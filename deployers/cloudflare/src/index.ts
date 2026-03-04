@@ -67,7 +67,21 @@ export class CloudflareDeployer extends Deployer {
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
-    const { vars: userVars, alias: userAlias, ...userConfig } = this.userConfig;
+    const {
+      vars: userVars,
+      alias: userAlias,
+      // Remove deprecated fields so they don't leak into wrangler.json
+      projectName: _projectName,
+      workerNamespace: _workerNamespace,
+      d1Databases: _d1Databases,
+      kvNamespaces: _kvNamespaces,
+      ...userConfig
+    } = this.userConfig as typeof this.userConfig & {
+      projectName?: string;
+      workerNamespace?: string;
+      d1Databases?: unknown;
+      kvNamespaces?: unknown;
+    };
     const loadedEnvVars = await this.loadEnvVars();
 
     // Merge env vars from .env files with user-provided vars
