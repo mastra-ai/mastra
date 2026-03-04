@@ -214,10 +214,11 @@ const workspace = new Workspace({
 Rename workspace tools to match the conventions your agent expects. The config key remains the original `WORKSPACE_TOOLS` constant — only the exposed name changes.
 
 ```typescript title="src/mastra/workspaces.ts"
-import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
   tools: {
     [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
     [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
