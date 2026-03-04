@@ -3,9 +3,9 @@
 '@mastra/playground-ui': patch
 ---
 
-**Skill tools now stay available across conversation turns.**
+**Skill tools now reliably stay available across conversation turns.**
 
-Previously, skill tools were lost between turns because they were re-created on every `stream()`/`generate()` call. They are now registered at the Agent level and persist across turns.
+Previously, skill tools could be lost between turns because they were tied to processor state that wasn't guaranteed to persist. They are now registered at the Agent level and always available.
 
 - Renamed `skill-activate` → `skill` — returns full skill instructions directly in the tool result
 - Consolidated `skill-read-reference`, `skill-read-script`, `skill-read-asset` → `skill_read`
