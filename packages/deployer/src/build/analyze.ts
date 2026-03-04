@@ -11,7 +11,7 @@ import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
 import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
-import { GLOBAL_EXTERNALS } from './analyze/constants';
+import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS } from './analyze/constants';
 import { checkConfigExport } from './babel/check-config-export';
 import type { BundlerOptions, DependencyMetadata, ExternalDependencyInfo } from './types';
 import { getPackageName, isBuiltinModule, isDependencyPartOfPackage, slash } from './utils';
@@ -163,11 +163,13 @@ async function validateFile(
     moduleResolveMapLocation,
     logger,
     workspaceMap,
+    stubbedExternals,
   }: {
     binaryMapData: Record<string, string[]>;
     moduleResolveMapLocation: string;
     logger: IMastraLogger;
     workspaceMap: Map<string, WorkspacePackageInfo>;
+    stubbedExternals: string[];
   },
 ) {
   try {
@@ -176,6 +178,7 @@ async function validateFile(
       await validate(join(root, file.fileName), {
         moduleResolveMapLocation,
         injectESMShim: false,
+        stubbedExternals,
       });
     }
   } catch (err) {
@@ -189,6 +192,7 @@ async function validateFile(
         await validate(join(root, file.fileName), {
           moduleResolveMapLocation,
           injectESMShim: true,
+          stubbedExternals,
         });
         errorToHandle = null;
       } catch (err) {
@@ -274,6 +278,7 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
+      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
     });
   }
 
