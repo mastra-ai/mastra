@@ -57,6 +57,7 @@ describe('useAuthCapabilities', () => {
       const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
 
       expect(url).toBe('http://localhost:3000/api/auth/capabilities');
+      expect(options.credentials).toBe('include');
       expect(options.headers).toEqual(
         expect.objectContaining({
           'Content-Type': 'application/json',
@@ -81,6 +82,7 @@ describe('useAuthCapabilities', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [, options] = mockFetch.mock.calls[0] as [string, RequestInit];
 
+      expect(options.credentials).toBe('include');
       expect(options.headers).toEqual(
         expect.objectContaining({
           'Content-Type': 'application/json',
@@ -88,8 +90,10 @@ describe('useAuthCapabilities', () => {
       );
     });
 
-    it('should work when client options is undefined', async () => {
-      const mockClient = {};
+    it('should work when client options has no baseUrl or headers', async () => {
+      const mockClient = {
+        options: {},
+      };
 
       mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
 
@@ -101,6 +105,7 @@ describe('useAuthCapabilities', () => {
 
       // Should still work, just with empty base URL
       expect(url).toBe('/api/auth/capabilities');
+      expect(options.credentials).toBe('include');
       expect(options.headers).toEqual(
         expect.objectContaining({
           'Content-Type': 'application/json',

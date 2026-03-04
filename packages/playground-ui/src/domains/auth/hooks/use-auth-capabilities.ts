@@ -11,9 +11,7 @@ import type { AuthCapabilities } from '../types';
  * @internal
  */
 export async function makeAuthCapabilitiesRequest(client: MastraClient): Promise<AuthCapabilities> {
-  const options = (client as any).options;
-  const baseUrl = options?.baseUrl || '';
-  const clientHeaders = options?.headers || {};
+  const { baseUrl = '', headers: clientHeaders = {} } = client.options;
 
   const response = await fetch(`${baseUrl}/api/auth/capabilities`, {
     credentials: 'include',
