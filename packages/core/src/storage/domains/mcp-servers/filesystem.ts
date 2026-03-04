@@ -1,20 +1,19 @@
-import { MCPServersStorage } from '@mastra/core/storage';
 import type {
   StorageMCPServerType,
   StorageCreateMCPServerInput,
   StorageUpdateMCPServerInput,
   StorageListMCPServersInput,
   StorageListMCPServersOutput,
-} from '@mastra/core/storage';
+} from '../../types';
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   MCPServerVersion,
   CreateMCPServerVersionInput,
   ListMCPServerVersionsInput,
   ListMCPServerVersionsOutput,
-} from '@mastra/core/storage';
-
-import type { FilesystemDB } from '../filesystem-db';
-import { FilesystemVersionedHelpers } from '../filesystem-versioned';
+} from './base';
+import { MCPServersStorage } from './base';
 
 export class FilesystemMCPServersStorage extends MCPServersStorage {
   private helpers: FilesystemVersionedHelpers<StorageMCPServerType, MCPServerVersion>;

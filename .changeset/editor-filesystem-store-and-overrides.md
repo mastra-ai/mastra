@@ -1,12 +1,12 @@
 ---
+'@mastra/core': minor
 '@mastra/editor': minor
 ---
 
 Added `FilesystemStore`, a file-based storage adapter for editor domains. Stores agent configurations, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, and skills as JSON files in a local directory (default: `.mastra-storage/`). Only published snapshots are written to disk — version history is kept in memory. Use with `MastraCompositeStore`'s `editor` shorthand to enable Git-friendly editor configurations.
 
 ```typescript
-import { MastraCompositeStore } from '@mastra/core/storage';
-import { FilesystemStore } from '@mastra/editor/storage';
+import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
 import { PostgresStore } from '@mastra/pg';
 
 export const mastra = new Mastra({

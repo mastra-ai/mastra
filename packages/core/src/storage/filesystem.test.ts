@@ -3,10 +3,11 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { MastraCompositeStore, InMemoryStore } from '@mastra/core/storage';
 
+import { MastraCompositeStore } from './base';
 import { FilesystemDB } from './filesystem-db';
-import { FilesystemStore } from './index';
+import { FilesystemStore } from './filesystem';
+import { InMemoryStore } from './mock';
 
 // =============================================================================
 // FilesystemDB Tests

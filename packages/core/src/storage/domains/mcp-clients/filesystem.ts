@@ -1,20 +1,19 @@
-import { MCPClientsStorage } from '@mastra/core/storage';
 import type {
   StorageMCPClientType,
   StorageCreateMCPClientInput,
   StorageUpdateMCPClientInput,
   StorageListMCPClientsInput,
   StorageListMCPClientsOutput,
-} from '@mastra/core/storage';
+} from '../../types';
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   MCPClientVersion,
   CreateMCPClientVersionInput,
   ListMCPClientVersionsInput,
   ListMCPClientVersionsOutput,
-} from '@mastra/core/storage';
-
-import type { FilesystemDB } from '../filesystem-db';
-import { FilesystemVersionedHelpers } from '../filesystem-versioned';
+} from './base';
+import { MCPClientsStorage } from './base';
 
 export class FilesystemMCPClientsStorage extends MCPClientsStorage {
   private helpers: FilesystemVersionedHelpers<StorageMCPClientType, MCPClientVersion>;

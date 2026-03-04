@@ -1,20 +1,19 @@
-import { SkillsStorage } from '@mastra/core/storage';
 import type {
   StorageSkillType,
   StorageCreateSkillInput,
   StorageUpdateSkillInput,
   StorageListSkillsInput,
   StorageListSkillsOutput,
-} from '@mastra/core/storage';
+} from '../../types';
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   SkillVersion,
   CreateSkillVersionInput,
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
-} from '@mastra/core/storage';
-
-import type { FilesystemDB } from '../filesystem-db';
-import { FilesystemVersionedHelpers } from '../filesystem-versioned';
+} from './base';
+import { SkillsStorage } from './base';
 
 export class FilesystemSkillsStorage extends SkillsStorage {
   private helpers: FilesystemVersionedHelpers<StorageSkillType, SkillVersion>;

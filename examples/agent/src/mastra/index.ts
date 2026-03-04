@@ -1,8 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
-import { MastraCompositeStore } from '@mastra/core/storage';
+import { MastraCompositeStore, FilesystemStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
-import { FilesystemStore } from '@mastra/editor/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { z } from 'zod';

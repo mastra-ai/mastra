@@ -1,20 +1,19 @@
-import { ScorerDefinitionsStorage } from '@mastra/core/storage';
 import type {
   StorageScorerDefinitionType,
   StorageCreateScorerDefinitionInput,
   StorageUpdateScorerDefinitionInput,
   StorageListScorerDefinitionsInput,
   StorageListScorerDefinitionsOutput,
-} from '@mastra/core/storage';
+} from '../../types';
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   ScorerDefinitionVersion,
   CreateScorerDefinitionVersionInput,
   ListScorerDefinitionVersionsInput,
   ListScorerDefinitionVersionsOutput,
-} from '@mastra/core/storage';
-
-import type { FilesystemDB } from '../filesystem-db';
-import { FilesystemVersionedHelpers } from '../filesystem-versioned';
+} from './base';
+import { ScorerDefinitionsStorage } from './base';
 
 export class FilesystemScorerDefinitionsStorage extends ScorerDefinitionsStorage {
   private helpers: FilesystemVersionedHelpers<StorageScorerDefinitionType, ScorerDefinitionVersion>;

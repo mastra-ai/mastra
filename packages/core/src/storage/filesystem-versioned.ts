@@ -1,13 +1,11 @@
-import { normalizePerPage, calculatePagination } from '@mastra/core/storage';
-import type { StorageOrderBy } from '@mastra/core/storage';
+import { normalizePerPage, calculatePagination } from './base';
+import type { StorageOrderBy } from './types';
 import type {
   VersionBase,
   ListVersionsInputBase,
   ListVersionsOutputBase,
   VersionedEntityBase,
-  VersionOrderByGeneric,
-  VersionSortDirectionGeneric,
-} from '@mastra/core/storage';
+} from './domains/versioned';
 
 import type { FilesystemDB } from './filesystem-db';
 import { GitHistory } from './git-history';
@@ -274,9 +272,6 @@ export class FilesystemVersionedHelpers<
    * Write the published snapshot config for an entity to disk.
    * Strips all entity metadata and version metadata fields, leaving only
    * the clean primitive configuration.
-   *
-   * If a `GitHistory` instance is available, also stages and commits the
-   * changed file. The commit message describes which entities were published.
    */
   private persistToDisk(): void {
     const diskData: Record<string, Record<string, unknown>> = {};
@@ -496,53 +491,40 @@ export class FilesystemVersionedHelpers<
     );
 
     // Sort
-    const field: VersionOrderByGeneric = orderBy?.field ?? 'versionNumber';
-    const direction: VersionSortDirectionGeneric = orderBy?.direction ?? 'DESC';
+    const field = (orderBy?.field as string) ?? 'versionNumber';
+    const direction = (orderBy?.direction as string) ?? 'DESC';
     versions.sort((a, b) => {
-      let aVal: number;
-      let bVal: number;
-      if (field === 'createdAt') {
-        aVal = new Date(a.createdAt).getTime();
-        bVal = new Date(b.createdAt).getTime();
-      } else {
-        aVal = a.versionNumber;
-        bVal = b.versionNumber;
-      }
+      const aVal = field === 'createdAt' ? new Date(a.createdAt).getTime() : a.versionNumber;
+      const bVal = field === 'createdAt' ? new Date(b.createdAt).getTime() : b.versionNumber;
       return direction === 'ASC' ? aVal - bVal : bVal - aVal;
     });
 
-    const total = versions.length;
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     return {
       versions: versions.slice(offset, offset + perPage),
-      total,
+      total: versions.length,
       page,
       perPage: perPageForResponse,
-      hasMore: offset + perPage < total,
+      hasMore: offset + perPage < versions.length,
     };
   }
 
   async deleteVersion(id: string): Promise<void> {
-    this.hydrate();
-    // Git-based versions are read-only and cannot be deleted
+    await this.ensureGitHistory();
+    // Git-based versions are read-only
     if (FilesystemVersionedHelpers.isGitVersion(id)) return;
     this.versions.delete(id);
   }
 
   async deleteVersionsByParentId(entityId: string): Promise<void> {
-    this.hydrate();
-    const idsToDelete: string[] = [];
-    for (const v of this.versions.values()) {
-      if ((v as Record<string, unknown>)[this.parentIdField] === entityId) {
-        // Don't delete git-based versions
-        if (!FilesystemVersionedHelpers.isGitVersion(v.id)) {
-          idsToDelete.push(v.id);
-        }
+    await this.ensureGitHistory();
+    for (const [versionId, version] of this.versions) {
+      if ((version as Record<string, unknown>)[this.parentIdField] === entityId) {
+        // Skip git-based versions (read-only)
+        if (FilesystemVersionedHelpers.isGitVersion(versionId)) continue;
+        this.versions.delete(versionId);
       }
-    }
-    for (const id of idsToDelete) {
-      this.versions.delete(id);
     }
   }
 
@@ -557,30 +539,19 @@ export class FilesystemVersionedHelpers<
     return count;
   }
 
-  /**
-   * Get the next version number for an entity, accounting for git history
-   * and existing in-memory versions.
-   */
   async getNextVersionNumber(entityId: string): Promise<number> {
     await this.ensureGitHistory();
     return this._getNextVersionNumber(entityId);
   }
 
-  /**
-   * Internal sync version — call only after git history is loaded.
-   */
   private _getNextVersionNumber(entityId: string): number {
     const gitCount = this.gitVersionCounts.get(entityId) ?? 0;
-
     let maxVersion = gitCount;
     for (const v of this.versions.values()) {
       if ((v as Record<string, unknown>)[this.parentIdField] === entityId) {
-        if (v.versionNumber > maxVersion) {
-          maxVersion = v.versionNumber;
-        }
+        maxVersion = Math.max(maxVersion, v.versionNumber);
       }
     }
-
     return maxVersion + 1;
   }
 
@@ -589,7 +560,7 @@ export class FilesystemVersionedHelpers<
     this.versions.clear();
     this.gitVersionCounts.clear();
     this.gitHistoryPromise = null;
+    this.hydrated = false;
     this.db.clearDomain(this.entitiesFile);
-    this.hydrated = true; // Mark as hydrated so we don't re-read the now-empty disk
   }
 }

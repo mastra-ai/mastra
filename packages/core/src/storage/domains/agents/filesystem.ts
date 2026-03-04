@@ -1,15 +1,14 @@
-import { AgentsStorage } from '@mastra/core/storage';
 import type {
   StorageAgentType,
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-} from '@mastra/core/storage';
-import type { AgentVersion, CreateVersionInput, ListVersionsInput, ListVersionsOutput } from '@mastra/core/storage';
-
-import type { FilesystemDB } from '../filesystem-db';
-import { FilesystemVersionedHelpers } from '../filesystem-versioned';
+} from '../../types';
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
+import type { AgentVersion, CreateVersionInput, ListVersionsInput, ListVersionsOutput } from './base';
+import { AgentsStorage } from './base';
 
 /**
  * Fields persisted for filesystem-stored agents.

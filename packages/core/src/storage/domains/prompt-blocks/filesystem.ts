@@ -1,20 +1,19 @@
-import { PromptBlocksStorage } from '@mastra/core/storage';
 import type {
   StoragePromptBlockType,
   StorageCreatePromptBlockInput,
   StorageUpdatePromptBlockInput,
   StorageListPromptBlocksInput,
   StorageListPromptBlocksOutput,
-} from '@mastra/core/storage';
+} from '../../types';
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   PromptBlockVersion,
   CreatePromptBlockVersionInput,
   ListPromptBlockVersionsInput,
   ListPromptBlockVersionsOutput,
-} from '@mastra/core/storage';
-
-import type { FilesystemDB } from '../filesystem-db';
-import { FilesystemVersionedHelpers } from '../filesystem-versioned';
+} from './base';
+import { PromptBlocksStorage } from './base';
 
 export class FilesystemPromptBlocksStorage extends PromptBlocksStorage {
   private helpers: FilesystemVersionedHelpers<StoragePromptBlockType, PromptBlockVersion>;

@@ -30,7 +30,7 @@ export class GitHistory {
   /** Cache: dir → repo root (string) or `false` if not a repo. */
   private repoRootCache = new Map<string, string | false>();
 
-  /** Cache: `dir:filename` → ordered commits (newest first). */
+  /** Cache: `dir:filename:limit` → ordered commits (newest first). */
   private commitCache = new Map<string, GitCommit[]>();
 
   /** Cache: `dir:commitHash:filename` → parsed JSON. */
@@ -68,7 +68,7 @@ export class GitHistory {
    * @param limit    Maximum number of commits to retrieve
    */
   async getFileHistory(dir: string, filename: string, limit: number = 50): Promise<GitCommit[]> {
-    const cacheKey = `${dir}:${filename}`;
+    const cacheKey = `${dir}:${filename}:${limit}`;
     if (this.commitCache.has(cacheKey)) {
       return this.commitCache.get(cacheKey)!;
     }
@@ -167,36 +167,25 @@ export class GitHistory {
    */
   private relativeToRepo(dir: string, filename: string): string {
     const root = this.repoRootCache.get(dir);
-    if (typeof root !== 'string') {
-      throw new Error('Not inside a Git repository');
+    if (!root) {
+      throw new Error(`Not a git repository: ${dir}`);
     }
-    // Use realpathSync to resolve symlinks — macOS /var → /private/var
+    // Resolve symlinks so that macOS /var → /private/var differences don't break relative()
     const realRoot = realpathSync(root);
-    const realFile = realpathSync(dir) + '/' + filename;
-    return relative(realRoot, realFile);
+    const realDir = realpathSync(dir);
+    const relDir = relative(realRoot, realDir);
+    return relDir ? `${relDir}/${filename}` : filename;
   }
 
   /**
-   * Execute a git command and return its stdout.
+   * Execute a git command and return stdout.
    */
   private exec(cwd: string, args: string[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      execFile(
-        'git',
-        args,
-        {
-          cwd,
-          maxBuffer: 10 * 1024 * 1024, // 10 MB
-          timeout: 10_000, // 10 seconds
-        },
-        (error, stdout) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve(stdout);
-          }
-        },
-      );
+      execFile('git', args, { cwd, maxBuffer: 10 * 1024 * 1024 }, (error, stdout) => {
+        if (error) reject(error);
+        else resolve(stdout);
+      });
     });
   }
 }

@@ -8,7 +8,7 @@
       },
       {
         "type": "prompt_block",
-        "content": "test test test 123"
+        "content": "test test test 123123123"
       },
       {
         "type": "prompt_block_ref",
@@ -26,6 +26,10 @@
       "weatherInfo": {
         "description": "Fetches the current weather information for a given city"
       }
+    },
+    "requestContextSchema": {
+      "type": "object",
+      "properties": {}
     },
     "mcpClients": {}
   }

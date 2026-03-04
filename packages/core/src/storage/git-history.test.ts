@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { GitHistory } from './git-history';
 
+
 /**
  * Helper to run git commands in a directory.
  */
@@ -176,7 +177,8 @@ describe('GitHistory', () => {
 
 import { FilesystemDB } from './filesystem-db';
 import { FilesystemVersionedHelpers } from './filesystem-versioned';
-import type { StorageAgentType, AgentVersion } from '@mastra/core/storage';
+import type { StorageAgentType } from './types';
+import type { AgentVersion } from './domains/agents/base';
 
 describe('FilesystemVersionedHelpers - Git integration', () => {
   let repoDir: string;

@@ -1,20 +1,19 @@
-import { WorkspacesStorage } from '@mastra/core/storage';
 import type {
   StorageWorkspaceType,
   StorageCreateWorkspaceInput,
   StorageUpdateWorkspaceInput,
   StorageListWorkspacesInput,
   StorageListWorkspacesOutput,
-} from '@mastra/core/storage';
+} from '../../types';
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   WorkspaceVersion,
   CreateWorkspaceVersionInput,
   ListWorkspaceVersionsInput,
   ListWorkspaceVersionsOutput,
-} from '@mastra/core/storage';
-
-import type { FilesystemDB } from '../filesystem-db';
-import { FilesystemVersionedHelpers } from '../filesystem-versioned';
+} from './base';
+import { WorkspacesStorage } from './base';
 
 export class FilesystemWorkspacesStorage extends WorkspacesStorage {
   private helpers: FilesystemVersionedHelpers<StorageWorkspaceType, WorkspaceVersion>;
