@@ -3,4 +3,4 @@
 '@mastra/server': patch
 ---
 
-Fixed auth capabilities endpoint to return disabled state when dev playground header is present, preventing the login gate from appearing in dev playground mode
+Fixed dev playground auth bypass not working in capabilities endpoint. The client now passes MastraClient headers (including x-mastra-dev-playground) to the auth capabilities endpoint, and the server returns disabled state when this header is present. This prevents the login gate from appearing in dev playground mode.
