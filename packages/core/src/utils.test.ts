@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
-import { toStandardSchema } from './schema/schema';
+import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 

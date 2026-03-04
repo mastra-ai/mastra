@@ -79,10 +79,12 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
 
 /**
  * Gets the type name from a Zod schema's internal definition.
- * Works across zod v3 and v4 by checking _def.typeName.
+ * Works across zod v3 and v4 by checking _def.typeName (v3) and _def.type (v4).
  */
 function getZodTypeName(schema: ZodTypeAny): string | undefined {
-  return (schema as any)?._def?.typeName;
+  const schemaAny = schema as any;
+  const def = schemaAny?._def ?? schemaAny?.def;
+  return def?.typeName ?? def?.type;
 }
 
 /**
@@ -99,14 +101,27 @@ function isComplexType(schema: ZodTypeAny): boolean {
   let inner: ZodTypeAny = schema;
   let typeName = getZodTypeName(inner);
 
-  while (typeName === 'ZodOptional' || typeName === 'ZodNullable') {
-    // Access innerType directly from _def to avoid version-specific method differences
-    inner = (inner as any)._def.innerType;
+  while (
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'optional' ||
+    typeName === 'nullable'
+  ) {
+    // Access innerType from internals to avoid version-specific method differences
+    const innerDef = (inner as any)._def ?? (inner as any).def;
+    inner = innerDef.innerType;
     typeName = getZodTypeName(inner);
   }
 
   // Complex types that need JSON parsing
-  return typeName === 'ZodArray' || typeName === 'ZodRecord' || typeName === 'ZodObject';
+  return (
+    typeName === 'ZodArray' ||
+    typeName === 'ZodRecord' ||
+    typeName === 'ZodObject' ||
+    typeName === 'array' ||
+    typeName === 'record' ||
+    typeName === 'object'
+  );
 }
 
 /**

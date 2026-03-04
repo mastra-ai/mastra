@@ -2,7 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { formatZodError } from '@mastra/server/handlers/error';
+import { formatZodError } from '@mastra/server/handlers';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {

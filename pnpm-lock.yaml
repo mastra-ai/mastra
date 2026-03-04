@@ -3362,6 +3362,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@mendable/firecrawl-js':
         specifier: ^1.29.3
         version: 1.29.3
