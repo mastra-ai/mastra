@@ -130,7 +130,7 @@ The agent has three skill tools:
 
 - **`skill`** — Loads a skill's full instructions and returns them in the tool result. The agent calls this whenever it needs a skill's guidance.
 - **`skill_read`** — Reads a file from a skill's `references/`, `scripts/`, or `assets/` directory.
-- **`skill_search`** — Searches across all skill content (requires BM25 or vector search on the workspace).
+- **`skill_search`** — Searches across all skill content. Uses BM25 or vector search when configured, otherwise falls back to simple text matching.
 
 This design is stateless — there is no activation state to track. If the skill instructions leave the conversation context (due to context window limits or compaction), the agent can call `skill` again to reload them.
 
