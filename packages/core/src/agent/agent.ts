@@ -1509,8 +1509,8 @@ export class Agent<
    * Updates the agent's instructions.
    * @internal
    */
-  __updateInstructions(newInstructions: string) {
-    this.#instructions = newInstructions;
+  __updateInstructions(newInstructions: DynamicArgument<AgentInstructions, any>) {
+    this.#instructions = newInstructions as DynamicArgument<AgentInstructions, TRequestContext>;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
@@ -1518,7 +1518,7 @@ export class Agent<
    * Updates the agent's model configuration.
    * @internal
    */
-  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
+  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> | ModelFallbacks }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
@@ -1531,6 +1531,20 @@ export class Agent<
   __resetToOriginalModel() {
     this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
+  }
+
+  /**
+   * Returns a snapshot of the raw field values that may be overridden by stored config.
+   * Used by the editor to save/restore code defaults externally.
+   * @internal
+   */
+  __getOverridableFields() {
+    return {
+      instructions: this.#instructions,
+      model: this.model,
+      tools: this.#tools,
+      workspace: this.#workspace,
+    };
   }
 
   reorderModels(modelIds: string[]) {
@@ -1672,8 +1686,8 @@ export class Agent<
    * @param tools
    * @internal
    */
-  __setTools(tools: TTools) {
-    this.#tools = tools;
+  __setTools(tools: DynamicArgument<TTools, any>) {
+    this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
     this.logger.debug(`[Agents:${this.name}] Tools set for agent ${this.name}`, { model: this.model, name: this.name });
   }
 
