@@ -33,7 +33,7 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
+import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 import type { FilesystemMountConfig } from './mount';
@@ -195,16 +195,16 @@ export class LocalFilesystem extends MastraFilesystem {
    */
   setAllowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
     const newPaths = typeof pathsOrUpdater === 'function' ? pathsOrUpdater(this._allowedPaths) : pathsOrUpdater;
-    this._allowedPaths = newPaths.map(p => nodePath.resolve(p));
+    this._allowedPaths = newPaths.map(p => nodePath.resolve(expandTilde(p)));
   }
 
   constructor(options: LocalFilesystemOptions) {
     super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
-    this._basePath = nodePath.resolve(options.basePath);
+    this._basePath = nodePath.resolve(expandTilde(options.basePath));
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
-    this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(p));
+    this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(expandTilde(p)));
     this._instructionsOverride = options.instructions;
   }
 
@@ -239,6 +239,8 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private resolvePath(inputPath: string): string {
     let absolutePath: string;
+    const wasTilde = inputPath.startsWith('~');
+    inputPath = expandTilde(inputPath);
 
     if (!this._contained && nodePath.isAbsolute(inputPath)) {
       // Containment disabled — absolute paths are real filesystem paths
@@ -249,6 +251,12 @@ export class LocalFilesystem extends MastraFilesystem {
       // convention (e.g. "/file.txt" meaning "basePath/file.txt")
       const normalized = nodePath.normalize(inputPath);
       if (this._isWithinAnyRoot(normalized)) {
+        absolutePath = normalized;
+      } else if (wasTilde) {
+        // Path started with ~ so the user meant a real filesystem path,
+        // not a virtual-root path. Treat as a real absolute path — the
+        // containment check below will throw PermissionError if it's not
+        // within basePath or allowedPaths.
         absolutePath = normalized;
       } else {
         absolutePath = resolveWorkspacePath(this._basePath, inputPath);
@@ -773,7 +781,7 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
-  getInstructions(opts?: { requestContext?: RequestContext }): string {
+  getInstructions(opts?: { requestContext?: RequestContext<any> }): string {
     return resolveInstructions(this._instructionsOverride, () => this._getDefaultInstructions(), opts?.requestContext);
   }
 

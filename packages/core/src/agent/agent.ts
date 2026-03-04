@@ -1693,7 +1693,7 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
     if (!normMessage) {
       throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
     }
@@ -1702,15 +1702,15 @@ export class Agent<
     for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
-      } else if (part.type === `source`) {
+      } else if (part.type === `source-url`) {
         partsToGen.push({
           type: 'text',
-          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+          text: `User added URL: ${part.url.substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
         partsToGen.push({
           type: 'text',
-          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+          text: `User added ${part.mediaType} file: ${part.url.slice(0, 100)}`,
         });
       }
     }
@@ -3178,6 +3178,7 @@ export class Agent<
           // current tool span onto the workflow to maintain continuity of the trace
           // @ts-expect-error - context type mismatch in workflow tool
           execute: async (inputData, context) => {
+            const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
               // Use a unique runId for each workflow tool call to prevent parallel calls
@@ -3252,6 +3253,10 @@ export class Agent<
                 result = await streamResult.result;
               }
 
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               if (result?.status === 'success') {
                 const workflowOutput = result?.result || result;
                 return { result: workflowOutput, runId: run.runId };
@@ -3294,6 +3299,10 @@ export class Agent<
                 };
               }
             } catch (err) {
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
@@ -4199,6 +4208,8 @@ export class Agent<
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
       structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
+      onStepFinish: mergedOptions?.onStepFinish as NetworkOptions<OUTPUT>['onStepFinish'],
+      onError: mergedOptions?.onError,
       onAbort: mergedOptions?.onAbort,
       abortSignal: mergedOptions?.abortSignal,
     });
@@ -4273,6 +4284,8 @@ export class Agent<
       onIterationComplete: mergedOptions?.onIterationComplete,
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
+      onStepFinish: mergedOptions?.onStepFinish,
+      onError: mergedOptions?.onError,
       onAbort: mergedOptions?.onAbort,
       abortSignal: mergedOptions?.abortSignal,
     });
