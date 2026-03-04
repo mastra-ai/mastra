@@ -3,9 +3,6 @@ pnpm --version || {
   exit 0
 }
 
-# Run TS typecheck
-pnpm typecheck
-
 # Formatting on staged files
-pnpm lint-staged
+pnpm dlx lint-staged
 

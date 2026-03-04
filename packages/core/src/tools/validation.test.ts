@@ -1064,6 +1064,170 @@ describe('Tool Output Validation Tests', () => {
   });
 });
 
+describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/12362
+  // LLMs like Gemini send null for optional fields, but Zod's .optional() only accepts
+  // undefined, not null. The validateToolInput function retries with null values stripped
+  // when initial validation fails.
+
+  it('should accept null for optional fields (the original bug scenario)', () => {
+    const schema = z.object({
+      category: z.string(),
+      minPrice: z.number().optional(),
+      maxPrice: z.number().optional(),
+    });
+
+    // LLM sends null for optional fields
+    const input = { category: 'electronics', minPrice: null, maxPrice: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ category: 'electronics' });
+  });
+
+  it('should handle nested objects with null values in optional fields', () => {
+    const schema = z.object({
+      query: z.string(),
+      filters: z.object({
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        limit: z.number().optional(),
+      }),
+    });
+
+    const input = {
+      query: 'search term',
+      filters: {
+        startDate: null,
+        endDate: null,
+        limit: 10,
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      query: 'search term',
+      filters: { limit: 10 },
+    });
+  });
+
+  it('should preserve null for .nullable() fields (null is a valid value)', () => {
+    const schema = z.object({
+      name: z.string(),
+      status: z.string().nullable(),
+    });
+
+    // null is valid for .nullable() fields
+    const input = { name: 'test', status: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', status: null });
+  });
+
+  it('should preserve null for required .nullable() fields without .optional()', () => {
+    const schema = z.object({
+      id: z.string(),
+      deletedAt: z.string().nullable(), // Required field that accepts null
+    });
+
+    // null is valid - the field is required but nullable
+    const input = { id: '123', deletedAt: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ id: '123', deletedAt: null });
+  });
+
+  it('should handle mix of .optional() and .nullable() fields', () => {
+    const schema = z.object({
+      name: z.string(),
+      bio: z.string().optional(), // null should be stripped
+      status: z.string().nullable(), // null should be preserved
+    });
+
+    const input = { name: 'test', bio: null, status: null };
+
+    const result = validateToolInput(schema, input);
+
+    // First try: { name: 'test', bio: null, status: null }
+    //   bio fails (.optional() doesn't accept null), status passes (.nullable() accepts null)
+    // Retry with stripped: { name: 'test' }
+    //   bio passes (absent = undefined for .optional()), status fails (required field missing)
+    // Neither attempt fully succeeds, so this should fail
+    // ...unless the schema allows status to be absent too
+
+    // Actually, status is required (not optional), so stripping null from it makes it missing.
+    // The first attempt fails because bio: null is invalid for .optional().
+    // The retry fails because status is missing (it's required).
+    // This IS the expected behavior - the schema design is contradictory with null input for bio.
+    // The user should use .nullable().optional() for bio or .nullable() for both.
+    expect(result.error).toBeDefined();
+  });
+
+  it('should handle .nullable().optional() fields receiving null', () => {
+    const schema = z.object({
+      name: z.string(),
+      nickname: z.string().nullable().optional(), // Accepts: string | null | undefined
+    });
+
+    // null is valid for .nullable().optional()
+    const input = { name: 'test', nickname: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', nickname: null });
+  });
+
+  it('should still reject invalid types after null stripping', () => {
+    const schema = z.object({
+      name: z.string(),
+      count: z.number().optional(),
+    });
+
+    // Invalid type should still fail even after null stripping
+    const input = { name: 123, count: null };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('Expected string, received number');
+  });
+
+  it('should handle deeply nested null values', () => {
+    const schema = z.object({
+      level1: z.object({
+        level2: z.object({
+          value: z.string().optional(),
+          required: z.string(),
+        }),
+      }),
+    });
+
+    const input = {
+      level1: {
+        level2: {
+          value: null,
+          required: 'present',
+        },
+      },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      level1: { level2: { required: 'present' } },
+    });
+  });
+});
+
 describe('validateToolInput - Undefined to Null Conversion (GitHub #11457)', () => {
   // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/11457
   // When schemas are processed through OpenAI compat layers, .optional() is converted
@@ -1431,5 +1595,231 @@ describe('validateToolInput - Built-in Object Preservation (GitHub #11502)', () 
     expect((result.data as any).nested.date).toBeInstanceOf(Date);
     expect((result.data as any).nested.map).toBeInstanceOf(Map);
     expect((result.data as any).nested.map.get('key')).toBe('value');
+  });
+});
+
+describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => {
+  // These tests verify the fix for https://github.com/mastra-ai/mastra/issues/12757
+  // Some LLMs (e.g., GLM4.7) generate tool arguments where array or object
+  // parameters are returned as stringified JSON strings instead of actual
+  // arrays/objects, causing Zod validation to fail.
+
+  it('should coerce a stringified JSON array to an actual array', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+      timeout: z.number().nullish().default(30000),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should coerce a stringified JSON array with multiple items', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '["item1", "item2", "item3"]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: ['item1', 'item2', 'item3'],
+    });
+  });
+
+  it('should coerce a stringified numeric array', () => {
+    const schema = z.object({
+      values: z.array(z.number()),
+    });
+
+    const input = {
+      values: '[1, 2, 3]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      values: [1, 2, 3],
+    });
+  });
+
+  it('should coerce a stringified empty array', () => {
+    const schema = z.object({
+      tags: z.array(z.string()).default([]),
+    });
+
+    const input = {
+      tags: '[]',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      tags: [],
+    });
+  });
+
+  it('should coerce a stringified JSON object to an actual object', () => {
+    const schema = z.object({
+      name: z.string(),
+      metadata: z.object({
+        key: z.string(),
+        value: z.string(),
+      }),
+    });
+
+    const input = {
+      name: 'test',
+      metadata: '{"key": "color", "value": "blue"}',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      metadata: { key: 'color', value: 'blue' },
+    });
+  });
+
+  it('should handle the exact GLM4.7 output for mastra_workspace_execute_command', () => {
+    const schema = z.object({
+      command: z.string().describe('The command to execute (e.g., "ls", "npm", "python")'),
+      args: z.array(z.string()).nullish().default([]).describe('Arguments to pass to the command'),
+      timeout: z.number().nullish().default(30000).describe('Maximum execution time in milliseconds.'),
+      cwd: z.string().nullish().describe('Working directory for the command'),
+    });
+
+    const input = {
+      command: 'python3',
+      args: '["parse_excel.py"]',
+      timeout: 60000,
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should work end-to-end with createTool when LLM sends stringified array', async () => {
+    const tool = createTool({
+      id: 'mastra_workspace_execute_command',
+      description: 'Execute a command',
+      inputSchema: z.object({
+        command: z.string(),
+        args: z.array(z.string()).nullish().default([]),
+        timeout: z.number().nullish().default(30000),
+      }),
+      execute: async ({ command, args, timeout }) => {
+        return { command, args: args ?? [], timeout: timeout ?? 30000 };
+      },
+    });
+
+    const result = await tool.execute({
+      command: 'python3',
+      args: '["parse_excel.py"]' as any,
+      timeout: 60000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+      timeout: 60000,
+    });
+  });
+
+  it('should NOT coerce regular strings that are not valid JSON', () => {
+    const schema = z.object({
+      name: z.string(),
+      tags: z.array(z.string()),
+    });
+
+    const input = {
+      name: 'test',
+      tags: 'not-json-at-all',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should NOT coerce a string that parses to wrong type', () => {
+    const schema = z.object({
+      items: z.array(z.string()),
+    });
+
+    const input = {
+      items: '42',
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should still accept actual arrays (no regression)', () => {
+    const schema = z.object({
+      command: z.string(),
+      args: z.array(z.string()).nullish().default([]),
+    });
+
+    const input = {
+      command: 'python3',
+      args: ['parse_excel.py'],
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      command: 'python3',
+      args: ['parse_excel.py'],
+    });
+  });
+
+  it('should still accept actual objects (no regression)', () => {
+    const schema = z.object({
+      name: z.string(),
+      config: z.object({ key: z.string() }),
+    });
+
+    const input = {
+      name: 'test',
+      config: { key: 'value' },
+    };
+
+    const result = validateToolInput(schema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'test',
+      config: { key: 'value' },
+    });
   });
 });

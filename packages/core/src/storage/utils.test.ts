@@ -320,8 +320,8 @@ describe('transformScoreRow', () => {
 
 describe('createStorageErrorId', () => {
   it('should generate error ID with FAILED status', () => {
-    const errorId = createStorageErrorId('PG', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED');
-    expect(errorId).toBe('MASTRA_STORAGE_PG_LIST_THREADS_BY_RESOURCE_ID_FAILED');
+    const errorId = createStorageErrorId('PG', 'LIST_THREADS', 'FAILED');
+    expect(errorId).toBe('MASTRA_STORAGE_PG_LIST_THREADS_FAILED');
   });
 
   it('should generate error ID with custom status', () => {
@@ -393,9 +393,7 @@ describe('createStorageErrorId', () => {
   });
 
   it('should normalize complex operation names', () => {
-    expect(createStorageErrorId('PG', 'listThreadsByResourceId', 'FAILED')).toBe(
-      'MASTRA_STORAGE_PG_LIST_THREADS_BY_RESOURCE_ID_FAILED',
-    );
+    expect(createStorageErrorId('PG', 'listThreads', 'FAILED')).toBe('MASTRA_STORAGE_PG_LIST_THREADS_FAILED');
 
     expect(createStorageErrorId('DYNAMODB', 'getMessagesPaginated', 'FAILED')).toBe(
       'MASTRA_STORAGE_DYNAMODB_GET_MESSAGES_PAGINATED_FAILED',

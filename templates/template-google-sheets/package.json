@@ -4,7 +4,6 @@
   "description": "Google Sheets integration template using Mastra's AI agents. Enables intelligent sheet manipulation, and seamless integration between Google Sheets and AI-powered business logic for spreadsheet automation and analysis.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
     "build": "mastra build",
     "start": "mastra start"
@@ -17,22 +16,21 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@composio/core": "^0.1.55",
-    "@composio/mastra": "^0.1.56",
-    "@mastra/core": "beta",
-    "@mastra/fastembed": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/mcp": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
-    "hono": "^4.11.3",
-    "zod": "^3.25.76"
+    "@composio/core": "^0.6.3",
+    "@composio/mastra": "^0.6.3",
+    "@mastra/core": "latest",
+    "@mastra/fastembed": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "hono": "^4.12.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
-    "mastra": "beta",
-    "prettier": "^3.6.2",
+    "@types/node": "^24.10.9",
+    "mastra": "latest",
     "typescript": "^5.9.3"
   }
 }

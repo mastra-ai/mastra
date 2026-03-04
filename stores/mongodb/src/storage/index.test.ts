@@ -22,13 +22,46 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const TEST_CONFIG: MongoDBConfig = {
   id: 'mongodb-test-store',
-  url: process.env.MONGODB_URL || 'mongodb://localhost:27017',
+  uri: process.env.MONGODB_URL || 'mongodb://localhost:27017',
   dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
 };
 
+// Tests for GitHub issue #11697 - MongoDBStore constructor uri/url handling
+// https://github.com/mastra-ai/mastra/issues/11697
+describe('MongoDBStore constructor (#11697)', () => {
+  it('should accept "uri" parameter (recommended)', () => {
+    expect(() => {
+      new MongoDBStore({
+        id: 'test',
+        uri: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+      });
+    }).not.toThrow();
+  });
+
+  it('should accept "url" parameter for backward compatibility', () => {
+    expect(() => {
+      new MongoDBStore({
+        id: 'test',
+        url: 'mongodb://localhost:27017',
+        dbName: 'test_db',
+      });
+    }).not.toThrow();
+  });
+
+  it('should throw clear error when neither uri nor url is provided', () => {
+    expect(() => {
+      new MongoDBStore({
+        id: 'test',
+        dbName: 'test_db',
+      } as any);
+    }).toThrow(/uri.*url|connection/i);
+  });
+});
+
 // Helper to create a connectorHandler from MongoClient
 const createConnectorHandler = async (): Promise<{ handler: ConnectorHandler; client: MongoClient }> => {
-  const client = new MongoClient(TEST_CONFIG.url!);
+  const client = new MongoClient(TEST_CONFIG.uri!);
   await client.connect();
   const db = client.db(TEST_CONFIG.dbName);
 
@@ -96,7 +129,7 @@ createConfigValidationTests({
     {
       description: 'empty url without connectorHandler',
       config: { id: 'test-store', url: '', dbName: 'test-db' },
-      expectedError: /url must be provided and cannot be empty/,
+      expectedError: /connection string|uri.*url/i,
     },
     {
       description: 'empty dbName without connectorHandler',
@@ -120,7 +153,7 @@ createClientAcceptanceTests({
   createStoreWithClient: () => {
     return new MongoDBStore({
       id: 'mongodb-client-test',
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: TEST_CONFIG.dbName!,
     });
   },
@@ -133,17 +166,17 @@ createDomainDirectTests({
   storeName: 'MongoDB',
   createMemoryDomain: () =>
     new MemoryStorageMongoDB({
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: TEST_CONFIG.dbName!,
     }),
   createWorkflowsDomain: () =>
     new WorkflowsStorageMongoDB({
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: TEST_CONFIG.dbName!,
     }),
   createScoresDomain: () =>
     new ScoresStorageMongoDB({
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: TEST_CONFIG.dbName!,
     }),
 });
@@ -404,6 +437,79 @@ describe('MongoDB Specific Tests', () => {
     });
   });
 
+  describe('MongoDB Message Upsert Behavior', () => {
+    beforeEach(async () => {
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
+    });
+
+    it('should not overwrite createdAt when updating existing message via saveMessages', async () => {
+      const threadId = `thread-upsert-test-${Date.now()}`;
+      const resourceId = 'resource-upsert-test';
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+
+      // Create thread
+      await memoryStore?.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Upsert Test Thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // First save — establishes original createdAt
+      const messageId = `msg-upsert-test-${Date.now()}`;
+      const originalMessage = {
+        id: messageId,
+        threadId,
+        resourceId,
+        role: 'user' as const,
+        type: 'v2' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        createdAt: new Date(),
+      };
+
+      await memoryStore?.saveMessages({ messages: [originalMessage] });
+
+      // Retrieve and record original createdAt
+      const firstResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const originalCreatedAt = firstResult?.messages?.[0]?.createdAt;
+      expect(originalCreatedAt).toBeDefined();
+
+      // Wait a bit to ensure a different timestamp if overwritten
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Second save (upsert) — same id, updated content
+      const updatedMessage = {
+        id: messageId,
+        threadId,
+        resourceId,
+        role: 'user' as const,
+        type: 'v2' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello updated' }] },
+        createdAt: new Date(), // newer timestamp passed in
+      };
+
+      await memoryStore?.saveMessages({ messages: [updatedMessage] });
+
+      // Verify createdAt was NOT overwritten
+      const secondResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const afterUpsertCreatedAt = secondResult?.messages?.[0]?.createdAt;
+      expect(afterUpsertCreatedAt).toEqual(originalCreatedAt);
+
+      // Verify content WAS updated
+      const updatedContent = secondResult?.messages?.[0]?.content;
+      expect(typeof updatedContent === 'string' ? updatedContent : JSON.stringify(updatedContent)).toContain(
+        'Hello updated',
+      );
+    });
+  });
+
   describe('MongoDB Schemaless Collection Behavior', () => {
     it('should create collections on-demand when using connector directly', async () => {
       // This tests MongoDB's schemaless nature - collections are created automatically
@@ -587,7 +693,7 @@ describe('MongoDB Specific Tests', () => {
 
 // Helper to check if a MongoDB index exists in a collection
 const mongoIndexExists = async (dbName: string, namePattern: string): Promise<boolean> => {
-  const client = new MongoClient(TEST_CONFIG.url!);
+  const client = new MongoClient(TEST_CONFIG.uri!);
   try {
     await client.connect();
     const db = client.db(dbName);
@@ -613,7 +719,7 @@ createStoreIndexTests({
     currentStoreTestDbName = `idx_s_${storeTestId}_d`;
     return new MongoDBStore({
       id: 'mongodb-idx-default',
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentStoreTestDbName,
     });
   },
@@ -621,7 +727,7 @@ createStoreIndexTests({
     currentStoreTestDbName = `idx_s_${storeTestId}_s`;
     return new MongoDBStore({
       id: 'mongodb-idx-skip',
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentStoreTestDbName,
       skipDefaultIndexes: true,
     });
@@ -630,7 +736,7 @@ createStoreIndexTests({
     currentStoreTestDbName = `idx_s_${storeTestId}_c`;
     return new MongoDBStore({
       id: 'mongodb-idx-custom',
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentStoreTestDbName,
       indexes: indexes.map(idx => ({
         collection: (idx as any).collection || TABLE_THREADS,
@@ -643,7 +749,7 @@ createStoreIndexTests({
     currentStoreTestDbName = `idx_s_${storeTestId}_i`;
     return new MongoDBStore({
       id: 'mongodb-idx-invalid',
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentStoreTestDbName,
       indexes: indexes.map(idx => ({
         collection: (idx as any).collection || 'nonexistent_collection_xyz',
@@ -677,14 +783,14 @@ createDomainIndexTests({
   createDefaultDomain: () => {
     currentDomainTestDbName = `idx_d_${domainTestId}_d`;
     return new MemoryStorageMongoDB({
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentDomainTestDbName,
     });
   },
   createDomainWithSkipDefaults: () => {
     currentDomainTestDbName = `idx_d_${domainTestId}_s`;
     return new MemoryStorageMongoDB({
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentDomainTestDbName,
       skipDefaultIndexes: true,
     });
@@ -692,7 +798,7 @@ createDomainIndexTests({
   createDomainWithCustomIndexes: indexes => {
     currentDomainTestDbName = `idx_d_${domainTestId}_c`;
     return new MemoryStorageMongoDB({
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentDomainTestDbName,
       indexes: indexes.map(idx => ({
         collection: (idx as any).collection || TABLE_THREADS,
@@ -704,7 +810,7 @@ createDomainIndexTests({
   createDomainWithInvalidTable: indexes => {
     currentDomainTestDbName = `idx_d_${domainTestId}_i`;
     return new MemoryStorageMongoDB({
-      url: TEST_CONFIG.url!,
+      uri: TEST_CONFIG.uri!,
       dbName: currentDomainTestDbName,
       indexes: indexes.map(idx => ({
         collection: (idx as any).collection || 'nonexistent_collection_xyz',

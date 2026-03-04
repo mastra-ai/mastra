@@ -1,79 +1,68 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-  DialogTrigger,
-} from "@radix-ui/react-dialog";
-import { CustomSearch } from "@site/src/components/custom-search";
-import { Button } from "@site/src/components/ui/button";
-import { useEffect, useState } from "react";
-import { useHotkeys } from "react-hotkeys-hook";
-import { useChatbotSidebar } from "@site/src/theme/DocRoot/Layout/ChatbotSidebar/context";
+import { Dialog, DialogContent, DialogOverlay, DialogPortal, DialogTitle, DialogTrigger } from '@radix-ui/react-dialog'
+import { Search as SearchIcon } from 'lucide-react'
+import { CustomSearch } from '@site/src/components/custom-search'
+import { Button } from '@site/src/components/ui/button'
+import { useEffect, useState } from 'react'
+import { useHotkeys } from 'react-hotkeys-hook'
+import { useChatbotSidebar } from '@site/src/theme/DocRoot/Layout/ChatbotSidebar/context'
 
 export function Shortcut({ shortcut }: { shortcut: string }) {
-  const [os, setOS] = useState<"mac" | "other" | null>(null);
+  const [os, setOS] = useState<'mac' | 'other' | null>(null)
 
   useEffect(() => {
-    const userAgent = navigator.userAgent;
+    const userAgent = navigator.userAgent
 
-    if (userAgent.includes("Mac")) {
-      setOS("mac");
+    if (userAgent.includes('Mac')) {
+      setOS('mac')
     } else {
-      setOS("other");
+      setOS('other')
     }
-  }, []);
+  }, [])
 
   return (
     <>
       {os ? (
-        <kbd className="flex items-center py-2 gap-1 text-xs font-medium text-(--mastra-icons-3)">
-          {os === "mac" ? `⌘ ${shortcut}` : `CTRL + ${shortcut}`}
+        <kbd className="flex items-center gap-1 py-2 text-xs font-medium text-(--mastra-icons-3)">
+          {os === 'mac' ? `⌘ ${shortcut}` : `CTRL + ${shortcut}`}
         </kbd>
       ) : null}
     </>
-  );
+  )
 }
 
 export default function SearchContainer({ locale }: { locale: string }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false)
 
-  useHotkeys("meta+k", () => setIsOpen((open) => !open));
+  useHotkeys('meta+k', () => setIsOpen(open => !open))
 
   function open() {
-    setIsOpen(true);
+    setIsOpen(true)
   }
 
   function close() {
-    setIsOpen(false);
+    setIsOpen(false)
   }
   // Configure Algolia search options
   const searchOptions = {
-    indexName: "docs_v1_crawler",
+    indexName: 'docs_v1_crawler',
     hitsPerPage: 20,
     attributesToRetrieve: [
-      "hierarchy",
-      "content",
-      "anchor",
-      "url",
-      "url_without_anchor",
-      "type",
-      "section",
-      "lang",
-      "priority",
-      "depth",
+      'hierarchy',
+      'content',
+      'anchor',
+      'url',
+      'url_without_anchor',
+      'type',
+      'section',
+      'lang',
+      'priority',
+      'depth',
     ],
-    attributesToHighlight: [
-      "hierarchy.lvl1",
-      "hierarchy.lvl2",
-      "hierarchy.lvl3",
-      "content",
-    ],
-    attributesToSnippet: ["content:30"],
+    attributesToHighlight: ['hierarchy.lvl1', 'hierarchy.lvl2', 'hierarchy.lvl3', 'content'],
+    attributesToSnippet: ['content:30'],
     filters: `lang:${locale}`,
-    snippetEllipsisText: "…",
-  };
+    snippetEllipsisText: '…',
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -82,46 +71,41 @@ export default function SearchContainer({ locale }: { locale: string }) {
           onClick={open}
           size="sm"
           variant="ghost"
-          className="md:flex hidden w-[200px]  items-center pr-[0.38rem] text-sm font-normal justify-between gap-6 cursor-pointer border-[0.5px] bg-(--mastra-surface-4) border-(--border)  text-(--mastra-icons-3)"
+          className="w-9 cursor-pointer items-center gap-2 border-[0.5px] border-transparent text-sm font-normal lg:w-46 lg:border-(--border) lg:bg-(--mastra-surface-4) xl:w-64"
+          aria-label="Search documentation (Meta + K)"
         >
-          <span className="text-sm">Search docs...</span>
-          <Shortcut shortcut="K" />
+          <SearchIcon className="text-(--mastra-icons-1)" />
+          <span className="hidden text-sm text-(--mastra-icons-2) lg:block">Search documentation</span>
+          <div className="ml-auto hidden xl:block">
+            <Shortcut shortcut="K" />
+          </div>
         </Button>
       </DialogTrigger>
       <DialogPortal>
-        <DialogOverlay className="fixed inset-0 transition-opacity z-250 bg-black/40" />
-        <DialogContent className="dialog-panel z-260 fixed left-1/2 top-[100px] -translate-x-1/2">
-          <div className="flex relative top-1/2 justify-center items-start p-4 min-h-full">
-            <div className="ring ring-neutral-200 dark:ring-(--border) shadow-2xl duration-150 ease-out data-closed:transform-[scale(95%)] data-closed:opacity-0 dark:border-(--border) h-fit w-[660px] mx-auto rounded-xl bg-(--ifm-background-color) dark:bg-(--mastra-surface-2) transition-all">
-              <DialogTitle className="sr-only">Search docs...</DialogTitle>
-              <div className="w-full">
-                <CustomSearch
-                  searchOptions={searchOptions}
-                  closeModal={close}
-                />
-              </div>
+        <DialogOverlay className="fixed inset-0 z-250 bg-black/50 backdrop-blur-[2px] transition-opacity">
+          <DialogContent className="dialog-panel relative z-260 mx-auto my-8 max-w-2xl p-6 lg:my-[15vh]">
+            <DialogTitle className="sr-only">Search documentation</DialogTitle>
+            <div className="mx-auto h-fit w-full rounded-xl bg-(--ifm-background-color) shadow-2xl transition-all duration-150 ease-out dark:border-(--border) dark:bg-(--mastra-surface-2)">
+              <CustomSearch searchOptions={searchOptions} closeModal={close} />
             </div>
-          </div>
-        </DialogContent>
+          </DialogContent>
+        </DialogOverlay>
       </DialogPortal>
     </Dialog>
-  );
+  )
 }
 
 export function AskAI() {
-  const { toggle } = useChatbotSidebar();
-
-  useHotkeys("meta+i", () => toggle());
+  const { toggle } = useChatbotSidebar()
 
   return (
     <Button
       onClick={toggle}
       size="sm"
-      variant="ghost"
-      className="md:flex hidden w-fit items-center pr-[0.38rem] text-sm font-normal justify-between gap-6 cursor-pointer border-[0.5px] bg-(--mastra-surface-4) border-(--border)  text-(--mastra-icons-3)"
+      variant="outline"
+      className="rounded-lg border-[0.5px] border-(--border) text-(--mastra-text-secondary) shadow-none hover:bg-(--mastra-surface-2) hover:text-(--mastra-text-primary) dark:bg-(--mastra-surface-4)"
     >
       <span className="text-sm">Ask AI</span>
-      <Shortcut shortcut="I" />
     </Button>
-  );
+  )
 }

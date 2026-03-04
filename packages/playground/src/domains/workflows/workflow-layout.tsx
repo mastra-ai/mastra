@@ -1,5 +1,4 @@
-import { useParams } from 'react-router';
-
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import {
   WorkflowRunProvider,
   Header,
@@ -14,10 +13,11 @@ import {
   Txt,
   TracingSettingsProvider,
   WorkflowLayout as WorkflowLayoutUI,
+  SchemaRequestContextProvider,
 } from '@mastra/playground-ui';
+import { useParams } from 'react-router';
 
 import { WorkflowHeader } from './workflow-header';
-import { WorkflowRunState } from '@mastra/core/workflows';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
@@ -34,7 +34,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
         </Header>
         <MainContentContent isCentered={true}>
           <div className="flex flex-col items-center justify-center h-full">
-            <Txt variant="ui-md" className="text-icon6 text-center">
+            <Txt variant="ui-md" className="text-neutral6 text-center">
               No workflow ID provided
             </Txt>
           </div>
@@ -61,7 +61,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
           context: {
             input: runExecutionResult?.payload,
             ...runExecutionResult?.steps,
-          } as any,
+          },
           status: runExecutionResult?.status,
           result: runExecutionResult?.result,
           error: runExecutionResult?.error,
@@ -72,18 +72,20 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <TracingSettingsProvider entityId={workflowId} entityType="workflow">
-      <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
-        <MainContentLayout>
-          <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
-          <WorkflowLayoutUI
-            workflowId={workflowId!}
-            leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
-            rightSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-          >
-            {children}
-          </WorkflowLayoutUI>
-        </MainContentLayout>
-      </WorkflowRunProvider>
+      <SchemaRequestContextProvider>
+        <WorkflowRunProvider snapshot={snapshot} workflowId={workflowId} initialRunId={runId}>
+          <MainContentLayout>
+            <WorkflowHeader workflowName={workflow?.name || ''} workflowId={workflowId} runId={runId} />
+            <WorkflowLayoutUI
+              workflowId={workflowId!}
+              leftSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
+              rightSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
+            >
+              {children}
+            </WorkflowLayoutUI>
+          </MainContentLayout>
+        </WorkflowRunProvider>
+      </SchemaRequestContextProvider>
     </TracingSettingsProvider>
   );
 };

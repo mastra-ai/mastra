@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createVectorErrorId } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import { MastraVector } from '@mastra/core/vector';
+import { MastraVector, validateUpsertInput, validateTopK } from '@mastra/core/vector';
 import type {
   IndexStats,
   QueryResult,
@@ -307,11 +307,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     probes,
   }: PgQueryVectorParams): Promise<QueryResult[]> {
     try {
-      if (!Number.isInteger(topK) || topK <= 0) {
-        throw new Error('topK must be a positive integer');
-      }
-      if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
-        throw new Error('queryVector must be an array of finite numbers');
+      // Validate topK parameter
+      validateTopK('PG', topK);
+      if (queryVector !== undefined) {
+        if (!Array.isArray(queryVector) || !queryVector.every(x => typeof x === 'number' && Number.isFinite(x))) {
+          throw new Error('queryVector must be an array of finite numbers');
+        }
+      } else if (!filter || Object.keys(filter).length === 0) {
+        throw new Error('Either queryVector or filter must be provided');
       }
     } catch (error) {
       const mastraError = new MastraError(
@@ -329,6 +332,51 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       throw mastraError;
     }
 
+    // Metadata-only query: filter without vector similarity
+    if (queryVector === undefined) {
+      const client = await this.pool.connect();
+      try {
+        const translatedFilter = this.transformFilter(filter);
+        const { sql: filterQuery, values: filterValues } = buildDeleteFilterQuery(translatedFilter);
+        const { tableName } = this.getTableName(indexName);
+
+        const query = `
+          SELECT
+            vector_id as id,
+            metadata
+            ${includeVector ? ', embedding' : ''}
+          FROM ${tableName}
+          ${filterQuery}
+          ORDER BY vector_id
+          LIMIT $${filterValues.length + 1}`;
+        const result = await client.query(query, [...filterValues, topK]);
+
+        return result.rows.map(({ id, metadata, embedding }: { id: string; metadata: any; embedding?: string }) => ({
+          id,
+          score: 0,
+          metadata,
+          ...(includeVector && embedding && { vector: JSON.parse(embedding) }),
+        }));
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: createVectorErrorId('PG', 'QUERY', 'FAILED'),
+            domain: ErrorDomain.MASTRA_VECTOR,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              indexName,
+            },
+          },
+          error,
+        );
+        this.logger?.trackException(mastraError);
+        throw mastraError;
+      } finally {
+        client.release();
+      }
+    }
+
+    // Vector similarity query
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -407,6 +455,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     ids,
     deleteFilter,
   }: UpsertVectorParams<PGVectorFilter>): Promise<string[]> {
+    // Validate input parameters
+    validateUpsertInput('PG', vectors, metadata, ids);
+
     const { tableName } = this.getTableName(indexName);
 
     // Start a transaction
@@ -1055,11 +1106,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             AND n.nspname = $2;
             `;
 
-      const [dimResult, countResult, indexResult] = await Promise.all([
-        client.query(dimensionQuery, [tableName]),
-        client.query(countQuery),
-        client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']),
-      ]);
+      const dimResult = await client.query(dimensionQuery, [tableName]);
+      const countResult = await client.query(countQuery);
+      const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
         index_method: 'flat',

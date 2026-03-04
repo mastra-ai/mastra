@@ -25,27 +25,6 @@ function escapeSql(str: string): string {
   return str.replace(/'/g, "''");
 }
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: ensureDate(row.createdAt)!,
-    updatedAt: ensureDate(row.updatedAt)!,
-    resourceId: row.resourceId,
-  };
-}
-
 export class StoreWorkflowsLance extends WorkflowsStorage {
   client: Connection;
   #db: LanceDB;
@@ -54,6 +33,30 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     const client = resolveLanceConfig(config);
     this.client = client;
     this.#db = new LanceDB({ client });
+  }
+
+  supportsConcurrentUpdates(): boolean {
+    return false;
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: ensureDate(row.createdAt)!,
+      updatedAt: ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
   }
 
   async init(): Promise<void> {
@@ -71,77 +74,26 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    requestContext,
-  }: {
+  async updateWorkflowResults(_args: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    // Load existing snapshot
-    let snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
-
-    if (!snapshot) {
-      // Create new snapshot if none exists
-      snapshot = {
-        context: {},
-        activePaths: [],
-        timestamp: Date.now(),
-        suspendedPaths: {},
-        activeStepsPath: {},
-        resumeLabels: {},
-        serializedStepGraph: [],
-        status: 'pending',
-        value: {},
-        waitingPaths: {},
-        runId: runId,
-        requestContext: {},
-      } as WorkflowRunState;
-    }
-
-    // Merge the new step result and request context
-    snapshot.context[stepId] = result;
-    snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-    // Persist updated snapshot
-    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot });
-
-    return snapshot.context;
+    throw new Error(
+      'updateWorkflowResults is not implemented for LanceDB storage. LanceDB does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
+  async updateWorkflowState(_args: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    // Load existing snapshot
-    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
-
-    if (!snapshot) {
-      return undefined;
-    }
-
-    if (!snapshot.context) {
-      throw new Error(`Snapshot not found for runId ${runId}`);
-    }
-
-    // Merge the new options with the existing snapshot
-    const updatedSnapshot = { ...snapshot, ...opts };
-
-    // Persist updated snapshot
-    await this.persistWorkflowSnapshot({ workflowName, runId, snapshot: updatedSnapshot });
-
-    return updatedSnapshot;
+    throw new Error(
+      'updateWorkflowState is not implemented for LanceDB storage. LanceDB does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot({
@@ -248,7 +200,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const records = await query.toArray();
       if (records.length === 0) return null;
       const record = records[0];
-      return parseWorkflowRun(record);
+      return this.parseWorkflowRun(record);
     } catch (error: any) {
       throw new MastraError(
         {
@@ -348,7 +300,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const records = await query.toArray();
 
       return {
-        runs: records.map(record => parseWorkflowRun(record)),
+        runs: records.map(record => this.parseWorkflowRun(record)),
         total: total || records.length,
       };
     } catch (error: any) {

@@ -8,7 +8,7 @@ import type {
   ObservabilityInstance,
   ExportedSpan,
 } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -70,6 +70,10 @@ const mockConsole = {
 
 vi.stubGlobal('console', mockConsole);
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 // Test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
@@ -80,6 +84,10 @@ class TestExporter implements ObservabilityExporter {
   }
 
   async shutdown(): Promise<void> {
+    // no-op
+  }
+
+  async flush(): Promise<void> {
     // no-op
   }
 
@@ -519,8 +527,8 @@ describe('Tracing', () => {
         attributes: {},
       });
 
-      // Wait for async export to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for fire-and-forget async export to complete
+      await Promise.resolve();
 
       // Should continue with other exporters despite failure
       expect(testExporter.events).toHaveLength(1);
@@ -531,6 +539,7 @@ describe('Tracing', () => {
       const mockExporter = {
         name: 'mock-exporter',
         exportTracingEvent: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 
@@ -1783,6 +1792,238 @@ describe('Tracing', () => {
       expect(span.metadata).toEqual({
         userId: 'user-123',
       });
+
+      span.end();
+    });
+  });
+
+  describe('hideInput/hideOutput Support', () => {
+    it('should hide input from exported spans when hideInput is true', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        input: { sensitiveData: 'secret-value' },
+        tracingOptions: {
+          hideInput: true,
+        },
+      });
+
+      // Input should be stored on the span itself
+      expect(span.input).toEqual({ sensitiveData: 'secret-value' });
+
+      // But exported span should have input hidden
+      const startedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_STARTED);
+      expect(startedEvent?.exportedSpan.input).toBeUndefined();
+
+      span.end({ output: { result: 'success' } });
+
+      // Ended event should also have input hidden
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.input).toBeUndefined();
+      // Output should still be present since hideOutput is not set
+      expect(endedEvent?.exportedSpan.output).toEqual({ result: 'success' });
+    });
+
+    it('should hide output from exported spans when hideOutput is true', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        input: { query: 'test query' },
+        tracingOptions: {
+          hideOutput: true,
+        },
+      });
+
+      // Input should be present in exported span
+      const startedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_STARTED);
+      expect(startedEvent?.exportedSpan.input).toEqual({ query: 'test query' });
+
+      span.end({ output: { sensitiveResult: 'secret-result' } });
+
+      // Output should be stored on the span itself
+      expect(span.output).toEqual({ sensitiveResult: 'secret-result' });
+
+      // Ended event should have output hidden
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.output).toBeUndefined();
+      // Input should still be present since hideInput is not set
+      expect(endedEvent?.exportedSpan.input).toEqual({ query: 'test query' });
+    });
+
+    it('should hide both input and output when both options are true', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        input: { sensitiveInput: 'secret-input' },
+        tracingOptions: {
+          hideInput: true,
+          hideOutput: true,
+        },
+      });
+
+      span.end({ output: { sensitiveOutput: 'secret-output' } });
+
+      // Both input and output should be hidden in exported span
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.input).toBeUndefined();
+      expect(endedEvent?.exportedSpan.output).toBeUndefined();
+    });
+
+    it('should inherit hideInput/hideOutput in child spans via TraceState', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'parent-agent',
+        attributes: { agentId: 'agent-1' },
+        input: { parentInput: 'parent-secret' },
+        tracingOptions: {
+          hideInput: true,
+          hideOutput: true,
+        },
+      });
+
+      // Verify TraceState has hideInput/hideOutput
+      expect(rootSpan.traceState?.hideInput).toBe(true);
+      expect(rootSpan.traceState?.hideOutput).toBe(true);
+
+      testExporter.events = []; // Clear root span events
+
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'child-tool',
+        attributes: { toolId: 'tool-1' },
+        input: { childInput: 'child-secret' },
+      });
+
+      // Child span should inherit TraceState
+      expect(childSpan.traceState?.hideInput).toBe(true);
+      expect(childSpan.traceState?.hideOutput).toBe(true);
+
+      childSpan.end({ output: { childOutput: 'child-result' } });
+
+      // Child span exports should also have input/output hidden
+      const startedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_STARTED);
+      expect(startedEvent?.exportedSpan.input).toBeUndefined();
+
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.input).toBeUndefined();
+      expect(endedEvent?.exportedSpan.output).toBeUndefined();
+
+      rootSpan.end();
+    });
+
+    it('should not hide input/output when options are false or not set', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        input: { normalInput: 'visible-input' },
+        tracingOptions: {
+          hideInput: false,
+          hideOutput: false,
+        },
+      });
+
+      span.end({ output: { normalOutput: 'visible-output' } });
+
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      expect(endedEvent?.exportedSpan.input).toEqual({ normalInput: 'visible-input' });
+      expect(endedEvent?.exportedSpan.output).toEqual({ normalOutput: 'visible-output' });
+    });
+
+    it('should work with hideInput/hideOutput combined with other tracingOptions', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        input: { sensitiveInput: 'secret' },
+        tracingOptions: {
+          hideInput: true,
+          tags: ['test-tag', 'sensitive-operation'],
+          metadata: { operationType: 'secret-operation' },
+        },
+      });
+
+      span.end({ output: { result: 'success' } });
+
+      const endedEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED);
+      // Input should be hidden
+      expect(endedEvent?.exportedSpan.input).toBeUndefined();
+      // Output should still be present
+      expect(endedEvent?.exportedSpan.output).toEqual({ result: 'success' });
+      // Tags and metadata should work normally
+      expect(endedEvent?.exportedSpan.tags).toEqual(['test-tag', 'sensitive-operation']);
+      expect(endedEvent?.exportedSpan.metadata).toEqual({ operationType: 'secret-operation' });
+    });
+
+    it('should handle hideInput/hideOutput in updated spans', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: { agentId: 'agent-1' },
+        input: { initialInput: 'secret' },
+        tracingOptions: {
+          hideInput: true,
+          hideOutput: true,
+        },
+      });
+
+      testExporter.events = [];
+
+      // Update the span
+      span.update({
+        input: { updatedInput: 'new-secret' },
+        output: { intermediateOutput: 'partial-result' },
+      });
+
+      // Updated event should have input/output hidden
+      const updateEvent = testExporter.events.find(e => e.type === TracingEventType.SPAN_UPDATED);
+      expect(updateEvent?.exportedSpan.input).toBeUndefined();
+      expect(updateEvent?.exportedSpan.output).toBeUndefined();
 
       span.end();
     });

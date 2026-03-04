@@ -21,6 +21,9 @@ import { ModelSpanTracker } from '../model-tracing';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
 
+/** Extended span type that includes getParentSpan method available on BaseSpan instances */
+type AnyBaseSpan = AnySpan & { getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined };
+
 /**
  * Determines if a span type should be considered internal based on flags.
  * Returns false if flags are undefined.
@@ -150,17 +153,18 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
     this.metadata = deepClean(options.metadata, this.deepCleanOptions);
     this.parent = options.parent;
-    this.startTime = new Date();
+    this.startTime = options.startTime ?? new Date();
     this.observabilityInstance = observabilityInstance;
     this.isEvent = options.isEvent ?? false;
     this.isInternal = isSpanInternal(this.type, options.tracingPolicy?.internal);
     this.traceState = options.traceState;
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
-    // Entity identification
-    this.entityType = options.entityType;
-    this.entityId = options.entityId;
-    this.entityName = options.entityName;
+    // Entity identification - inherit from closest non-internal parent if not explicitly provided
+    const entityParent = this.getParentSpan(false);
+    this.entityType = options.entityType ?? entityParent?.entityType;
+    this.entityId = options.entityId ?? entityParent?.entityId;
+    this.entityName = options.entityName ?? entityParent?.entityName;
 
     if (this.isEvent) {
       // Event spans don't have endTime or input.
@@ -211,16 +215,28 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
   abstract get isValid(): boolean;
 
+  /** Get the closest parent span, optionally skipping internal spans */
+  public getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined {
+    if (!this.parent) {
+      return undefined;
+    }
+    if (includeInternalSpans) return this.parent;
+    if (this.parent.isInternal) return (this.parent as AnyBaseSpan).getParentSpan(includeInternalSpans);
+    return this.parent;
+  }
+
   /** Get the closest parent spanId that isn't an internal span */
   public getParentSpanId(includeInternalSpans?: boolean): string | undefined {
     if (!this.parent) {
-      // Return parent span ID if available, otherwise undefined
+      // Return parent span ID if available (for root spans with external parent)
       return this.parentSpanId;
     }
-    if (includeInternalSpans) return this.parent.id;
-    if (this.parent.isInternal) return this.parent.getParentSpanId(includeInternalSpans);
-
-    return this.parent.id;
+    const parentSpan = this.getParentSpan(includeInternalSpans);
+    if (parentSpan) {
+      return parentSpan.id;
+    }
+    // All ancestors are internal, recurse to get root's parentSpanId
+    return this.parent.getParentSpanId(includeInternalSpans);
   }
 
   /** Find the closest parent span of a specific type by walking up the parent chain */
@@ -239,6 +255,10 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns a lightweight span ready for export */
   public exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> {
+    // Check if input/output should be hidden based on traceState
+    const hideInput = this.traceState?.hideInput ?? false;
+    const hideOutput = this.traceState?.hideOutput ?? false;
+
     return {
       id: this.id,
       traceId: this.traceId,
@@ -251,8 +271,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       metadata: this.metadata,
       startTime: this.startTime,
       endTime: this.endTime,
-      input: this.input,
-      output: this.output,
+      input: hideInput ? undefined : this.input,
+      output: hideOutput ? undefined : this.output,
       errorInfo: this.errorInfo,
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,

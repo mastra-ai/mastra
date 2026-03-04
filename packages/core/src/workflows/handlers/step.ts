@@ -4,8 +4,14 @@ import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '..
 import type { MastraScorers } from '../../evals';
 import { runScorer } from '../../evals/hooks';
 import type { PubSub } from '../../events/pubsub';
-import { EntityType, SpanType, wrapMastra } from '../../observability';
-import type { TracingContext } from '../../observability';
+import {
+  EntityType,
+  SpanType,
+  wrapMastra,
+  createObservabilityContext,
+  resolveObservabilityContext,
+} from '../../observability';
+import type { ObservabilityContext, Span } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -28,13 +34,14 @@ import {
   validateStepResumeData,
   validateStepSuspendData,
   validateStepStateData,
+  validateStepRequestContext,
 } from '../utils';
 
-export interface ExecuteStepParams {
+export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;
   runId: string;
   resourceId?: string;
-  step: Step<string, any, any>;
+  step: Step<string, any, any, any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   executionContext: ExecutionContext;
   restart?: RestartExecutionParams;
@@ -53,7 +60,6 @@ export interface ExecuteStepParams {
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
-  tracingContext: TracingContext;
   iterationCount?: number;
   perStep?: boolean;
 }
@@ -80,18 +86,28 @@ export async function executeStep(
     outputWriter,
     disableScorers,
     serializedStepGraph,
-    tracingContext,
     iterationCount,
     perStep,
+    ...rest
   } = params;
+  const observabilityContext = resolveObservabilityContext(rest);
 
   const stepCallId = randomUUID();
 
-  const { inputData, validationError } = await validateStepInput({
+  const { inputData, validationError: inputValidationError } = await validateStepInput({
     prevOutput,
     step,
     validateInputs: engine.options?.validateInputs ?? true,
   });
+
+  const { validationError: requestContextValidationError } = await validateStepRequestContext({
+    requestContext,
+    step,
+    validateInputs: engine.options?.validateInputs ?? true,
+  });
+
+  // Combine validation errors - input validation takes precedence
+  const validationError = inputValidationError || requestContextValidationError;
 
   const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =
     await validateStepResumeData({
@@ -135,13 +151,19 @@ export async function executeStep(
 
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
-  const stepSpan = tracingContext.currentSpan?.createChildSpan({
-    name: `workflow step: '${step.id}'`,
-    type: SpanType.WORKFLOW_STEP,
-    entityType: EntityType.WORKFLOW_STEP,
-    entityId: step.id,
-    input: inputData,
-    tracingPolicy: engine.options?.tracingPolicy,
+  const stepSpan = await engine.createStepSpan({
+    parentSpan: observabilityContext.tracingContext.currentSpan,
+    stepId: step.id,
+    operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
+    options: {
+      name: `workflow step: '${step.id}'`,
+      type: SpanType.WORKFLOW_STEP,
+      entityType: EntityType.WORKFLOW_STEP,
+      entityId: step.id,
+      input: inputData,
+      tracingPolicy: engine.options?.tracingPolicy,
+    },
+    executionContext,
   });
 
   const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
@@ -184,14 +206,43 @@ export async function executeStep(
       startedAt: startTime ?? Date.now(),
       abortController,
       requestContext,
-      tracingContext,
+      ...observabilityContext,
       outputWriter,
-      stepSpan,
+      stepSpan: stepSpan as Span<SpanType.WORKFLOW_STEP> | undefined,
       perStep,
     });
 
     // If executeWorkflowStep returns a result, wrap it in StepExecutionResult
     if (workflowResult !== null) {
+      // End the step span with the nested workflow result
+      if (stepSpan) {
+        if (workflowResult.status === 'failed') {
+          await engine.errorStepSpan({
+            span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
+            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+            errorOptions: {
+              error:
+                workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
+              attributes: { status: 'failed' },
+            },
+          });
+        } else {
+          // For success, suspended, paused, tripwire - end the span normally
+          // Only 'success' has .output, others may have suspendOutput or nothing
+          const output =
+            workflowResult.status === 'success' ? workflowResult.output : (workflowResult as any).suspendOutput;
+
+          await engine.endStepSpan({
+            span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
+            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+            endOptions: {
+              output,
+              attributes: { status: workflowResult.status },
+            },
+          });
+        }
+      }
+
       const stepResult = { ...stepInfo, ...workflowResult } as StepResult<any, any, any, any>;
       return {
         result: stepResult,
@@ -249,11 +300,21 @@ export async function executeStep(
         requestContextUpdate: null,
       };
 
+      // For nested workflow steps, pass raw mastra - the nested workflow will
+      // register it on its own engine and wrap it fresh for its own steps.
+      // For regular steps, wrap mastra with current step span for proper tracing.
+      const isNestedWorkflow = step.component === 'WORKFLOW';
+      const mastraForStep = engine.mastra
+        ? isNestedWorkflow
+          ? engine.mastra
+          : wrapMastra(engine.mastra, { currentSpan: stepSpan })
+        : undefined;
+
       const output = await runStep({
         runId,
         resourceId,
         workflowId,
-        mastra: engine.mastra ? wrapMastra(engine.mastra, { currentSpan: stepSpan }) : undefined,
+        mastra: mastraForStep,
         requestContext,
         inputData,
         state: executionContext.state,
@@ -272,10 +333,10 @@ export async function executeStep(
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
-        tracingContext: { currentSpan: stepSpan },
+        ...createObservabilityContext({ currentSpan: stepSpan }),
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
-        suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<any> => {
+        suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,
             step,
@@ -320,7 +381,6 @@ export async function executeStep(
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
-                // @ts-ignore
                 runId: stepResults[step.id]?.suspendPayload?.__workflow_meta?.runId,
                 label: resume?.label,
                 forEachIndex: resume?.forEachIndex,
@@ -403,7 +463,7 @@ export async function executeStep(
         stepId: step.id,
         requestContext,
         disableScorers,
-        tracingContext: { currentSpan: stepSpan },
+        ...createObservabilityContext({ currentSpan: stepSpan }),
       });
     }
 
@@ -439,10 +499,14 @@ export async function executeStep(
   }
 
   if (execResults.status != 'failed') {
-    stepSpan?.end({
-      output: execResults.output,
-      attributes: {
-        status: execResults.status,
+    await engine.endStepSpan({
+      span: stepSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      endOptions: {
+        output: execResults.output,
+        attributes: {
+          status: execResults.status,
+        },
       },
     });
   }
@@ -462,7 +526,7 @@ export async function executeStep(
   };
 }
 
-export interface RunScorersParams {
+export interface RunScorersParams extends ObservabilityContext {
   engine: DefaultExecutionEngine;
   scorers: DynamicArgument<MastraScorers>;
   runId: string;
@@ -472,12 +536,11 @@ export interface RunScorersParams {
   workflowId: string;
   stepId: string;
   disableScorers?: boolean;
-  tracingContext: TracingContext;
 }
 
 export async function runScorersForStep(params: RunScorersParams): Promise<void> {
-  const { engine, scorers, runId, input, output, workflowId, stepId, requestContext, disableScorers, tracingContext } =
-    params;
+  const { engine, scorers, runId, input, output, workflowId, stepId, requestContext, disableScorers, ...rest } = params;
+  const observabilityContext = resolveObservabilityContext(rest);
 
   let scorersToUse = scorers;
   if (typeof scorersToUse === 'function') {
@@ -521,7 +584,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
         structuredOutput: true,
         source: 'LIVE',
         entityType: 'WORKFLOW',
-        tracingContext,
+        ...observabilityContext,
       });
     }
   }

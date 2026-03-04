@@ -7,8 +7,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
@@ -877,33 +877,83 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-    const perPage = normalizePerPage(perPageInput, 100);
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { page },
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        new Error('page must be >= 0'),
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
     }
 
-    // When perPage is false (get all), ignore page offset
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
 
     try {
-      // Get total count - count distinct thread IDs to handle duplicates
+      // Build WHERE clauses
+      const whereClauses: string[] = [];
+      const queryParams: Record<string, any> = {};
+
+      if (filter?.resourceId) {
+        whereClauses.push('resourceId = {resourceId:String}');
+        queryParams.resourceId = filter.resourceId;
+      }
+
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIndex}`;
+          // Use JSONExtractRaw to compare exact JSON representation
+          whereClauses.push(`JSONExtractRaw(metadata, '${key}') = {${paramName}:String}`);
+          queryParams[paramName] = JSON.stringify(value);
+          metadataIndex++;
+        }
+      }
+
+      // Get total count - count AFTER ranking to ensure we count latest versions only
       const countResult = await this.client.query({
-        query: `SELECT count(DISTINCT id) as total FROM ${TABLE_THREADS} WHERE resourceId = {resourceId:String}`,
-        query_params: { resourceId },
+        query: `
+          WITH ranked_threads AS (
+            SELECT
+              id,
+              resourceId,
+              metadata,
+              ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
+            FROM ${TABLE_THREADS}
+          )
+          SELECT count(*) as total 
+          FROM ranked_threads 
+          WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
+        `,
+        query_params: queryParams,
         clickhouse_settings: {
           date_time_input_format: 'best_effort',
           date_time_output_format: 'iso',
@@ -924,7 +974,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         };
       }
 
-      // Get paginated threads - get newest version of each thread by using row number
+      // Get paginated threads - get newest version of each thread
+      // Important: Apply WHERE filters AFTER row ranking to ensure we filter on latest versions
       const dataResult = await this.client.query({
         query: `
               WITH ranked_threads AS (
@@ -937,7 +988,6 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                   toDateTime64(updatedAt, 3) as updatedAt,
                   ROW_NUMBER() OVER (PARTITION BY id ORDER BY updatedAt DESC) as row_num
                 FROM ${TABLE_THREADS}
-                WHERE resourceId = {resourceId:String}
               )
               SELECT
                 id,
@@ -947,12 +997,12 @@ export class MemoryStorageClickhouse extends MemoryStorage {
                 createdAt,
                 updatedAt
               FROM ranked_threads
-              WHERE row_num = 1
+              WHERE row_num = 1 ${whereClauses.length > 0 ? `AND ${whereClauses.join(' AND ')}` : ''}
               ORDER BY "${field}" ${direction === 'DESC' ? 'DESC' : 'ASC'}
               LIMIT {perPage:Int64} OFFSET {offset:Int64}
             `,
         query_params: {
-          resourceId,
+          ...queryParams,
           perPage: perPage,
           offset: offset,
         },
@@ -980,10 +1030,14 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page },
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+            page,
+          },
         },
         error,
       );
@@ -1378,10 +1432,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           resource.workingMemory && typeof resource.workingMemory === 'object'
             ? JSON.stringify(resource.workingMemory)
             : resource.workingMemory,
-        metadata:
-          resource.metadata && typeof resource.metadata === 'string'
-            ? JSON.parse(resource.metadata)
-            : resource.metadata,
+        metadata: parseMetadata(resource.metadata),
         createdAt: new Date(resource.createdAt),
         updatedAt: new Date(resource.updatedAt),
       };
@@ -1407,7 +1458,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           {
             id: resource.id,
             workingMemory: resource.workingMemory,
-            metadata: JSON.stringify(resource.metadata),
+            metadata: serializeMetadata(resource.metadata),
             createdAt: resource.createdAt.toISOString(),
             updatedAt: resource.updatedAt.toISOString(),
           },
@@ -1419,7 +1470,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         },
       });
 
-      return resource;
+      // Return resource with normalized metadata
+      return {
+        ...resource,
+        metadata: resource.metadata || {},
+      };
     } catch (error) {
       throw new MastraError(
         {

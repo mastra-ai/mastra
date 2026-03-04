@@ -1,37 +1,33 @@
 {
   "name": "template-text-to-sql",
   "version": "1.0.0",
+  "description": "A Mastra template for natural language to SQL conversion using a local SQLite database.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "mastra dev",
+    "seed": "tsx src/seed.ts",
+    "dev": "tsx src/seed.ts && mastra dev",
     "build": "mastra build",
     "start": "mastra start"
   },
-  "keywords": [],
-  "author": "",
   "license": "Apache-2.0",
-  "description": "A Mastra workflow system for database introspection and natural language to SQL conversion. Features PostgreSQL schema analysis, AI-powered query generation, safe SQL execution, and interactive workflows for database operations.",
+  "packageManager": "pnpm@10.23.0",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/core": "beta",
-    "@mastra/libsql": "beta",
-    "@mastra/loggers": "beta",
-    "@mastra/memory": "beta",
-    "@mastra/observability": "beta",
-    "ai": "^5.0.111",
-    "csv-parse": "^5.6.0",
-    "dotenv": "^17.0.1",
-    "pg": "^8.16.3",
-    "zod": "^3.25.76"
+    "@libsql/client": "^0.17.0",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
-    "@types/pg": "^8.16.0",
-    "mastra": "beta",
+    "@types/node": "^22.19.7",
+    "mastra": "latest",
+    "tsx": "^4.19.4",
     "typescript": "^5.9.3"
   }
 }

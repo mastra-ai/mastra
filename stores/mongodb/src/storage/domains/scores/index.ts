@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
@@ -152,7 +154,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
     try {
       const now = new Date();
-      const scoreId = crypto.randomUUID();
+      const scoreId = randomUUID();
 
       const scorer =
         typeof validatedScore.scorer === 'string' ? safelyParseJSON(validatedScore.scorer) : validatedScore.scorer;
@@ -258,7 +260,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find(query).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -319,7 +321,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find({ runId }).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find({ runId }).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -382,7 +384,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find({ entityId, entityType }).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find({ entityId, entityType }).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -446,7 +448,7 @@ export class ScoresStorageMongoDB extends ScoresStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       // Build query - omit limit() when perPage is false to fetch all results
-      let cursor = collection.find(query).sort({ createdAt: 'desc' }).skip(start);
+      let cursor = collection.find(query).sort({ createdAt: -1 }).skip(start);
 
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);

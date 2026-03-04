@@ -1,22 +1,21 @@
-import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { AgentExecutionOptions, NetworkOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import type { OutputSchema } from '@mastra/core/stream';
 import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
 import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
-export type NetworkStreamHandlerParams<OUTPUT extends OutputSchema = undefined> = AgentExecutionOptions<OUTPUT> & {
+export type NetworkStreamHandlerParams<OUTPUT = undefined> = AgentExecutionOptions<OUTPUT> & {
   messages: MessageListInput;
 };
 
-export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined> = {
+export type NetworkStreamHandlerOptions<OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
   params: NetworkStreamHandlerParams<OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT>;
+  defaultOptions?: NetworkOptions<OUTPUT>;
 };
 
 /**
@@ -41,7 +40,7 @@ export type NetworkStreamHandlerOptions<OUTPUT extends OutputSchema = undefined>
  * }
  * ```
  */
-export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined>({
+export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT = undefined>({
   mastra,
   agentId,
   params,
@@ -55,7 +54,7 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
     throw new Error(`Agent ${agentId} not found`);
   }
 
-  const result = await agentObj.network(messages, {
+  const result = await agentObj.network<any>(messages, {
     ...defaultOptions,
     ...rest,
   });
@@ -69,9 +68,9 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT e
   });
 }
 
-export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> };
+export type NetworkRouteOptions<OUTPUT = undefined> =
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: NetworkOptions<OUTPUT> }
+  | { path: string; agent: string; defaultOptions?: NetworkOptions<OUTPUT> };
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.
@@ -99,7 +98,7 @@ export type NetworkRouteOptions<OUTPUT extends OutputSchema = undefined> =
  *   },
  * });
  */
-export function networkRoute<OUTPUT extends OutputSchema = undefined>({
+export function networkRoute<OUTPUT = undefined>({
   path = '/network/:agentId',
   agent,
   defaultOptions,
@@ -201,7 +200,7 @@ export function networkRoute<OUTPUT extends OutputSchema = undefined>({
         params: {
           ...params,
           requestContext: effectiveRequestContext,
-        },
+        } as any,
         defaultOptions,
       });
 

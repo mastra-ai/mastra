@@ -1,0 +1,289 @@
+{
+  "__structure__": [
+    "agent_run: \"agent run: 'test-agent'\"",
+    "└── model_generation: \"llm: 'mock-model-id'\"",
+    "    ├── model_step: \"step: 0\"",
+    "    │   ├── model_chunk: \"chunk: 'tool-call'\"",
+    "    │   ├── tool_call: \"tool: 'calculator'\"",
+    "    │   └── model_chunk: \"chunk: 'tool-result'\"",
+    "    └── model_step: \"step: 1\"",
+    "        └── model_chunk: \"chunk: 'text'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "agent run: 'test-agent'",
+        "type": "agent_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "agent",
+        "entityId": "test-agent",
+        "attributes": {
+          "conversationId": "test-thread-id",
+          "instructions": "You are a test agent"
+        },
+        "metadata": {
+          "runId": "<runId-1>",
+          "resourceId": "test-resource-id",
+          "threadId": "test-thread-id"
+        },
+        "input": "Calculate 5 + 3",
+        "output": {
+          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "files": []
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "llm: 'mock-model-id'",
+            "type": "model_generation",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "test-agent",
+            "attributes": {
+              "model": "mock-model-id",
+              "provider": "mock-provider",
+              "streaming": true,
+              "parameters": {
+                "temperature": 0
+              },
+              "finishReason": "stop",
+              "responseId": "<responseId-1>",
+              "responseModel": "mock-model-id",
+              "completionStartTime": "<date>",
+              "usage": {
+                "inputTokens": 30,
+                "outputTokens": 35
+              }
+            },
+            "metadata": {
+              "runId": "<runId-1>",
+              "resourceId": "test-resource-id"
+            },
+            "input": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "You are a test agent"
+                },
+                {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Calculate 5 + 3"
+                    }
+                  ]
+                }
+              ]
+            },
+            "output": {
+              "files": [],
+              "reasoning": [],
+              "sources": [],
+              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "warnings": []
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-3>",
+                "traceId": "<trace-1>",
+                "name": "step: 0",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "test-agent",
+                "attributes": {
+                  "stepIndex": 0,
+                  "messageId": "<messageId-1>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 10
+                  },
+                  "isContinued": true,
+                  "finishReason": "tool-calls"
+                },
+                "metadata": {
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  }
+                },
+                "input": {},
+                "output": {
+                  "text": "",
+                  "toolCalls": [
+                    {
+                      "toolCallId": "call-calc-1",
+                      "toolName": "calculator",
+                      "args": {
+                        "operation": "add",
+                        "a": 5,
+                        "b": 3
+                      }
+                    }
+                  ]
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-4>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-call'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "test-agent",
+                    "attributes": {
+                      "chunkType": "tool-call",
+                      "sequenceNumber": 0
+                    },
+                    "output": {
+                      "toolName": "calculator",
+                      "toolCallId": "call-calc-1",
+                      "toolInput": {
+                        "operation": "add",
+                        "a": 5,
+                        "b": 3
+                      }
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
+                    "name": "tool: 'calculator'",
+                    "type": "tool_call",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "tool",
+                    "entityId": "calculator",
+                    "attributes": {
+                      "toolDescription": "Performs calculations",
+                      "toolType": "tool",
+                      "success": true
+                    },
+                    "input": {
+                      "operation": "add",
+                      "a": 5,
+                      "b": 3
+                    },
+                    "output": {
+                      "result": 8
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-6>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'tool-result'",
+                    "type": "model_chunk",
+                    "completed": false,
+                    "isEvent": true,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "test-agent",
+                    "attributes": {
+                      "chunkType": "tool-result",
+                      "sequenceNumber": 1
+                    },
+                    "metadata": {
+                      "toolCallId": "call-calc-1",
+                      "toolName": "calculator"
+                    },
+                    "output": {
+                      "result": 8
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "span": {
+                "id": "<span-7>",
+                "traceId": "<trace-1>",
+                "name": "step: 1",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "test-agent",
+                "attributes": {
+                  "stepIndex": 1,
+                  "messageId": "<messageId-1>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25
+                  },
+                  "isContinued": false,
+                  "finishReason": "stop"
+                },
+                "metadata": {
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  }
+                },
+                "input": {},
+                "output": {
+                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "toolCalls": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-8>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-7>",
+                    "entityType": "agent",
+                    "entityId": "test-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "output": {
+                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

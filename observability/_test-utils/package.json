@@ -4,19 +4,22 @@
   "description": "Test utilities for observability exporters",
   "type": "module",
   "private": true,
-  "main": "./index.ts",
+  "main": "./src/index.ts",
   "files": [
-    "index.ts"
+    "src"
   ],
   "scripts": {
     "test": "vitest run"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
+    "@mastra/observability": "workspace:*",
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:"
+    "@vitest/ui": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=0.18.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/observability": ">=1.0.0-0 <2.0.0-0"
   }
 }

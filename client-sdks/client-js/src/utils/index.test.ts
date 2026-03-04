@@ -81,6 +81,36 @@ describe('Request Context Utils', () => {
 
       expect(result).toBe(expected);
     });
+
+    it('should handle non-ASCII characters without throwing', () => {
+      const requestContext = {
+        description: 'A community for founders — experts & beginners alike',
+        name: '日本語コミュニティ',
+        emoji: '🚀',
+      };
+
+      const result = base64RequestContext(requestContext);
+
+      // Should not throw (btoa would throw InvalidCharacterError on non-Latin1 chars)
+      expect(result).toBeDefined();
+      expect(typeof result).toBe('string');
+
+      // Verify round-trip: server-side decode uses Buffer.from(str, 'base64').toString('utf-8')
+      const decoded = JSON.parse(Buffer.from(result!, 'base64').toString('utf-8'));
+      expect(decoded).toEqual(requestContext);
+    });
+
+    it('should produce output compatible with server-side Buffer.from decode for ASCII', () => {
+      const requestContext = { userId: '123', role: 'admin' };
+
+      const result = base64RequestContext(requestContext);
+
+      // For ASCII-only data, output should be identical to plain btoa
+      expect(result).toBe(btoa(JSON.stringify(requestContext)));
+      // And server-side decode should work
+      const decoded = JSON.parse(Buffer.from(result!, 'base64').toString('utf-8'));
+      expect(decoded).toEqual(requestContext);
+    });
   });
 
   describe('Integration tests', () => {

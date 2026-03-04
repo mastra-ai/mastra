@@ -111,9 +111,16 @@ export class ChromaFilterTranslator extends BaseFilterTranslator<ChromaVectorFil
       }
     }
 
-    // If we have multiple operators, return them combined with $and
+    // Combine multiOperatorConditions with result if both exist
     if (multiOperatorConditions.length > 0) {
-      return { $and: multiOperatorConditions };
+      // Convert result to array of conditions for $and
+      const resultConditions = Object.entries(result).map(([key, value]) => ({ [key]: value }));
+      const allConditions = [...multiOperatorConditions, ...resultConditions];
+
+      if (allConditions.length === 1) {
+        return allConditions[0];
+      }
+      return { $and: allConditions };
     }
 
     // Wrap in $and if there are multiple top-level fields

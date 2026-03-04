@@ -1,14 +1,21 @@
 import { AgentWorkingMemory } from './agent-working-memory';
 import { AgentMemoryConfig } from './agent-memory-config';
+import { AgentObservationalMemory } from './agent-observational-memory';
 import { useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { ExternalLink, Copy } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 import { useThreadInput } from '@/domains/conversation';
-import { useMemoryConfig, useMemorySearch, useCloneThread } from '@/domains/memory/hooks';
-import { MemorySearch } from '@/components/assistant-ui/memory-search';
+import {
+  useMemoryConfig,
+  useMemorySearch,
+  useCloneThread,
+  useMemoryWithOMStatus,
+  useThread,
+} from '@/domains/memory/hooks';
+import { MemorySearch } from '@/lib/ai-ui/memory-search';
 import { Button } from '@/ds/components/Button/Button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 interface AgentMemoryProps {
   agentId: string;
@@ -20,6 +27,10 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
 
   const { paths, navigate } = useLinkComponent();
 
+  // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
+  const { data: thread } = useThread({ threadId, agentId });
+  const effectiveResourceId = thread?.resourceId ?? agentId;
+
   // Get memory config to check if semantic recall is enabled
   const { data, isLoading: isConfigLoading } = useMemoryConfig(agentId);
 
@@ -27,10 +38,18 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   const config = data?.config;
   const isSemanticRecallEnabled = Boolean(config?.semanticRecall);
 
+  // Check if observational memory is enabled
+  const { data: omStatus } = useMemoryWithOMStatus({
+    agentId,
+    resourceId: effectiveResourceId,
+    threadId,
+  });
+  const isOMEnabled = omStatus?.observationalMemory?.enabled ?? false;
+
   // Get memory search hook
   const { mutateAsync: searchMemory, data: searchMemoryData } = useMemorySearch({
     agentId: agentId || '',
-    resourceId: agentId || '', // In playground, agentId is the resourceId
+    resourceId: effectiveResourceId || '',
     threadId,
   });
 
@@ -83,14 +102,14 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0 overflow-hidden">
       {/* Clone Thread Section */}
       {threadId && (
         <div className="p-4 border-b border-border1">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-medium text-icon5">Clone Thread</h3>
-              <p className="text-xs text-icon3 mt-1">Create a copy of this conversation</p>
+              <h3 className="text-sm font-medium text-neutral5">Clone Thread</h3>
+              <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning}>
               <Copy className="w-4 h-4 mr-2" />
@@ -100,11 +119,18 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
         </div>
       )}
 
+      {/* Observational Memory Section - moved above Semantic Recall */}
+      {isOMEnabled && (
+        <div className="border-b border-border1 min-w-0 overflow-hidden">
+          <AgentObservationalMemory agentId={agentId} resourceId={effectiveResourceId} threadId={threadId} />
+        </div>
+      )}
+
       {/* Memory Search Section */}
       <div className="p-4 border-b border-border1">
         <div className="mb-2">
           <div className="flex items-center gap-2 mb-2">
-            <h3 className="text-sm font-medium text-icon5">Semantic Recall</h3>
+            <h3 className="text-sm font-medium text-neutral5">Semantic Recall</h3>
             {searchMemoryData?.searchScope && (
               <span
                 className={cn(
@@ -130,7 +156,7 @@ export function AgentMemory({ agentId, threadId }: AgentMemoryProps) {
           />
         ) : (
           <div className="bg-surface3 border border-border1 rounded-lg p-4">
-            <p className="text-sm text-icon3 mb-3">
+            <p className="text-sm text-neutral3 mb-3">
               Semantic recall is not enabled for this agent. Enable it to search through conversation history.
             </p>
             <a

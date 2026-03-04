@@ -1,5 +1,6 @@
 import z from 'zod';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -12,6 +13,10 @@ export const toolIdPathParams = z.object({
 
 export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
+});
+
+export const agentSkillPathParams = agentIdPathParams.extend({
+  skillName: z.string().describe('Name of the skill'),
 });
 
 export const modelConfigIdPathParams = agentIdPathParams.extend({
@@ -101,9 +106,12 @@ export const serializedAgentSchema = z.object({
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
   modelList: z.array(modelConfigSchema).optional(),
-  defaultOptions: z.record(z.string(), z.any()).optional(),
+  defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  activeVersionId: z.string().optional(),
+  hasDraft: z.boolean().optional(),
 });
 
 /**
@@ -188,9 +196,6 @@ export const agentExecutionBodySchema = z
 
     // Memory & Persistence
     memory: agentMemoryOptionSchema.optional(),
-    resourceId: z.string().optional(), // @deprecated
-    resourceid: z.string().optional(),
-    threadId: z.string().optional(), // @deprecated
     runId: z.string().optional(),
     savePerStep: z.boolean().optional(),
 
@@ -253,6 +258,16 @@ export const agentExecutionBodySchema = z
   .passthrough(); // Allow additional fields for forward compatibility
 
 /**
+ * Legacy body schema for deprecated endpoints that still use threadId/resourceId
+ * Used by /agents/:agentId/generate-legacy and /agents/:agentId/stream-legacy
+ */
+export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
+  resourceId: z.string().optional(),
+  resourceid: z.string().optional(), // lowercase variant
+  threadId: z.string().optional(),
+});
+
+/**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
  * Note: Using z.custom() instead of z.any()/z.any() because those are treated as optional by Zod
@@ -296,6 +311,11 @@ const toolCallActionBodySchema = z.object({
   toolCallId: z.string(),
   format: z.string().optional(),
 });
+const networkToolCallActionBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  format: z.string().optional(),
+});
 
 /**
  * Body schema for approving tool call
@@ -306,6 +326,16 @@ export const approveToolCallBodySchema = toolCallActionBodySchema;
  * Body schema for declining tool call
  */
 export const declineToolCallBodySchema = toolCallActionBodySchema;
+
+/**
+ * Body schema for approving network tool call
+ */
+export const approveNetworkToolCallBodySchema = networkToolCallActionBodySchema;
+
+/**
+ * Body schema for declining network tool call
+ */
+export const declineNetworkToolCallBodySchema = networkToolCallActionBodySchema;
 
 /**
  * Response schema for tool approval/decline

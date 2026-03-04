@@ -908,4 +908,104 @@ describe('vNext Workflow Handlers', () => {
       expect(storedRun?.resourceId).toBe(resourceId);
     });
   });
+
+  describe('requestContext passthrough', () => {
+    it('STREAM_WORKFLOW_ROUTE should pass requestContext to run.stream()', async () => {
+      const requestContext = createTestServerContext({ mastra: mockMastra }).requestContext;
+      requestContext.set('custom-key', 'stream-workflow-value');
+
+      // Create a run first to spy on it
+      const run = await mockWorkflow.createRun({ runId: 'test-run-rc-stream' });
+
+      // Spy on the stream method to capture options
+      let capturedOptions: any;
+      const originalStream = run.stream.bind(run);
+      vi.spyOn(run, 'stream').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalStream(options);
+      });
+
+      // Also spy on workflow.createRun to return our spied run
+      vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue(run);
+
+      await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-rc-stream',
+        requestContext,
+        inputData: {},
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('stream-workflow-value');
+    });
+
+    it('START_ASYNC_WORKFLOW_ROUTE should pass requestContext to run.start()', async () => {
+      const requestContext = createTestServerContext({ mastra: mockMastra }).requestContext;
+      requestContext.set('custom-key', 'start-async-value');
+
+      // Create a run first to spy on it
+      const run = await mockWorkflow.createRun({ runId: 'test-run-rc-start' });
+
+      // Spy on the start method to capture options
+      let capturedOptions: any;
+      const originalStart = run.start.bind(run);
+      vi.spyOn(run, 'start').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalStart(options);
+      });
+
+      // Also spy on workflow.createRun to return our spied run
+      vi.spyOn(mockWorkflow, 'createRun').mockResolvedValue(run);
+
+      await START_ASYNC_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-rc-start',
+        requestContext,
+        inputData: {},
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('start-async-value');
+    });
+
+    it('RESUME_ASYNC_WORKFLOW_ROUTE should pass requestContext to run.resume()', async () => {
+      const requestContext = createTestServerContext({ mastra: mockMastra }).requestContext;
+      requestContext.set('custom-key', 'resume-async-value');
+
+      // Create and start a run that will suspend
+      const run = await reusableWorkflow.createRun({ runId: 'test-run-rc-resume' });
+      await run.start({ inputData: {} });
+
+      // Wait for it to suspend
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Spy on the resume method to capture options
+      let capturedOptions: any;
+      const originalResume = run.resume.bind(run);
+      vi.spyOn(run, 'resume').mockImplementation((options: any) => {
+        capturedOptions = options;
+        return originalResume(options);
+      });
+
+      // Spy on workflow.createRun to return our spied run
+      vi.spyOn(reusableWorkflow, 'createRun').mockResolvedValue(run);
+
+      await RESUME_ASYNC_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'reusable-workflow',
+        runId: 'test-run-rc-resume',
+        requestContext,
+        step: 'test-step',
+        resumeData: {},
+      } as any);
+
+      // Verify requestContext was passed through
+      expect(capturedOptions.requestContext).toBeDefined();
+      expect(capturedOptions.requestContext.get('custom-key')).toBe('resume-async-value');
+    });
+  });
 });

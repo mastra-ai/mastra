@@ -8,6 +8,10 @@ export const useWorkflows = () => {
 
   return useQuery({
     queryKey: ['workflows', requestContext],
-    queryFn: () => client.listWorkflows(requestContext),
+    queryFn: async () => {
+      const workflows = await client.listWorkflows(requestContext);
+      // Filter out processor workflows - they're shown on the Processors tab instead
+      return Object.fromEntries(Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow));
+    },
   });
 };

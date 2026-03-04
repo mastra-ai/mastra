@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
+import type { z } from 'zod';
 import type {
   KeywordExtractPrompt,
   QuestionExtractPrompt,
@@ -32,6 +33,13 @@ export type TitleExtractorsArgs = {
   nodes?: number;
   nodeTemplate?: TitleExtractorPrompt['template'];
   combineTemplate?: TitleCombinePrompt['template'];
+};
+
+export type SchemaExtractArgs<T extends z.ZodType = z.ZodType> = {
+  schema: T;
+  llm?: MastraLegacyLanguageModel | MastraLanguageModel;
+  instructions?: string;
+  metadataKey?: string;
 };
 
 export const STRIP_REGEX = /(\r\n|\n|\r)/gm;

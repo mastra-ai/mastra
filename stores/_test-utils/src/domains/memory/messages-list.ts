@@ -571,14 +571,219 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result0.total).toBe(5); // Total should still reflect actual count
         expect(result0.perPage).toBe(0);
 
-        // Test negative perPage - should fall back to default behavior (40)
-        const resultNeg = await memoryStorage.listMessages({
-          threadId: thread.id,
-          perPage: -5,
+        // Test negative perPage - should throw an error (invalid input)
+        await expect(
+          memoryStorage.listMessages({
+            threadId: thread.id,
+            perPage: -5,
+          }),
+        ).rejects.toThrow('perPage must be >= 0');
+      });
+    });
+
+    describe('listMessagesByResourceId (resource-scoped queries)', () => {
+      // Skip for adapters that don't support OM/resource-scoped queries
+      beforeEach(ctx => {
+        if (!memoryStorage.supportsObservationalMemory) {
+          ctx.skip();
+        }
+      });
+
+      it('should list all messages for a resource across multiple threads', async () => {
+        // thread and thread2 are already created in beforeEach with different resourceIds
+        // Create a third thread with the same resourceId as thread
+        const thread3 = createSampleThread();
+        thread3.resourceId = thread.resourceId; // Same resource as thread
+        await memoryStorage.saveThread({ thread: thread3 });
+
+        // Add messages to thread3
+        const thread3Messages = [
+          createSampleMessageV2({
+            threadId: thread3.id,
+            resourceId: thread.resourceId,
+            content: { content: 'Thread3 Message 1' },
+            createdAt: new Date(Date.now() + 10000),
+          }),
+          createSampleMessageV2({
+            threadId: thread3.id,
+            resourceId: thread.resourceId,
+            content: { content: 'Thread3 Message 2' },
+            createdAt: new Date(Date.now() + 11000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: thread3Messages });
+
+        // Query by resourceId only - should get messages from thread AND thread3
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: thread.resourceId,
+          perPage: false,
         });
-        // Should fall back to default perPage (40) and return all 5 available messages
-        expect(resultNeg.messages).toHaveLength(5);
-        expect(resultNeg.perPage).toBe(40); // Verify fallback to default value
+
+        // thread has 5 messages, thread3 has 2 messages = 7 total
+        expect(result.messages).toHaveLength(7);
+        expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
+
+        // Verify we got messages from both threads
+        const threadIds = new Set(result.messages.map(m => m.threadId));
+        expect(threadIds.has(thread.id)).toBe(true);
+        expect(threadIds.has(thread3.id)).toBe(true);
+      });
+
+      it('should filter by dateRange.start when querying by resourceId', async () => {
+        // Create a thread with specific timestamps
+        const resourceThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: resourceThread });
+
+        const now = Date.now();
+        const cutoffTime = new Date(now + 3000);
+
+        const resourceMessages = [
+          createSampleMessageV2({
+            threadId: resourceThread.id,
+            resourceId: resourceThread.resourceId,
+            content: { content: 'Old Message 1' },
+            createdAt: new Date(now + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: resourceThread.id,
+            resourceId: resourceThread.resourceId,
+            content: { content: 'Old Message 2' },
+            createdAt: new Date(now + 2000),
+          }),
+          createSampleMessageV2({
+            threadId: resourceThread.id,
+            resourceId: resourceThread.resourceId,
+            content: { content: 'New Message 1' },
+            createdAt: new Date(now + 4000),
+          }),
+          createSampleMessageV2({
+            threadId: resourceThread.id,
+            resourceId: resourceThread.resourceId,
+            content: { content: 'New Message 2' },
+            createdAt: new Date(now + 5000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: resourceMessages });
+
+        // Query by resourceId with dateRange.start (cursor-based loading)
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: resourceThread.resourceId,
+          filter: {
+            dateRange: { start: cutoffTime },
+          },
+          perPage: false,
+        });
+
+        // Should only get messages after the cutoff
+        expect(result.messages).toHaveLength(2);
+        expect(result.messages.every(m => new Date(m.createdAt) >= cutoffTime)).toBe(true);
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(
+          expect.arrayContaining(['New Message 1', 'New Message 2']),
+        );
+      });
+
+      it('should filter by dateRange.start across multiple threads for the same resource', async () => {
+        // Create two threads with the same resourceId
+        const sharedResourceId = `shared-resource-${Date.now()}`;
+        const threadA = createSampleThread();
+        threadA.resourceId = sharedResourceId;
+        const threadB = createSampleThread();
+        threadB.resourceId = sharedResourceId;
+        await memoryStorage.saveThread({ thread: threadA });
+        await memoryStorage.saveThread({ thread: threadB });
+
+        const now = Date.now();
+        const cutoffTime = new Date(now + 3000);
+
+        // Messages in threadA
+        const threadAMessages = [
+          createSampleMessageV2({
+            threadId: threadA.id,
+            resourceId: sharedResourceId,
+            content: { content: 'ThreadA Old' },
+            createdAt: new Date(now + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: threadA.id,
+            resourceId: sharedResourceId,
+            content: { content: 'ThreadA New' },
+            createdAt: new Date(now + 4000),
+          }),
+        ];
+
+        // Messages in threadB
+        const threadBMessages = [
+          createSampleMessageV2({
+            threadId: threadB.id,
+            resourceId: sharedResourceId,
+            content: { content: 'ThreadB Old' },
+            createdAt: new Date(now + 2000),
+          }),
+          createSampleMessageV2({
+            threadId: threadB.id,
+            resourceId: sharedResourceId,
+            content: { content: 'ThreadB New' },
+            createdAt: new Date(now + 5000),
+          }),
+        ];
+
+        await memoryStorage.saveMessages({ messages: [...threadAMessages, ...threadBMessages] });
+
+        // Query by resourceId with dateRange.start
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: sharedResourceId,
+          filter: {
+            dateRange: { start: cutoffTime },
+          },
+          perPage: false,
+        });
+
+        // Should get new messages from both threads
+        expect(result.messages).toHaveLength(2);
+        expect(result.messages.every(m => new Date(m.createdAt) >= cutoffTime)).toBe(true);
+
+        // Verify we got messages from both threads
+        const threadIds = new Set(result.messages.map(m => m.threadId));
+        expect(threadIds.has(threadA.id)).toBe(true);
+        expect(threadIds.has(threadB.id)).toBe(true);
+      });
+
+      it('should return empty array when no messages match resourceId', async () => {
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: 'non-existent-resource',
+          perPage: false,
+        });
+
+        expect(result.messages).toHaveLength(0);
+        expect(result.total).toBe(0);
+      });
+
+      it('should isolate messages by resourceId', async () => {
+        // thread and thread2 have different resourceIds
+        // Query for thread's resourceId should not include thread2's messages
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: thread.resourceId,
+          perPage: false,
+        });
+
+        // Should only get thread's 5 messages, not thread2's message
+        expect(result.messages).toHaveLength(5);
+        expect(result.messages.every(m => m.resourceId === thread.resourceId)).toBe(true);
+        expect(result.messages.every(m => m.threadId === thread.id)).toBe(true);
+      });
+
+      it('should support pagination when querying by resourceId', async () => {
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: thread.resourceId,
+          perPage: 2,
+          page: 0,
+        });
+
+        expect(result.messages).toHaveLength(2);
+        expect(result.total).toBe(5);
+        expect(result.hasMore).toBe(true);
+        expect(result.page).toBe(0);
+        expect(result.perPage).toBe(2);
       });
     });
 

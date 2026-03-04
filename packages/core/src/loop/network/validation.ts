@@ -29,6 +29,7 @@
 import { z } from 'zod';
 
 import type { MastraDBMessage, Agent } from '../../agent';
+import type { StructuredOutputOptions } from '../../agent/types';
 import type { MastraScorer } from '../../evals/base';
 import { ChunkFrom } from '../../stream';
 import type { NetworkChunkType } from '../../stream/types';
@@ -131,6 +132,15 @@ export interface CompletionConfig {
    * Called after scorers run with results
    */
   onComplete?: (results: CompletionRunResult) => void | Promise<void>;
+
+  /**
+   * Suppress the completion feedback message from being saved to memory.
+   * When true, the "#### Completion Check Results" message will not be
+   * persisted, preventing it from appearing in subsequent iterations or
+   * history. Useful for cleaner conversation threads.
+   * Default: false
+   */
+  suppressFeedback?: boolean;
 }
 
 /**
@@ -380,6 +390,8 @@ export async function runDefaultCompletionCheck(
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<ScorerResult> {
   const start = Date.now();
 
@@ -419,6 +431,8 @@ export async function runDefaultCompletionCheck(
 
     If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.
 
+    Also, if the ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.
+
     IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.
     
     If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.
@@ -441,6 +455,8 @@ export async function runDefaultCompletionCheck(
       structuredOutput: {
         schema: defaultCompletionSchema,
       },
+      abortSignal,
+      onAbort,
     });
 
     let currentText = '';
@@ -530,6 +546,8 @@ export async function generateFinalResult(
     stepId?: string;
     runId?: string;
   },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
 ): Promise<string | undefined> {
   const prompt = `
     The task has been completed successfully.
@@ -554,6 +572,8 @@ export async function generateFinalResult(
   const stream = await agent.stream(prompt, {
     maxSteps: 1,
     structuredOutput: { schema: finalResultSchema },
+    abortSignal,
+    onAbort,
   });
 
   let currentText = '';
@@ -594,5 +614,201 @@ export async function generateFinalResult(
   return result.object?.finalResult;
 }
 
+/**
+ * Result type for structured final result generation
+ */
+export interface StructuredFinalResult<OUTPUT = undefined> {
+  /** Text result (for backward compatibility) */
+  text?: string;
+  /** Structured object result when user schema is provided */
+  object?: OUTPUT;
+}
+
+/**
+ * Generates a structured final result using the user-provided schema.
+ * This is called when the network has structuredOutput option configured.
+ *
+ * @internal Used by the network loop when structuredOutput is provided
+ */
+export async function generateStructuredFinalResult<OUTPUT extends {}>(
+  agent: Agent,
+  context: CompletionContext,
+  structuredOutputOptions: StructuredOutputOptions<OUTPUT>,
+  streamContext?: {
+    writer?: { write: (chunk: NetworkChunkType) => Promise<void> };
+    stepId?: string;
+    runId?: string;
+  },
+  abortSignal?: AbortSignal,
+  onAbort?: (event: any) => Promise<void> | void,
+): Promise<StructuredFinalResult<OUTPUT>> {
+  const prompt = `
+    The task has been completed successfully.
+    Original task: ${context.originalTask}
+
+    The ${context.selectedPrimitive.type} ${context.selectedPrimitive.id} produced this result:
+    ${JSON.stringify(context.primitiveResult)}
+
+    Based on the task and result above, generate a structured response according to the provided schema.
+    Use the conversation history and primitive results to craft the response.
+  `;
+
+  const stream = await agent.stream<OUTPUT>(prompt, {
+    maxSteps: 1,
+    structuredOutput: structuredOutputOptions,
+    abortSignal,
+    onAbort,
+  });
+
+  const { writer, stepId, runId: streamRunId } = streamContext ?? {};
+  const canStream = writer && stepId && streamRunId;
+
+  // Stream partial objects via network-object chunks
+  for await (const partialObject of stream.objectStream) {
+    if (canStream && partialObject) {
+      // Cast via unknown because the generic OUTPUT is opaque at this point
+      await writer.write({
+        type: 'network-object',
+        payload: { object: partialObject },
+        from: ChunkFrom.NETWORK,
+        runId: streamRunId,
+      } as unknown as NetworkChunkType);
+    }
+  }
+
+  const result = await stream.getFullOutput();
+  const finalObject = result.object as OUTPUT | undefined;
+
+  // Emit final object-result chunk
+  if (canStream && finalObject) {
+    // Cast via unknown because the generic OUTPUT is opaque at this point
+    await writer.write({
+      type: 'network-object-result',
+      payload: { object: finalObject },
+      from: ChunkFrom.NETWORK,
+      runId: streamRunId,
+    } as unknown as NetworkChunkType);
+  }
+
+  return {
+    text: finalObject ? JSON.stringify(finalObject) : undefined,
+    object: finalObject,
+  };
+}
+
 // Re-export for users who want to create custom scorers
 export { createScorer } from '../../evals/base';
+
+// ============================================================================
+// Stream Completion Scoring
+// ============================================================================
+
+/**
+ * Runtime context passed to stream/generate completion scoring.
+ * This is a simplified version of CompletionContext for tool-based supervisor patterns.
+ */
+export interface StreamCompletionContext {
+  /** Current iteration number (1-based) */
+  iteration: number;
+  /** Maximum iterations allowed (maxSteps) */
+  maxIterations?: number;
+  /** The original user message/task that started this execution */
+  originalTask: string;
+  /** Current output text from the LLM */
+  currentText: string;
+  /** Tool calls made in this iteration */
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+  /** Tool results from this iteration */
+  toolResults: Array<{ name: string; result: unknown }>;
+  /** ID of the current run */
+  runId: string;
+  /** Current thread ID (if using memory) */
+  threadId?: string;
+  /** Resource ID (if using memory) */
+  resourceId?: string;
+  /** Agent ID */
+  agentId?: string;
+  /** Agent name */
+  agentName?: string;
+  /** Custom context from the request */
+  customContext?: Record<string, unknown>;
+  messages: MastraDBMessage[];
+}
+
+/**
+ * Runs completion scorers for stream/generate execution.
+ * Adapts the StreamCompletionContext to work with existing scorers.
+ */
+export async function runStreamCompletionScorers(
+  scorers: MastraScorer<any, any, any, any>[],
+  context: StreamCompletionContext,
+  options?: {
+    strategy?: 'all' | 'any';
+    parallel?: boolean;
+    timeout?: number;
+  },
+): Promise<CompletionRunResult> {
+  // Adapt StreamCompletionContext to CompletionContext for scorer compatibility
+  const adaptedContext: CompletionContext = {
+    iteration: context.iteration,
+    maxIterations: context.maxIterations,
+    messages: context.messages,
+    originalTask: context.originalTask,
+    selectedPrimitive: {
+      id: 'stream',
+      type: 'agent',
+    },
+    primitivePrompt: context.originalTask,
+    primitiveResult: context.currentText,
+    networkName: context.agentName || context.agentId || 'stream',
+    runId: context.runId,
+    threadId: context.threadId,
+    resourceId: context.resourceId,
+    customContext: {
+      ...context.customContext,
+      // Include stream-specific data in custom context for scorers that need it
+      toolCalls: context.toolCalls,
+      toolResults: context.toolResults,
+      agentId: context.agentId,
+      agentName: context.agentName,
+    },
+  };
+
+  return runCompletionScorers(scorers, adaptedContext, options);
+}
+
+/**
+ * Formats stream completion feedback for the LLM.
+ * Similar to formatCompletionFeedback but tailored for stream context.
+ */
+export function formatStreamCompletionFeedback(result: CompletionRunResult, maxIterationReached: boolean): string {
+  const lines: string[] = [];
+
+  lines.push('#### Completion Check Results');
+  lines.push('');
+  lines.push(`Overall: ${result.complete ? '✅ COMPLETE' : '❌ NOT COMPLETE'}`);
+  lines.push(`Duration: ${result.totalDuration}ms`);
+  if (result.timedOut) {
+    lines.push('⚠️ Scoring timed out');
+  }
+  lines.push('');
+
+  for (const scorer of result.scorers) {
+    lines.push(`**${scorer.scorerName}** (${scorer.scorerId})`);
+    lines.push(`Score: ${scorer.score} ${scorer.passed ? '✅' : '❌'}`);
+    if (scorer.reason) {
+      lines.push(`Reason: ${scorer.reason}`);
+    }
+    lines.push('');
+  }
+
+  if (result.complete) {
+    lines.push('✅ The task is complete.');
+  } else if (maxIterationReached) {
+    lines.push('⚠️ Max iterations reached.');
+  } else {
+    lines.push('🔄 The task is not yet complete. Please continue working based on the feedback above.');
+  }
+
+  return lines.join('\n');
+}

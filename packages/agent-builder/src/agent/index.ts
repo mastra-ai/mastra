@@ -4,10 +4,15 @@ import type {
   AgentGenerateOptions,
   AgentStreamOptions,
   AgentExecutionOptions,
+  StructuredOutputOptions,
+  AgentExecutionOptionsBase,
+  ToolsInput,
+  AgentConfig,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
-import type { MastraModelOutput, OutputSchema } from '@mastra/core/stream';
+import { InMemoryStore } from '@mastra/core/storage';
+import type { MastraModelOutput, FullOutput } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
@@ -42,7 +47,11 @@ import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
 //
 // =============================================================================
 
-export class AgentBuilder extends Agent {
+export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = undefined> extends Agent<
+  'agent-builder',
+  TTools,
+  TOutput
+> {
   private builderConfig: AgentBuilderConfig;
 
   /**
@@ -52,22 +61,27 @@ export class AgentBuilder extends Agent {
     const additionalInstructions = config.instructions ? `## Priority Instructions \n\n${config.instructions}` : '';
     const combinedInstructions = additionalInstructions + AgentBuilderDefaults.DEFAULT_INSTRUCTIONS(config.projectPath);
 
-    const agentConfig = {
+    // Create Memory with storage for AgentBuilder
+    // Use provided storage if available, otherwise fall back to in-memory storage
+    const memory = new Memory({
+      options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
+    });
+    memory.setStorage(config.storage ?? new InMemoryStore());
+
+    const agentConfig: AgentConfig<'agent-builder', TTools, TOutput> = {
       id: 'agent-builder',
       name: 'agent-builder',
       description:
         'An AI agent specialized in generating Mastra agents, tools, and workflows from natural language requirements.',
       instructions: combinedInstructions,
       model: config.model,
-      tools: async () => {
+      tools: async (): Promise<TTools> => {
         return {
           ...(await AgentBuilderDefaults.listToolsForMode(config.projectPath, config.mode)),
-          ...(config.tools || {}),
-        };
+          ...(config.tools || ({} as TTools)),
+        } as TTools;
       },
-      memory: new Memory({
-        options: AgentBuilderDefaults.DEFAULT_MEMORY_CONFIG,
-      }),
+      memory,
       inputProcessors: [
         // use the write to disk processor to debug the agent's context
         // new WriteToDiskProcessor({ prefix: 'before-filter' }),
@@ -153,11 +167,24 @@ export class AgentBuilder extends Agent {
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  async stream<OUTPUT extends OutputSchema = undefined>(
+  async stream<OUTPUT extends {}>(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
+    },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async stream<OUTPUT>(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+    },
+  ): Promise<MastraModelOutput<OUTPUT>>;
+  async stream(messages: MessageListInput, streamOptions?: AgentExecutionOptions): Promise<MastraModelOutput>;
+  async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
-    const { ...baseOptions } = streamOptions || {};
+    const { ...baseOptions } = streamOptions || ({} as AgentExecutionOptions<OUTPUT>);
 
     const originalInstructions = await this.getInstructions({ requestContext: streamOptions?.requestContext });
     const additionalInstructions = baseOptions.instructions;
@@ -166,7 +193,7 @@ export class AgentBuilder extends Agent {
     if (additionalInstructions) {
       enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
     }
-    const enhancedContext = [...(baseOptions.context || [])];
+    const enhancedContext = [...(baseOptions.context || ([] as AgentExecutionOptions<OUTPUT>['context'][]))];
 
     const enhancedOptions = {
       ...baseOptions,
@@ -183,10 +210,26 @@ export class AgentBuilder extends Agent {
     return super.stream(messages, enhancedOptions);
   }
 
-  async generate<OUTPUT extends OutputSchema = undefined>(
+  async generate(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<FullOutput<TOutput>>;
+  async generate<OUTPUT extends {}>(
     messages: MessageListInput,
-    options?: AgentExecutionOptions<OUTPUT>,
-  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    options: AgentExecutionOptionsBase<OUTPUT> & {
+      structuredOutput: StructuredOutputOptions<OUTPUT>;
+    },
+  ): Promise<FullOutput<OUTPUT>>;
+  // Catch-all overload to handle conditional types when OUTPUT is generic
+  async generate<OUTPUT>(
+    messages: MessageListInput,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+    },
+  ): Promise<FullOutput<OUTPUT>>;
+  async generate(
+    messages: MessageListInput,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
+    },
+  ): Promise<FullOutput<any>> {
     const { ...baseOptions } = options || {};
 
     const originalInstructions = await this.getInstructions({ requestContext: options?.requestContext });

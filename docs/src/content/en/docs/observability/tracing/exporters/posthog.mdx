@@ -14,7 +14,7 @@ packages:
 ## Installation
 
 ```bash npm2yarn
-npm install @mastra/posthog@beta
+npm install @mastra/posthog@latest
 ```
 
 ## Configuration
@@ -22,8 +22,8 @@ npm install @mastra/posthog@beta
 ### Prerequisites
 
 1. **PostHog Account**: Sign up at [posthog.com](https://posthog.com/)
-2. **Project API Key**: Get your project API key from PostHog Settings → Project API Key
-3. **Environment Variables**: Set your credentials
+1. **Project API Key**: Get your project API key from PostHog Settings → Project API Key
+1. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
 # Required
@@ -38,20 +38,20 @@ POSTHOG_HOST=https://us.i.posthog.com  # or eu.i.posthog.com for EU region
 With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { PosthogExporter } from "@mastra/posthog";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { PosthogExporter } from '@mastra/posthog'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       posthog: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new PosthogExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Explicit Configuration
@@ -59,15 +59,15 @@ export const mastra = new Mastra({
 You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { PosthogExporter } from "@mastra/posthog";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { PosthogExporter } from '@mastra/posthog'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       posthog: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new PosthogExporter({
             apiKey: process.env.POSTHOG_API_KEY,
@@ -76,7 +76,7 @@ export const mastra = new Mastra({
       },
     },
   }),
-});
+})
 ```
 
 ## Configuration Options
@@ -89,7 +89,7 @@ new PosthogExporter({
   apiKey: process.env.POSTHOG_API_KEY!,
 
   // Optional settings
-  host: "https://us.i.posthog.com", // Default: US region
+  host: 'https://us.i.posthog.com', // Default: US region
   // or "https://eu.i.posthog.com" for EU region
   // or your self-hosted URL
 
@@ -99,14 +99,14 @@ new PosthogExporter({
   serverless: false, // Serverless mode: flushAt=10, flushInterval=2000
 
   // User identification
-  defaultDistinctId: "anonymous", // Fallback if no userId in metadata
+  defaultDistinctId: 'anonymous', // Fallback if no userId in metadata
 
   // Privacy settings
   enablePrivacyMode: false, // Excludes input/output from generation events
 
   // Diagnostic logging
-  logLevel: "info", // debug | info | warn | error
-});
+  logLevel: 'info', // debug | info | warn | error
+})
 ```
 
 ### Serverless Mode
@@ -117,7 +117,7 @@ Optimized batching for serverless environments:
 new PosthogExporter({
   apiKey: process.env.POSTHOG_API_KEY!,
   serverless: true, // Configures smaller batches for faster flushing
-});
+})
 ```
 
 ### Privacy Mode
@@ -128,30 +128,10 @@ Exclude input/output data from generation events while preserving token metrics:
 new PosthogExporter({
   apiKey: process.env.POSTHOG_API_KEY!,
   enablePrivacyMode: true, // Removes $ai_input and $ai_output_choices
-});
+})
 ```
-
-## Using Tags
-
-Tags help you categorize and filter traces in PostHog's AI analytics. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are added as event properties where the tag name is the key and the value is set to `true`. In PostHog's trace view, filter by a tag using the `is set` filter (e.g., "production is set" shows all traces with the production tag). Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
-- User segments: `"beta-user"`, `"enterprise"`
 
 ## Related
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Tracing Overview](/docs/observability/tracing/overview)
 - [PostHog Documentation](https://posthog.com/docs)

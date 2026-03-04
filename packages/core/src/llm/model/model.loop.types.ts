@@ -11,10 +11,9 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
-import type { OutputSchema } from '../../stream/base/schema';
 import type { inferOutput } from './shared.types';
 
 export type OriginalStreamTextOptions<
@@ -34,16 +33,16 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
+export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
   methodType: ModelMethodType;
   messages?: UIMessage[] | ModelMessage[];
   outputProcessors?: OutputProcessorOrWorkflow[];
   requestContext: RequestContext;
-  tracingContext: TracingContext;
   resourceId?: string;
   threadId?: string;
   returnScorerData?: boolean;
   messageList: MessageList;
-} & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+} & ObservabilityContext &
+  Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
 
 export type ModelMethodType = 'generate' | 'stream';

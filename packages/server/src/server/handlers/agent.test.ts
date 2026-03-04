@@ -108,15 +108,21 @@ describe('Agent Handlers', () => {
           tools: {},
           agents: {},
           workflows: {},
+          skills: [],
+          workspaceTools: [],
+          workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.chat',
+          requestContextSchema: undefined,
+          hasDraft: false,
           modelId: 'gpt-4o',
           modelVersion: 'v1',
           defaultOptions: {},
           defaultGenerateOptionsLegacy: {},
           defaultStreamOptionsLegacy: {},
           modelList: undefined,
+          source: 'code',
         },
         'test-multi-model-agent': {
           id: 'test-multi-model-agent',
@@ -126,6 +132,10 @@ describe('Agent Handlers', () => {
           tools: {},
           agents: {},
           workflows: {},
+          hasDraft: false,
+          requestContextSchema: undefined,
+          skills: [],
+          workspaceTools: [],
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.responses',
@@ -134,26 +144,31 @@ describe('Agent Handlers', () => {
           defaultOptions: {},
           defaultGenerateOptionsLegacy: {},
           defaultStreamOptionsLegacy: {},
+          workspaceId: undefined,
           modelList: [
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4o-mini', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4o', provider: 'openai.responses', modelVersion: 'v2' },
             },
             {
               id: expect.any(String),
               enabled: true,
               maxRetries: 0,
+              headers: undefined,
               model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
             },
           ],
+          source: 'code',
         },
       });
     });
@@ -389,6 +404,8 @@ describe('Agent Handlers', () => {
             },
           },
         },
+        skills: [],
+        workspaceTools: [],
         inputProcessors: [],
         outputProcessors: [],
         provider: 'openai.chat',
@@ -398,6 +415,7 @@ describe('Agent Handlers', () => {
         defaultGenerateOptionsLegacy: {},
         defaultStreamOptionsLegacy: {},
         modelList: undefined,
+        source: 'code',
       });
     });
 
@@ -596,6 +614,10 @@ describe('Agent Handlers', () => {
 
   describe('enhanceInstructionsHandler', () => {
     it('should enhance instructions and return structured output', async () => {
+      // Set OPENAI_API_KEY so isProviderConnected returns true
+      const originalEnv = process.env.OPENAI_API_KEY;
+      process.env.OPENAI_API_KEY = 'test-key';
+
       const mockEnhancedResult = {
         object: {
           explanation: 'Added more specific guidelines for tone and response format.',
@@ -624,6 +646,12 @@ describe('Agent Handlers', () => {
         expect(generateSpy).toHaveBeenCalledOnce();
       } finally {
         generateSpy.mockRestore();
+        // Restore original env var
+        if (originalEnv === undefined) {
+          delete process.env.OPENAI_API_KEY;
+        } else {
+          process.env.OPENAI_API_KEY = originalEnv;
+        }
       }
     });
   });

@@ -128,7 +128,6 @@ export class WorkflowRunOutput<
                     }
                   : {},
                 output: {
-                  // @ts-ignore
                   usage: self.#usageCount,
                 },
                 // Include tripwire data when status is 'tripwire'
@@ -301,7 +300,6 @@ export class WorkflowRunOutput<
                     }
                   : {},
                 output: {
-                  // @ts-ignore
                   usage: self.#usageCount,
                 },
                 // Include tripwire data when status is 'tripwire'

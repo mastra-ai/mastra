@@ -1,0 +1,316 @@
+---
+title: "Supervisor Agents | Agents"
+description: Learn how to coordinate multiple agents using the supervisor pattern with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# Supervisor Agents
+
+A supervisor agent coordinates multiple subagents using `agent.stream()` or `agent.generate()`. You configure subagents on the supervisor's `agents` property, and the supervisor uses its instructions and each subagent's `description` to decide when and how to delegate tasks.
+
+## When to use supervisor agents
+
+Use supervisor agents when a task requires multiple agents with different specializations to work together. The supervisor handles delegation decisions, context passing, and result synthesis.
+
+Common use cases:
+
+- Research and writing workflows where one agent gathers data and another produces content
+- Multi-step tasks that need different expertise at each stage
+- Tasks where you need fine-grained control over delegation behavior
+
+## Quick start
+
+Define subagents with clear descriptions, then create a supervisor agent that references them:
+
+```typescript title="src/mastra/agents/supervisor.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const researchAgent = new Agent({
+  id: 'research-agent',
+  // highlight-next-line
+  description: 'Gathers factual information and returns bullet-point summaries.',
+  model: 'openai/gpt-4o-mini',
+})
+
+const writingAgent = new Agent({
+  id: 'writing-agent',
+  // highlight-next-line
+  description: 'Transforms research into well-structured articles.',
+  model: 'openai/gpt-4o-mini',
+})
+
+// highlight-start
+const supervisor = new Agent({
+  id: 'supervisor',
+  instructions: `You coordinate research and writing using specialized agents.
+    Delegate to research-agent for facts, then writing-agent for content.`,
+  model: 'openai/gpt-5.1',
+  agents: { researchAgent, writingAgent },
+  memory: new Memory({
+    storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
+  }),
+})
+// highlight-end
+
+const stream = await supervisor.stream('Research AI in education and write an article', {
+  maxSteps: 10,
+})
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+## Delegation hooks
+
+Delegation hooks let you intercept, modify, or reject delegations as they happen. Configure them under the `delegation` option, either in the agent's `defaultOptions` or per-call.
+
+### onDelegationStart
+
+Called before the supervisor delegates to a subagent. Return an object to control the delegation:
+
+- `proceed: true` — allow the delegation (default behavior)
+- `proceed: false` — reject the delegation with a `rejectionReason`
+- `modifiedPrompt` — rewrite the prompt sent to the subagent
+- `modifiedMaxSteps` — limit the subagent's iteration count
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const stream = await supervisor.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationStart: async context => {
+      console.log(`Delegating to: ${context.primitiveId}`)
+
+      // Modify the prompt for a specific agent
+      if (context.primitiveId === 'research-agent') {
+        return {
+          proceed: true,
+          modifiedPrompt: `${context.prompt}\n\nFocus on 2024-2025 data.`,
+          modifiedMaxSteps: 5,
+        }
+      }
+
+      // Reject delegation after too many iterations
+      if (context.iteration > 8) {
+        return {
+          proceed: false,
+          rejectionReason: 'Max iterations reached. Synthesize current findings.',
+        }
+      }
+
+      return { proceed: true }
+    },
+  },
+})
+```
+
+The `context` object includes:
+
+| Property | Description |
+| - | - |
+| `primitiveId` | The ID of the subagent being delegated to |
+| `prompt` | The prompt the supervisor is sending |
+| `iteration` | Current iteration number |
+
+### onDelegationComplete
+
+Called after a delegation finishes. Use it to inspect results, provide feedback, or stop execution:
+
+- `context.bail()` — stop the supervisor loop immediately
+- Return `{ feedback: '...' }` — add feedback that gets saved to the supervisor's memory and is visible to subsequent iterations
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const stream = await supervisor.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    onDelegationComplete: async context => {
+      console.log(`Completed: ${context.primitiveId}`)
+
+      // Bail on errors
+      if (context.error) {
+        context.bail()
+        return {
+          feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+        }
+      }
+    },
+  },
+})
+```
+
+The `context` object includes:
+
+| Property | Description |
+| - | - |
+| `primitiveId` | The ID of the subagent that ran |
+| `result` | The subagent's response |
+| `error` | Error if the delegation failed |
+| `bail()` | Function to stop the supervisor loop |
+
+## Message filtering
+
+By default, subagents receive the full conversation context from the supervisor. Use `messageFilter` to control what messages are shared — for example, to remove sensitive data or limit context size.
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const stream = await supervisor.stream('Research AI trends', {
+  maxSteps: 10,
+  delegation: {
+    messageFilter: ({ messages, primitiveId, prompt }) => {
+      // Remove messages containing sensitive data
+      return messages
+        .filter(msg => {
+          const content =
+            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+          return !content.includes('confidential')
+        })
+        .slice(-10) // Only pass the last 10 messages
+    },
+  },
+})
+```
+
+The callback receives `messages` (the full conversation history), `primitiveId` (the subagent ID), and `prompt` (the delegation prompt). Return the filtered array of messages.
+
+## Iteration monitoring
+
+`onIterationComplete` is called after each iteration of the supervisor loop. Use it to log progress, inject feedback, or stop execution early.
+
+```typescript title="src/mastra/agents/supervisor.ts"
+const stream = await supervisor.stream('Research AI trends', {
+  maxSteps: 10,
+  onIterationComplete: async context => {
+    console.log(`Iteration ${context.iteration}/${context.maxIterations}`)
+    console.log(`Finish reason: ${context.finishReason}`)
+
+    // Inject feedback to guide the agent
+    if (!context.text.includes('recommendations')) {
+      return {
+        continue: true,
+        feedback: 'Please include specific recommendations in your analysis.',
+      }
+    }
+
+    // Stop early when the response is sufficient
+    if (context.text.length > 1000 && context.finishReason === 'stop') {
+      return { continue: false }
+    }
+
+    return { continue: true }
+  },
+})
+```
+
+Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to add guidance that's visible to the next iteration.
+
+## Memory isolation
+
+The supervisor pattern implements memory isolation — subagents receive the full conversation context for better decision-making, but only their specific delegation prompt and response are saved to their memory.
+
+How it works:
+
+1. **Full context forwarded** — When the supervisor delegates, the subagent receives all messages from the supervisor's conversation
+1. **Scoped memory saves** — Only the delegation prompt and the subagent's response are saved to the subagent's memory
+1. **Fresh thread per invocation** — Each delegation uses a unique thread ID, ensuring clean separation
+
+This ensures subagents have the context they need without cluttering their memory with the entire supervisor conversation.
+
+## Tool approval propagation
+
+Tool approvals propagate through the delegation chain. When a subagent uses a tool with `requireApproval: true` or calls `suspend()`, the approval request surfaces to the supervisor level.
+
+```typescript
+const sensitiveDataTool = createTool({
+  id: 'get-user-data',
+  requireApproval: true,
+  execute: async input => {
+    return await database.getUserData(input.userId)
+  },
+})
+
+const dataAgent = new Agent({
+  id: 'data-agent',
+  tools: { sensitiveDataTool },
+})
+
+const supervisor = new Agent({
+  id: 'supervisor',
+  agents: { dataAgent },
+  memory: new Memory(),
+})
+
+const stream = await supervisor.stream('Get data for user 123')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-approval') {
+    console.log('Tool requires approval:', chunk.payload.toolName)
+  }
+}
+```
+
+## Task completion scoring
+
+Task completion scorers validate whether the task is complete after each iteration. If validation fails, the supervisor continues iterating. Feedback from failed scorers is included in the conversation context so subagents can see what was missing.
+
+```typescript
+import { createScorer } from '@mastra/core/evals'
+
+const taskCompleteScorer = createScorer({
+  id: 'task-complete',
+  name: 'Task Completeness',
+}).generateScore(async context => {
+  const text = (context.run.output || '').toString()
+  const hasAnalysis = text.includes('analysis')
+  const hasRecommendations = text.includes('recommendation')
+  return hasAnalysis && hasRecommendations ? 1 : 0
+})
+
+const stream = await supervisor.stream('Research AI in education', {
+  maxSteps: 10,
+  isTaskComplete: {
+    scorers: [taskCompleteScorer],
+    strategy: 'all',
+    onComplete: async result => {
+      console.log('Task complete:', result.complete)
+    },
+  },
+})
+```
+
+## Writing effective instructions
+
+Clear instructions are essential for effective delegation. Your supervisor's `instructions` should specify available resources, when to use each one, how to coordinate them, and success criteria.
+
+Each subagent should have a clear `description` that explains what it does, what format it returns, and when to use it. The supervisor uses these descriptions to make delegation decisions.
+
+```typescript
+const supervisor = new Agent({
+  instructions: `You coordinate research and writing tasks.
+
+Available resources:
+- researchAgent: Gathers factual data and sources (returns bullet points)
+- writingAgent: Transforms research into narrative content (returns full paragraphs)
+
+Delegation strategy:
+1. For research requests: Delegate to researchAgent first
+2. For writing requests: Delegate to writingAgent
+3. For complex requests: Delegate to researchAgent first, then writingAgent
+
+Success criteria:
+- All user questions are fully answered
+- Response is well-formatted and complete`,
+  agents: { researchAgent, writingAgent },
+})
+```
+
+## Related
+
+- [Agent Networks](./networks)
+- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
+- [Guide: Research Coordinator](/guides/guide/research-coordinator)
+- [Agent.stream() Reference](/reference/streaming/agents/stream)
+- [Agent.generate() Reference](/reference/agents/generate)
+- [Agent Approval](./agent-approval)

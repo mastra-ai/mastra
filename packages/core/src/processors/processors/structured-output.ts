@@ -4,10 +4,10 @@ import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { IMastraLogger } from '../../logger';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
 import { ChunkFrom } from '../../stream';
 import type { ChunkType, OutputSchema } from '../../stream';
-import type { InferSchemaOutput } from '../../stream/base/schema';
 import type { ToolCallChunk, ToolResultChunk } from '../../stream/types';
 import type { Processor } from '../index';
 
@@ -27,14 +27,14 @@ export const STRUCTURED_OUTPUT_PROCESSOR_NAME = 'structured-output';
  * - Configurable error handling strategies
  * - Automatic instruction generation based on schema
  */
-export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements Processor<'structured-output'> {
+export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'structured-output'> {
   readonly id = STRUCTURED_OUTPUT_PROCESSOR_NAME;
   readonly name = 'Structured Output';
 
-  public schema: OUTPUT;
-  private structuringAgent: Agent;
+  public schema: NonNullable<OutputSchema<OUTPUT>>;
+  private structuringAgent: Agent<any, any, undefined>;
   private errorStrategy: 'strict' | 'warn' | 'fallback';
-  private fallbackValue?: InferSchemaOutput<OUTPUT>;
+  private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
   private jsonPromptInjection?: boolean;
   private providerOptions?: ProviderOptions;
@@ -73,17 +73,19 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     });
   }
 
-  async processOutputStream(args: {
-    part: ChunkType;
-    streamParts: ChunkType[];
-    state: Record<string, unknown> & {
-      controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
-    };
-    abort: (reason?: string, options?: unknown) => never;
-    tracingContext?: TracingContext;
-    retryCount: number;
-  }): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, abort, tracingContext } = args;
+  async processOutputStream(
+    args: {
+      part: ChunkType;
+      streamParts: ChunkType[];
+      state: Record<string, unknown> & {
+        controller?: TransformStreamDefaultController<ChunkType<OUTPUT>>;
+      };
+      abort: (reason?: string, options?: unknown) => never;
+      retryCount: number;
+    } & Partial<ObservabilityContext>,
+  ): Promise<ChunkType | null | undefined> {
+    const { part, state, streamParts, abort, ...rest } = args;
+    const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>>;
 
     switch (part.type) {
@@ -92,7 +94,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
         // - enqueue the structuring agent stream chunks into the main stream
         // - when the structuring agent stream is finished, enqueue the final chunk into the main stream
 
-        await this.processAndEmitStructuredOutput(streamParts, controller, abort, tracingContext);
+        await this.processAndEmitStructuredOutput(streamParts, controller, abort, observabilityContext);
         return part;
 
       default:
@@ -104,7 +106,7 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
     streamParts: ChunkType[],
     controller: TransformStreamDefaultController<ChunkType<OUTPUT>>,
     abort: (reason?: string) => never,
-    tracingContext?: TracingContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<void> {
     if (this.isStructuringAgentStreamStarted) return;
     this.isStructuringAgentStreamStarted = true;
@@ -115,11 +117,11 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
         structuredOutput: {
-          schema: this.schema as OUTPUT extends OutputSchema ? OUTPUT : never,
+          schema: this.schema!,
           jsonPromptInjection: this.jsonPromptInjection,
         },
         providerOptions: this.providerOptions,
-        tracingContext,
+        ...observabilityContext,
       });
 
       const excludedChunkTypes = [
@@ -160,12 +162,12 @@ export class StructuredOutputProcessor<OUTPUT extends OutputSchema> implements P
           }
         }
 
-        const newChunk = {
+        const newChunk: ChunkType<OUTPUT> = {
           ...chunk,
           metadata: {
             from: 'structured-output',
           },
-        };
+        } as const;
         controller.enqueue(newChunk);
       }
     } catch (error) {

@@ -2,7 +2,7 @@ import type { KVNamespace } from '@cloudflare/workers-types';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
-  MastraStorage,
+  MastraCompositeStore,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -38,7 +38,7 @@ import type { CloudflareStoreConfig, CloudflareWorkersConfig, CloudflareRestConf
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class CloudflareStore extends MastraStorage {
+export class CloudflareStore extends MastraCompositeStore {
   stores: StorageDomains;
   private client?: Cloudflare;
   private accountId?: string;

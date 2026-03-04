@@ -534,12 +534,11 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it('prompt() should throw error for empty message list', () => {
+      it('prompt() should pass through empty message list unchanged', () => {
         const list = new MessageList({ threadId, resourceId });
 
-        expect(() => list.get.all.aiV5.prompt()).toThrow(
-          'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-        );
+        const prompt = list.get.all.aiV5.prompt();
+        expect(prompt).toHaveLength(0);
       });
 
       it('prompt() should ensure proper message ordering for Gemini compatibility', () => {
@@ -942,8 +941,8 @@ describe('MessageList V5 Support', () => {
       const messageList = new MessageList();
       const imageUrl = 'https://httpbin.org/image/png';
 
-      // This mimics what happens when the user passes messages to stream
-      // with format: 'aisdk' containing file parts with URLs
+      // This mimics what happens when messages containing file parts with URLs
+      // are converted to AI SDK v5 format
       const v2Message: MastraDBMessage = {
         id: 'test-msg-1',
         role: 'user',
@@ -982,7 +981,7 @@ describe('MessageList V5 Support', () => {
         expect(v2FilePart.data).not.toContain('data:image/png;base64,https://');
       }
 
-      // Get V5 UI messages (used by AI SDK when format: 'aisdk')
+      // Get V5 UI messages (used for AI SDK v5 output)
       const v5UIMessages = messageList.get.all.aiV5.ui();
       const v5FilePart = v5UIMessages[0].parts.find(p => p.type === 'file');
 
@@ -1128,16 +1127,15 @@ describe('MessageList V5 Support', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should throw error for empty message list with prompt methods', () => {
+    it('should pass through empty message list unchanged with prompt methods', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      // Both v4 and v5 should throw error for empty list
-      expect(() => list.get.all.aiV4.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      // Both v4 and v5 should pass through empty list
+      const v4Prompt = list.get.all.aiV4.prompt();
+      expect(v4Prompt).toHaveLength(0);
+
+      const v5Prompt = list.get.all.aiV5.prompt();
+      expect(v5Prompt).toHaveLength(0);
     });
 
     it('should throw error for system messages with wrong role', () => {
@@ -1662,6 +1660,205 @@ describe('MessageList V5 Support', () => {
 
       expect(dataProgressPart).toBeDefined();
       expect((dataProgressPart as any)?.data).toEqual({ step: 1, total: 3 });
+    });
+  });
+
+  describe('toModelOutput support', () => {
+    it('should use stored modelOutput from providerMetadata in llmPrompt', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('What is the weather?', 'input');
+
+      // Message with toModelOutput result stored at creation time on providerMetadata.mastra.modelOutput
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'getWeather',
+                state: 'result',
+                args: { city: 'NYC' },
+                result: { temperature: 72, humidity: 45, conditions: 'sunny', forecast: [1, 2, 3, 4, 5] },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Temperature: 72°F, sunny' },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      // llmPrompt should use the stored modelOutput, not the raw result
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      expect(toolRole).toBeDefined();
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output.type).toBe('text');
+      expect(toolResultPart.output.value).toBe('Temperature: 72°F, sunny');
+    });
+
+    it('should preserve raw result in stored messages when modelOutput is set', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Call a tool', 'input');
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-tool-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-2',
+                toolName: 'fetchData',
+                state: 'result',
+                args: { url: 'https://example.com' },
+                result: { status: 200, body: 'lots of data here' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Data fetched successfully' },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      // llmPrompt should use stored modelOutput
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output.type).toBe('text');
+      expect(toolResultPart.output.value).toBe('Data fetched successfully');
+
+      // But the raw DB messages should still have the original result
+      const dbMessages = list.get.all.db();
+      const toolDbMsg = dbMessages.find(m => m.content.parts?.some((p: any) => p.type === 'tool-invocation'));
+      const toolPart = toolDbMsg?.content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
+    });
+
+    it('should only override output for tool results that have stored modelOutput', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Do things', 'input');
+
+      const multiToolMessage: MastraDBMessage = {
+        id: 'msg-multi',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-a',
+                toolName: 'toolA',
+                state: 'result',
+                args: {},
+                result: { raw: 'a-data' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'A transformed' },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-b',
+                toolName: 'toolB',
+                state: 'result',
+                args: {},
+                result: { raw: 'b-data' },
+              },
+              // No modelOutput — should get default json conversion
+            },
+          ],
+        },
+      };
+
+      list.add(multiToolMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRoles = prompt.filter(m => m.role === 'tool');
+
+      const allToolResults = toolRoles.flatMap((m: any) => m.content.filter((p: any) => p.type === 'tool-result'));
+
+      const resultA = allToolResults.find((p: any) => p.toolName === 'toolA');
+      const resultB = allToolResults.find((p: any) => p.toolName === 'toolB');
+
+      // toolA has stored modelOutput — should use it
+      expect(resultA.output.type).toBe('text');
+      expect(resultA.output.value).toBe('A transformed');
+
+      // toolB has no stored modelOutput — should get default json conversion
+      expect(resultB.output.type).toBe('json');
+      expect(resultB.output.value).toEqual({ raw: 'b-data' });
+    });
+
+    it('should fall back to default conversion when no modelOutput is stored', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Ask something', 'input');
+
+      // No providerMetadata / no modelOutput
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-no-model-output',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-fallback',
+                toolName: 'search',
+                state: 'result',
+                args: { q: 'test' },
+                result: { results: ['a', 'b', 'c'] },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+
+      // Default AI SDK conversion — json wrapping
+      expect(toolResultPart.output.type).toBe('json');
+      expect(toolResultPart.output.value).toEqual({ results: ['a', 'b', 'c'] });
     });
   });
 });

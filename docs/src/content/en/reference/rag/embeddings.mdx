@@ -14,65 +14,65 @@ Mastra uses the AI SDK's `embed` and `embedMany` functions to generate vector em
 The `embed` function generates a vector embedding for a single text input:
 
 ```typescript
-import { embed } from "ai";
-import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+import { embed } from 'ai'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const result = await embed({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  value: "Your text to embed",
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  value: 'Your text to embed',
   maxRetries: 2, // optional, defaults to 2
-});
+})
 ```
 
 ### Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "EmbeddingModel",
-      description:
-        "The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
-    },
-    {
-      name: "value",
-      type: "string | Record<string, any>",
-      description: "The text content or object to embed",
-    },
-    {
-      name: "maxRetries",
-      type: "number",
-      description:
-        "Maximum number of retries per embedding call. Set to 0 to disable retries.",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "abortSignal",
-      type: "AbortSignal",
-      description: "Optional abort signal to cancel the request",
-      isOptional: true,
-    },
-    {
-      name: "headers",
-      type: "Record<string, string>",
-      description:
-        "Additional HTTP headers for the request (only for HTTP-based providers)",
-      isOptional: true,
-    },
-  ]}
+{
+name: "model",
+type: "EmbeddingModel",
+description:
+"The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
+},
+{
+name: "value",
+type: "string | Record<string, any>",
+description: "The text content or object to embed",
+},
+{
+name: "maxRetries",
+type: "number",
+description:
+"Maximum number of retries per embedding call. Set to 0 to disable retries.",
+isOptional: true,
+defaultValue: "2",
+},
+{
+name: "abortSignal",
+type: "AbortSignal",
+description: "Optional abort signal to cancel the request",
+isOptional: true,
+},
+{
+name: "headers",
+type: "Record<string, string>",
+description:
+"Additional HTTP headers for the request (only for HTTP-based providers)",
+isOptional: true,
+},
+]}
 />
 
 ### Return Value
 
 <PropertiesTable
   content={[
-    {
-      name: "embedding",
-      type: "number[]",
-      description: "The embedding vector for the input",
-    },
-  ]}
+{
+name: "embedding",
+type: "number[]",
+description: "The embedding vector for the input",
+},
+]}
 />
 
 ## Multiple Embeddings
@@ -80,87 +80,87 @@ const result = await embed({
 For embedding multiple texts at once, use the `embedMany` function:
 
 ```typescript
-import { embedMany } from "ai";
+import { embedMany } from 'ai'
 
 const result = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  values: ["First text", "Second text", "Third text"],
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  values: ['First text', 'Second text', 'Third text'],
   maxRetries: 2, // optional, defaults to 2
-});
+})
 ```
 
 ### Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "EmbeddingModel",
-      description:
-        "The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
-    },
-    {
-      name: "values",
-      type: "string[] | Record<string, any>[]",
-      description: "Array of text content or objects to embed",
-    },
-    {
-      name: "maxRetries",
-      type: "number",
-      description:
-        "Maximum number of retries per embedding call. Set to 0 to disable retries.",
-      isOptional: true,
-      defaultValue: "2",
-    },
-    {
-      name: "abortSignal",
-      type: "AbortSignal",
-      description: "Optional abort signal to cancel the request",
-      isOptional: true,
-    },
-    {
-      name: "headers",
-      type: "Record<string, string>",
-      description:
-        "Additional HTTP headers for the request (only for HTTP-based providers)",
-      isOptional: true,
-    },
-  ]}
+{
+name: "model",
+type: "EmbeddingModel",
+description:
+"The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
+},
+{
+name: "values",
+type: "string[] | Record<string, any>[]",
+description: "Array of text content or objects to embed",
+},
+{
+name: "maxRetries",
+type: "number",
+description:
+"Maximum number of retries per embedding call. Set to 0 to disable retries.",
+isOptional: true,
+defaultValue: "2",
+},
+{
+name: "abortSignal",
+type: "AbortSignal",
+description: "Optional abort signal to cancel the request",
+isOptional: true,
+},
+{
+name: "headers",
+type: "Record<string, string>",
+description:
+"Additional HTTP headers for the request (only for HTTP-based providers)",
+isOptional: true,
+},
+]}
 />
 
 ### Return Value
 
 <PropertiesTable
   content={[
-    {
-      name: "embeddings",
-      type: "number[][]",
-      description:
-        "Array of embedding vectors corresponding to the input values",
-    },
-  ]}
+{
+name: "embeddings",
+type: "number[][]",
+description:
+"Array of embedding vectors corresponding to the input values",
+},
+]}
 />
 
 ## Example Usage
 
 ```typescript
-import { embed, embedMany } from "ai";
+import { embed, embedMany } from 'ai'
 
 // Single embedding
 const singleResult = await embed({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
-  value: "What is the meaning of life?",
-});
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  value: 'What is the meaning of life?',
+})
 
 // Multiple embeddings
 const multipleResult = await embedMany({
-  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
+  model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
   values: [
-    "First question about life",
-    "Second question about universe",
-    "Third question about everything",
+    'First question about life',
+    'Second question about universe',
+    'Third question about everything',
   ],
-});
+})
 ```
 
 For more detailed information about embeddings in the Vercel AI SDK, see:

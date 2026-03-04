@@ -1,6 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { createStorageErrorId, MastraStorage } from '@mastra/core/storage';
+import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import Cloudflare from 'cloudflare';
 import { MemoryStorageD1 } from './domains/memory';
@@ -94,7 +94,7 @@ export interface D1Client {
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class D1Store extends MastraStorage {
+export class D1Store extends MastraCompositeStore {
   private client?: D1Client;
   private binding?: D1Database;
   private tablePrefix: string;

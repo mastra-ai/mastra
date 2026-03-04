@@ -1,5 +1,5 @@
-import clsx from 'clsx';
 import React from 'react';
+import { cn } from '@/lib/utils';
 
 export interface IconProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
@@ -14,7 +14,7 @@ const sizes = {
 
 export const Icon = ({ children, className, size = 'default', ...props }: IconProps) => {
   return (
-    <span className={clsx('block', sizes[size], className)} {...props}>
+    <span className={cn('block', sizes[size], className)} {...props}>
       {children}
     </span>
   );

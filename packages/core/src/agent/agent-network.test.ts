@@ -1,703 +1,14 @@
-import { openai } from '@ai-sdk/openai-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { MastraError } from '../error';
+
+import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
-
-/**
- * Validates that iteration counter works correctly in agent network loops.
- * Prevents regression of issue #9314 where iteration counter was stuck at 0.
- * Also prevents skipping the first iteration (should start at 0, not 1).
- */
-async function checkIterations(anStream: AsyncIterable<any>) {
-  const iterations: number[] = [];
-  for await (const chunk of anStream) {
-    if (chunk.type === 'routing-agent-end') {
-      const iteration = (chunk.payload as any)?.iteration;
-      iterations.push(iteration);
-    }
-  }
-
-  // Check that iterations start at 0 and increment correctly
-  for (let i = 0; i < iterations.length; i++) {
-    expect(iterations[i], `Iteration ${i} should be ${i}, but got ${iterations[i]}. `).toBe(i);
-  }
-
-  // Explicitly verify first iteration is 0 (not 1)
-  expect(iterations[0], 'First iteration must start at 0, not 1').toBe(0);
-}
-
-describe.skip('Agent - network', () => {
-  const memory = new MockMemory();
-
-  const agent1 = new Agent({
-    id: 'agent1',
-    name: 'Research Agent',
-    instructions:
-      'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
-    description:
-      'This agent is used to do research, but not create full responses. Answer in bullet points only and be concise.',
-    model: openai('gpt-4o'),
-  });
-
-  const agent2 = new Agent({
-    id: 'agent2',
-    name: 'Text Synthesis Agent',
-    description:
-      'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles.',
-    instructions:
-      'This agent is used to do text synthesis on researched material. Write a full report based on the researched material. Do not use bullet points. Write full paragraphs. There should not be a single bullet point in the final report. You write articles. [IMPORTANT] Make sure to mention information that has been highlighted as relevant in message history.',
-    model: openai('gpt-4o'),
-  });
-
-  const agentStep1 = createStep({
-    id: 'agent-step',
-    description: 'This step is used to do research and text synthesis.',
-    inputSchema: z.object({
-      city: z.string().describe('The city to research'),
-    }),
-    outputSchema: z.object({
-      text: z.string(),
-    }),
-    execute: async ({ inputData }) => {
-      const resp = await agent1.generate(inputData.city, {
-        structuredOutput: {
-          schema: z.object({
-            text: z.string(),
-          }),
-        },
-      });
-
-      return { text: resp.object.text };
-    },
-  });
-
-  const agentStep2 = createStep({
-    id: 'agent-step',
-    description: 'This step is used to do research and text synthesis.',
-    inputSchema: z.object({
-      text: z.string().describe('The city to research'),
-    }),
-    outputSchema: z.object({
-      text: z.string(),
-    }),
-    execute: async ({ inputData }) => {
-      const resp = await agent2.generate(inputData.text, {
-        structuredOutput: {
-          schema: z.object({
-            text: z.string(),
-          }),
-        },
-      });
-
-      return { text: resp.object.text };
-    },
-  });
-
-  const workflow1 = createWorkflow({
-    id: 'workflow1',
-    description: 'This workflow is perfect for researching a specific city.',
-    steps: [],
-    inputSchema: z.object({
-      city: z.string(),
-    }),
-    outputSchema: z.object({
-      text: z.string(),
-    }),
-    options: { validateInputs: false },
-  })
-    .then(agentStep1)
-    .then(agentStep2)
-    .commit();
-
-  const agentStep1WithStream = createStep(agent1);
-
-  const agentStep2WithStream = createStep(agent2);
-
-  const workflow1WithAgentStream = createWorkflow({
-    id: 'workflow1',
-    description: 'This workflow is perfect for researching a specific topic.',
-    steps: [],
-    inputSchema: z.object({
-      researchTopic: z.string(),
-    }),
-    outputSchema: z.object({
-      text: z.string(),
-    }),
-  })
-    .map(async ({ inputData }) => {
-      return {
-        prompt: inputData.researchTopic,
-      };
-    })
-    .then(agentStep1WithStream)
-    .map(async ({ inputData }) => {
-      return {
-        prompt: inputData.text,
-      };
-    })
-    .then(agentStep2WithStream)
-    .commit();
-
-  const tool = createTool({
-    id: 'tool1',
-    description: 'This tool will tell you about "cool stuff"',
-    inputSchema: z.object({
-      howCool: z.string().describe('How cool is the stuff?'),
-    }),
-    outputSchema: z.object({
-      text: z.string(),
-    }),
-    execute: async (inputData, context) => {
-      await context?.writer?.write({
-        type: 'my-custom-tool-payload',
-        payload: {
-          context: inputData,
-        },
-      });
-
-      return { text: `This is a test tool. How cool is the stuff? ${inputData.howCool}` };
-    },
-  });
-
-  const network = new Agent({
-    id: 'test-network',
-    name: 'Test Network',
-    instructions:
-      'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
-    model: openai('gpt-4o-mini'),
-    agents: {
-      agent1,
-      agent2,
-    },
-    workflows: {
-      workflow1,
-    },
-    tools: {
-      tool,
-    },
-    memory,
-  });
-
-  const networkWithWflowAgentStream = new Agent({
-    id: 'test-network-with-workflow-agent-stream',
-    name: 'Test Network',
-    instructions:
-      'You can research anything. You can also synthesize research material. You can also write a full report based on the researched material.',
-    model: openai('gpt-4o-mini'),
-    agents: {
-      agent1,
-      agent2,
-    },
-    workflows: {
-      workflow1WithAgentStream,
-    },
-    tools: {
-      tool,
-    },
-    memory,
-  });
-
-  const requestContext = new RequestContext();
-
-  it('LOOP - execute a single tool', async () => {
-    const anStream = await network.network('Execute tool1', {
-      requestContext,
-    });
-
-    await checkIterations(anStream);
-  });
-
-  it('LOOP - execute a single workflow', async () => {
-    const anStream = await network.network('Execute workflow1 on Paris', {
-      requestContext,
-    });
-
-    await checkIterations(anStream);
-  });
-
-  it('LOOP - execute a single agent', async () => {
-    const anStream = await network.network('Research dolphins', {
-      requestContext,
-    });
-
-    await checkIterations(anStream);
-  });
-
-  it('LOOP - execute a single agent then workflow', async () => {
-    const anStream = await network.network(
-      'Research dolphins then execute workflow1 based on the location where dolphins live',
-      {
-        requestContext,
-        maxSteps: 3,
-      },
-    );
-
-    await checkIterations(anStream);
-  });
-
-  it('LOOP - should not trigger WorkflowRunOutput deprecation warning when executing workflows', async () => {
-    const originalWarn = console.warn;
-    const warnings: string[] = [];
-    console.warn = (message: string) => {
-      warnings.push(message);
-    };
-
-    try {
-      const anStream = await network.network('Execute workflow1 on Paris', {
-        requestContext,
-      });
-
-      // Consume the stream
-      for await (const _chunk of anStream) {
-        // Just iterate through
-      }
-
-      // Verify no deprecation warnings about WorkflowRunOutput[Symbol.asyncIterator]
-      const deprecationWarnings = warnings.filter(
-        w => w.includes('WorkflowRunOutput[Symbol.asyncIterator]') && w.includes('deprecated'),
-      );
-
-      expect(deprecationWarnings).toHaveLength(0);
-    } finally {
-      console.warn = originalWarn;
-    }
-  });
-
-  it('LOOP - should track usage data from workflow with agent stream agent.network()', async () => {
-    const anStream = await networkWithWflowAgentStream.network('Research dolphins', {
-      requestContext,
-    });
-
-    let networkUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      reasoningTokens: 0,
-      cachedInputTokens: 0,
-    };
-
-    // Consume the stream to trigger usage collection
-    for await (const _chunk of anStream) {
-      if (
-        _chunk.type === 'routing-agent-end' ||
-        _chunk.type === 'agent-execution-end' ||
-        _chunk.type === 'workflow-execution-end'
-      ) {
-        if (_chunk.payload?.usage) {
-          networkUsage.inputTokens += parseInt(_chunk.payload.usage?.inputTokens?.toString() ?? '0', 10);
-          networkUsage.outputTokens += parseInt(_chunk.payload.usage?.outputTokens?.toString() ?? '0', 10);
-          networkUsage.totalTokens += parseInt(_chunk.payload.usage?.totalTokens?.toString() ?? '0', 10);
-          networkUsage.reasoningTokens += parseInt(_chunk.payload.usage?.reasoningTokens?.toString() ?? '0', 10);
-          networkUsage.cachedInputTokens += parseInt(_chunk.payload.usage?.cachedInputTokens?.toString() ?? '0', 10);
-        }
-      }
-    }
-
-    // Check that usage data is available
-    const usage = await anStream.usage;
-    expect(usage).toBeDefined();
-    expect(usage.inputTokens).toBe(networkUsage.inputTokens);
-    expect(usage.outputTokens).toBe(networkUsage.outputTokens);
-    expect(usage.totalTokens).toBe(networkUsage.totalTokens);
-    expect(usage.reasoningTokens).toBe(networkUsage.reasoningTokens);
-    expect(usage.cachedInputTokens).toBe(networkUsage.cachedInputTokens);
-  });
-
-  it('LOOP - should track usage data from agent in agent.network()', async () => {
-    const anStream = await networkWithWflowAgentStream.network('Research dolphins using agent1', {
-      requestContext,
-    });
-
-    let networkUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      reasoningTokens: 0,
-      cachedInputTokens: 0,
-    };
-
-    let finishUsage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-      reasoningTokens: 0,
-      cachedInputTokens: 0,
-    };
-
-    // Consume the stream to trigger usage collection
-    for await (const _chunk of anStream) {
-      if (
-        _chunk.type === 'routing-agent-end' ||
-        _chunk.type === 'agent-execution-end' ||
-        _chunk.type === 'workflow-execution-end'
-      ) {
-        if (_chunk.payload?.usage) {
-          networkUsage.inputTokens += parseInt(_chunk.payload.usage?.inputTokens?.toString() ?? '0', 10);
-          networkUsage.outputTokens += parseInt(_chunk.payload.usage?.outputTokens?.toString() ?? '0', 10);
-          networkUsage.totalTokens += parseInt(_chunk.payload.usage?.totalTokens?.toString() ?? '0', 10);
-          networkUsage.reasoningTokens += parseInt(_chunk.payload.usage?.reasoningTokens?.toString() ?? '0', 10);
-          networkUsage.cachedInputTokens += parseInt(_chunk.payload.usage?.cachedInputTokens?.toString() ?? '0', 10);
-        }
-      }
-
-      if (_chunk.type === 'network-execution-event-finish') {
-        finishUsage = _chunk.payload.usage as any;
-      }
-    }
-
-    // Check that usage data is available
-    const usage = await anStream.usage;
-    expect(usage).toBeDefined();
-    expect(usage.inputTokens).toBe(networkUsage.inputTokens);
-    expect(usage.outputTokens).toBe(networkUsage.outputTokens);
-    expect(usage.totalTokens).toBe(networkUsage.totalTokens);
-    expect(usage.reasoningTokens).toBe(networkUsage.reasoningTokens);
-    expect(usage.cachedInputTokens).toBe(networkUsage.cachedInputTokens);
-    expect(usage.inputTokens).toBe(finishUsage.inputTokens);
-    expect(usage.outputTokens).toBe(finishUsage.outputTokens);
-    expect(usage.totalTokens).toBe(finishUsage.totalTokens);
-    expect(usage.reasoningTokens).toBe(finishUsage.reasoningTokens);
-    expect(usage.cachedInputTokens).toBe(finishUsage.cachedInputTokens);
-  });
-
-  it('Should throw if memory is not configured', async () => {
-    const calculatorAgent = new Agent({
-      id: 'calculator-agent',
-      name: 'Calculator Agent',
-      instructions: `You are a calculator agent. You can perform basic arithmetic operations such as addition, subtraction, multiplication, and division.
-    When you receive a request, you should respond with the result of the calculation.`,
-      model: openai('gpt-4o-mini'),
-    });
-
-    const orchestratorAgentConfig = {
-      systemInstruction: `
-      You are an orchestrator agent.
-
-      You have access to one agent: Calculator Agent.
-    - Calculator Agent can perform basic arithmetic operations such as addition, subtraction, multiplication, and division.
-    `,
-    };
-
-    const orchestratorAgent = new Agent({
-      id: 'orchestrator-agent',
-      name: 'Orchestrator Agent',
-      instructions: orchestratorAgentConfig.systemInstruction,
-      model: openai('gpt-4o-mini'),
-      agents: {
-        calculatorAgent,
-      },
-    });
-
-    const prompt = `Hi!`; // <- this triggers an infinite loop
-
-    expect(orchestratorAgent.network([{ role: 'user', content: prompt }])).rejects.toThrow();
-  });
-
-  it('Should generate title for network thread when generateTitle is enabled', async () => {
-    let titleGenerated = false;
-    let generatedTitle = '';
-
-    // Create a custom memory with generateTitle enabled
-    const memoryWithTitleGen = new MockMemory();
-    memoryWithTitleGen.getMergedThreadConfig = () => {
-      return {
-        generateTitle: true,
-      };
-    };
-
-    // Override createThread to capture the title
-    const originalCreateThread = memoryWithTitleGen.createThread.bind(memoryWithTitleGen);
-    memoryWithTitleGen.createThread = async (params: any) => {
-      const result = await originalCreateThread(params);
-      if (params.title && !params.title.startsWith('New Thread')) {
-        titleGenerated = true;
-        generatedTitle = params.title;
-      }
-      return result;
-    };
-
-    const networkWithTitle = new Agent({
-      id: 'test-network-with-title',
-      name: 'Test Network With Title',
-      instructions:
-        'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
-      model: openai('gpt-4o-mini'),
-      agents: {
-        agent1,
-        agent2,
-      },
-      workflows: {
-        workflow1,
-      },
-      tools: {
-        tool,
-      },
-      memory: memoryWithTitleGen,
-    });
-
-    const anStream = await networkWithTitle.network('Research dolphins', {
-      requestContext,
-    });
-
-    await checkIterations(anStream);
-
-    // Wait a bit for async title generation to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(titleGenerated).toBe(true);
-    expect(generatedTitle).toBeTruthy();
-    expect(generatedTitle.length).toBeGreaterThan(0);
-  });
-
-  it('Should generate title for network thread when generateTitle is enabled via network options', async () => {
-    let titleGenerated = false;
-    let generatedTitle = '';
-
-    // Create a custom memory with generateTitle enabled
-    const memoryWithTitleGen = new MockMemory();
-
-    // Override createThread to capture the title
-    const originalCreateThread = memoryWithTitleGen.createThread.bind(memoryWithTitleGen);
-    memoryWithTitleGen.createThread = async (params: any) => {
-      const result = await originalCreateThread(params);
-      if (params.title && !params.title.startsWith('New Thread')) {
-        titleGenerated = true;
-        generatedTitle = params.title;
-      }
-      return result;
-    };
-
-    const networkWithTitle = new Agent({
-      id: 'test-network-with-title-in-options',
-      name: 'Test Network With Title In Options',
-      instructions:
-        'You can research cities. You can also synthesize research material. You can also write a full report based on the researched material.',
-      model: openai('gpt-4o-mini'),
-      agents: {
-        agent1,
-        agent2,
-      },
-      workflows: {
-        workflow1,
-      },
-      tools: {
-        tool,
-      },
-      memory: memoryWithTitleGen,
-    });
-
-    const anStream = await networkWithTitle.network('Research dolphins', {
-      requestContext,
-      memory: {
-        thread: 'test-network-with-title',
-        resource: 'test-network-with-title',
-        options: {
-          generateTitle: true,
-        },
-      },
-    });
-
-    await checkIterations(anStream);
-
-    // Wait a bit for async title generation to complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(titleGenerated).toBe(true);
-    expect(generatedTitle).toBeTruthy();
-    expect(generatedTitle.length).toBeGreaterThan(0);
-  });
-
-  it('Should not generate title when generateTitle is false', async () => {
-    let titleGenerationAttempted = false;
-
-    const memoryWithoutTitleGen = new MockMemory();
-    memoryWithoutTitleGen.getMergedThreadConfig = () => {
-      return {
-        threads: {
-          generateTitle: false,
-        },
-      };
-    };
-
-    // Override createThread to check if title generation was attempted
-    const originalCreateThread = memoryWithoutTitleGen.createThread.bind(memoryWithoutTitleGen);
-    memoryWithoutTitleGen.createThread = async (params: any) => {
-      if (params.title && !params.title.startsWith('New Thread')) {
-        titleGenerationAttempted = true;
-      }
-      return await originalCreateThread(params);
-    };
-
-    const networkNoTitle = new Agent({
-      id: 'test-network-no-title',
-      name: 'Test Network No Title',
-      instructions: 'You can research topics.',
-      model: openai('gpt-4o-mini'),
-      agents: {
-        agent1,
-      },
-      memory: memoryWithoutTitleGen,
-    });
-
-    const anStream = await networkNoTitle.network('Research dolphins', {
-      requestContext,
-    });
-
-    await checkIterations(anStream);
-
-    // Wait for any async operations
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(titleGenerationAttempted).toBe(false);
-  });
-
-  it('Should not generate title when generateTitle:false is passed in netwwork options', async () => {
-    let titleGenerationAttempted = false;
-
-    const memoryWithoutTitleGen = new MockMemory();
-
-    // Override createThread to check if title generation was attempted
-    const originalCreateThread = memoryWithoutTitleGen.createThread.bind(memoryWithoutTitleGen);
-    memoryWithoutTitleGen.createThread = async (params: any) => {
-      if (params.title && !params.title.startsWith('New Thread')) {
-        titleGenerationAttempted = true;
-      }
-      return await originalCreateThread(params);
-    };
-
-    const networkNoTitle = new Agent({
-      id: 'test-network-no-title',
-      name: 'Test Network No Title',
-      instructions: 'You can research topics.',
-      model: openai('gpt-4o-mini'),
-      agents: {
-        agent1,
-      },
-      memory: memoryWithoutTitleGen,
-    });
-
-    const anStream = await networkNoTitle.network('Research dolphins', {
-      requestContext,
-      memory: {
-        thread: 'test-network-no-title',
-        resource: 'test-network-no-title',
-        options: {
-          threads: {
-            generateTitle: false,
-          },
-        },
-      },
-    });
-
-    await checkIterations(anStream);
-
-    // Wait for any async operations
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(titleGenerationAttempted).toBe(false);
-  });
-}, 120e3);
-
-describe('Agent - network - updateWorkingMemory', () => {
-  it('Should forward memory context (threadId, resourceId) to sub-agents when using same memory template', async () => {
-    // Create a shared memory instance with working memory enabled
-    // This is the scenario from issue #9873 where sub-agents share the same memory template
-    const sharedMemory = new MockMemory({
-      enableWorkingMemory: true,
-      workingMemoryTemplate: `
-      # Information Profile
-      - Title:
-      - Some facts:
-        - Fact 1:
-        - Fact 2:
-        - Fact 3:
-      - Summary:
-      `,
-    });
-
-    // Create sub-agents with the shared memory and working memory enabled
-    // These agents will need threadId/resourceId to use updateWorkingMemory tool
-    const subAgent1 = new Agent({
-      id: 'sub-agent-1',
-      name: 'Sub Agent 1',
-      instructions:
-        'You are a helpful assistant. When the user provides information, remember it using your memory tools.',
-      model: openai('gpt-4o-mini'),
-      memory: sharedMemory,
-      defaultOptions: {
-        toolChoice: 'required',
-      },
-    });
-
-    const subAgent2 = new Agent({
-      id: 'sub-agent-2',
-      name: 'Sub Agent 2',
-      instructions:
-        'You are a helpful assistant. When the user provides information, remember it using your memory tools.',
-      model: openai('gpt-4o-mini'),
-      memory: sharedMemory,
-      defaultOptions: {
-        toolChoice: 'required',
-      },
-    });
-
-    // Create network agent with the same shared memory
-    const networkWithSharedMemory = new Agent({
-      id: 'network-with-shared-memory',
-      name: 'Network With Shared Memory',
-      instructions:
-        'You can delegate tasks to sub-agents. Sub Agent 1 handles research tasks. Sub Agent 2 handles writing tasks.',
-      model: openai('gpt-4o-mini'),
-      agents: {
-        subAgent1,
-        subAgent2,
-      },
-      memory: sharedMemory,
-    });
-
-    const threadId = 'test-thread-shared-memory';
-    const resourceId = 'test-resource-shared-memory';
-
-    const anStream = await networkWithSharedMemory.network('Research dolphins and write a summary', {
-      memory: {
-        thread: threadId,
-        resource: resourceId,
-      },
-    });
-
-    // Consume the stream and track sub-agent executions
-    for await (const chunk of anStream) {
-      if (chunk.type === 'agent-execution-event-tool-result') {
-        const payload = chunk.payload as any;
-        const toolName = payload.payload?.toolName;
-        const result = payload.payload?.result;
-        if (toolName === 'updateWorkingMemory' && result instanceof MastraError) {
-          const toolResultMessage = result?.message;
-          if (toolResultMessage.includes('Thread ID') || toolResultMessage.includes('resourceId')) {
-            expect.fail(toolResultMessage + ' should not be thrown');
-          }
-        }
-      }
-    }
-
-    // Verify the stream completed (usage should be available)
-    const usage = await anStream.usage;
-    expect(usage).toBeDefined();
-
-    // Verify that the thread was created/accessed in memory
-    // This confirms that memory operations worked correctly
-    const thread = await sharedMemory.getThreadById({ threadId });
-    expect(thread).toBeDefined();
-    expect(thread?.id).toBe(threadId);
-    expect(thread?.resourceId).toBe(resourceId);
-  });
-}, 120e3);
 
 describe('Agent - network - finalResult token efficiency', () => {
   it('should NOT store redundant toolCalls in finalResult when messages already contain tool call data', async () => {
@@ -1069,6 +380,91 @@ describe('Agent - network - text streaming', () => {
 
     const textContent = textDeltaEvents.map(e => e.payload?.text || '').join('');
     expect(textContent).toContain('I am a helpful assistant');
+  });
+
+  it('should not emit selectionReason as text-delta when routing agent handles request directly', async () => {
+    const memory = new MockMemory();
+
+    // The selectionReason is internal routing logic, distinct from the actual answer
+    const routingReason =
+      'The user is asking a simple question that can be answered directly. No sub-agent is needed because the answer is available in context.';
+
+    const selfHandleResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: routingReason,
+    });
+
+    const completionCheckResponse = JSON.stringify({
+      isComplete: true,
+      completionReason: 'The routing agent provided a direct answer.',
+      finalResult: 'The answer is 42.',
+    });
+
+    let callCount = 0;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: response }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const response = callCount === 1 ? selfHandleResponse : completionCheckResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: response },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'no-reason-text-agent',
+      name: 'No Reason Text Agent',
+      instructions: 'You are a helpful assistant.',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('What is the answer?', {
+      memory: {
+        thread: 'test-thread-no-reason-text',
+        resource: 'test-resource-no-reason-text',
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    const routingAgentEndEvents = chunks.filter(c => c.type === 'routing-agent-end');
+    expect(routingAgentEndEvents.length).toBeGreaterThan(0);
+
+    const endEvent = routingAgentEndEvents[0];
+    expect(endEvent.payload.primitiveType).toBe('none');
+    expect(endEvent.payload.primitiveId).toBe('none');
+
+    // The selectionReason is internal routing logic and should appear
+    // in the routing-agent-end payload (as metadata), but NOT as text-delta events
+    expect(endEvent.payload.selectionReason).toBe(routingReason);
+
+    // routing-agent-text-delta events should NOT contain the selectionReason
+    const textDeltaEvents = chunks.filter(c => c.type === 'routing-agent-text-delta');
+    const textContent = textDeltaEvents.map(e => e.payload?.text || '').join('');
+    expect(textContent).not.toContain(routingReason);
   });
 });
 
@@ -1837,6 +1233,310 @@ describe('Agent - network - completion validation', () => {
     expect(iterationCallbacks[0].iteration).toBe(0);
     expect(iterationCallbacks[1].iteration).toBe(1);
     expect(iterationCallbacks[2].iteration).toBe(2);
+  });
+
+  it('should add suppressFeedback: true to the feedback message metadata when suppressFeedback is true', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that fails to trigger feedback
+    const mockScorer = {
+      id: 'suppress-test-scorer',
+      name: 'Suppress Test Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Test failure to trigger feedback' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Testing suppression',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'suppress-feedback-network',
+      name: 'Suppress Feedback Network',
+      instructions: 'Test network for suppressFeedback option',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+        suppressFeedback: true, // Enable feedback suppression
+      },
+      maxSteps: 1, // Limit iterations to reduce test time
+      memory: {
+        thread: 'suppress-feedback-thread',
+        resource: 'suppress-feedback-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Filter for completion feedback messages (marked with completionResult metadata)
+    const feedbackMessages = savedMessages.filter(msg => msg.content?.metadata?.completionResult !== undefined);
+
+    // Verify no feedback messages were saved
+    expect(feedbackMessages.length).toBeGreaterThan(0);
+
+    const allHaveSuppressFeedback = feedbackMessages.every(
+      msg => msg.content.metadata.completionResult.suppressFeedback,
+    );
+
+    // Verify the suppressFeedback flag is set to true
+    expect(allHaveSuppressFeedback).toBe(true);
+  });
+
+  it('should save feedback message when suppressFeedback is false (default)', async () => {
+    const memory = new MockMemory();
+    const savedMessages: any[] = [];
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Mock scorer that fails to trigger feedback
+    const mockScorer = {
+      id: 'feedback-default-scorer',
+      name: 'Feedback Default Scorer',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Test failure to trigger feedback' }),
+    };
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Testing default behavior',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'default-feedback-network',
+      name: 'Default Feedback Network',
+      instructions: 'Test network for default feedback behavior',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      completion: {
+        scorers: [mockScorer as any],
+        // suppressFeedback not set (defaults to false)
+      },
+      maxSteps: 1, // Limit iterations to reduce test time
+      memory: {
+        thread: 'default-feedback-thread',
+        resource: 'default-feedback-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Filter for completion feedback messages (marked with completionResult metadata)
+    const feedbackMessages = savedMessages.filter(msg => msg.content?.metadata?.completionResult !== undefined);
+
+    // Verify feedback messages were saved (default behavior)
+    expect(feedbackMessages.length).toBeGreaterThan(0);
+
+    // Verify feedback contains expected content
+    const feedbackText = feedbackMessages[0].content.parts[0].text;
+    expect(feedbackText).toContain('Completion Check Results');
+  });
+});
+
+/**
+ * Test for issue #11749: Agent network not working with gpt-5-mini
+ * When certain models fail to return valid structured output,
+ * the routing agent should throw a descriptive MastraError instead of
+ * "Cannot read properties of undefined (reading 'primitiveId')"
+ */
+describe('Agent - network - routing agent output', () => {
+  it('should throw descriptive MastraError when routing agent object is undefined', async () => {
+    const memory = new MockMemory();
+
+    // Import the utils module to spy on tryGenerateWithJsonFallback
+    const utils = await import('../agent/utils');
+
+    // Spy on tryGenerateWithJsonFallback to return undefined object
+    // This simulates what happens when a model like gpt-5-mini returns
+    // output that doesn't parse correctly
+    const spy = vi.spyOn(utils, 'tryGenerateWithJsonFallback').mockResolvedValue({
+      object: undefined as any,
+      text: 'Some invalid response that did not parse',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      rememberedMessages: [],
+    } as any);
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: '{}' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: '{}' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'undefined-object-test-network',
+      name: 'Undefined Object Test Network',
+      instructions: 'Test network',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      memory: {
+        thread: 'undefined-object-test-thread',
+        resource: 'undefined-object-test-resource',
+      },
+    });
+
+    // Collect chunks - the error will be thrown during iteration
+    const chunks: any[] = [];
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Error is expected - the workflow step fails with our MastraError
+    }
+
+    // The spy should have been called
+    expect(spy).toHaveBeenCalled();
+
+    // The error should contain our descriptive message (either thrown or in chunks)
+    // Check stderr showed our error was thrown in the workflow
+    // The stream completes but the workflow step fails with our error
+
+    // Verify chunks were emitted (at least routing-agent-start)
+    expect(chunks.length).toBeGreaterThan(0);
+
+    spy.mockRestore();
+  });
+
+  it('should work correctly with valid structured output', async () => {
+    const memory = new MockMemory();
+
+    // Valid routing agent response - properly formatted JSON
+    const validRoutingResponse = JSON.stringify({
+      primitiveId: 'none',
+      primitiveType: 'none',
+      prompt: '',
+      selectionReason: 'Task complete - no delegation needed',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: validRoutingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: validRoutingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'valid-output-test-network',
+      name: 'Valid Output Test Network',
+      instructions: 'Test network for valid output handling',
+      model: mockModel,
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do something', {
+      memory: {
+        thread: 'valid-output-test-thread',
+        resource: 'valid-output-test-resource',
+      },
+    });
+
+    // Consume stream and collect chunks
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Should have routing-agent-start and routing-agent-end
+    const routingStartChunks = chunks.filter(c => c.type === 'routing-agent-start');
+    const routingEndChunks = chunks.filter(c => c.type === 'routing-agent-end');
+
+    expect(routingStartChunks.length).toBeGreaterThan(0);
+    expect(routingEndChunks.length).toBeGreaterThan(0);
+
+    // The routing end should have the correct primitiveId
+    expect(routingEndChunks[0].payload.primitiveId).toBe('none');
+    expect(routingEndChunks[0].payload.isComplete).toBe(true);
   });
 });
 
@@ -3414,5 +3114,3389 @@ describe('Agent - network - finalResult real-world scenarios', () => {
     expect(finishEvent).toBeDefined();
     expect(finishEvent.payload.result).toContain('HISTORY_AWARE_RESULT');
     expect(finishEvent.payload.result).toContain('2 iterations');
+  });
+});
+
+describe('Agent - network - structured output', () => {
+  const memory = new MockMemory();
+  const requestContext = new RequestContext();
+
+  // Schema for structured network output
+  const resultSchema = z.object({
+    summary: z.string().describe('A brief summary of the task result'),
+    recommendations: z.array(z.string()).describe('List of recommendations'),
+    confidence: z.number().min(0).max(1).describe('Confidence score'),
+  });
+
+  // Expected structured result
+  const structuredResult = {
+    summary: 'Task completed successfully',
+    recommendations: ['Recommendation 1', 'Recommendation 2'],
+    confidence: 0.95,
+  };
+
+  // Mock scorer that always passes
+  const alwaysPassScorer = {
+    id: 'always-pass',
+    name: 'Always Pass Scorer',
+    run: vi.fn().mockResolvedValue({ score: 1, reason: 'Always passes' }),
+  };
+
+  /**
+   * Creates a mock model that handles the network flow:
+   * 1. First call: Routing decision
+   * 2. Second call: Structured output generation (when schema is provided)
+   */
+  function createNetworkMockModel(options: { routingResponse?: object; structuredResult?: object }) {
+    const routingResponse = JSON.stringify(
+      options.routingResponse ?? {
+        primitiveId: 'none',
+        primitiveType: 'none',
+        prompt: '',
+        selectionReason: 'Task handled directly',
+      },
+    );
+
+    const structuredResultJson = JSON.stringify(options.structuredResult ?? structuredResult);
+
+    let callCount = 0;
+
+    return new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        // First call is routing, subsequent calls return structured result
+        const text = callCount === 1 ? routingResponse : structuredResultJson;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        // First call is routing, subsequent calls return structured result
+        const text = callCount === 1 ? routingResponse : structuredResultJson;
+
+        // Stream JSON - for non-routing calls, stream in chunks
+        const chunks = [
+          { type: 'stream-start' as const, warnings: [] },
+          {
+            type: 'response-metadata' as const,
+            id: `id-${callCount}`,
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          { type: 'text-start' as const, id: `text-${callCount}` },
+          { type: 'text-delta' as const, id: `text-${callCount}`, delta: text },
+          { type: 'text-end' as const, id: `text-${callCount}` },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ];
+
+        return {
+          stream: convertArrayToReadableStream(chunks),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+  }
+
+  it('should expose .object getter that returns a Promise', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Test task', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+    });
+
+    // Consume stream
+    for await (const _chunk of stream) {
+      // Process
+    }
+
+    // Test that .object getter exists and is a Promise
+    expect(stream).toHaveProperty('object');
+    expect(typeof (stream as any).object?.then).toBe('function');
+  });
+
+  it('should expose .objectStream getter that returns a ReadableStream', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Test task', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+    });
+
+    // Test that .objectStream getter exists
+    expect(stream).toHaveProperty('objectStream');
+    expect((stream as any).objectStream).toBeInstanceOf(ReadableStream);
+  });
+
+  it('should return typed object when structuredOutput.schema is provided', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test structured output',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Analyze this', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: {
+        schema: resultSchema,
+      },
+    });
+
+    // Consume stream
+    for await (const _chunk of stream) {
+      // Process
+    }
+
+    // Get the structured object
+    const result = await stream.object;
+
+    // These assertions verify the feature is implemented
+    expect(result).toBeDefined();
+    expect(result).not.toBeUndefined();
+    expect(result!.summary).toBe(structuredResult.summary);
+    expect(result!.recommendations).toEqual(structuredResult.recommendations);
+    expect(result!.confidence).toBe(structuredResult.confidence);
+  });
+
+  it('should emit network-object-result chunk with typed object', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test object chunks',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Check chunks', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: {
+        schema: resultSchema,
+      },
+    });
+
+    let objectResultChunk: any = null;
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'network-object-result') {
+        objectResultChunk = chunk;
+      }
+    }
+
+    // This will pass when the feature emits network-object-result chunks
+    expect(objectResultChunk).not.toBeNull();
+    expect(objectResultChunk.payload.object).toEqual(structuredResult);
+  });
+
+  it('should include object property in NetworkFinishPayload', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test finish payload',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Check finish payload', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: {
+        schema: resultSchema,
+      },
+    });
+
+    let finishPayload: any = null;
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'network-execution-event-finish') {
+        finishPayload = chunk.payload;
+      }
+    }
+
+    expect(finishPayload).toBeDefined();
+    // NetworkFinishPayload should include object property
+    expect(finishPayload).toHaveProperty('object');
+    expect(finishPayload.object).toEqual(structuredResult);
+  });
+
+  it('should stream partial objects via objectStream', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test streaming',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Stream test', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: {
+        schema: resultSchema,
+      },
+    });
+
+    const partialObjects: any[] = [];
+
+    // objectStream should be defined
+    const objectStream = stream.objectStream;
+    expect(objectStream).toBeDefined();
+
+    // Start consuming objectStream in background
+    const objectStreamPromise = (async () => {
+      for await (const partial of objectStream) {
+        partialObjects.push(partial);
+      }
+    })();
+
+    // Consume main stream
+    for await (const _chunk of stream) {
+      // Process
+    }
+
+    // Wait for objectStream to finish
+    await objectStreamPromise;
+
+    // Should have received at least one partial object
+    expect(partialObjects.length).toBeGreaterThan(0);
+  });
+
+  it('should emit network-object chunks during streaming', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test object chunks',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Partial chunks test', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: {
+        schema: resultSchema,
+      },
+    });
+
+    const objectChunks: any[] = [];
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'network-object') {
+        objectChunks.push(chunk);
+      }
+    }
+
+    // network-object chunks should be emitted during streaming
+    expect(objectChunks.length).toBeGreaterThan(0);
+  });
+
+  it('should generate structured output after sub-agent completes', async () => {
+    const subAgentResponse = 'Detailed analysis results from sub-agent.';
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 20, outputTokens: 40, totalTokens: 60 },
+        content: [{ type: 'text', text: subAgentResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'sub-agent-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: subAgentResponse },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 20, outputTokens: 40, totalTokens: 60 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'research-agent',
+      name: 'Research Agent',
+      description: 'Performs detailed research',
+      instructions: 'Research topics thoroughly',
+      model: subAgentMockModel,
+    });
+
+    // Routing agent selects sub-agent first, then handles structured output
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'research-agent',
+      primitiveType: 'agent',
+      prompt: 'Analyze this topic',
+      selectionReason: 'Delegating to research agent',
+    });
+
+    const structuredResultJson = JSON.stringify(structuredResult);
+
+    let callCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectAgent : structuredResultJson;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectAgent : structuredResultJson;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'routing-model', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: text },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'orchestrator',
+      name: 'Orchestrator',
+      instructions: 'Coordinate research tasks',
+      model: routingMockModel,
+      agents: { 'research-agent': subAgent },
+      memory,
+    });
+
+    const stream = await networkAgent.network('Research and summarize', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: {
+        schema: resultSchema,
+      },
+    });
+
+    let agentExecutionSeen = false;
+
+    for await (const chunk of stream) {
+      if (chunk.type === 'agent-execution-end') {
+        agentExecutionSeen = true;
+      }
+    }
+
+    expect(agentExecutionSeen).toBe(true);
+
+    // Get structured result
+    const result = await stream.object;
+
+    expect(result).toBeDefined();
+    expect(result).toEqual(structuredResult);
+  });
+
+  it('should resolve object promise even if awaited before stream consumption', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Test', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: { schema: resultSchema },
+    });
+
+    // Start awaiting object before consuming stream
+    const objectPromise = stream.object;
+
+    // Now consume stream
+    for await (const _chunk of stream) {
+      // Process
+    }
+
+    // Object should resolve correctly
+    const result = await objectPromise;
+    expect(result).toBeDefined();
+    expect(result!.summary).toBe(structuredResult.summary);
+  });
+
+  it('should handle complex nested schemas', async () => {
+    const nestedSchema = z.object({
+      metadata: z.object({
+        version: z.string(),
+        timestamp: z.number(),
+      }),
+      results: z.array(
+        z.object({
+          id: z.string(),
+          data: z.object({
+            value: z.number(),
+            tags: z.array(z.string()),
+          }),
+        }),
+      ),
+      status: z.enum(['success', 'partial', 'failed']),
+    });
+
+    const nestedResult = {
+      metadata: { version: '1.0', timestamp: 1234567890 },
+      results: [
+        { id: 'r1', data: { value: 42, tags: ['important', 'urgent'] } },
+        { id: 'r2', data: { value: 17, tags: ['low'] } },
+      ],
+      status: 'success' as const,
+    };
+
+    const mockModel = createNetworkMockModel({ structuredResult: nestedResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test nested',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Test nested schema', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: { schema: nestedSchema },
+    });
+
+    for await (const _chunk of stream) {
+      // Consume
+    }
+
+    const result = await stream.object;
+    expect(result).toBeDefined();
+    expect(result!.metadata.version).toBe('1.0');
+    expect(result!.results).toHaveLength(2);
+    expect(result!.results[0].data.tags).toContain('important');
+    expect(result!.status).toBe('success');
+  });
+
+  it('should handle schema with optional fields', async () => {
+    const optionalSchema = z.object({
+      required: z.string(),
+      optional: z.string().optional(),
+      withDefault: z.number().default(0),
+    });
+
+    const resultWithOptional = {
+      required: 'value',
+      // optional is omitted
+      withDefault: 5,
+    };
+
+    const mockModel = createNetworkMockModel({ structuredResult: resultWithOptional });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test optional',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Test optional fields', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: { schema: optionalSchema },
+    });
+
+    for await (const _chunk of stream) {
+      // Consume
+    }
+
+    const result = await stream.object;
+    expect(result).toBeDefined();
+    expect(result!.required).toBe('value');
+    expect(result!.optional).toBeUndefined();
+    expect(result!.withDefault).toBe(5);
+  });
+
+  it('should resolve object as undefined when network completes without structuredOutput', async () => {
+    const mockModel = createNetworkMockModel({});
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Test', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      // No structuredOutput
+    });
+
+    for await (const _chunk of stream) {
+      // Consume
+    }
+
+    const result = await stream.object;
+    expect(result).toBeUndefined();
+  });
+
+  it('should accumulate usage across structured output generation', async () => {
+    const mockModel = createNetworkMockModel({ structuredResult });
+
+    const networkAgent = new Agent({
+      id: 'test-network',
+      name: 'Test Network',
+      instructions: 'Test',
+      model: mockModel,
+      memory,
+    });
+
+    const stream = await networkAgent.network('Test usage', {
+      requestContext,
+      completion: { scorers: [alwaysPassScorer as any] },
+      structuredOutput: { schema: resultSchema },
+    });
+
+    for await (const _chunk of stream) {
+      // Consume
+    }
+
+    const usage = await stream.usage;
+    // Usage should include tokens from both routing and structured output calls
+    expect(usage.totalTokens).toBeGreaterThan(0);
+  });
+});
+
+describe('Agent - network - tool approval and suspension', () => {
+  const memory = new MockMemory();
+  const storage = new InMemoryStore();
+
+  afterEach(async () => {
+    const workflowsStore = await storage.getStore('workflows');
+    await workflowsStore?.dangerouslyClearAll();
+  });
+
+  // Helper to create routing mock model that selects a specific primitive
+  const createRoutingMockModel = (
+    primitiveId: string,
+    primitiveType: 'tool' | 'agent' | 'workflow',
+    prompt: string,
+  ) => {
+    const routingResponse = JSON.stringify({
+      primitiveId,
+      primitiveType,
+      prompt,
+      selectionReason: `Selected ${primitiveType} ${primitiveId} for the task`,
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Task completed successfully',
+      completionReason: 'The task was completed by the primitive',
+    });
+
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const response = callCount === 1 ? routingResponse : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: response }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const response = callCount === 1 ? routingResponse : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: response },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+  };
+
+  // Helper to create sub-agent mock model that makes a tool call
+  // First call: makes tool call, subsequent calls: returns text response
+  const createSubAgentMockModel = (toolName: string, toolArgs: Record<string, any>) => {
+    let callCount = 0;
+    return new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'mock-tool-call-id',
+                toolName,
+                args: toolArgs,
+                input: JSON.stringify(toolArgs),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        // Subsequent calls: return text response (after tool result)
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [{ type: 'text' as const, text: 'Task completed with tool result.' }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'mock-tool-call-id',
+                toolName,
+                args: toolArgs,
+                input: JSON.stringify(toolArgs),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          };
+        }
+        // Subsequent calls: return text response (after tool result)
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Task completed with tool result.' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+          ]),
+        };
+      },
+    });
+  };
+
+  // Tool with requireApproval for direct network tool tests
+  const mockToolExecute = vi.fn().mockImplementation(async (input: { query: string }) => {
+    return { result: `Processed: ${input.query}` };
+  });
+
+  const approvalTool = createTool({
+    id: 'approvalTool',
+    description: 'A tool that processes queries. Use this tool when the user asks to process something.',
+    inputSchema: z.object({ query: z.string().describe('The query to process') }),
+    requireApproval: true,
+    execute: mockToolExecute,
+  });
+
+  // Tool with suspend/resume for suspension tests
+  const suspendingTool = createTool({
+    id: 'suspendingTool',
+    description: 'A tool that collects user information. Use this when the user wants to provide information.',
+    inputSchema: z.object({ initialQuery: z.string().describe('The initial query from user') }),
+    suspendSchema: z.object({ message: z.string() }),
+    resumeSchema: z.object({ userResponse: z.string() }),
+    execute: async (input, context) => {
+      if (!context?.agent?.resumeData) {
+        return await context?.agent?.suspend({ message: 'Please provide additional information' });
+      }
+      return { result: `Received: ${input.initialQuery} and ${context.agent.resumeData.userResponse}` };
+    },
+  });
+
+  describe('approveNetworkToolCall', () => {
+    it('should approve a direct network tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const mockModel = createRoutingMockModel('approvalTool', 'tool', JSON.stringify({ query: 'hello world' }));
+
+      const networkAgent = new Agent({
+        id: 'approval-network-agent',
+        name: 'Approval Network Agent',
+        instructions: 'You help users process queries. Use the approval-tool when asked to process something.',
+        model: mockModel,
+        tools: { approvalTool },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "hello world"', {
+        memory: {
+          thread: 'test-thread-approve-direct',
+          resource: 'test-resource-approve-direct',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'tool-execution-approval') {
+          approvalReceived = true;
+        }
+      }
+      expect(approvalReceived).toBe(true);
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-approval');
+
+      // Approve the tool call
+      const resumeStream = await registeredAgent.approveNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-approve-direct',
+          resource: 'test-resource-approve-direct',
+        },
+      });
+
+      let toolExecutionEnded = false;
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'tool-execution-end') {
+          toolExecutionEnded = true;
+          expect((chunk.payload?.result as any)?.result).toBe('Processed: hello world');
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('tool-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(toolExecutionEnded).toBe(true);
+      expect(mockToolExecute).toHaveBeenCalled();
+    });
+
+    it('should approve a nested agent tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const routingMockModel = createRoutingMockModel('subAgent', 'agent', 'Process the query "nested test"');
+
+      const subAgentMockModel = createSubAgentMockModel('approvalTool', { query: 'nested test' });
+
+      const subAgent = new Agent({
+        id: 'sub-agent-with-approval-tool',
+        name: 'Sub Agent',
+        description: 'An agent that processes queries using the approval tool',
+        instructions: 'You process queries. Always use the approval-tool when asked to process something.',
+        model: subAgentMockModel,
+        tools: { approvalTool },
+      });
+
+      const networkAgent = new Agent({
+        id: 'network-agent-with-sub-agent',
+        name: 'Network Agent',
+        instructions: 'You delegate query processing to the sub-agent-with-approval-tool agent.',
+        model: routingMockModel,
+        agents: { subAgent },
+        memory,
+      });
+
+      // Register agents with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent, subAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "nested test"', {
+        memory: {
+          thread: 'test-thread-approve-nested',
+          resource: 'test-resource-approve-nested',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'agent-execution-approval' || chunk.type === 'agent-execution-event-tool-call-approval') {
+          approvalReceived = true;
+        }
+      }
+
+      expect(approvalReceived).toBe(true);
+      expect(allChunks[allChunks.length - 1].type).toBe('agent-execution-approval');
+      // Approve the tool call
+      const resumeStream = await registeredAgent.approveNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-approve-nested',
+          resource: 'test-resource-approve-nested',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'agent-execution-event-tool-result') {
+          if (chunk.payload.type === 'tool-result') {
+            expect((chunk.payload.payload?.result as any)?.result).toBe('Processed: nested test');
+          } else {
+            throw new Error(`Unexpected chunk type: ${chunk.type}`);
+          }
+        }
+      }
+      expect(resumeChunks[0].type).toBe('agent-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(mockToolExecute).toHaveBeenCalled();
+    });
+  });
+
+  describe('declineNetworkToolCall', () => {
+    it('should decline a direct network tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const mockModel = createRoutingMockModel('approvalTool', 'tool', JSON.stringify({ query: 'decline test' }));
+
+      const networkAgent = new Agent({
+        id: 'decline-network-agent',
+        name: 'Decline Network Agent',
+        instructions: 'You help users process queries. Use the approval-tool when asked to process something.',
+        model: mockModel,
+        tools: { approvalTool },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "decline test"', {
+        memory: {
+          thread: 'test-thread-decline-direct',
+          resource: 'test-resource-decline-direct',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'tool-execution-approval') {
+          approvalReceived = true;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-approval');
+
+      expect(approvalReceived).toBe(true);
+
+      // Decline the tool call
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-decline-direct',
+          resource: 'test-resource-decline-direct',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      let rejectionFound = false;
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'tool-execution-end') {
+          const result = chunk.payload?.result;
+          if (result === 'Tool call was not approved by the user') {
+            rejectionFound = true;
+          }
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('tool-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(rejectionFound).toBe(true);
+      expect(mockToolExecute).not.toHaveBeenCalled();
+    });
+
+    it('should decline a nested agent tool call', async () => {
+      mockToolExecute.mockClear();
+
+      const routingMockModel = createRoutingMockModel('subAgent', 'agent', 'Process the query "nested decline"');
+
+      const subAgentMockModel = createSubAgentMockModel('approvalTool', { query: 'nested decline' });
+
+      const subAgent = new Agent({
+        id: 'sub-agent-decline',
+        name: 'Sub Agent Decline',
+        description: 'An agent that processes queries using the approval tool',
+        instructions: 'You process queries. Always use the approval-tool when asked to process something.',
+        model: subAgentMockModel,
+        tools: { approvalTool },
+      });
+
+      const networkAgent = new Agent({
+        id: 'network-agent-decline-nested',
+        name: 'Network Agent Decline',
+        instructions: 'You delegate query processing to the sub-agent-decline agent.',
+        model: routingMockModel,
+        agents: { subAgent },
+        memory,
+      });
+
+      // Register agents with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent, subAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Process the query "nested decline"', {
+        memory: {
+          thread: 'test-thread-decline-nested',
+          resource: 'test-resource-decline-nested',
+        },
+      });
+
+      let approvalReceived = false;
+      const allChunks: any[] = [];
+
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'agent-execution-approval' || chunk.type === 'agent-execution-event-tool-call-approval') {
+          approvalReceived = true;
+        }
+      }
+
+      expect(approvalReceived).toBe(true);
+      expect(allChunks[allChunks.length - 1].type).toBe('agent-execution-approval');
+
+      // Decline the tool call
+      const resumeStream = await registeredAgent.declineNetworkToolCall({
+        runId: anStream.runId,
+        memory: {
+          thread: 'test-thread-decline-nested',
+          resource: 'test-resource-decline-nested',
+        },
+      });
+
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'agent-execution-event-tool-result') {
+          if (chunk.payload.type === 'tool-result') {
+            expect(chunk.payload.payload?.result).toBe('Tool call was not approved by the user');
+          } else {
+            throw new Error(`Unexpected chunk type: ${chunk.type}`);
+          }
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('agent-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+
+      expect(mockToolExecute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resumeNetwork', () => {
+    it('should resume suspended direct network tool', async () => {
+      const mockModel = createRoutingMockModel(
+        'suspendingTool',
+        'tool',
+        JSON.stringify({ initialQuery: 'starting data' }),
+      );
+
+      const networkAgent = new Agent({
+        id: 'suspend-network-agent',
+        name: 'Suspend Network Agent',
+        instructions: 'You help users provide information. Use the suspending-tool when asked to collect info.',
+        model: mockModel,
+        tools: { suspendingTool },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "starting data"', {
+        memory: {
+          thread: 'test-thread-suspend-direct',
+          resource: 'test-resource-suspend-direct',
+        },
+      });
+
+      let suspensionReceived = false;
+      let suspendPayload: any = null;
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'tool-execution-suspended') {
+          suspensionReceived = true;
+          suspendPayload = chunk.payload?.suspendPayload;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('tool-execution-suspended');
+      expect(suspensionReceived).toBe(true);
+      expect(suspendPayload).toBeDefined();
+      expect(suspendPayload?.message).toBe('Please provide additional information');
+
+      // Resume with user data
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'my additional info' },
+        {
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-suspend-direct',
+            resource: 'test-resource-suspend-direct',
+          },
+        },
+      );
+
+      let toolResult: any = null;
+      const resumeChunks: any[] = [];
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'tool-execution-end') {
+          toolResult = chunk.payload?.result;
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('tool-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+      expect(toolResult).toBeDefined();
+      expect(toolResult?.result).toContain('my additional info');
+    });
+
+    it('should resume suspended nested agent tool', async () => {
+      const routingMockModel = createRoutingMockModel(
+        'subAgent',
+        'agent',
+        'Collect information with query "nested suspend test"',
+      );
+
+      const subAgentMockModel = createSubAgentMockModel('suspendingTool', { initialQuery: 'nested suspend test' });
+
+      const subAgent = new Agent({
+        id: 'sub-agent-suspend',
+        name: 'Sub Agent Suspend',
+        description: 'An agent that collects information using the suspending tool',
+        instructions: 'You collect information. Always use the suspending-tool when asked to collect info.',
+        model: subAgentMockModel,
+        tools: { suspendingTool },
+      });
+
+      const networkAgent = new Agent({
+        id: 'network-agent-suspend-nested',
+        name: 'Network Agent Suspend',
+        instructions: 'You delegate information collection to the sub-agent-suspend agent.',
+        model: routingMockModel,
+        agents: { subAgent },
+        memory,
+      });
+
+      // Register agents with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with query "nested suspend test"', {
+        memory: {
+          thread: 'test-thread-suspend-nested',
+          resource: 'test-resource-suspend-nested',
+        },
+      });
+
+      let suspensionReceived = false;
+      let suspendPayload: any = null;
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'agent-execution-suspended') {
+          suspensionReceived = true;
+          suspendPayload = chunk.payload?.suspendPayload;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('agent-execution-suspended');
+      expect(suspensionReceived).toBe(true);
+      expect(suspendPayload).toBeDefined();
+      expect(suspendPayload?.message).toBe('Please provide additional information');
+
+      // Resume with user data
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'nested resume data' },
+        {
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-suspend-nested',
+            resource: 'test-resource-suspend-nested',
+          },
+        },
+      );
+
+      const resumeChunks: any[] = [];
+      let agentExecutionEnded = false;
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'agent-execution-event-tool-result') {
+          if (chunk.payload.type === 'tool-result') {
+            expect((chunk.payload.payload?.result as any)?.result).toContain('nested resume data');
+          } else {
+            throw new Error(`Unexpected chunk type: ${chunk.type}`);
+          }
+        }
+        if (chunk.type === 'agent-execution-end') {
+          agentExecutionEnded = true;
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('agent-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+      expect(agentExecutionEnded).toBe(true);
+    });
+
+    it('should resume suspended workflow', async () => {
+      const mockModel = createRoutingMockModel(
+        'suspendingWorkflow',
+        'workflow',
+        JSON.stringify({ query: 'workflow test' }),
+      );
+
+      const suspendingStep = createStep({
+        id: 'suspending-step',
+        description: 'A step that suspends and waits for user input',
+        inputSchema: z.object({ query: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ userInput: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, suspend, resumeData }) => {
+          if (!resumeData) {
+            return await suspend({ message: 'Please provide user input for workflow' });
+          }
+          return { result: `Workflow received: ${inputData.query} and ${resumeData.userInput}` };
+        },
+      });
+
+      const suspendingWorkflow = createWorkflow({
+        id: 'suspending-workflow',
+        description: 'A workflow that collects user input. Use when asked to run a workflow that needs user input.',
+        inputSchema: z.object({ query: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .then(suspendingStep)
+        .commit();
+
+      const networkAgent = new Agent({
+        id: 'network-agent-workflow-suspend',
+        name: 'Network Agent Workflow',
+        instructions: 'You help run workflows. Use the suspending-workflow when asked to run a workflow.',
+        model: mockModel,
+        workflows: { suspendingWorkflow },
+        memory,
+      });
+
+      // Register agent with Mastra for storage access
+      const mastra = new Mastra({
+        agents: { networkAgent },
+        storage,
+        logger: false,
+      });
+
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Run the workflow with query "workflow test"', {
+        memory: {
+          thread: 'test-thread-workflow-suspend',
+          resource: 'test-resource-workflow-suspend',
+        },
+      });
+
+      let suspensionReceived = false;
+      let suspendPayload: any = null;
+
+      const allChunks: any[] = [];
+      for await (const chunk of anStream) {
+        allChunks.push(chunk);
+        if (chunk.type === 'workflow-execution-suspended') {
+          suspensionReceived = true;
+          suspendPayload = chunk.payload?.suspendPayload;
+        }
+      }
+
+      expect(allChunks[allChunks.length - 1].type).toBe('workflow-execution-suspended');
+      expect(suspensionReceived).toBe(true);
+      expect(suspendPayload).toBeDefined();
+      expect(suspendPayload?.message).toBe('Please provide user input for workflow');
+
+      // Resume with user data
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userInput: 'workflow resume input' },
+        {
+          runId: anStream.runId,
+          memory: {
+            thread: 'test-thread-workflow-suspend',
+            resource: 'test-resource-workflow-suspend',
+          },
+        },
+      );
+
+      const resumeChunks: any[] = [];
+      let workflowResult: any = null;
+      for await (const chunk of resumeStream) {
+        resumeChunks.push(chunk);
+        if (chunk.type === 'workflow-execution-end') {
+          workflowResult = chunk.payload?.result;
+        }
+      }
+
+      expect(resumeChunks[0].type).toBe('workflow-execution-start');
+      expect(resumeChunks[resumeChunks.length - 1].type).toBe('network-execution-event-finish');
+      expect(workflowResult).toBeDefined();
+      expect(workflowResult?.result?.result).toContain('workflow resume input');
+    });
+  });
+}, 120e3);
+
+describe('Agent - network - message history transfer to sub-agents', () => {
+  it('should pass original user message history to sub-agents WITHOUT memory so they have conversation context', async () => {
+    // Sub-agents without their own memory should still receive conversation context
+    // from the network so they can understand prior messages in the conversation.
+
+    const memory = new MockMemory();
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Your name is Alice.' }],
+          warnings: [],
+        };
+      },
+      doStream: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Your name is Alice.' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const questionAnswerAgent = new Agent({
+      id: 'question-answer-agent',
+      name: 'Question Answer Agent',
+      description: 'An agent that answers questions based on conversation context',
+      instructions:
+        'Answer questions based on the conversation history. If asked about names, look for where the user introduced themselves.',
+      model: subAgentMockModel,
+      // No memory configured
+    });
+
+    const routingResponse = JSON.stringify({
+      primitiveId: 'questionAnswerAgent',
+      primitiveType: 'agent',
+      prompt: 'What is my name?',
+      selectionReason: 'User is asking a question that requires conversation context',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Your name is Alice.',
+      completionReason: 'The question was answered',
+    });
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingResponse : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingResponse : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-agent',
+      name: 'Network Agent',
+      instructions: 'Route questions to the question-answer-agent.',
+      model: routingMockModel,
+      agents: { questionAnswerAgent },
+      memory,
+    });
+
+    const threadId = 'test-thread-message-history';
+    const resourceId = 'test-resource-message-history';
+
+    const anStream = await networkAgent.network(
+      [
+        { role: 'user', content: 'My name is Alice.' },
+        { role: 'user', content: 'What is my name?' },
+      ],
+      {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+      },
+    );
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    expect(subAgentReceivedPrompts.length).toBeGreaterThan(0);
+
+    const lastPrompt = subAgentReceivedPrompts[subAgentReceivedPrompts.length - 1];
+    const promptString = JSON.stringify(lastPrompt);
+
+    // Sub-agent should receive the original user message for context
+    expect(promptString).toContain('My name is Alice');
+  });
+
+  it('should NOT include internal network JSON messages (isNetwork: true) in sub-agent context', async () => {
+    // Internal network routing messages should be filtered out from sub-agent context.
+
+    const memory = new MockMemory();
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Done.' }],
+          warnings: [],
+        };
+      },
+      doStream: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Done.' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent',
+      name: 'Sub Agent',
+      description: 'A sub-agent',
+      instructions: 'Do the task.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    const routingResponse1 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do step 1',
+      selectionReason: 'First step',
+    });
+
+    const routingResponse2 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do step 2',
+      selectionReason: 'Second step',
+    });
+
+    const notCompleteResponse = JSON.stringify({
+      isComplete: false,
+      finalResult: '',
+      completionReason: '',
+    });
+
+    const completeResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'All done.',
+      completionReason: 'Both steps completed',
+    });
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else if (routingCallCount === 2) text = notCompleteResponse;
+        else if (routingCallCount === 3) text = routingResponse2;
+        else text = completeResponse;
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else if (routingCallCount === 2) text = notCompleteResponse;
+        else if (routingCallCount === 3) text = routingResponse2;
+        else text = completeResponse;
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'multi-step-network-agent',
+      name: 'Multi-Step Network Agent',
+      instructions: 'Execute multiple steps.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Do a multi-step task', {
+      maxSteps: 3,
+      memory: {
+        thread: 'test-thread-no-network-json',
+        resource: 'test-resource-no-network-json',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // The second sub-agent call should not see internal network JSON from the first call
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
+    const secondCallPrompt = JSON.stringify(subAgentReceivedPrompts[1]);
+    expect(secondCallPrompt).not.toContain('isNetwork');
+    expect(secondCallPrompt).not.toContain('selectionReason');
+  });
+
+  it('should NOT include completion check feedback messages in sub-agent context (issue #12224)', async () => {
+    // When a completion check fails and feedback is saved to memory,
+    // that feedback should NOT appear in the conversation context passed to sub-agents.
+    // The feedback messages contain "#### Completion Check Results" and are saved with
+    // metadata.mode = 'network', but this metadata wasn't being checked by the filter.
+
+    const memory = new MockMemory();
+
+    let subAgentReceivedPrompts: any[] = [];
+
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: 'Task completed.' }],
+          warnings: [],
+        };
+      },
+      doStream: async ({ prompt }) => {
+        subAgentReceivedPrompts.push(prompt);
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: 'Task completed.' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-completion-test',
+      name: 'Sub Agent Completion Test',
+      description: 'A sub-agent for testing completion feedback filtering',
+      instructions: 'Complete the assigned task.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    // First iteration: delegate to sub-agent, completion check FAILS
+    const routingResponse1 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do the first part of the task',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    // Second iteration: delegate to sub-agent again, completion check PASSES
+    const routingResponse2 = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do the second part of the task',
+      selectionReason: 'Continuing with sub-agent',
+    });
+
+    // Use a custom scorer that fails first, then passes
+    let scorerCallCount = 0;
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else text = routingResponse2;
+
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        let text: string;
+        if (routingCallCount === 1) text = routingResponse1;
+        else text = routingResponse2;
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'completion-feedback-filter-test',
+      name: 'Completion Feedback Filter Test',
+      instructions: 'Execute tasks via sub-agent.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const mockScorer = {
+      id: 'fail-then-pass-scorer',
+      name: 'Fail Then Pass Scorer',
+      run: vi.fn().mockImplementation(async () => {
+        scorerCallCount++;
+        if (scorerCallCount === 1) {
+          // First check fails - this should trigger feedback to be saved to memory
+          return { score: 0, reason: 'Task not complete yet, needs more work' };
+        }
+        // Second check passes
+        return { score: 1, reason: 'Task is now complete' };
+      }),
+    };
+
+    const anStream = await networkAgent.network('Complete a multi-part task', {
+      maxSteps: 3,
+      completion: {
+        scorers: [mockScorer as any],
+      },
+      memory: {
+        thread: 'test-thread-completion-feedback',
+        resource: 'test-resource-completion-feedback',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // Verify that the scorer was called at least twice (fail then pass)
+    expect(scorerCallCount).toBeGreaterThanOrEqual(2);
+
+    // The sub-agent should have been called at least twice
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(2);
+
+    // The second sub-agent call should NOT see completion check feedback from the first iteration
+    const secondCallPrompt = JSON.stringify(subAgentReceivedPrompts[1]);
+
+    // This is the key assertion: completion feedback should NOT appear in sub-agent context
+    expect(secondCallPrompt).not.toContain('Completion Check Results');
+    expect(secondCallPrompt).not.toContain('NOT COMPLETE');
+    expect(secondCallPrompt).not.toContain('Will continue working on the task');
+
+    // Also verify the first call didn't somehow get feedback (it shouldn't exist yet)
+    const firstCallPrompt = JSON.stringify(subAgentReceivedPrompts[0]);
+    expect(firstCallPrompt).not.toContain('Completion Check Results');
+  });
+});
+
+describe('Agent - network - output processors', () => {
+  it('should apply output processors to messages saved during network execution', async () => {
+    // This test verifies that output processors (like TraceIdInjector for Braintrust)
+    // are applied to messages saved during network execution.
+    // Issue: https://github.com/mastra-ai/mastra/issues/12300
+
+    const savedMessages: any[] = [];
+    const memory = new MockMemory();
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Create an output processor that adds traceId to assistant messages
+    // (similar to the TraceIdInjector from the issue)
+    const traceIdProcessor = {
+      id: 'trace-id-injector',
+      name: 'Trace ID Injector',
+      processOutputResult: ({ messages }: { messages: any[] }) => {
+        return messages.map((msg: any) => {
+          if (msg.role === 'assistant') {
+            return {
+              ...msg,
+              content: {
+                ...msg.content,
+                metadata: {
+                  ...msg.content?.metadata,
+                  traceId: 'test-trace-id-12300',
+                },
+              },
+            };
+          }
+          return msg;
+        });
+      },
+    };
+
+    // Create a simple sub-agent
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Sub-agent response' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Sub-agent response' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'Sub Agent',
+      description: 'A sub-agent for testing',
+      instructions: 'Do the task.',
+      model: subAgentMockModel,
+    });
+
+    // Routing agent selects sub-agent, then marks complete
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do the task',
+      selectionReason: 'Sub-agent can handle this',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Task completed',
+      completionReason: 'Sub-agent completed the request',
+    });
+
+    let routingCallCount = 0;
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Create network agent with the output processor
+    const networkAgent = new Agent({
+      id: 'network-agent-with-processor',
+      name: 'Network Agent with Output Processor',
+      instructions: 'Delegate tasks to sub-agents.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+      outputProcessors: [traceIdProcessor],
+    });
+
+    const anStream = await networkAgent.network('Do the task', {
+      memory: {
+        thread: 'test-thread-output-processors',
+        resource: 'test-resource-output-processors',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Verify that at least some messages were saved
+    expect(savedMessages.length).toBeGreaterThan(0);
+
+    // Find assistant messages saved during network execution
+    const assistantMessages = savedMessages.filter((msg: any) => msg.role === 'assistant');
+    expect(assistantMessages.length).toBeGreaterThan(0);
+
+    // The key assertion: output processors should have been applied,
+    // so assistant messages should have the traceId in their metadata
+    const messagesWithTraceId = assistantMessages.filter(
+      (msg: any) => msg.content?.metadata?.traceId === 'test-trace-id-12300',
+    );
+
+    // This assertion will FAIL if output processors are not applied to saved messages
+    expect(
+      messagesWithTraceId.length,
+      'Output processors should be applied to assistant messages saved during network execution. ' +
+        'Expected at least one assistant message to have traceId in metadata.',
+    ).toBeGreaterThan(0);
+  });
+});
+
+describe('Agent - network - requestContext propagation (issue #12330)', () => {
+  it('should propagate requestContext to tools executed within the network', async () => {
+    const memory = new MockMemory();
+    const capturedRequestContext: { userId?: string; resourceId?: string } = {};
+
+    const contextCaptureTool = createTool({
+      id: 'context-capture-tool-12330',
+      description: 'A tool that captures requestContext values for testing',
+      inputSchema: z.object({ message: z.string() }),
+      execute: async ({ message }, context) => {
+        capturedRequestContext.userId = context?.requestContext?.get('userId') as string | undefined;
+        capturedRequestContext.resourceId = context?.requestContext?.get('resourceId') as string | undefined;
+        return { result: `Captured for: ${message}` };
+      },
+    });
+
+    const routingSelectTool = JSON.stringify({
+      primitiveId: 'context-capture-tool-12330',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ message: 'test' }),
+      selectionReason: 'Testing requestContext propagation',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Tool executed',
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'test-agent-12330',
+      name: 'RequestContext Test Agent',
+      instructions: 'Use the context-capture-tool-12330 when asked.',
+      model: mockModel,
+      tools: { 'context-capture-tool-12330': contextCaptureTool },
+      memory,
+    });
+
+    const requestContext = new RequestContext<{ userId: string; resourceId: string }>();
+    requestContext.set('userId', 'network-user-12330');
+    requestContext.set('resourceId', 'network-resource-12330');
+
+    const anStream = await networkAgent.network('Test requestContext propagation', {
+      requestContext,
+      memory: {
+        thread: 'test-thread-12330',
+        resource: 'test-resource-12330',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // consume
+    }
+
+    expect(capturedRequestContext.userId).toBe('network-user-12330');
+    expect(capturedRequestContext.resourceId).toBe('network-resource-12330');
+  });
+});
+
+describe('Agent - network - abort functionality', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should call onAbort and emit abort event when abortSignal is triggered before routing step', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Abort immediately before any network activity
+    abortController.abort();
+
+    // Mock model that would respond if not aborted
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('doGenerate should not be called when aborted');
+      },
+      doStream: async () => {
+        throw new Error('doStream should not be called when aborted');
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-test-network',
+      name: 'Abort Test Network',
+      instructions: 'Test network for abort functionality',
+      model: mockModel,
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortEventPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Do something', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortEventPayload = event;
+      },
+      memory: {
+        thread: 'abort-test-thread',
+        resource: 'abort-test-resource',
+      },
+    });
+
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Verify onAbort was called
+    expect(onAbortCalled).toBe(true);
+    expect(abortEventPayload).toBeDefined();
+    expect(abortEventPayload.primitiveType).toBe('routing');
+
+    // Verify abort event was emitted
+    const abortEvents = chunks.filter(c => c.type === 'routing-agent-abort');
+    expect(abortEvents.length).toBeGreaterThan(0);
+    expect(abortEvents[0].payload.primitiveType).toBe('routing');
+  });
+
+  it('should call onAbort and emit abort event when abortSignal is triggered during agent execution', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Routing response selects a sub-agent
+    const routingResponse = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do something',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    // Mock routing model
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    let pullCalls = 0;
+
+    // Sub-agent mock that aborts when called
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        await new Promise(resolve => setImmediate(resolve));
+        abortController.abort();
+        throw new DOMException('The user aborted a request.', 'AbortError');
+      },
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: new ReadableStream({
+          pull(controller) {
+            switch (pullCalls++) {
+              case 0:
+                controller.enqueue({
+                  type: 'stream-start',
+                  warnings: [],
+                });
+                break;
+              case 1:
+                controller.enqueue({
+                  type: 'text-start',
+                  id: '1',
+                });
+                break;
+              case 2:
+                // Abort during streaming
+                abortController.abort();
+                controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                break;
+            }
+          },
+        }),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'Sub Agent',
+      description: 'A sub-agent that gets aborted',
+      instructions: 'Do something',
+      model: subAgentMockModel,
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-agent-test-network',
+      name: 'Abort Agent Test Network',
+      instructions: 'Delegate to sub-agents',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortEventPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Do something', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortEventPayload = event;
+      },
+      memory: {
+        thread: 'abort-agent-test-thread',
+        resource: 'abort-agent-test-resource',
+      },
+    });
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Abort may throw
+    }
+
+    // Verify onAbort was called
+    expect(onAbortCalled).toBe(true);
+    expect(abortEventPayload).toBeDefined();
+  });
+
+  it('should call onAbort when abortSignal is triggered during tool execution', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Create a tool that aborts during execution
+    const abortingTool = createTool({
+      id: 'aborting-tool',
+      description: 'A tool that triggers abort during execution',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async (_input, options) => {
+        // Trigger abort during tool execution
+        abortController.abort();
+        expect(options?.abortSignal?.aborted).toBe(true);
+        return { result: 'success' };
+      },
+    });
+
+    // Routing response selects the tool
+    const routingResponse = JSON.stringify({
+      primitiveId: 'aborting-tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ input: 'test' }),
+      selectionReason: 'Using the aborting tool',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-tool-test-network',
+      name: 'Abort Tool Test Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'aborting-tool': abortingTool },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Use the aborting tool', {
+      abortSignal: abortController.signal,
+      onAbort: () => {
+        onAbortCalled = true;
+      },
+      memory: {
+        thread: 'abort-tool-test-thread',
+        resource: 'abort-tool-test-resource',
+      },
+    });
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Abort may throw
+    }
+
+    // The onAbort callback should eventually be called
+    // Either during tool execution or when the network detects the abort
+    expect(onAbortCalled).toBe(true);
+  });
+
+  // Issue #10874: abort fires during the routing LLM call. After routing completes,
+  // the abort signal is already set. The tool step should detect this and NOT execute the tool.
+  it('should abort before tool execution when abortSignal is already aborted', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    let toolExecuted = false;
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async () => {
+        toolExecuted = true;
+        return { result: 'success' };
+      },
+    });
+
+    // Routing response selects the tool
+    const routingResponse = JSON.stringify({
+      primitiveId: 'test-tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ input: 'test' }),
+      selectionReason: 'Using the test tool',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        // Abort fires during the routing LLM call
+        abortController.abort();
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        // Abort fires during the routing LLM call
+        abortController.abort();
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-before-tool-network',
+      name: 'Abort Before Tool Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'test-tool': testTool },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Use the test tool', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortPayload = event;
+      },
+      memory: {
+        thread: 'abort-before-tool-thread',
+        resource: 'abort-before-tool-resource',
+      },
+    });
+
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Tool should not have been executed because abort happened before
+    expect(toolExecuted).toBe(false);
+
+    // onAbort should be called
+    expect(onAbortCalled).toBe(true);
+
+    // Abort is detected at the routing level (before the tool step starts)
+    expect(abortPayload?.primitiveType).toBe('routing');
+
+    // Abort chunk should be emitted
+    const abortEvents = chunks.filter(c => c.type === 'routing-agent-abort');
+    expect(abortEvents.length).toBeGreaterThan(0);
+  });
+
+  it('should call onAbort and emit abort event when abortSignal is triggered during workflow execution', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    // Create a workflow step that simulates some work and allows time for abort
+    const slowStep = createStep({
+      id: 'slow-step',
+      description: 'A step that takes time to execute',
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ inputData }) => {
+        // Trigger abort during workflow execution
+        abortController.abort();
+        // Simulate some async work
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { result: `Researched ${inputData.city}` };
+      },
+    });
+
+    const testWorkflow = createWorkflow({
+      id: 'abort-test-workflow',
+      description: 'A workflow for testing abort functionality',
+      steps: [],
+      inputSchema: z.object({
+        city: z.string(),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+    })
+      .then(slowStep)
+      .commit();
+
+    // Routing response selects the workflow
+    const routingResponse = JSON.stringify({
+      primitiveId: 'abort-test-workflow',
+      primitiveType: 'workflow',
+      prompt: JSON.stringify({ city: 'Paris' }),
+      selectionReason: 'Using the workflow to research',
+    });
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-workflow-test-network',
+      name: 'Abort Workflow Test Network',
+      instructions: 'Execute workflows',
+      model: mockModel,
+      workflows: { 'abort-test-workflow': testWorkflow },
+      memory,
+    });
+
+    let onAbortCalled = false;
+    let abortEventPayload: any = null;
+    const chunks: any[] = [];
+
+    const anStream = await networkAgent.network('Research Paris using the workflow', {
+      abortSignal: abortController.signal,
+      onAbort: event => {
+        onAbortCalled = true;
+        abortEventPayload = event;
+      },
+      memory: {
+        thread: 'abort-workflow-test-thread',
+        resource: 'abort-workflow-test-resource',
+      },
+    });
+
+    try {
+      for await (const chunk of anStream) {
+        chunks.push(chunk);
+      }
+    } catch {
+      // Abort may throw
+    }
+
+    // Verify onAbort was called
+    expect(onAbortCalled).toBe(true);
+    expect(abortEventPayload).toBeDefined();
+    expect(abortEventPayload.primitiveType).toBe('workflow');
+    expect(abortEventPayload.primitiveId).toBe('abort-test-workflow');
+
+    // Verify workflow-execution-abort event was emitted
+    const abortEvents = chunks.filter(c => c.type === 'workflow-execution-abort');
+    expect(abortEvents.length).toBeGreaterThan(0);
+    expect(abortEvents[0].payload.primitiveType).toBe('workflow');
+    expect(abortEvents[0].payload.primitiveId).toBe('abort-test-workflow');
+  });
+
+  it('should pass abortSignal to tool execute function', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+
+    let receivedAbortSignal: AbortSignal | undefined;
+    const testTool = createTool({
+      id: 'signal-test-tool',
+      description: 'A tool that captures the abort signal',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async (_input, options) => {
+        receivedAbortSignal = options?.abortSignal;
+        return { result: 'success' };
+      },
+    });
+
+    // Routing response selects the tool
+    const routingResponse = JSON.stringify({
+      primitiveId: 'signal-test-tool',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ input: 'test' }),
+      selectionReason: 'Using the signal test tool',
+    });
+
+    // Completion response
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Task completed',
+    });
+
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingResponse : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingResponse : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'signal-pass-test-network',
+      name: 'Signal Pass Test Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'signal-test-tool': testTool },
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Use the signal test tool', {
+      abortSignal: abortController.signal,
+      memory: {
+        thread: 'signal-pass-test-thread',
+        resource: 'signal-pass-test-resource',
+      },
+    });
+
+    for await (const _chunk of anStream) {
+      // Consume stream
+    }
+
+    // Verify abort signal was passed to tool
+    expect(receivedAbortSignal).toBeDefined();
+    expect(receivedAbortSignal).toBe(abortController.signal);
+  });
+
+  /**
+   * Test for GitHub issue #10874
+   * When abort fires during the routing step, results from aborted sub-agents
+   * should NOT be saved to memory. Currently aborted sub-agent results still
+   * land in memory even when the parent stream was aborted.
+   */
+  it('should not save aborted sub-agent results to memory', async () => {
+    const memory = new MockMemory();
+    const abortController = new AbortController();
+    const savedMessages: any[] = [];
+
+    // Track what gets saved to memory
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Routing response selects a sub-agent
+    const routingResponse = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Do something',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    // Routing model streams normally
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: routingResponse }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: routingResponse },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
+
+    let pullCalls = 0;
+
+    // Sub-agent model that triggers abort mid-stream
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        abortController.abort();
+        throw new DOMException('The user aborted a request.', 'AbortError');
+      },
+      doStream: async () => ({
+        stream: new ReadableStream({
+          pull(controller) {
+            switch (pullCalls++) {
+              case 0:
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                break;
+              case 1:
+                controller.enqueue({ type: 'text-start', id: '1' });
+                break;
+              case 2:
+                // Abort during streaming
+                abortController.abort();
+                controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                break;
+            }
+          },
+        }),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'Sub Agent',
+      description: 'A sub-agent that gets aborted mid-stream',
+      instructions: 'Do something',
+      model: subAgentMockModel,
+    });
+
+    const networkAgent = new Agent({
+      id: 'abort-memory-test-network',
+      name: 'Abort Memory Test Network',
+      instructions: 'Delegate to sub-agents',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    let aborted = false;
+
+    const anStream = await networkAgent.network('Do something', {
+      abortSignal: abortController.signal,
+      onAbort: () => {
+        aborted = true;
+      },
+      memory: {
+        thread: 'abort-memory-test-thread',
+        resource: 'abort-memory-test-resource',
+      },
+    });
+
+    try {
+      for await (const _chunk of anStream) {
+        // consume stream
+      }
+    } catch {
+      // Abort may throw — also mark aborted in case onAbort didn't fire
+      aborted = true;
+    }
+
+    // Verify the abort path actually ran
+    expect(aborted).toBe(true);
+
+    // When a sub-agent is aborted, its partial results should NOT be persisted to memory.
+    // Match any isNetwork payload that is not a bona fide final result:
+    // missing finalResult, finalResult.aborted === true, or partial === true.
+    const networkMessages = savedMessages.filter(msg => {
+      if (msg.role !== 'assistant') return false;
+      const parts = msg.content?.parts ?? [];
+      for (const part of parts) {
+        if (part?.type === 'text') {
+          try {
+            const parsed = JSON.parse(part.text);
+            if (parsed.isNetwork) {
+              const isAbortedOrPartial =
+                !parsed.finalResult || parsed.finalResult?.aborted === true || parsed.partial === true;
+              if (isAbortedOrPartial) return true;
+            }
+          } catch {
+            // Not JSON
+          }
+        }
+      }
+      return false;
+    });
+
+    // Aborted/partial results should not be saved to memory
+    expect(networkMessages).toHaveLength(0);
+  });
+});
+
+/**
+ * Test for GitHub issue #12477
+ * When routing agent returns invalid (non-JSON) prompt for tool execution,
+ * the network should handle it gracefully instead of throwing "Invalid task input"
+ */
+describe('Agent - network - invalid tool input handling (issue #12477)', () => {
+  it('should handle invalid JSON prompt gracefully and feed error back to routing agent', async () => {
+    const memory = new MockMemory();
+
+    // Create a tool that expects JSON input
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'A test tool that processes input',
+      inputSchema: z.object({
+        message: z.string().describe('The message to process'),
+      }),
+      outputSchema: z.object({
+        result: z.string(),
+      }),
+      execute: async ({ message }) => {
+        return { result: `Processed: ${message}` };
+      },
+    });
+
+    // Track call count to simulate: first call returns invalid JSON, second returns "none" to complete
+    let callCount = 0;
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        // First call: return invalid JSON prompt (simulates the bug scenario)
+        // Second call: return "none" to complete the network (simulates routing agent understanding the error)
+        const text =
+          callCount === 1
+            ? JSON.stringify({
+                primitiveId: 'test-tool',
+                primitiveType: 'tool',
+                prompt: '{message input}', // Invalid JSON - missing quotes
+                selectionReason: 'Using test tool',
+              })
+            : JSON.stringify({
+                primitiveId: 'none',
+                primitiveType: 'none',
+                prompt: '',
+                selectionReason: 'Task cannot be completed due to previous JSON parsing error',
+              });
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text =
+          callCount === 1
+            ? JSON.stringify({
+                primitiveId: 'test-tool',
+                primitiveType: 'tool',
+                prompt: '{message input}',
+                selectionReason: 'Using test tool',
+              })
+            : JSON.stringify({
+                primitiveId: 'none',
+                primitiveType: 'none',
+                prompt: '',
+                selectionReason: 'Task cannot be completed due to previous JSON parsing error',
+              });
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'invalid-input-test-network',
+      name: 'Invalid Input Test Network',
+      instructions: 'Execute tools',
+      model: mockModel,
+      tools: { 'test-tool': testTool },
+      memory,
+    });
+
+    // Execute the network which will encounter invalid JSON for tool prompt
+    const anStream = await networkAgent.network('Process a message using the test tool', {
+      memory: {
+        thread: 'invalid-input-test-thread',
+        resource: 'invalid-input-test-resource',
+      },
+    });
+
+    // Consume the stream - should NOT throw
+    const chunks: any[] = [];
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+    }
+
+    // Check the workflow status
+    const status = await anStream.status;
+    const result = await anStream.result;
+
+    // After the fix:
+    // - The network should NOT fail with status 'failed'
+    // - The error should be fed back to the routing agent as a result string
+    // - The routing agent gets another chance to handle the situation
+    expect(status).not.toBe('failed');
+    expect(result?.error?.message || '').not.toContain('Invalid task input');
+
+    // Verify the routing agent was called multiple times (retry happened)
+    expect(callCount).toBeGreaterThan(1);
+  });
+});
+
+describe('Agent - network - client tools in defaultOptions', () => {
+  it('should use client tools from main agent defaultOptions during network execution', async () => {
+    const memory = new MockMemory();
+
+    // Create mock responses for the routing agent
+    // First call: select the client tool
+    const routingSelectTool = JSON.stringify({
+      primitiveId: 'changeColor',
+      primitiveType: 'tool',
+      prompt: JSON.stringify({ color: 'blue' }),
+      selectionReason: 'Using client tool to change color',
+    });
+
+    // Second call: completion check - mark as complete
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Color has been changed to blue',
+      completionReason: 'The client tool successfully changed the color',
+    });
+
+    // Track how many times the model is called
+    let callCount = 0;
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        callCount++;
+        const text = callCount === 1 ? routingSelectTool : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Create agent with clientTools in defaultOptions
+    const networkAgent = new Agent({
+      id: 'client-tools-default-options-test',
+      name: 'Client Tools Test Network',
+      instructions: 'Use the available tools to change colors',
+      model: mockModel,
+      memory,
+      defaultOptions: {
+        clientTools: {
+          changeColor: {
+            id: 'changeColor',
+            description: 'Change the color on the client side',
+            inputSchema: z.object({
+              color: z.string().describe('The color to change to'),
+            }),
+            outputSchema: z.object({
+              success: z.boolean(),
+              message: z.string(),
+            }),
+            execute: async ({ color }) => {
+              return {
+                success: true,
+                message: `Color changed to ${color}`,
+              };
+            },
+          },
+        },
+      },
+    });
+
+    // Execute the network - should use client tools from defaultOptions
+    const anStream = await networkAgent.network('Change the color to blue', {
+      memory: {
+        thread: 'client-tools-test-thread',
+        resource: 'client-tools-test-resource',
+      },
+    });
+
+    // Collect all chunks
+    const chunks: any[] = [];
+    let toolCallExecuted = false;
+
+    for await (const chunk of anStream) {
+      chunks.push(chunk);
+      // Check if the client tool was called
+      if (chunk.type === 'tool-execution-end') {
+        const result = chunk.payload?.result as any;
+        if (result?.success === true && result?.message === 'Color changed to blue') {
+          toolCallExecuted = true;
+        }
+      }
+    }
+
+    // Verify the network completed successfully
+    const status = await anStream.status;
+    expect(status).toBe('success');
+
+    // Verify the client tool was executed
+    expect(toolCallExecuted).toBe(true);
+
+    // Verify the routing agent was called exactly twice (routing decision + completion check)
+    expect(callCount).toBe(2);
+  });
+});
+
+describe('Agent - network - metadata on forwarded messages (issue #13106)', () => {
+  it('should tag isNetwork result messages with metadata.mode = network', async () => {
+    // Issue #13106: Network-internal messages (isNetwork JSON results containing
+    // sub-agent responses) are stored without metadata.mode = 'network'.
+    // This makes it impossible for consumers to reliably filter internal network
+    // messages from user-facing ones without parsing JSON content.
+    //
+    // The isNetwork result JSON already has isNetwork: true in the JSON body,
+    // but it should ALSO have metadata.mode = 'network' in the message's
+    // content.metadata for consistent filtering.
+
+    const savedMessages: any[] = [];
+    const memory = new MockMemory();
+
+    // Intercept saveMessages to capture all saved messages
+    const originalSaveMessages = memory.saveMessages.bind(memory);
+    memory.saveMessages = async (params: any) => {
+      savedMessages.push(...params.messages);
+      return originalSaveMessages(params);
+    };
+
+    // Sub-agent mock that returns a simple response
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Sub-agent completed the research.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Sub-agent completed the research.' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-metadata-test',
+      name: 'Sub Agent Metadata Test',
+      description: 'A sub-agent for testing metadata tagging',
+      instructions: 'Complete research tasks.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    // Routing agent: first call selects sub-agent
+    const routingResponse = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Research the topic of quantum computing',
+      selectionReason: 'Delegating research to sub-agent',
+    });
+
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-metadata-test',
+      name: 'Network Metadata Test Agent',
+      instructions: 'Delegate research to sub-agents.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const threadId = 'test-thread-13106';
+    const resourceId = 'test-resource-13106';
+
+    const anStream = await networkAgent.network('Tell me about quantum computing', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Find isNetwork result messages - these contain the sub-agent's forwarded input
+    // and response, embedded in JSON. They should have metadata.mode = 'network'.
+    const networkResultMessages = savedMessages.filter(msg => {
+      if (msg.role !== 'assistant') return false;
+      try {
+        const text = msg.content?.parts?.[0]?.text;
+        const parsed = JSON.parse(text);
+        return parsed.isNetwork === true;
+      } catch {
+        return false;
+      }
+    });
+
+    expect(networkResultMessages.length).toBeGreaterThan(0);
+
+    // Each isNetwork result message should have metadata.mode = 'network'
+    // so consumers can filter them without parsing JSON content
+    for (const msg of networkResultMessages) {
+      expect(msg.content?.metadata?.mode).toBe('network');
+    }
+
+    // The original user message should NOT have mode: 'network'
+    const originalUserMessage = savedMessages.find(
+      (msg: any) =>
+        msg.role === 'user' &&
+        msg.content?.parts?.some((p: any) => p.type === 'text' && p.text === 'Tell me about quantum computing'),
+    );
+    expect(originalUserMessage).toBeDefined();
+    expect(originalUserMessage?.content?.metadata?.mode).not.toBe('network');
+  });
+
+  it('should tag sub-agent messages with metadata.mode = network when sub-agent persists to shared thread', async () => {
+    // Issue #13106: When a sub-agent has its own memory and persists messages
+    // to the shared network thread, those forwarded user messages and sub-agent
+    // responses should have metadata.mode = 'network' to distinguish them
+    // from genuine user/assistant messages.
+    //
+    // This test uses a storage that captures all saved messages (including those
+    // from the sub-agent's MessageHistory processor) by intercepting at the
+    // storage layer.
+
+    const storage = new InMemoryStore();
+    const memory = new MockMemory({ storage });
+
+    // Sub-agent mock that returns a simple response
+    const subAgentMockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Sub-agent completed the research.' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Sub-agent completed the research.' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent-metadata-test',
+      name: 'Sub Agent Metadata Test',
+      description: 'A sub-agent for testing metadata tagging',
+      instructions: 'Complete research tasks.',
+      model: subAgentMockModel,
+      memory,
+    });
+
+    // Routing agent: first call selects sub-agent
+    const routingResponse = JSON.stringify({
+      primitiveId: 'subAgent',
+      primitiveType: 'agent',
+      prompt: 'Research the topic of quantum computing',
+      selectionReason: 'Delegating research to sub-agent',
+    });
+
+    const routingMockModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: routingResponse }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: routingResponse },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const networkAgent = new Agent({
+      id: 'network-metadata-test',
+      name: 'Network Metadata Test Agent',
+      instructions: 'Delegate research to sub-agents.',
+      model: routingMockModel,
+      agents: { subAgent },
+      memory,
+    });
+
+    const threadId = 'test-thread-13106-sub';
+    const resourceId = 'test-resource-13106-sub';
+
+    const anStream = await networkAgent.network('Tell me about quantum computing', {
+      memory: {
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Retrieve all messages from storage (captures messages from ALL code paths)
+    const memoryStore = await storage.getStore('memory');
+    const result = await memoryStore!.listMessages({
+      threadId,
+      page: 0,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const threadMessages = result.messages;
+
+    // All assistant messages with isNetwork JSON or routing decisions should have
+    // metadata.mode = 'network', making them filterable without JSON parsing
+    for (const msg of threadMessages) {
+      if ((msg as any).role === 'assistant') {
+        const parts = (msg as any).content?.parts || [];
+        for (const part of parts) {
+          if (part?.type === 'text' && part?.text) {
+            try {
+              const parsed = JSON.parse(part.text);
+              if (parsed.isNetwork || (parsed.primitiveId && parsed.selectionReason)) {
+                // This is a network-internal message - it MUST have metadata.mode = 'network'
+                expect(
+                  (msg as any).content?.metadata?.mode,
+                  `Network-internal assistant message should have metadata.mode = 'network' but doesn't. Content: ${part.text.substring(0, 100)}`,
+                ).toBe('network');
+              }
+            } catch {
+              // Not JSON, skip
+            }
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('Agent - network - onStepFinish and onError callbacks', () => {
+  it('should call onStepFinish callback during sub-agent execution', async () => {
+    const memory = new MockMemory();
+    const stepFinishCallbacks: any[] = [];
+
+    // Routing agent selects sub-agent, then marks complete
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'stepFinishSubAgent',
+      primitiveType: 'agent',
+      prompt: 'Say hello',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Task complete',
+    });
+
+    let routingCallCount = 0;
+    const routingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text', text: 'Hello from sub-agent!' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-delta', id: 'id-0', delta: 'Hello from sub-agent!' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 } },
+        ]),
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'stepFinishSubAgent',
+      name: 'Step Finish Sub Agent',
+      description: 'A sub-agent for testing onStepFinish',
+      instructions: 'Say hello.',
+      model: subAgentModel,
+    });
+
+    const networkAgent = new Agent({
+      id: 'step-finish-network',
+      name: 'Step Finish Network',
+      instructions: 'Delegate tasks to sub-agents.',
+      model: routingModel,
+      agents: { stepFinishSubAgent: subAgent },
+      memory,
+    });
+
+    const anStream = await networkAgent.network('Say hello', {
+      onStepFinish: event => {
+        stepFinishCallbacks.push(event);
+      },
+      memory: {
+        thread: 'step-finish-test-thread',
+        resource: 'step-finish-test-resource',
+      },
+    });
+
+    // Consume the stream
+    for await (const _chunk of anStream) {
+      // Process stream
+    }
+
+    // Verify onStepFinish was called at least once
+    expect(stepFinishCallbacks.length).toBeGreaterThan(0);
+
+    // Verify the callback received step data with exact expected values
+    const lastStep = stepFinishCallbacks[stepFinishCallbacks.length - 1];
+    expect(lastStep.finishReason).toBe('stop');
+    expect(lastStep.usage).toMatchObject({
+      inputTokens: 5,
+      outputTokens: 10,
+      totalTokens: 15,
+    });
+  });
+
+  it('should call onError callback when sub-agent encounters an error', async () => {
+    const memory = new MockMemory();
+    const errorCallbacks: any[] = [];
+
+    // Routing agent selects the error-throwing sub-agent
+    const routingSelectAgent = JSON.stringify({
+      primitiveId: 'errorSubAgent',
+      primitiveType: 'agent',
+      prompt: 'Do something',
+      selectionReason: 'Delegating to sub-agent',
+    });
+
+    const completionResponse = JSON.stringify({
+      isComplete: true,
+      finalResult: 'Done',
+      completionReason: 'Task complete',
+    });
+
+    let routingCallCount = 0;
+    const routingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text }],
+          warnings: [],
+        };
+      },
+      doStream: async () => {
+        routingCallCount++;
+        const text = routingCallCount === 1 ? routingSelectAgent : completionResponse;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-delta', id: 'id-0', delta: text },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        };
+      },
+    });
+
+    // Sub-agent model that throws an error during streaming
+    const errorSubAgentModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Sub-agent model error');
+      },
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'error', error: new Error('Sub-agent stream error') },
+          { type: 'finish', finishReason: 'error', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+        ]),
+      }),
+    });
+
+    const errorSubAgent = new Agent({
+      id: 'errorSubAgent',
+      name: 'Error Sub Agent',
+      description: 'A sub-agent that errors',
+      instructions: 'This agent will error.',
+      model: errorSubAgentModel,
+    });
+
+    const networkAgent = new Agent({
+      id: 'error-callback-network',
+      name: 'Error Callback Network',
+      instructions: 'Delegate tasks to sub-agents.',
+      model: routingModel,
+      agents: { errorSubAgent },
+      memory,
+    });
+
+    try {
+      const anStream = await networkAgent.network('Do something', {
+        onError: ({ error }) => {
+          errorCallbacks.push({ error });
+        },
+        memory: {
+          thread: 'error-test-thread',
+          resource: 'error-test-resource',
+        },
+      });
+
+      // Consume the stream - may throw
+      for await (const _chunk of anStream) {
+        // Process stream
+      }
+    } catch {
+      // Expected - the stream may throw due to the error
+    }
+
+    // Verify onError was called
+    expect(errorCallbacks.length).toBeGreaterThan(0);
+
+    // Verify the callback received the expected error
+    const errorEvent = errorCallbacks[0];
+    expect(errorEvent.error).toBeInstanceOf(Error);
+    expect(errorEvent.error.message).toContain('Sub-agent stream error');
   });
 });

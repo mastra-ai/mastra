@@ -20,7 +20,7 @@ export const memory = new Memory({
     url: 'file:mastra.db', // relative path from bundled .mastra/output dir
   }),
   vector: new LibSQLVector({
-    connectionUrl: 'file:mastra.db', // relative path from bundled .mastra/output dir
+    url: 'file:mastra.db', // relative path from bundled .mastra/output dir
     id: 'weather-vector',
   }),
   embedder: openai.embedding('text-embedding-3-small'),
@@ -50,7 +50,7 @@ const memoryWithProcessor = new Memory({
     url: 'file:mastra.db',
   }),
   vector: new LibSQLVector({
-    connectionUrl: 'file:mastra.db',
+    url: 'file:mastra.db',
     id: 'weather-vector',
   }),
   options: {

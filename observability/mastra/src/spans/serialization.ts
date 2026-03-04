@@ -4,6 +4,26 @@
  * These utilities prevent memory issues by enforcing strict limits on
  * string lengths, array sizes, object depths, and total output size.
  * They are designed to be used across all tracing/telemetry systems.
+ *
+ * ## Custom Span Serialization
+ *
+ * Classes can implement a `serializeForSpan()` method to provide a custom
+ * representation when serialized for tracing spans. This is useful for:
+ * - Excluding internal state and implementation details
+ * - Removing functions and circular references
+ * - Providing a clean, readable representation for observability
+ *
+ * @example
+ * ```typescript
+ * class MyClass {
+ *   private internalState = new Map();
+ *   public data: string[];
+ *
+ *   serializeForSpan() {
+ *     return { data: this.data };
+ *   }
+ * }
+ * ```
  */
 
 /**
@@ -16,10 +36,12 @@ export const DEFAULT_KEYS_TO_STRIP = new Set([
   'providerMetadata',
   'steps',
   'tracingContext',
+  'execute', // Tool execute functions
+  'validate', // Schema validate functions
 ]);
 
 export interface DeepCleanOptions {
-  keysToStrip: Set<string>;
+  keysToStrip: Set<string> | string[] | Record<string, unknown>;
   maxDepth: number;
   maxStringLength: number;
   maxArrayLength: number;
@@ -28,8 +50,8 @@ export interface DeepCleanOptions {
 
 export const DEFAULT_DEEP_CLEAN_OPTIONS: DeepCleanOptions = Object.freeze({
   keysToStrip: DEFAULT_KEYS_TO_STRIP,
-  maxDepth: 6,
-  maxStringLength: 1024,
+  maxDepth: 8,
+  maxStringLength: 128 * 1024, // 128KB - sufficient for large LLM prompts/responses
   maxArrayLength: 50,
   maxObjectKeys: 50,
 });
@@ -68,6 +90,100 @@ export function truncateString(s: string, maxChars: number): string {
 }
 
 /**
+ * Detect if an object is a JSON Schema.
+ * Looks for typical JSON Schema markers like $schema, type with properties, etc.
+ */
+function isJsonSchema(val: any): boolean {
+  if (typeof val !== 'object' || val === null) return false;
+
+  // Has explicit $schema property
+  if (val.$schema && typeof val.$schema === 'string' && val.$schema.includes('json-schema')) {
+    return true;
+  }
+
+  // Has type: "object" with properties (common pattern)
+  if (val.type === 'object' && val.properties && typeof val.properties === 'object') {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Compress a JSON Schema to a more readable format for tracing.
+ * Extracts just the essential structure: property names and their types.
+ * Recursively handles nested object schemas.
+ *
+ * @example
+ * Input:
+ * {
+ *   type: "object",
+ *   properties: {
+ *     name: { type: "string" },
+ *     address: {
+ *       type: "object",
+ *       properties: { city: { type: "string" }, zip: { type: "string" } }
+ *     }
+ *   },
+ *   required: ["name"],
+ *   $schema: "http://json-schema.org/draft-07/schema#"
+ * }
+ *
+ * Output:
+ * { name: "string (required)", address: { city: "string", zip: "string" } }
+ */
+function compressJsonSchema(schema: any, depth: number = 0): any {
+  // Limit recursion depth to avoid overly verbose output
+  if (depth > 3) {
+    return schema.type || 'object';
+  }
+
+  if (schema.type !== 'object' || !schema.properties) {
+    // For non-object schemas, just return the type
+    return schema.type || schema;
+  }
+
+  const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+  const compressed: Record<string, any> = {};
+
+  for (const [key, propSchema] of Object.entries(schema.properties)) {
+    const prop = propSchema as any;
+    let value: any = prop.type || 'unknown';
+
+    // Handle nested objects recursively
+    if (prop.type === 'object' && prop.properties) {
+      value = compressJsonSchema(prop, depth + 1);
+      if (required.has(key)) {
+        // For nested objects, we can't append to the object, so wrap it
+        compressed[key + ' (required)'] = value;
+        continue;
+      }
+    }
+    // Handle arrays with item types
+    else if (prop.type === 'array' && prop.items) {
+      if (prop.items.type === 'object' && prop.items.properties) {
+        value = [compressJsonSchema(prop.items, depth + 1)];
+      } else {
+        value = `${prop.items.type || 'any'}[]`;
+      }
+    }
+    // Handle enums
+    else if (prop.enum) {
+      value = prop.enum.map((v: any) => JSON.stringify(v)).join(' | ');
+    }
+
+    // Mark required fields (for non-object types)
+    if (required.has(key) && typeof value === 'string') {
+      value += ' (required)';
+    }
+
+    compressed[key] = value;
+  }
+
+  return compressed;
+}
+
+/**
  * Recursively cleans a value by removing circular references, stripping problematic keys,
  * and enforcing size limits on strings, arrays, and objects.
  *
@@ -79,6 +195,14 @@ export function truncateString(s: string, maxChars: number): string {
  */
 export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_CLEAN_OPTIONS): any {
   const { keysToStrip, maxDepth, maxStringLength, maxArrayLength, maxObjectKeys } = options;
+
+  // Normalize to a Set once so lookups are always O(1).
+  // Bundlers can transform `new Set([...])` into a plain object or array,
+  // so we accept all three forms and coerce up front.
+  const stripSet =
+    keysToStrip instanceof Set
+      ? keysToStrip
+      : new Set(Array.isArray(keysToStrip) ? keysToStrip : Object.keys(keysToStrip));
 
   const seen = new WeakSet<any>();
 
@@ -157,13 +281,28 @@ export function deepClean(value: any, options: DeepCleanOptions = DEFAULT_DEEP_C
       return `[ArrayBuffer byteLength=${val.byteLength}]`;
     }
 
+    // Handle objects with serializeForSpan() method - use their custom trace serialization
+    if (typeof val.serializeForSpan === 'function') {
+      try {
+        return helper(val.serializeForSpan(), depth);
+      } catch {
+        // If serializeForSpan() fails, fall through to default object handling
+      }
+    }
+
+    // Handle JSON Schema objects - compress to a more readable format
+    // Pass the compressed result back through helper to apply size limits
+    if (isJsonSchema(val)) {
+      return helper(compressJsonSchema(val), depth);
+    }
+
     // Handle objects - enforce key limit
     const cleaned: Record<string, any> = {};
     const entries = Object.entries(val);
     let keyCount = 0;
 
     for (const [key, v] of entries) {
-      if (keysToStrip.has(key)) {
+      if (stripSet.has(key)) {
         continue;
       }
 

@@ -1,6 +1,6 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
-import { CopyButton } from '@/components/ui/copy-button';
+import { CopyButton } from '@/ds/components/CopyButton';
 import { useCodemirrorTheme } from '@/ds/components/CodeEditor';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { javascript } from '@codemirror/lang-javascript';
@@ -42,7 +42,7 @@ export const CodeDialogContent = ({
   if (typeof data !== 'string') {
     const content = JSON.stringify(data, null, 2);
     return (
-      <div className="max-h-[500px] overflow-auto relative p-4">
+      <div className="max-h-[500px] overflow-auto relative">
         <div className="absolute right-2 top-2 bg-surface4 rounded-full z-10">
           <CopyButton content={content} />
         </div>
@@ -65,7 +65,7 @@ export const CodeDialogContent = ({
   }
 
   return (
-    <div className="max-h-[500px] overflow-auto relative p-4">
+    <div className="max-h-[500px] overflow-auto relative">
       <div className="absolute right-2 top-2 bg-surface4 rounded-full z-10">
         <CopyButton content={data} />
       </div>

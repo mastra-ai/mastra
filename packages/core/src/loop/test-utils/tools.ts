@@ -16,7 +16,7 @@ import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLangua
 export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe.skip('provider-executed tools', () => {
     describe('single provider-executed tool call and result', () => {
-      let result: MastraModelOutput;
+      let result: MastraModelOutput<unknown>;
 
       beforeEach(async () => {
         result = await loopFn({
@@ -92,13 +92,13 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
 
       it('should only execute a single step', async () => {
-        await result.aisdk.v5.consumeStream();
-        expect((await result.aisdk.v5.steps).length).toBe(1);
+        await result.consumeStream();
+        expect((await result.steps).length).toBe(1);
       });
 
       it('should include provider-executed tool call and result content', async () => {
-        await result.aisdk.v5.consumeStream();
-        expect(result.aisdk.v5.content).toMatchInlineSnapshot(`
+        await result.consumeStream();
+        expect(result.content).toMatchInlineSnapshot(`
           [
             {
               "input": {
@@ -145,7 +145,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
 
       it('should include provider-executed tool call and result in the full stream', async () => {
-        expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any)).toMatchInlineSnapshot(`
+        expect(await convertAsyncIterableToArray(result.fullStream as any)).toMatchInlineSnapshot(`
             [
               {
                 "type": "start",
@@ -243,73 +243,12 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             ]
           `);
       });
-
-      it('should include provider-executed tool call and result in the ui message stream', async () => {
-        expect(await convertReadableStreamToArray(result.aisdk.v5.toUIMessageStream())).toMatchInlineSnapshot(`
-            [
-              {
-                "type": "start",
-              },
-              {
-                "type": "start-step",
-              },
-              {
-                "dynamic": false,
-                "providerExecuted": true,
-                "toolCallId": "call-1",
-                "toolName": "web_search",
-                "type": "tool-input-start",
-              },
-              {
-                "inputTextDelta": "{ "value": "value" }",
-                "toolCallId": "call-1",
-                "type": "tool-input-delta",
-              },
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": true,
-                "toolCallId": "call-1",
-                "toolName": "web_search",
-                "type": "tool-input-available",
-              },
-              {
-                "output": "{ "value": "result1" }",
-                "providerExecuted": true,
-                "toolCallId": "call-1",
-                "type": "tool-output-available",
-              },
-              {
-                "input": {
-                  "value": "value",
-                },
-                "providerExecuted": true,
-                "toolCallId": "call-2",
-                "toolName": "web_search",
-                "type": "tool-input-available",
-              },
-              {
-                "errorText": "ERROR",
-                "providerExecuted": true,
-                "toolCallId": "call-2",
-                "type": "tool-output-error",
-              },
-              {
-                "type": "finish-step",
-              },
-              {
-                "type": "finish",
-              },
-            ]
-          `);
-      });
     });
   });
 
   describe.skip('dynamic tools', () => {
     describe('single dynamic tool call and result', () => {
-      let result: MastraModelOutput;
+      let result: MastraModelOutput<unknown>;
 
       beforeEach(async () => {
         result = await loopFn({
@@ -358,11 +297,11 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
 
       it('should include dynamic tool call and result content', async () => {
-        await result.aisdk.v5.consumeStream();
+        await result.consumeStream();
 
-        console.log(JSON.stringify(result.aisdk.v5.content, null, 2));
+        console.log(JSON.stringify(result.content, null, 2));
 
-        expect(result.aisdk.v5.content).toMatchInlineSnapshot(`
+        expect(result.content).toMatchInlineSnapshot(`
           [
             {
               "dynamic": true,
@@ -394,7 +333,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
 
       it('should include dynamic tool call and result in the full stream', async () => {
-        const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
+        const fullStream = await convertAsyncIterableToArray(result.fullStream as any);
 
         console.log(JSON.stringify(fullStream, null, 2));
 
@@ -475,53 +414,6 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
                   "reasoningTokens": undefined,
                   "totalTokens": 13,
                 },
-                "type": "finish",
-              },
-            ]
-          `);
-      });
-
-      it('should include dynamic tool call and result in the ui message stream', async () => {
-        expect(await convertReadableStreamToArray(result.aisdk.v5.toUIMessageStream())).toMatchInlineSnapshot(`
-            [
-              {
-                "type": "start",
-              },
-              {
-                "type": "start-step",
-              },
-              {
-                "dynamic": true,
-                "toolCallId": "call-1",
-                "toolName": "dynamicTool",
-                "type": "tool-input-start",
-              },
-              {
-                "inputTextDelta": "{ "value": "value" }",
-                "toolCallId": "call-1",
-                "type": "tool-input-delta",
-              },
-              {
-                "dynamic": true,
-                "input": {
-                  "value": "value",
-                },
-                "toolCallId": "call-1",
-                "toolName": "dynamicTool",
-                "type": "tool-input-available",
-              },
-              {
-                "dynamic": true,
-                "output": {
-                  "value": "test-result",
-                },
-                "toolCallId": "call-1",
-                "type": "tool-output-available",
-              },
-              {
-                "type": "finish-step",
-              },
-              {
                 "type": "finish",
               },
             ]
@@ -630,7 +522,7 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         },
       });
 
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
       expect(recordedCalls).toMatchInlineSnapshot(`
         [
@@ -892,39 +784,76 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
         },
       });
 
-      expect(await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any)).toMatchSnapshot();
+      expect(await convertAsyncIterableToArray(result.fullStream as any)).toMatchSnapshot();
     });
   });
 
   describe('tool execution errors', () => {
-    let result: MastraModelOutput;
+    let result: MastraModelOutput<unknown>;
 
     beforeEach(async () => {
+      let responseCount = 0;
       result = await loopFn({
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
-        models: createTestModels({
-          stream: convertArrayToReadableStream([
-            {
-              type: 'response-metadata',
-              id: 'id-0',
-              modelId: 'mock-model-id',
-              timestamp: new Date(0),
-            },
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'tool1',
-              input: `{ "value": "value" }`,
-            },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: testUsage,
-            },
-          ]),
-        }),
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      warnings: [],
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'tool1',
+                          input: `{ "value": "value" }`,
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      warnings: [],
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'I see the tool failed, let me help.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
         tools: {
           tool1: {
             inputSchema: z.object({ value: z.string() }),
@@ -933,234 +862,27 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
             },
           },
         },
+        stopWhen: stepCountIs(3),
         ...defaultSettings(),
       });
     });
 
     it('should include tool error part in the full stream', async () => {
-      const fullStream = await convertAsyncIterableToArray(result.aisdk.v5.fullStream as any);
+      const fullStream = await convertAsyncIterableToArray(result.fullStream as any);
 
-      console.log(fullStream);
-
-      expect(fullStream).toMatchInlineSnapshot(`
-        [
-          {
-            "type": "start",
-          },
-          {
-            "request": {},
-            "type": "start-step",
-            "warnings": [],
-          },
-          {
-            "input": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-            "type": "tool-call",
-          },
-          {
-            "error": [Error: test error],
-            "input": {
-              "value": "value",
-            },
-            "providerExecuted": undefined,
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-            "type": "tool-error",
-          },
-          {
-            "finishReason": "stop",
-            "providerMetadata": undefined,
-            "response": {
-              "headers": undefined,
-              "id": "id-0",
-              "modelId": "mock-model-id",
-              "modelMetadata": {
-                "modelId": "mock-model-id",
-                "modelProvider": "mock-provider",
-                "modelVersion": "v2",
-              },
-              "timestamp": 1970-01-01T00:00:00.000Z,
-            },
-            "type": "finish-step",
-            "usage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-          },
-          {
-            "finishReason": "stop",
-            "totalUsage": {
-              "inputTokens": 3,
-              "outputTokens": 10,
-              "totalTokens": 13,
-            },
-            "type": "finish",
-          },
-        ]
-      `);
+      expect(fullStream).toMatchSnapshot();
     });
 
     it.skip('should include the error part in the step stream', async () => {
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      console.log(JSON.stringify(result.aisdk.v5.steps, null, 2));
-
-      expect(result.aisdk.v5.steps).toMatchInlineSnapshot(`
-            [
-              DefaultStepResult {
-                "content": [
-                  {
-                    "input": {
-                      "value": "value",
-                    },
-                    "providerExecuted": undefined,
-                    "providerMetadata": undefined,
-                    "toolCallId": "call-1",
-                    "toolName": "tool1",
-                    "type": "tool-call",
-                  },
-                  {
-                    "error": [Error: test error],
-                    "input": {
-                      "value": "value",
-                    },
-                    "providerExecuted": undefined,
-                    "providerMetadata": undefined,
-                    "toolCallId": "call-1",
-                    "toolName": "tool1",
-                    "type": "tool-error",
-                  },
-                ],
-                "finishReason": "stop",
-                "providerMetadata": undefined,
-                "request": {},
-                "response": {
-                  "headers": undefined,
-                  "id": "id-0",
-                  "messages": [
-                    {
-                      "content": [
-                        {
-                          "input": {
-                            "value": "value",
-                          },
-                          "providerExecuted": undefined,
-                          "providerOptions": undefined,
-                          "toolCallId": "call-1",
-                          "toolName": "tool1",
-                          "type": "tool-call",
-                        },
-                      ],
-                      "role": "assistant",
-                    },
-                    {
-                      "content": [
-                        {
-                          "output": {
-                            "type": "error-text",
-                            "value": "test error",
-                          },
-                          "toolCallId": "call-1",
-                          "toolName": "tool1",
-                          "type": "tool-result",
-                        },
-                      ],
-                      "role": "tool",
-                    },
-                  ],
-                  "modelId": "mock-model-id",
-                  "timestamp": 1970-01-01T00:00:00.000Z,
-                },
-                "usage": {
-                  "cachedInputTokens": undefined,
-                  "inputTokens": 3,
-                  "outputTokens": 10,
-                  "reasoningTokens": undefined,
-                  "totalTokens": 13,
-                },
-                "warnings": [],
-              },
-            ]
-          `);
+      expect(result.steps).toMatchSnapshot();
     });
 
     it.skip('should include error result in response messages', async () => {
-      await result.aisdk.v5.consumeStream();
+      await result.consumeStream();
 
-      expect((await result.aisdk.v5.response).messages).toMatchInlineSnapshot(`
-            [
-              {
-                "content": [
-                  {
-                    "input": {
-                      "value": "value",
-                    },
-                    "providerExecuted": undefined,
-                    "providerOptions": undefined,
-                    "toolCallId": "call-1",
-                    "toolName": "tool1",
-                    "type": "tool-call",
-                  },
-                ],
-                "role": "assistant",
-              },
-              {
-                "content": [
-                  {
-                    "output": {
-                      "type": "error-text",
-                      "value": "test error",
-                    },
-                    "toolCallId": "call-1",
-                    "toolName": "tool1",
-                    "type": "tool-result",
-                  },
-                ],
-                "role": "tool",
-              },
-            ]
-          `);
-    });
-
-    it('should add tool-error parts to ui message stream', async () => {
-      const uiMessageStream = await convertReadableStreamToArray(result.aisdk.v5.toUIMessageStream());
-
-      expect(uiMessageStream).toMatchInlineSnapshot(`
-        [
-          {
-            "messageId": "msg-0",
-            "type": "start",
-          },
-          {
-            "type": "start-step",
-          },
-          {
-            "input": {
-              "value": "value",
-            },
-            "toolCallId": "call-1",
-            "toolName": "tool1",
-            "type": "tool-input-available",
-          },
-          {
-            "errorText": "test error",
-            "toolCallId": "call-1",
-            "type": "tool-output-error",
-          },
-          {
-            "type": "finish-step",
-          },
-          {
-            "type": "finish",
-          },
-        ]
-      `);
+      expect((await result.response).messages).toMatchSnapshot();
     });
   });
 
@@ -1218,22 +940,242 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       });
 
       // Should complete without "tool not found" error
-      const stream = result.aisdk.v5.fullStream;
+      const stream = result.fullStream;
       const chunks = await convertAsyncIterableToArray(stream);
 
       // Verify tool-result chunk exists with provider output
       const toolResultChunk = chunks.find((c: any) => c.type === 'tool-result');
       expect(toolResultChunk).toBeDefined();
       // as any because we're testing a case where there's a provider defined tool that's not added to tools: {} in agent definition, so there's no output type
-      expect((toolResultChunk as any)?.output).toEqual({
+      expect((toolResultChunk as any)?.payload?.result).toEqual({
         content: '// app.ts file content\nexport function main() {\n  console.log("Hello");\n}',
         line_count: 4,
       });
-      expect((toolResultChunk as any)?.providerExecuted).toBe(true);
+      expect((toolResultChunk as any)?.payload?.providerExecuted).toBe(true);
 
       // Verify we also get the text response
       const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
       expect(textChunks.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('toModelOutput', () => {
+    it('should call toModelOutput and use transformed output in subsequent model prompt', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const toModelOutputCalls: unknown[] = [];
+      const stepInputs: any[] = [];
+
+      let responseCount = 0;
+      const result = await loopFn({
+        methodType: 'stream',
+        runId,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt, tools, toolChoice }) => {
+                stepInputs.push({ prompt, tools, toolChoice });
+
+                switch (responseCount++) {
+                  case 0: {
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          id: 'call-1',
+                          toolCallId: 'call-1',
+                          toolName: 'weather',
+                          input: `{ "city": "Seattle" }`,
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  }
+                  case 1: {
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(1000),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'The weather is nice.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  }
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          weather: {
+            inputSchema: z.object({ city: z.string() }),
+            execute: async ({ city }: { city: string }) => ({
+              city,
+              temperature: 72,
+              conditions: 'sunny',
+              humidity: 45,
+              wind_speed: 12,
+              raw_sensor_data: { sensor_id: 'wx-001', readings: [71.8, 72.1, 72.0] },
+            }),
+            toModelOutput: (output: unknown) => {
+              toModelOutputCalls.push(output);
+              const data = output as any;
+              return {
+                type: 'text' as const,
+                value: `Weather in ${data.city}: ${data.temperature}F, ${data.conditions}`,
+              };
+            },
+          },
+        },
+        messageList,
+        stopWhen: stepCountIs(3),
+        ...defaultSettings(),
+        _internal: {
+          now: mockValues(0, 100, 500, 600, 1000),
+          generateId: mockId({ prefix: 'id' }),
+        },
+      });
+
+      await result.consumeStream();
+
+      // toModelOutput should have been called with the raw tool result
+      expect(toModelOutputCalls).toHaveLength(1);
+      expect(toModelOutputCalls[0]).toEqual({
+        city: 'Seattle',
+        temperature: 72,
+        conditions: 'sunny',
+        humidity: 45,
+        wind_speed: 12,
+        raw_sensor_data: { sensor_id: 'wx-001', readings: [71.8, 72.1, 72.0] },
+      });
+
+      // The second model call's prompt should contain the transformed output
+      expect(stepInputs).toHaveLength(2);
+      const secondPrompt = stepInputs[1].prompt;
+      const toolMessage = secondPrompt.find((m: any) => m.role === 'tool');
+      expect(toolMessage).toBeDefined();
+
+      const toolResult = toolMessage.content.find((p: any) => p.type === 'tool-result');
+      expect(toolResult).toBeDefined();
+      expect(toolResult.output).toEqual({
+        type: 'text',
+        value: `Weather in Seattle: 72F, sunny`,
+      });
+    });
+  });
+
+  describe('stopWhen receives toolResults', () => {
+    it('should populate toolResults on steps passed to stopWhen', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const stopWhenSteps: any[][] = [];
+
+      let responseCount = 0;
+      const result = await loopFn({
+        methodType: 'stream',
+        runId,
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MockLanguageModelV2({
+              doStream: async () => {
+                switch (responseCount++) {
+                  case 0:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          toolCallId: 'call-1',
+                          toolName: 'test-tool',
+                          input: '{"value":"hello"}',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  case 1:
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'id-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: testUsage,
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        tools: {
+          'test-tool': {
+            inputSchema: z.object({ value: z.string() }),
+            execute: async ({ value }: { value: string }) => ({ echoed: value }),
+          },
+        },
+        messageList,
+        stopWhen: ({ steps }: { steps: any[] }) => {
+          stopWhenSteps.push([...steps]);
+          return false;
+        },
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      // stopWhen should have been called (once per continued step)
+      expect(stopWhenSteps.length).toBeGreaterThanOrEqual(1);
+
+      // First call: step has tool-call + tool-result content, toolResults should be populated
+      const firstCallStep = stopWhenSteps[0]![0]!;
+      const contentToolResults = firstCallStep.content.filter((p: any) => p.type === 'tool-result');
+      expect(contentToolResults.length).toBe(1);
+      expect(firstCallStep.toolResults.length).toBe(contentToolResults.length);
+      expect(firstCallStep.toolResults[0].toolName).toBe('test-tool');
     });
   });
 }

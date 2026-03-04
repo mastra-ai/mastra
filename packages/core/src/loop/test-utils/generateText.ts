@@ -1,5 +1,5 @@
 import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
-import type { generateText as generateText5 } from '@internal/ai-sdk-v5';
+import type { generateText as generateText5, ToolSet } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
@@ -23,7 +23,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       ...args,
     });
     // @ts-expect-error -- missing `experimental_output` in v5 getFullOutput
-    return output.aisdk.v5.getFullOutput();
+    return output.getFullOutput();
   };
 
   const dummyResponseValues = {
@@ -743,7 +743,12 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
             "id": "test-id-from-model",
             "messages": [
               {
-                "content": "Hello, world!",
+                "content": [
+                  {
+                    "text": "Hello, world!",
+                    "type": "text",
+                  },
+                ],
                 "role": "assistant",
               },
             ],
@@ -776,6 +781,23 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         expect(await result.response).toMatchInlineSnapshot(`
           {
             "body": "test body",
+            "dbMessages": [
+              {
+                "content": {
+                  "content": "Hello, world!",
+                  "format": 2,
+                  "parts": [
+                    {
+                      "text": "Hello, world!",
+                      "type": "text",
+                    },
+                  ],
+                },
+                "createdAt": 2024-01-01T00:00:00.001Z,
+                "id": "1234",
+                "role": "assistant",
+              },
+            ],
             "headers": {
               "custom-response-header": "response-header-value",
             },

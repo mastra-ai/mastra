@@ -8,11 +8,11 @@ import TabItem from "@theme/TabItem";
 
 # Integrate Mastra in your Express project
 
-In this guide, you'll build a tool-calling AI agent using Mastra and Express. Using the [Express server adapter](/reference/v1/server/express-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server.
+In this guide, you'll build a tool-calling AI agent using Mastra and Express. Using the [Express server adapter](/reference/server/express-adapter), you can expose your agents as HTTP endpoints without writing the routing yourself or running a separate Mastra server.
 
 ## Before you begin
 
-- You'll need an API key from a supported [model provider](/models/v1). If you don't have a preference, use [OpenAI](/models/v1/providers/openai).
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 - Install Node.js `v22.13.0` or later
 
 ## Create a new Express app (optional)
@@ -22,41 +22,38 @@ If you already have an Express app, skip to the next step.
 Clone this [boilerplate repository](https://github.com/mastra-ai/express-ts-boilerplate) and install dependencies:
 
 <Tabs>
-<TabItem value="https" label="HTTPS">
+  <TabItem value="https" label="HTTPS">
+    ```bash npm2yarn
+    git clone https://github.com/mastra-ai/express-ts-boilerplate.git
+    cd express-ts-boilerplate
+    npm install
+    ```
+  </TabItem>
 
-```bash
-git clone https://github.com/mastra-ai/express-ts-boilerplate.git
-cd express-ts-boilerplate
-npm install
-```
-
-</TabItem>
-<TabItem value="ssh" label="SSH">
-
-```bash
-git clone git@github.com:mastra-ai/express-ts-boilerplate.git
-cd express-ts-boilerplate
-npm install
-```
-
-</TabItem>
+  <TabItem value="ssh" label="SSH">
+    ```bash npm2yarn
+    git clone git@github.com:mastra-ai/express-ts-boilerplate.git
+    cd express-ts-boilerplate
+    npm install
+    ```
+  </TabItem>
 </Tabs>
 
 ## Initialize Mastra
 
-Inside your Express project directory, run [`mastra init`](/reference/v1/cli/mastra#mastra-init).
+Inside your Express project directory, run [`mastra init`](/reference/cli/mastra#mastra-init).
 
 When prompted, choose a provider (e.g. OpenAI) and enter your key:
 
 ```bash
-npx mastra@beta init
+npx mastra@latest init
 ```
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
--	`index.ts` - Mastra config, including memory
+- `index.ts` - Mastra config, including memory
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
--	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll pass the `src/mastra/index.ts` file to the Express server adapter later.
 
@@ -64,35 +61,35 @@ You'll pass the `src/mastra/index.ts` file to the Express server adapter later.
 
 Install the Express server adapter package:
 
-```bash
-npm install @mastra/express@beta
+```bash npm2yarn
+npm install @mastra/express@latest
 ```
 
 Open the Express entry file at `src/index.ts` and add the required import and initialization code:
 
 ```typescript {2-3,11-12} title="src/index.ts"
-import express, { type Request, type Response } from "express";
-import { MastraServer } from "@mastra/express";
-import { mastra } from "./mastra";
+import express, { type Request, type Response } from 'express'
+import { MastraServer } from '@mastra/express'
+import { mastra } from './mastra'
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const app = express()
+const PORT = process.env.PORT || 3000
 
 // Middleware
-app.use(express.json());
+app.use(express.json())
 
-const server = new MastraServer({ app, mastra });
-await server.init();
+const server = new MastraServer({ app, mastra })
+await server.init()
 
 // Routes
-app.get("/", (_req: Request, res: Response) => {
-  res.json({ message: "Hello, World!" });
-});
+app.get('/', (_req: Request, res: Response) => {
+  res.json({ message: 'Hello, World!' })
+})
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+  console.log(`Server is running on http://localhost:${PORT}`)
+})
 ```
 
 The ⁠`MastraServer` is initialized with the existing Express `app` and the root ⁠`mastra` instance. Calling `⁠init()` registers the Mastra middleware and exposes all available Mastra endpoints.
@@ -119,10 +116,10 @@ Congratulations on building your Mastra agent with Express! 🎉
 
 From here, you can extend the project with your own tools and logic:
 
-- Learn more about [agents](/docs/v1/agents/overview)
-- Give your agent its own [tools](/docs/v1/agents/using-tools)
-- Add human-like [memory](/docs/v1/agents/agent-memory) to your agent
+- Learn more about [agents](/docs/agents/overview)
+- Give your agent its own [tools](/docs/agents/using-tools)
+- Add human-like [memory](/docs/agents/agent-memory) to your agent
 
 When you're ready, read more about how Mastra integrates with Express:
 
-- [Server Adapters](/docs/v1/server/server-adapters)
+- [Server Adapters](/docs/server/server-adapters)

@@ -1,0 +1,21 @@
+{
+  "name": "workspace-tools-e2e-test",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "execa": "^9.6.1",
+    "get-port": "^7.1.0",
+    "globby": "^14.1.0",
+    "verdaccio": "^6.2.5",
+    "verdaccio-auth-memory": "^10.3.1",
+    "vitest": "4.0.16",
+    "typescript": "^5.9.3"
+  }
+}

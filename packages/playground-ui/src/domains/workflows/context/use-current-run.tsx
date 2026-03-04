@@ -16,6 +16,14 @@ export type TripwireData = {
   processorId?: string;
 };
 
+export type ForeachProgress = {
+  completedCount: number;
+  totalCount: number;
+  currentIndex: number;
+  iterationStatus: 'success' | 'failed' | 'suspended';
+  iterationOutput?: any;
+};
+
 export type Step = {
   error?: any;
   tripwire?: TripwireData;
@@ -27,6 +35,7 @@ export type Step = {
   resumeData?: any;
   suspendOutput?: any;
   suspendPayload?: any;
+  foreachProgress?: ForeachProgress;
 };
 
 type UseCurrentRunReturnType = {
@@ -56,6 +65,7 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
         resumeData: 'resumePayload' in value ? value.resumePayload : undefined,
         suspendOutput: 'suspendOutput' in value ? value.suspendOutput : undefined,
         suspendPayload: 'suspendPayload' in value ? value.suspendPayload : undefined,
+        foreachProgress: 'foreachProgress' in value ? value.foreachProgress : undefined,
       },
     };
   }, {});

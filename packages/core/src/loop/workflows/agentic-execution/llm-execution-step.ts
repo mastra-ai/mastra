@@ -1,36 +1,41 @@
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { executeWithContextSync } from '../../../observability';
+import { createObservabilityContext, executeWithContextSync } from '../../../observability';
+import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
+import { safeEnqueue } from '../../../stream/base';
 import { MastraModelOutput } from '../../../stream/base/output';
-import type { OutputSchema } from '../../../stream/base/schema';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
+  StreamTransport,
+  StreamTransportRef,
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
-import { isControllerOpen } from '../stream';
 
-type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
+type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tools?: ToolSet;
   messageId: string;
   includeRawChunks?: boolean;
@@ -45,9 +50,11 @@ type ProcessOutputStreamOptions<OUTPUT extends OutputSchema = undefined> = {
     rawResponse: any;
   };
   logger?: IMastraLogger;
+  transportRef?: StreamTransportRef;
+  transportResolver?: () => StreamTransport | undefined;
 };
 
-async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
+async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
   messageList,
@@ -58,10 +65,30 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
   responseFromModel,
   includeRawChunks,
   logger,
+  transportRef,
+  transportResolver,
 }: ProcessOutputStreamOptions<OUTPUT>) {
+  let transportSet = false;
+
   for await (const chunk of outputStream._getBaseStream()) {
+    // Stop processing chunks if the abort signal has fired.
+    // Some LLM providers continue streaming data after abort (e.g. due to buffering),
+    // so we must check the signal on each iteration to avoid accumulating the full
+    // response into the messageList after the caller has disconnected.
+    if (options?.abortSignal?.aborted) {
+      break;
+    }
+
     if (!chunk) {
       continue;
+    }
+
+    if (!transportSet && transportRef && transportResolver) {
+      const transport = transportResolver();
+      if (transport) {
+        transportRef.current = transport;
+        transportSet = true;
+      }
     }
 
     if (chunk.type == 'object' || chunk.type == 'object-result') {
@@ -154,9 +181,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             providerOptions: chunk.payload.providerMetadata,
           });
         }
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -167,9 +192,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           textDeltas: textDeltasFromState,
           isStreaming: true,
         });
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -179,9 +202,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         runState.setState({
           providerOptions: undefined,
         });
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -202,9 +223,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           }
         }
 
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
 
         break;
       }
@@ -226,9 +245,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             logger?.error('Error calling onInputDelta', error);
           }
         }
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -257,14 +274,10 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          if (isControllerOpen(controller)) {
-            controller.enqueue(chunk);
-          }
+          safeEnqueue(controller, chunk);
           break;
         }
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -276,9 +289,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           reasoningDeltas: reasoningDeltasFromState,
           providerOptions: chunk.payload.providerMetadata ?? runState.state.providerOptions,
         });
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -312,9 +323,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
           providerOptions: undefined,
         });
 
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
@@ -328,7 +337,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
               parts: [
                 {
                   type: 'file' as const,
-                  // @ts-expect-error
+                  // @ts-expect-error - data type mismatch, see TODO
                   data: chunk.payload.data, // TODO: incorrect string type
                   mimeType: chunk.payload.mimeType,
                 },
@@ -337,7 +346,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          controller.enqueue(chunk);
+          safeEnqueue(controller, chunk);
         }
         break;
 
@@ -364,7 +373,7 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
             createdAt: new Date(),
           };
           messageList.add(message, 'response');
-          controller.enqueue(chunk);
+          safeEnqueue(controller, chunk);
         }
         break;
 
@@ -403,14 +412,12 @@ async function processOutputStream<OUTPUT extends OutputSchema = undefined>({
         const error = getErrorFromUnknown(chunk.payload.error, {
           fallbackMessage: 'Unknown error in agent stream',
         });
-        controller.enqueue({ ...chunk, payload: { ...chunk.payload, error } });
+        safeEnqueue(controller, { ...chunk, payload: { ...chunk.payload, error } });
         await options?.onError?.({ error });
         break;
 
       default:
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
     }
 
     if (
@@ -446,6 +453,7 @@ function executeStreamWithFallbackModels<T>(
     let finalResult: T | undefined;
 
     let done = false;
+    let lastError: unknown;
     for (const modelConfig of models) {
       index++;
       const maxRetries = modelConfig.maxRetries || 0;
@@ -469,6 +477,7 @@ function executeStreamWithFallbackModels<T>(
             throw err;
           }
 
+          lastError = err;
           attempt++;
 
           logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
@@ -486,17 +495,19 @@ function executeStreamWithFallbackModels<T>(
       }
     }
     if (typeof finalResult === 'undefined') {
-      logger?.error('Exhausted all fallback models and reached the maximum number of retries.');
-      throw new Error('Exhausted all fallback models and reached the maximum number of retries.');
+      const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
+      const errorMessage = `Exhausted all fallback models and reached the maximum number of retries. Last error: ${lastErrMsg}`;
+      logger?.error(errorMessage);
+      throw new Error(errorMessage, { cause: lastError });
     }
     return finalResult;
   };
 }
 
-export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined>({
+export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
-  messageId,
+  messageId: messageIdPassed,
   runId,
   tools,
   toolChoice,
@@ -521,14 +532,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
   modelSpanTracker,
   autoResumeSuspendedTools,
   maxProcessorRetries,
+  workspace,
+  outputWriter,
 }: OuterLLMRun<TOOLS, OUTPUT>) {
   const initialSystemMessages = messageList.getAllSystemMessages();
 
+  let currentIteration = 0;
+
   return createStep({
-    id: 'llm-execution',
+    id: 'llm-execution' as const,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
+      currentIteration++;
+
+      const messageId = inputData.isTaskCompleteCheckFailed
+        ? `${messageIdPassed}-${currentIteration}`
+        : messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
@@ -537,11 +557,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
       let request: any;
       let rawResponse: any;
 
-      const { outputStream, callBail, runState, stepTools } = await executeStreamWithFallbackModels<{
-        outputStream: MastraModelOutput<OUTPUT | undefined>;
+      const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
+        outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
         callBail?: boolean;
         stepTools?: TOOLS;
+        stepWorkspace?: Workspace;
       }>(
         models,
         logger,
@@ -568,7 +589,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           activeTools?: (keyof TOOLS)[] | undefined;
           providerOptions?: SharedProviderOptions | undefined;
           modelSettings?: Omit<CallSettings, 'abortSignal'> | undefined;
-          structuredOutput?: StructuredOutputOptions<OUTPUT> | undefined;
+          structuredOutput?: StructuredOutputOptions<OUTPUT>;
+          workspace?: Workspace;
         } = {
           model,
           tools,
@@ -577,6 +599,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           providerOptions,
           modelSettings,
           structuredOutput,
+          workspace,
         };
 
         const inputStepProcessors = [
@@ -589,15 +612,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            processorStates,
           });
 
           try {
             // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
             const stepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+            // Create a ProcessorStreamWriter from outputWriter if available
+            const inputStepWriter: ProcessorStreamWriter | undefined = outputWriter
+              ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+              : undefined;
+
             const processInputStepResult = await processorRunner.runProcessInputStep({
               messageList,
               stepNumber: inputData.output?.steps?.length || 0,
-              tracingContext: stepTracingContext,
+              ...createObservabilityContext(stepTracingContext),
               requestContext,
               model,
               steps: inputData.output?.steps || [],
@@ -608,25 +638,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               modelSettings,
               structuredOutput,
               retryCount: inputData.processorRetryCount || 0,
+              writer: inputStepWriter,
+              abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
           } catch (error) {
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
               // Emit tripwire chunk to the stream
-              if (isControllerOpen(controller)) {
-                controller.enqueue({
-                  type: 'tripwire',
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    reason: error.message,
-                    retry: error.options?.retry,
-                    metadata: error.options?.metadata,
-                    processorId: error.processorId,
-                  },
-                });
-              }
+              safeEnqueue(controller, {
+                type: 'tripwire',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  reason: error.message,
+                  retry: error.options?.retry,
+                  metadata: error.options?.metadata,
+                  processorId: error.processorId,
+                },
+              });
 
               // Create a minimal runState for the bail response
               const runState = new AgenticRunState({
@@ -665,10 +695,24 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           _internal: _internal!,
           model: currentStep.model,
         });
+
+        // Resolve supportedUrls - it may be a Promise (e.g., from ModelRouterLanguageModel)
+        // This allows providers like Mistral to expose their native URL support for PDFs
+        // See: https://github.com/mastra-ai/mastra/issues/12152
+        let resolvedSupportedUrls: Record<string, RegExp[]> | undefined;
+        const modelSupportedUrls = currentStep.model?.supportedUrls;
+        if (modelSupportedUrls) {
+          if (typeof (modelSupportedUrls as PromiseLike<unknown>).then === 'function') {
+            resolvedSupportedUrls = await (modelSupportedUrls as PromiseLike<Record<string, RegExp[]>>);
+          } else {
+            resolvedSupportedUrls = modelSupportedUrls as Record<string, RegExp[]>;
+          }
+        }
+
         const messageListPromptArgs = {
           downloadRetries,
           downloadConcurrency,
-          supportedUrls: currentStep.model?.supportedUrls as Record<string, RegExp[]>,
+          supportedUrls: resolvedSupportedUrls,
         };
         let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
 
@@ -722,6 +766,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                       When you find that and call that tool, add the resumeData to the tool call arguments/input.
                       Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.
                       If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.
+
+                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. 
                       `;
                 }
 
@@ -764,13 +810,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                   request = requestFromStream || {};
                   rawResponse = rawResponseFromStream;
 
-                  if (!isControllerOpen(controller)) {
-                    // Controller is closed or errored, skip enqueueing
-                    // This can happen when downstream errors (like in onStepFinish) close the controller
-                    return;
-                  }
-
-                  controller.enqueue({
+                  safeEnqueue(controller, {
                     runId,
                     from: ChunkFrom.AGENT,
                     type: 'step-start',
@@ -790,13 +830,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           );
         }
 
-        const outputStream = new MastraModelOutput({
+        const outputStream = new MastraModelOutput<OUTPUT>({
           model: {
             modelId: currentStep.model.modelId,
             provider: currentStep.model.provider,
             version: currentStep.model.specificationVersion,
           },
-          stream: modelResult as ReadableStream<ChunkType>,
+          stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
           messageList,
           messageId,
           options: {
@@ -811,6 +851,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             requestContext,
           },
         });
+
+        let transportResolver: (() => StreamTransport | undefined) | undefined;
+        if (currentStep.model instanceof ModelRouterLanguageModel) {
+          const routerModel = currentStep.model;
+          transportResolver = () => routerModel._getStreamTransport();
+        }
 
         try {
           await processOutputStream({
@@ -828,30 +874,49 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
               rawResponse,
             },
             logger,
+            transportRef: _internal?.transportRef,
+            transportResolver,
           });
         } catch (error) {
-          logger?.error('Error in LLM Execution Step', error);
+          const provider = model?.provider;
+          const modelIdStr = model?.modelId;
+          const isUpstreamError = APICallError.isInstance(error);
+
+          if (isUpstreamError) {
+            const providerInfo = provider ? ` from ${provider}` : '';
+            const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
+            logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          } else {
+            logger?.error('Error in LLM execution', {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          }
+
           if (isAbortError(error) && options?.abortSignal?.aborted) {
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });
 
-            if (isControllerOpen(controller)) {
-              controller.enqueue({ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
-            }
+            safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
 
             return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
           }
 
           if (isLastModel) {
-            if (isControllerOpen(controller)) {
-              controller.enqueue({
-                type: 'error',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: { error },
-              });
-            }
+            safeEnqueue(controller, {
+              type: 'error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { error },
+            });
 
             runState.setState({
               hasErrored: true,
@@ -865,13 +930,33 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           }
         }
 
-        return { outputStream, callBail: false, runState, stepTools: currentStep.tools };
+        // Handle abort detected via signal check in processOutputStream (loop broke early).
+        // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
+        // so this handles the case where processOutputStream completed normally via `break`.
+        if (options?.abortSignal?.aborted) {
+          await options?.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+          });
+
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+
+          return { callBail: true, outputStream, runState, stepTools: currentStep.tools };
+        }
+
+        return {
+          outputStream,
+          callBail: false,
+          runState,
+          stepTools: currentStep.tools,
+          stepWorkspace: currentStep.workspace,
+        };
       });
 
-      // Store modified tools in _internal so toolCallStep can access them
+      // Store modified tools and workspace in _internal so toolCallStep can access them
       // without going through workflow serialization (which would lose execute functions)
       if (_internal) {
         _internal.stepTools = stepTools;
+        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
       }
 
       if (callBail) {
@@ -896,7 +981,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           output: {
             text,
             toolCalls: [],
-            usage: usage ?? inputData.output?.usage,
+            usage: usage ?? inputData.output.usage,
             steps: [],
           },
           messages: {
@@ -940,7 +1025,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
                   toolName: toolCall.toolName,
                   args: toolCall.args,
                 },
-                ...(toolCall.providerMetadata ? { providerMetadata: toolCall.providerMetadata } : {}),
+                providerMetadata: toolCall.providerMetadata,
+                providerExecuted: toolCall.providerExecuted,
               };
             }),
           },
@@ -958,6 +1044,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          processorStates,
         });
 
         try {
@@ -977,6 +1064,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
 
           // Use MODEL_STEP context so step processor spans are children of MODEL_STEP
           const outputStepTracingContext = modelSpanTracker?.getTracingContext() ?? tracingContext;
+
+          // Create a ProcessorStreamWriter from outputWriter if available
+          const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+            ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType) }
+            : undefined;
+
           await processorRunner.runProcessOutputStep({
             steps: inputData.output?.steps ?? [],
             messages: messageList.get.all.db(),
@@ -985,9 +1078,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
             finishReason: immediateFinishReason,
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
-            tracingContext: outputStepTracingContext,
+            ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,
+            writer: processorWriter,
           });
         } catch (error) {
           if (error instanceof TripWire) {
@@ -1068,6 +1162,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         }),
       );
 
+      // Remove rejected response messages from the messageList before the next iteration.
+      // Without this, the LLM sees the rejected assistant response in its prompt on retry,
+      // which confuses models and often causes empty text responses.
+      if (shouldRetry) {
+        messageList.removeByIds([messageId]);
+      }
+
       // Build retry feedback text if retrying
       // This will be passed through workflow state to survive the system message reset
       const retryFeedbackText =
@@ -1119,7 +1220,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT e
         output: {
           text,
           toolCalls: shouldRetry ? [] : toolCalls, // Clear tool calls on retry
-          tools: stepTools,
           usage: usage ?? inputData.output?.usage,
           steps,
           ...(object ? { object } : {}),

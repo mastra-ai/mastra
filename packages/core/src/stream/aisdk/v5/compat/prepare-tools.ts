@@ -24,15 +24,19 @@ type PreparedTool =
 type PreparedToolChoice = LanguageModelV2ToolChoice | LanguageModelV3ToolChoice;
 
 /**
- * Checks if a tool is a provider tool by examining its id property.
- * Provider tools have an id in the format '<provider>.<tool_name>' (e.g., 'openai.web_search').
- * This works for both V5 and V6 provider tools.
+ * Checks if a tool is a provider-defined tool from the AI SDK.
+ * Provider tools (like openai.tools.webSearch()) are created by the AI SDK with:
+ * - type: "provider-defined" (AI SDK v5) or "provider" (AI SDK v6)
+ * - id: in format 'provider.tool_name' (e.g., 'openai.web_search')
  */
 function isProviderTool(tool: unknown): tool is { id: string; args?: Record<string, unknown> } {
   if (typeof tool !== 'object' || tool === null) return false;
   const t = tool as Record<string, unknown>;
-  // Check for id property with provider prefix format
-  return typeof t.id === 'string' && t.id.includes('.');
+
+  // Provider tools have type: "provider-defined" (v5) or "provider" (v6)
+  // This is the reliable marker set by the AI SDK's createProviderDefinedToolFactory
+  const isProviderType = t.type === 'provider-defined' || t.type === 'provider';
+  return isProviderType && typeof t.id === 'string';
 }
 
 /**
@@ -41,6 +45,53 @@ function isProviderTool(tool: unknown): tool is { id: string; args?: Record<stri
  */
 function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');
+}
+
+/**
+ * Recursively fixes JSON Schema properties that lack a 'type' key.
+ * Zod v4's toJSONSchema serializes z.any() to just { description: "..." } with no 'type',
+ * which providers like OpenAI reject. This converts such schemas to a permissive type union.
+ */
+function fixTypelessProperties(schema: Record<string, unknown>): Record<string, unknown> {
+  if (typeof schema !== 'object' || schema === null) return schema;
+
+  const result = { ...schema };
+
+  if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties as Record<string, unknown>).map(([key, value]) => {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          return [key, value];
+        }
+        const propSchema = value as Record<string, unknown>;
+        const hasType = 'type' in propSchema;
+        const hasRef = '$ref' in propSchema;
+        const hasAnyOf = 'anyOf' in propSchema;
+        const hasOneOf = 'oneOf' in propSchema;
+        const hasAllOf = 'allOf' in propSchema;
+
+        if (!hasType && !hasRef && !hasAnyOf && !hasOneOf && !hasAllOf) {
+          // Exclude 'array' from the fallback: an array without a meaningful items schema
+          // is unusable by the LLM, and including it with items: {} causes Gemini to reject
+          // the schema (items is only valid when type is exclusively ARRAY).
+          const { items: _items, ...rest } = propSchema;
+          return [key, { ...rest, type: ['string', 'number', 'integer', 'boolean', 'object', 'null'] }];
+        }
+        // Recurse into nested object schemas
+        return [key, fixTypelessProperties(propSchema)];
+      }),
+    );
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = (result.items as Record<string, unknown>[]).map(item => fixTypelessProperties(item));
+    } else if (typeof result.items === 'object') {
+      result.items = fixTypelessProperties(result.items as Record<string, unknown>);
+    }
+  }
+
+  return result;
 }
 
 export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
@@ -59,9 +110,10 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   toolChoice: PreparedToolChoice | undefined;
 } {
   if (Object.keys(tools || {}).length === 0) {
+    // Preserve explicit 'none' toolChoice to tell the LLM not to attempt tool calls
     return {
       tools: undefined,
-      toolChoice: undefined,
+      toolChoice: toolChoice === 'none' ? { type: 'none' as const } : undefined,
     };
   }
 
@@ -96,7 +148,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
           if ('inputSchema' in tool) {
             inputSchema = tool.inputSchema;
           } else if ('parameters' in tool) {
-            // @ts-ignore tool is not part
+            // @ts-expect-error tool is not part
             inputSchema = tool.parameters;
           }
 
@@ -116,7 +168,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 type: 'function' as const,
                 name,
                 description: sdkTool.description,
-                inputSchema: asSchema(sdkTool.inputSchema).jsonSchema,
+                inputSchema: fixTypelessProperties(asSchema(sdkTool.inputSchema).jsonSchema as Record<string, unknown>),
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {

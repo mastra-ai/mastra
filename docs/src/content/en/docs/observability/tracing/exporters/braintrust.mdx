@@ -14,7 +14,7 @@ packages:
 ## Installation
 
 ```bash npm2yarn
-npm install @mastra/braintrust@beta
+npm install @mastra/braintrust@latest
 ```
 
 ## Configuration
@@ -22,9 +22,9 @@ npm install @mastra/braintrust@beta
 ### Prerequisites
 
 1. **Braintrust Account**: Sign up at [braintrust.dev](https://www.braintrust.dev/)
-2. **Project**: Create or select a project for your traces
-3. **API Key**: Generate in Braintrust Settings → API Keys
-4. **Environment Variables**: Set your credentials:
+1. **Project**: Create or select a project for your traces
+1. **API Key**: Generate in Braintrust Settings → API Keys
+1. **Environment Variables**: Set your credentials:
 
 ```bash title=".env"
 BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
@@ -38,20 +38,20 @@ BRAINTRUST_ENDPOINT=https://api.braintrust.dev  # Custom endpoint if needed
 With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { BraintrustExporter } from "@mastra/braintrust";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       braintrust: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new BraintrustExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Explicit Configuration
@@ -59,25 +59,25 @@ export const mastra = new Mastra({
 You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { BraintrustExporter } from "@mastra/braintrust";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       braintrust: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new BraintrustExporter({
             apiKey: process.env.BRAINTRUST_API_KEY,
-            projectName: "my-project",
+            projectName: 'my-project',
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 ### Complete Configuration
@@ -88,32 +88,13 @@ new BraintrustExporter({
   apiKey: process.env.BRAINTRUST_API_KEY!,
 
   // Optional settings
-  projectName: "my-project", // Default: 'mastra-tracing'
-  endpoint: "https://api.braintrust.dev", // Custom endpoint if needed
-  logLevel: "info", // Diagnostic logging: debug | info | warn | error
-});
+  projectName: 'my-project', // Default: 'mastra-tracing'
+  endpoint: 'https://api.braintrust.dev', // Custom endpoint if needed
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+})
 ```
-
-## Using Tags
-
-Tags help you categorize and filter traces in the Braintrust dashboard. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags appear in Braintrust's trace view and can be used to filter and search traces. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
 
 ## Related
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Tracing Overview](/docs/observability/tracing/overview)
 - [Braintrust Documentation](https://www.braintrust.dev/docs)

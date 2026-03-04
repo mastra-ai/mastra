@@ -672,9 +672,9 @@ export function pgTests() {
         expect(schema).toContain('mastra_workflow_snapshot');
         expect(schema).toContain('mastra_scorers');
         expect(schema).toContain('mastra_ai_spans');
-        expect(schema).toContain('mastra_traces');
         expect(schema).toContain('mastra_resources');
         expect(schema).toContain('mastra_agents');
+        expect(schema).toContain('mastra_observational_memory');
       });
 
       it('should export schema with custom schema name', () => {
@@ -684,8 +684,8 @@ export function pgTests() {
         expect(schema).toContain('"my_custom_schema"."mastra_threads"');
         expect(schema).toContain('"my_custom_schema"."mastra_messages"');
 
-        // Verify constraint names include the schema prefix
-        expect(schema).toContain('my_custom_schema_mastra_workflow_snapshot_workflow_name_run_id_key');
+        // Verify constraint names include the schema prefix (truncated to 63 bytes for PG limit)
+        expect(schema).toContain('my_custom_schema_mastra_workflow_snapshot_workflow_name_run_id_');
         expect(schema).toContain('my_custom_schema_mastra_ai_spans_traceid_spanid_pk');
       });
 
@@ -714,6 +714,207 @@ export function pgTests() {
         expect(schema).toContain('"my_schema"."mastra_threads"');
         expect(schema).toContain('my_schema_mastra_workflow_snapshot_workflow_name_run_id_key');
         expect(schema).toContain('my_schema_mastra_ai_spans_traceid_spanid_pk');
+      });
+
+      it('should export default indexes for public schema', () => {
+        const schema = exportSchemas();
+
+        // Memory domain indexes
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_threads_resourceid_createdat_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_messages_thread_id_createdat_idx"');
+
+        // Observability domain indexes
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_traceid_startedat_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_parentspanid_startedat_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_name_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_spantype_startedat_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_root_spans_idx"');
+        expect(schema).toContain('WHERE "parentSpanId" IS NULL');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_entitytype_entityid_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_entitytype_entityname_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_ai_spans_orgid_userid_idx"');
+        expect(schema).toContain(
+          'CREATE INDEX IF NOT EXISTS "mastra_ai_spans_metadata_gin_idx" ON "public"."mastra_ai_spans" USING gin',
+        );
+        expect(schema).toContain(
+          'CREATE INDEX IF NOT EXISTS "mastra_ai_spans_tags_gin_idx" ON "public"."mastra_ai_spans" USING gin',
+        );
+
+        // Scores domain indexes
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "mastra_scores_trace_id_span_id_created_at_idx"');
+
+        // Scorer definitions domain indexes
+        expect(schema).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "idx_scorer_definition_versions_def_version"');
+
+        // Prompt blocks domain indexes
+        expect(schema).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "idx_prompt_block_versions_block_version"');
+      });
+
+      it('should export indexes with schema prefix for custom schema', () => {
+        const schema = exportSchemas('my_schema');
+
+        // Index names should have the schema prefix
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "my_schema_mastra_threads_resourceid_createdat_idx"');
+        expect(schema).toContain('CREATE INDEX IF NOT EXISTS "my_schema_mastra_ai_spans_traceid_startedat_idx"');
+        expect(schema).toContain(
+          'CREATE INDEX IF NOT EXISTS "my_schema_mastra_scores_trace_id_span_id_created_at_idx"',
+        );
+        expect(schema).toContain(
+          'CREATE UNIQUE INDEX IF NOT EXISTS "my_schema_idx_scorer_definition_versions_def_version"',
+        );
+        expect(schema).toContain(
+          'CREATE UNIQUE INDEX IF NOT EXISTS "my_schema_idx_prompt_block_versions_block_version"',
+        );
+
+        // Index table references should use the schema-qualified table name
+        expect(schema).toContain('ON "my_schema"."mastra_threads"');
+        expect(schema).toContain('ON "my_schema"."mastra_ai_spans"');
+      });
+
+      it('should export timestamp trigger for spans table', () => {
+        const schema = exportSchemas();
+
+        // Trigger function
+        expect(schema).toContain('CREATE OR REPLACE FUNCTION "public".trigger_set_timestamps()');
+        expect(schema).toContain('RETURNS TRIGGER');
+        expect(schema).toContain('LANGUAGE plpgsql');
+
+        // Trigger itself
+        expect(schema).toContain('CREATE TRIGGER "mastra_ai_spans_timestamps"');
+        expect(schema).toContain('BEFORE INSERT OR UPDATE ON "public"."mastra_ai_spans"');
+        expect(schema).toContain('EXECUTE FUNCTION "public".trigger_set_timestamps()');
+      });
+
+      it('should export timestamp trigger with custom schema', () => {
+        const schema = exportSchemas('my_schema');
+
+        expect(schema).toContain('CREATE OR REPLACE FUNCTION "my_schema".trigger_set_timestamps()');
+        expect(schema).toContain('BEFORE INSERT OR UPDATE ON "my_schema"."mastra_ai_spans"');
+        expect(schema).toContain('EXECUTE FUNCTION "my_schema".trigger_set_timestamps()');
+      });
+
+      it('should export observational memory table and index', () => {
+        const schema = exportSchemas();
+
+        // OM table
+        expect(schema).toContain('mastra_observational_memory');
+        expect(schema).toContain('"lookupKey"');
+        expect(schema).toContain('"activeObservations"');
+
+        // OM lookup key index
+        expect(schema).toContain(
+          'CREATE INDEX IF NOT EXISTS "idx_om_lookup_key" ON "public"."mastra_observational_memory" ("lookupKey")',
+        );
+      });
+
+      it('should export observational memory table with custom schema', () => {
+        const schema = exportSchemas('my_schema');
+
+        expect(schema).toContain('"my_schema"."mastra_observational_memory"');
+        expect(schema).toContain(
+          'CREATE INDEX IF NOT EXISTS "my_schema_idx_om_lookup_key" ON "my_schema"."mastra_observational_memory" ("lookupKey")',
+        );
+      });
+    });
+
+    // PG-specific: Unicode escape sequence handling in workflow snapshots
+    // See: https://github.com/mastra-ai/mastra/issues/11563
+    describe('Unicode Escape Sequence Handling', () => {
+      let unicodeStore: PostgresStore;
+      let workflowsStorage: any;
+
+      beforeAll(async () => {
+        // Create a dedicated store for these tests to avoid pool lifecycle issues
+        // with other tests that close/reopen the main store
+        unicodeStore = new PostgresStore({ ...TEST_CONFIG, id: 'unicode-test-store' });
+        await unicodeStore.init();
+        workflowsStorage = await unicodeStore.getStore('workflows');
+      });
+
+      afterAll(async () => {
+        try {
+          await unicodeStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        await workflowsStorage.dangerouslyClearAll();
+      });
+
+      it('should handle null characters in snapshot when filtering by status', async () => {
+        // Test for GitHub issue #11563: "Unsupported unicode escape sequence" when listing messages
+        // PostgreSQL's jsonb cast fails on null characters (\u0000) with error 22P05
+        const workflowName = 'unicode_null_test';
+        const runId = `run-${Date.now()}`;
+
+        const snapshotWithNull = {
+          runId,
+          status: 'success',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+          userMessage: 'Ótimo, já entendi! Vamos lá então.',
+          problematicContent: 'Text with null char: \u0000 and accented: áéíóú',
+        };
+
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: snapshotWithNull,
+        });
+
+        // This should NOT throw "unsupported Unicode escape sequence" error
+        const { runs } = await workflowsStorage.listWorkflowRuns({ status: 'success' });
+
+        expect(runs.length).toBeGreaterThanOrEqual(1);
+        const foundRun = runs.find((r: any) => r.workflowName === workflowName);
+        expect(foundRun).toBeDefined();
+        expect(foundRun.snapshot.userMessage).toBe('Ótimo, já entendi! Vamos lá então.');
+        // Verify the null character is sanitized (removed) to allow jsonb storage
+        // PostgreSQL jsonb type does not support null characters, so they are stripped during insertion
+        expect(foundRun.snapshot.problematicContent).toBe('Text with null char:  and accented: áéíóú');
+        expect(foundRun.snapshot.problematicContent.includes('\u0000')).toBe(false);
+      });
+
+      it('should handle unpaired Unicode surrogates in snapshot when filtering by status', async () => {
+        // PostgreSQL's jsonb cast fails on unpaired surrogates (\uD800-\uDFFF)
+        const workflowName = 'unicode_surrogate_test';
+        const runId = `run-${Date.now()}`;
+
+        const snapshotWithSurrogate = {
+          runId,
+          status: 'failed',
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          waitingPaths: {},
+          timestamp: Date.now(),
+          problematicHigh: 'Text with high surrogate: \ud800 here',
+          problematicLow: 'Text with low surrogate: \udc00 here',
+        };
+
+        await workflowsStorage.persistWorkflowSnapshot({
+          workflowName,
+          runId,
+          snapshot: snapshotWithSurrogate,
+        });
+
+        // This should NOT throw "Unicode low surrogate must follow a high surrogate" error
+        const { runs } = await workflowsStorage.listWorkflowRuns({ status: 'failed' });
+
+        expect(runs.length).toBeGreaterThanOrEqual(1);
+        const foundRun = runs.find((r: any) => r.workflowName === workflowName);
+        expect(foundRun).toBeDefined();
       });
     });
   });

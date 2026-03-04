@@ -7,7 +7,7 @@ export interface ApiError extends Error {
 }
 
 export type ServerBundleOptions = {
-  playground?: boolean;
+  studio?: boolean;
   isDev?: boolean;
   tools: Record<string, Tool>;
 };

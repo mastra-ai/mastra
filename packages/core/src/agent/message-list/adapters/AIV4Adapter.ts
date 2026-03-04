@@ -26,6 +26,24 @@ function filterDataParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
   return parts.filter((part): part is UIMessageV4Part => !part.type.startsWith('data-'));
 }
 
+/**
+ * Filter out empty text parts from message parts array.
+ * Empty text blocks are not allowed by Anthropic's API and cause request failures.
+ * This can happen during streaming when text-start/text-end events occur without actual content.
+ * However, if the only part is an empty text part, it is preserved as a legitimate placeholder
+ * (e.g. empty assistant messages between tool results and user messages).
+ */
+function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
+  const hasNonEmptyParts = parts.some(part => !(part.type === 'text' && part.text === ''));
+  if (!hasNonEmptyParts) return parts;
+  return parts.filter(part => {
+    if (part.type === 'text') {
+      return part.text !== '';
+    }
+    return true;
+  });
+}
+
 // Re-export for backward compatibility
 export type { UIMessageWithMetadata };
 
@@ -54,7 +72,7 @@ export class AIV4Adapter {
     const contentString =
       typeof m.content.content === `string` && m.content.content !== ''
         ? m.content.content
-        : m.content.parts.reduce((prev, part) => {
+        : (m.content.parts ?? []).reduce((prev, part) => {
             if (part.type === `text`) {
               // return only the last text part like AI SDK does
               return part.text;
@@ -63,9 +81,10 @@ export class AIV4Adapter {
           }, '');
 
     const parts: MastraMessageContentV2['parts'] = [];
+    const sourceParts = m.content.parts ?? [];
 
-    if (m.content.parts.length) {
-      for (const part of m.content.parts) {
+    if (sourceParts.length) {
+      for (const part of sourceParts) {
         if (part.type === `file`) {
           // Normalize part.data to ensure it's a valid URL or data URI
           let normalizedUrl: string;
@@ -100,7 +119,7 @@ export class AIV4Adapter {
           // Find the step number for this tool invocation
           let currentStep = -1;
           let toolStep = -1;
-          for (const innerPart of m.content.parts) {
+          for (const innerPart of sourceParts) {
             if (innerPart.type === `step-start`) currentStep++;
             if (
               innerPart.type === `tool-invocation` &&
@@ -223,9 +242,12 @@ export class AIV4Adapter {
     ctx: AIV4AdapterContext,
     messageSource: MessageSource,
   ): MastraDBMessage {
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredParts = message.parts ? filterEmptyTextParts(message.parts) : [];
+
     const content: MastraMessageContentV2 = {
       format: 2,
-      parts: message.parts,
+      parts: filteredParts,
     };
 
     if (message.toolInvocations) content.toolInvocations = message.toolInvocations;
@@ -407,6 +429,9 @@ export class AIV4Adapter {
               if (aiV4Part.providerOptions) {
                 part.providerMetadata = aiV4Part.providerOptions;
               }
+              if (aiV4Part.filename) {
+                (part as Record<string, unknown>).filename = aiV4Part.filename;
+              }
               parts.push(part);
             } else if (typeof aiV4Part.data === 'string') {
               const categorized = categorizeFileData(aiV4Part.data, aiV4Part.mimeType);
@@ -420,6 +445,9 @@ export class AIV4Adapter {
                 if (aiV4Part.providerOptions) {
                   part.providerMetadata = aiV4Part.providerOptions;
                 }
+                if (aiV4Part.filename) {
+                  (part as Record<string, unknown>).filename = aiV4Part.filename;
+                }
                 parts.push(part);
               } else {
                 try {
@@ -430,6 +458,9 @@ export class AIV4Adapter {
                   };
                   if (aiV4Part.providerOptions) {
                     part.providerMetadata = aiV4Part.providerOptions;
+                  }
+                  if (aiV4Part.filename) {
+                    (part as Record<string, unknown>).filename = aiV4Part.filename;
                   }
                   parts.push(part);
                 } catch (error) {
@@ -446,6 +477,9 @@ export class AIV4Adapter {
                 if (aiV4Part.providerOptions) {
                   part.providerMetadata = aiV4Part.providerOptions;
                 }
+                if (aiV4Part.filename) {
+                  (part as Record<string, unknown>).filename = aiV4Part.filename;
+                }
                 parts.push(part);
               } catch (error) {
                 console.error(`Failed to convert binary data to base64 in CoreMessage file part: ${error}`, error);
@@ -457,9 +491,12 @@ export class AIV4Adapter {
       }
     }
 
+    // Filter out empty text parts to prevent Anthropic API errors
+    const filteredParts = filterEmptyTextParts(parts);
+
     const content: MastraDBMessage['content'] = {
       format: 2,
-      parts,
+      parts: filteredParts,
     };
 
     if (toolInvocations.length) content.toolInvocations = toolInvocations;

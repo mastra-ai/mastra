@@ -1,11 +1,20 @@
-import { MastraStorage } from './base';
+import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
+import { InMemoryBlobStore } from './domains/blobs/inmemory';
+import { DatasetsInMemory } from './domains/datasets/inmemory';
+import { ExperimentsInMemory } from './domains/experiments/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
+import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
+import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
+import { InMemoryScorerDefinitionsStorage } from './domains/scorer-definitions/inmemory';
 import { ScoresInMemory } from './domains/scores/inmemory';
+import { InMemorySkillsStorage } from './domains/skills/inmemory';
 import { WorkflowsInMemory } from './domains/workflows/inmemory';
+import { InMemoryWorkspacesStorage } from './domains/workspaces/inmemory';
 /**
  * In-memory storage implementation for testing and development.
  *
@@ -25,7 +34,7 @@ import { WorkflowsInMemory } from './domains/workflows/inmemory';
  * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
  * ```
  */
-export class InMemoryStore extends MastraStorage {
+export class InMemoryStore extends MastraCompositeStore {
   stores: StorageDomains;
 
   /**
@@ -50,6 +59,15 @@ export class InMemoryStore extends MastraStorage {
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
+      datasets: new DatasetsInMemory({ db: this.#db }),
+      experiments: new ExperimentsInMemory({ db: this.#db }),
+      promptBlocks: new InMemoryPromptBlocksStorage({ db: this.#db }),
+      scorerDefinitions: new InMemoryScorerDefinitionsStorage({ db: this.#db }),
+      mcpClients: new InMemoryMCPClientsStorage({ db: this.#db }),
+      mcpServers: new InMemoryMCPServersStorage({ db: this.#db }),
+      workspaces: new InMemoryWorkspacesStorage({ db: this.#db }),
+      skills: new InMemorySkillsStorage({ db: this.#db }),
+      blobs: new InMemoryBlobStore(),
     };
   }
 

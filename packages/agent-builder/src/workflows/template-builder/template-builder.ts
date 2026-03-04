@@ -53,6 +53,8 @@ import {
   resolveModel,
 } from '../../utils';
 
+type AgentBuilderInputSchemaType = z.infer<typeof AgentBuilderInputSchema>;
+
 // Step 1: Clone template to temp directory
 const cloneTemplateStep = createStep({
   id: 'clone-template',
@@ -561,27 +563,31 @@ const programmaticFileCopyStep = createStep({
         const baseName = basename(name, extname(name));
         const ext = extname(name);
 
+        // Helper: split a name into words by hyphens, underscores, or camelCase boundaries
+        const toWords = (s: string): string[] => {
+          return (
+            s
+              .replace(/[-_]/g, ' ')
+              // split "HTTPServer" -> "HTTP Server"
+              .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+              .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+              .split(/\s+/)
+              .filter(Boolean)
+              .map(w => w.toLowerCase())
+          );
+        };
+
+        const words = toWords(baseName);
+
         switch (convention) {
           case 'camelCase':
-            return (
-              baseName
-                .replace(/[-_]/g, '')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? p1.toLowerCase() : p1)) + ext
-            );
+            return words.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('') + ext;
           case 'snake_case':
-            return (
-              baseName
-                .replace(/[-]/g, '_')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '_') + p1.toLowerCase()) + ext
-            );
+            return words.join('_') + ext;
           case 'kebab-case':
-            return (
-              baseName
-                .replace(/[_]/g, '-')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '-') + p1.toLowerCase()) + ext
-            );
+            return words.join('-') + ext;
           case 'PascalCase':
-            return baseName.replace(/[-_]/g, '').replace(/^[a-z]/, match => match.toUpperCase()) + ext;
+            return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('') + ext;
           default:
             return name;
         }
@@ -1614,7 +1620,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .then(orderUnitsStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
@@ -1625,7 +1631,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
     const packageResult = getStepResult(analyzePackageStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
@@ -1635,7 +1641,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   })
   .then(packageMergeStep)
   .map(async ({ getInitData }) => {
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       targetPath: initData.targetPath,
     };
@@ -1645,7 +1651,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const cloneResult = getStepResult(cloneTemplateStep);
     const orderResult = getStepResult(orderUnitsStep);
     const installResult = getStepResult(installStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     if (shouldAbortWorkflow(installResult)) {
       throw new Error(`Failure in install step: ${installResult.error || 'Install failed'}`);
@@ -1663,7 +1669,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const copyResult = getStepResult(programmaticFileCopyStep);
     const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     return {
       conflicts: copyResult.conflicts,
@@ -1680,7 +1686,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const orderResult = getStepResult(orderUnitsStep);
     const copyResult = getStepResult(programmaticFileCopyStep);
     const mergeResult = getStepResult(intelligentMergeStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     return {
       commitSha: cloneResult.commitSha,

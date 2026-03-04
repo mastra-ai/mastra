@@ -179,8 +179,8 @@ function toUpperSnakeCase(str: string): string {
  * @example
  * ```ts
  * // Storage operations
- * createStoreErrorId('storage', 'PG', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED')
- * // Returns: 'MASTRA_STORAGE_PG_LIST_THREADS_BY_RESOURCE_ID_FAILED'
+ * createStoreErrorId('storage', 'PG', 'LIST_THREADS', 'FAILED')
+ * // Returns: 'MASTRA_STORAGE_PG_LIST_THREADS_FAILED'
  *
  * // Vector operations
  * createStoreErrorId('vector', 'CHROMA', 'QUERY', 'FAILED')
@@ -317,4 +317,47 @@ export function filterByDateRange<T>(items: T[], getCreatedAt: (item: T) => Date
   }
 
   return result;
+}
+
+/**
+ * Deep equality check for JSON values.
+ * Compares primitives, arrays, objects, and Date instances recursively.
+ *
+ * @param a - First value to compare
+ * @param b - Second value to compare
+ * @returns true if values are deeply equal, false otherwise
+ */
+export function jsonValueEquals(a: unknown, b: unknown): boolean {
+  if (a === undefined || b === undefined) {
+    return a === b;
+  }
+  if (a === null || b === null) {
+    return a === b;
+  }
+  if (typeof a !== typeof b) {
+    return false;
+  }
+  // Handle Date objects
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+  if (a instanceof Date || b instanceof Date) {
+    return false; // One is Date, other is not
+  }
+  if (typeof a === 'object') {
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length) return false;
+      return a.every((val, i) => jsonValueEquals(val, b[i]));
+    }
+    if (Array.isArray(a) || Array.isArray(b)) {
+      return false;
+    }
+    const aKeys = Object.keys(a as object);
+    const bKeys = Object.keys(b as object);
+    if (aKeys.length !== bKeys.length) return false;
+    return aKeys.every(key =>
+      jsonValueEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+    );
+  }
+  return a === b;
 }

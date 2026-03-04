@@ -1,8 +1,8 @@
+import { TransformStream } from 'node:stream/web';
 import type { LLMStepResult } from '@mastra/core/agent';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { AgentChunkType, ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
 import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
-import type { ZodType } from 'zod';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
 import {
@@ -87,7 +87,9 @@ const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
 export function WorkflowStreamToAISDKTransformer({
   includeTextStreamParts,
-}: { includeTextStreamParts?: boolean } = {}) {
+  sendReasoning,
+  sendSources,
+}: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -96,7 +98,7 @@ export function WorkflowStreamToAISDKTransformer({
     }
   >();
   return new TransformStream<
-    ChunkType,
+    ChunkType<any>,
     | {
         data?: string;
         type?: 'start' | 'finish';
@@ -119,7 +121,10 @@ export function WorkflowStreamToAISDKTransformer({
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts);
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts, {
+        sendReasoning,
+        sendSources,
+      });
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -178,10 +183,10 @@ export function AgentNetworkToAISDKTransformer() {
   });
 }
 
-export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
+export function AgentStreamToAISDKTransformer<OUTPUT>({
   lastMessageId,
-  sendStart,
-  sendFinish,
+  sendStart = true,
+  sendFinish = true,
   sendReasoning,
   sendSources,
   messageMetadata,
@@ -199,7 +204,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
   let tripwireOccurred = false;
   let finishEventSent = false;
 
-  return new TransformStream<ChunkType<TOutput>, object>({
+  return new TransformStream<ChunkType<OUTPUT>, object>({
     transform(chunk, controller) {
       // Track if tripwire occurred
       if (chunk.type === 'tripwire') {
@@ -229,7 +234,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
       if (transformedChunk) {
         if (transformedChunk.type === 'tool-agent') {
           const payload = transformedChunk.payload;
-          const agentTransformed = transformAgent<TOutput>(payload, bufferedSteps);
+          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
           if (agentTransformed) controller.enqueue(agentTransformed);
         } else if (transformedChunk.type === 'tool-workflow') {
           const payload = transformedChunk.payload;
@@ -258,10 +263,7 @@ export function AgentStreamToAISDKTransformer<TOutput extends ZodType<any>>({
   });
 }
 
-export function transformAgent<TOutput extends ZodType<any>>(
-  payload: ChunkType<TOutput>,
-  bufferedSteps: Map<string, any>,
-) {
+export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps: Map<string, any>) {
   let hasChanged = false;
   switch (payload.type) {
     case 'start':
@@ -410,8 +412,8 @@ export function transformAgent<TOutput extends ZodType<any>>(
   return null;
 }
 
-export function transformWorkflow<TOutput extends ZodType<any>>(
-  payload: ChunkType<TOutput>,
+export function transformWorkflow<OUTPUT>(
+  payload: ChunkType<OUTPUT>,
   bufferedWorkflows: Map<
     string,
     {
@@ -421,6 +423,7 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
   >,
   isNested?: boolean,
   includeTextStreamParts?: boolean,
+  streamOptions?: { sendReasoning?: boolean; sendSources?: boolean },
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -518,10 +521,13 @@ export function transformWorkflow<TOutput extends ZodType<any>>(
       const output = payload.payload.output;
 
       if (includeTextStreamParts && output && isMastraTextStreamChunk(output)) {
-        const part = convertMastraChunkToAISDKv5({ chunk: output, mode: 'stream' });
+        // @ts-expect-error - generic type mismatch in conversion
+        const part = convertMastraChunkToAISDKv5<OUTPUT>({ chunk: output, mode: 'stream' });
 
-        const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+        const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
+          sendReasoning: streamOptions?.sendReasoning,
+          sendSources: streamOptions?.sendSources,
           onError(error) {
             return safeParseErrorObject(error);
           },
@@ -846,8 +852,25 @@ export function transformNetwork(
         },
       } as const;
 
+      // Check if the routing agent handled the request directly (no delegation)
+      // In that case, the result text is the selectionReason (routing logic), not user-facing content.
+      // Text events for the actual answer will come from the validation step instead.
+      // Scope to the current step (via payload.payload.runId) to avoid stale matches in multi-iteration scenarios.
+      const finishStepId = payload.payload?.runId;
+      const routingStep = current.steps.find(
+        step => step.id === finishStepId && step.task?.id === 'none' && step.task?.type === 'none',
+      );
+      const isDirectHandling = !!routingStep;
+
       // Fallback: emit text events from result if core didn't send routing-agent-text-* events
-      if (!current.hasEmittedText && resultText && typeof resultText === 'string' && resultText.length > 0) {
+      // Skip this when routing agent handled directly, as the result contains internal routing reasoning
+      if (
+        !isDirectHandling &&
+        !current.hasEmittedText &&
+        resultText &&
+        typeof resultText === 'string' &&
+        resultText.length > 0
+      ) {
         current.hasEmittedText = true;
         return [
           { type: 'text-start', id: payload.runId } as const,
@@ -872,6 +895,12 @@ export function transformNetwork(
         },
       } as const;
     }
+    case 'network-object':
+    case 'network-object-result': {
+      // Structured output chunks - currently not exposed in AI SDK format
+      // These are used by MastraAgentNetworkStream's .object and .objectStream getters
+      return null;
+    }
     default: {
       // Check for custom data chunks first (before processing as events)
       if (isAgentExecutionDataChunkType(payload)) {
@@ -895,7 +924,7 @@ export function transformNetwork(
       }
 
       if (payload.type.startsWith('agent-execution-event-')) {
-        const stepId = payload.payload.runId;
+        const stepId = (payload.payload as AgentChunkType).runId;
         const current = bufferedNetworks.get(payload.runId!);
         if (!current) return null;
 
@@ -923,7 +952,7 @@ export function transformNetwork(
       }
 
       if (payload.type.startsWith('workflow-execution-event-')) {
-        const stepId = payload.payload.runId;
+        const stepId = (payload.payload as WorkflowStreamEvent).runId;
         const current = bufferedNetworks.get(payload.runId!);
         if (!current) return null;
 

@@ -64,14 +64,14 @@ function getUpgradeToV1Messages(area?: string): PromptMessage[] {
           type: 'text',
           text: `I need help migrating my Mastra ${area} code from v0.x to v1.0. Use the mastraMigration tool to:
 
-1. If packages aren't already at the 'beta' tag, upgrade packages to the 'beta' tag and do an install of the new packages.
+1. If packages aren't already at the 'latest' tag, upgrade packages to the 'latest' tag and do an install of the new packages.
 2. First, try to get the specific migration guide for "${area}" using path: "upgrade-to-v1/${area}"
 3. If that doesn't exist, try the alternate form (singular/plural):
    - If "${area}" ends with 's', try without the 's' (e.g., "agents" → "agent")
    - If "${area}" doesn't end with 's', try adding 's' (e.g., "agent" → "agents")
 4. If the guide exists, walk me through the changes step by step
 5. If neither form exists, list available migration guides in "upgrade-to-v1/" and suggest which ones might be relevant to "${area}"
-6. After you find the guide, collect all the codemod calls to run to codemods. These callouts are marked with ":::tip[Codemod]" in the docs. Run the codemods with "npx @mastra/codemod@beta <codemod-name> <path>" to automate all those changes. Afterwards, help me with any remaining manual changes needed.`,
+6. After you find the guide, collect all the codemod calls to run to codemods. These callouts are marked with "> **Codemod:**" in the docs. Run the codemods with "npx @mastra/codemod@latest <codemod-name> <path>" to automate all those changes. Afterwards, help me with any remaining manual changes needed.`,
         },
       },
     ];
@@ -84,11 +84,11 @@ function getUpgradeToV1Messages(area?: string): PromptMessage[] {
         type: 'text',
         text: `I need to migrate my Mastra project from v0.x to v1.0. Use the mastraMigration tool to:
 
-1. If packages aren't already at the 'beta' tag, upgrade packages to the 'beta' tag and do an install of the new packages.
+1. If packages aren't already at the 'latest' tag, upgrade packages to the 'latest' tag and do an install of the new packages.
 2. First, list all available migration guides with path: "upgrade-to-v1/"
 2. Give me a high-level overview of what changed in each area
 3. Find relevant migration areas to focus on based on my project's codebase and confirm the list with me
-4. After the areas are confirmed, check the migration guides for callouts to codemods. These callouts are marked with ":::tip[Codemod]" in the docs. Run the codemods with "npx @mastra/codemod@beta v1" to automate all those changes. Afterwards, help me with any remaining manual changes needed.
+4. After the areas are confirmed, check the migration guides for callouts to codemods. These callouts are marked with "> **Codemod:**" in the docs. Run the codemods with "npx @mastra/codemod@latest v1" to automate all those changes. Afterwards, help me with any remaining manual changes needed.
 
 After the areas are confirmed, we'll go through each one systematically.`,
       },

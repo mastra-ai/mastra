@@ -59,4 +59,4 @@ curl -X POST http://localhost:4111/api/agents/assistantAgent/generate \
 ## Documentation
 
 - [Express Adapter docs](https://mastra.ai/docs/v1/server-db/express-adapter)
-- [Server Adapters overview](https://mastra.ai/docs/v1/server-db/server-adapters)
+- [Server Adapters overview](https://mastra.ai/docs/v1/server/server-adapters)

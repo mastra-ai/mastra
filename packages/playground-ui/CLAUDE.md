@@ -2,7 +2,14 @@
 
 Standards and conventions for building components in `packages/playground-ui`.
 
----
+## MUST DO EVERY SINGLE TIME
+
+On every change to this package, you MUST ALWAYS follow these instructions:
+
+- use `e2e-frontend-validation` skill
+- use `react-best-practices` skill
+- use `tailwind-best-practices` skill
+
 
 ## Commands
 
@@ -19,8 +26,6 @@ Standards and conventions for building components in `packages/playground-ui`.
 
 - `pnpm dev:playground`: Start dev servers for playground, playground-ui, and react client SDK
 - `pnpm build:cli`: Build the CLI (includes playground and playground-ui as dependencies)
-
----
 
 ## Package Architecture
 
@@ -41,139 +46,6 @@ Standards and conventions for building components in `packages/playground-ui`.
 - **Business Components**: Domain-specific components (`src/domains`)
   - Examples: `<AgentsTable>`, `<AgentInformation>`
 
----
-
-## Styling Guidelines
-
-### Tailwind CSS (v3.x)
-
-- Use Tailwind for all styling
-- **REQUIRED**: Use design tokens from `src/ds/tokens/index.ts`
-- **FORBIDDEN**: Arbitrary values (e.g., `bg-[#1A1A1A]`) unless explicitly requested
-
-#### Examples
-
-```tsx
-// ❌ Bad
-<div className="bg-[#1A1A1A] shadow-[0_4px_12px_rgba(0,0,0,0.5)]" />
-
-// ✅ Good
-<div className="bg-surface4 shadow-lg" />
-```
-
-### Complex Styles
-
-- Prefer Tailwind utilities over custom CSS files for shadows, gradients, etc.
-- Only use CSS files when Tailwind cannot express the style
-
----
-
-## Coding Conventions
-
-### Naming
-
-- **Components**: PascalCase (e.g., `EntryList`)
-- **Files**: kebab-case (e.g., `entry-list.tsx`)
-
-### Exports
-
-- Use **named exports** only
-- Avoid default exports
-
-```tsx
-// ✅ Good
-export function EntryList() { ... }
-
-// ❌ Bad
-export default function EntryList() { ... }
-```
-
-### Reusability
-
-- Before creating a component, verify it doesn't already exist
-- Reuse existing components instead of duplicating
-
----
-
-## React Code Style
-
-### Data Fetching
-
-- **REQUIRED**: Use TanStack Query for all data fetching hooks
-- **REQUIRED**: Use `useMastraClient` SDK for API calls
-- **FORBIDDEN**: Direct `fetch()` calls
-
-```tsx
-// ✅ Good
-import { useMastraClient } from '.@mastra/react';
-import { useQuery } from '@tanstack/react-query';
-
-export function useAgents() {
-  const client = useMastraClient();
-  return useQuery({
-    queryKey: ['agents'],
-    queryFn: () => client.getAgents(),
-  });
-}
-
-// ❌ Bad
-export function useAgents() {
-  const [data, setData] = useState(null);
-  useEffect(() => {
-    fetch('/api/agents')
-      .then(r => r.json())
-      .then(setData);
-  }, []);
-  return data;
-}
-```
-
-### Type Definitions
-
-- **REQUIRED**: Export explicit prop types separately
-- Keep type definitions alongside components
-
-```tsx
-// ✅ Good
-export type AppProps = { a: number; b: number };
-export function App({ a, b }: AppProps) {
-  return <div>{a + b}</div>;
-}
-
-// ❌ Bad
-export function App({ a, b }: { a: number; b: number }) {
-  return <div>{a + b}</div>;
-}
-```
-
-### State Management
-
-- Prefer derived values over `useState` + `useEffect`
-- Minimize `useEffect` usage
-- Calculate values directly when possible
-
-```tsx
-// ✅ Good
-export type AppProps = { a: number; b: number };
-export function App({ a, b }: AppProps) {
-  return <div>{a + b}</div>;
-}
-
-// ❌ Bad
-export type AppProps = { a: number; b: number };
-export function App({ a, b }: AppProps) {
-  const [result, setResult] = useState<number>(0);
-
-  useEffect(() => {
-    setResult(a + b);
-  }, [a, b]);
-
-  return <div>{result}</div>;
-}
-```
-
----
-
 ## Key Principles
 
 - All components must work in both React Router and Next.js
@@ -182,3 +54,4 @@ export function App({ a, b }: AppProps) {
 - Prioritize design system tokens for consistency
 - Minimize side effects and state management
 - Use TanStack Query for all server state
+

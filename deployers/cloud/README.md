@@ -76,7 +76,7 @@ MASTRA_STORAGE_AUTH_TOKEN=your-auth-token
 BUSINESS_API_RUNNER_LOGS_ENDPOINT=your-logs-endpoint
 BUSINESS_JWT_TOKEN=your-jwt-token
 
-# Playground Configuration
+# Studio Configuration
 PLAYGROUND_JWT_TOKEN=your-playground-jwt-token
 
 # Runtime Configuration
@@ -109,7 +109,7 @@ The deployer generates a server entry that:
 
 4. **Starts Server**:
    - Creates Node.js server with Mastra configuration
-   - Disables playground and Swagger UI for production
+   - Disables Studio and Swagger UI for production
    - Exports tools for API access
 
 ## Project Structure

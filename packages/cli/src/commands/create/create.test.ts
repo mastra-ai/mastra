@@ -149,7 +149,7 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'my-project',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
       expect(installDependencies).toHaveBeenCalledWith('/my-project');
@@ -182,7 +182,7 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'user-chosen-name',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
     });
@@ -210,7 +210,7 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'my-project',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
     });
@@ -362,7 +362,7 @@ describe('create command with --template flag', () => {
           slug: 'template-deep-research',
         }),
         projectName: 'my-github-project',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
       expect(note).toHaveBeenCalled();

@@ -24,6 +24,7 @@ export type DefaultNode = Node<
     isParallel?: boolean;
     canSuspend?: boolean;
     isForEach?: boolean;
+    metadata?: Record<string, unknown>;
   },
   'default-node'
 >;
@@ -79,7 +80,7 @@ export function WorkflowDefaultNode({
         data-workflow-step-status={displayStatus ?? 'idle'}
         data-testid="workflow-default-node"
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border-sm border-border1',
+          'bg-surface3 rounded-lg w-[274px] border border-border1',
           hasSpecialBadge ? 'pt-0' : 'pt-2',
           displayStatus === 'success' && 'bg-accent1Darker',
           displayStatus === 'failed' && 'bg-accent2Darker',
@@ -132,27 +133,49 @@ export function WorkflowDefaultNode({
             {displayStatus === 'suspended' && <PauseIcon className="text-accent3" />}
             {displayStatus === 'waiting' && <HourglassIcon className="text-accent5" />}
             {displayStatus === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-            {!step && <CircleDashed className="text-icon2" />}
+            {!step && <CircleDashed className="text-neutral2" />}
           </Icon>
 
-          <Txt variant="ui-lg" className="text-icon6 font-medium inline-flex items-center gap-1 justify-between w-full">
+          <Txt
+            variant="ui-lg"
+            className="text-neutral6 font-medium inline-flex items-center gap-1 justify-between w-full"
+          >
             {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
         </div>
 
         {description && (
-          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+          <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
             {description}
           </Txt>
         )}
+
+        {isForEachNode && step?.foreachProgress && (
+          <div className="px-3 pb-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-surface1 rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-300',
+                  step.foreachProgress.iterationStatus === 'failed' ? 'bg-accent2' : 'bg-accent1',
+                )}
+                style={{
+                  width: `${step.foreachProgress.totalCount > 0 ? (step.foreachProgress.completedCount / step.foreachProgress.totalCount) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
+              {step.foreachProgress.completedCount} / {step.foreachProgress.totalCount}
+            </Txt>
+          </div>
+        )}
         {duration && (
-          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+          <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
             sleeps for <strong>{duration}ms</strong>
           </Txt>
         )}
 
         {date && (
-          <Txt variant="ui-sm" className="text-icon3 px-3 pb-2">
+          <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
             sleeps until <strong>{new Date(date).toLocaleString()}</strong>
           </Txt>
         )}
