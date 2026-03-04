@@ -983,11 +983,18 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
           expect((onErrorArg as Error).message).toBe('Error with stop finish');
         });
 
-        it('should throw in resumeGenerate when model errors after resume', async () => {
+        // The error-chunk-with-mismatched-finishReason scenario requires bypassing the
+        // AISDKV5LanguageModel wrapper (which converts doGenerate results via
+        // createStreamFromGenerateResult and never inserts error chunks). We subclass
+        // AISDKV5LanguageModel so the model passes the instanceof check in resolveModel
+        // (avoiding re-wrapping), then override doGenerate to return a raw stream containing
+        // an error chunk with finishReason 'stop' — the exact scenario this fix addresses.
+        it('should throw in resumeGenerate when error chunk has non-error finishReason', async () => {
           const { Mastra } = await import('../../mastra');
           const { InMemoryStore } = await import('../../storage');
+          const { AISDKV5LanguageModel } = await import('../../llm/model/aisdk/v5/model');
 
-          const resumeError = new Error('Model failed after resume');
+          const streamError = new Error('Resume model error with stop finish');
           let generateCallCount = 0;
 
           const suspendingTool = createTool({
@@ -1004,37 +1011,85 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
             },
           });
 
-          const model = new MockLanguageModelV2({
-            doGenerate: async () => {
+          const baseModel = new MockLanguageModelV2();
+
+          // Subclass to bypass resolveModel's instanceof check and return raw streams
+          class TestModel extends AISDKV5LanguageModel {
+            override async doGenerate(): Promise<any> {
               generateCallCount++;
               if (generateCallCount === 1) {
                 // First call: trigger tool suspension
                 return {
-                  rawCall: { rawPrompt: null, rawSettings: {} },
-                  content: [
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start' as const, warnings: [] },
+                    {
+                      type: 'response-metadata' as const,
+                      id: 'resp-1',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-input-start' as const,
+                      id: 'tc-1',
+                      toolName: 'suspendTool',
+                    },
+                    {
+                      type: 'tool-input-delta' as const,
+                      id: 'tc-1',
+                      delta: '{"input": "test"}',
+                    },
+                    {
+                      type: 'tool-input-end' as const,
+                      id: 'tc-1',
+                    },
                     {
                       type: 'tool-call' as const,
                       toolCallId: 'tc-1',
                       toolName: 'suspendTool',
                       input: '{"input": "test"}',
                     },
-                  ],
-                  finishReason: 'tool-calls' as const,
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'tool-calls' as const,
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ]),
                   warnings: [],
+                  request: {},
+                  rawResponse: {},
                 };
               }
-              // After resume, model fails
-              throw resumeError;
-            },
-          });
+              // Second call (after resume): error chunk with non-error finishReason
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start' as const, warnings: [] },
+                  {
+                    type: 'response-metadata' as const,
+                    id: 'resp-2',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'error' as const, error: streamError },
+                  {
+                    type: 'finish' as const,
+                    finishReason: 'stop' as const,
+                    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                  },
+                ]),
+                warnings: [],
+                request: {},
+                rawResponse: {},
+              };
+            }
+          }
 
+          const model = new TestModel(baseModel);
           const storage = new InMemoryStore();
 
           const agent = new Agent({
             id: 'test-resume-error',
             name: 'Test Resume Error',
-            model,
+            model: model as any,
             instructions: 'You are a helpful assistant.',
             tools: { suspendTool: suspendingTool },
           });
@@ -1055,7 +1110,7 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
           expect(output.finishReason).toBe('suspended');
 
-          // Resume should throw because model errors after tool result
+          // Resume should throw because stream has error chunk despite finishReason 'stop'
           await expect(
             registeredAgent.resumeGenerate(
               { data: 'resumed' },
