@@ -145,7 +145,7 @@ export async function handleAskQuestion(
 }
 
 /**
- * Handle a sandbox_access_request event from the request_sandbox_access tool.
+ * Handle a sandbox_access_request event from the request_access tool.
  * Shows an inline prompt for the user to approve or deny directory access.
  *
  * If another inline question is already active, the new prompt is queued
