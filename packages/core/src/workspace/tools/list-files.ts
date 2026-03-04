@@ -12,13 +12,13 @@ Returns a compact tab-indented listing for efficient token usage.
 Options mirror common tree command flags for familiarity.
 
 Examples:
-- List root: { path: "./" }
-- Deep listing: { path: "./src", maxDepth: 5 }
-- Directories only: { path: "./", dirsOnly: true }
-- Exclude node_modules: { path: "./", exclude: "node_modules" }
-- Find TypeScript files: { path: "./src", pattern: "**/*.ts" }
-- Find config files: { path: "./", pattern: "*.config.{js,ts}" }
-- Multiple patterns: { path: "./", pattern: ["**/*.ts", "**/*.tsx"] }`,
+- List root: { path: "." }
+- Deep listing: { path: "src", maxDepth: 5 }
+- Directories only: { path: ".", dirsOnly: true }
+- Exclude node_modules: { path: ".", exclude: "node_modules" }
+- Find TypeScript files: { path: "src", pattern: "**/*.ts" }
+- Find config files: { path: ".", pattern: "*.config.{js,ts}" }
+- Multiple patterns: { path: ".", pattern: ["**/*.ts", "**/*.tsx"] }`,
   inputSchema: z.object({
     path: z.string().default('.').describe('Directory path to list'),
     maxDepth: z
