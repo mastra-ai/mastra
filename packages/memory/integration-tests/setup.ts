@@ -8,10 +8,8 @@ export default async function setup() {
     {},
   )`pnpm tsc ./src/worker/generic-memory-worker.ts ./src/worker/mock-embedder.ts --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --outDir ./ --rootDir ./ --skipLibCheck`;
 
-  // Pre-download fastembed model to avoid race conditions when multiple
-  // test files call FlagEmbedding.init() concurrently.
-  // Clean up any leftover/corrupted tar.gz files first — if a previous run
-  // was interrupted during download, a partial tar.gz causes Z_BUF_ERROR.
+  // Clean up any leftover/corrupted tar.gz files from interrupted fastembed
+  // model downloads — partial tar.gz files cause Z_BUF_ERROR on next run.
   const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
   await fsp.mkdir(cachePath, { recursive: true });
 
@@ -25,14 +23,4 @@ export default async function setup() {
   } catch {
     // Ignore errors during cleanup
   }
-
-  // Run the warmup in a subprocess so the ONNX runtime handle
-  // dies with the subprocess and doesn't keep vitest alive.
-  await $`node -e ${`
-    async function warmup() {
-      const { fastembed } = await import('@mastra/fastembed');
-      await fastembed.small.doEmbed({ values: ['warmup'] });
-    }
-    warmup().catch(() => process.exit(1));
-  `}`;
 }
