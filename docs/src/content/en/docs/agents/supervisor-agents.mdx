@@ -204,7 +204,7 @@ const stream = await supervisor.stream('Research AI trends', {
 })
 ```
 
-Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to add guidance that's visible to the next iteration.
+Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to inject guidance into the conversation. When `feedback` is combined with `continue: false`, the model gets one final turn to produce a text response incorporating the feedback before the loop stops.
 
 ## Memory isolation
 

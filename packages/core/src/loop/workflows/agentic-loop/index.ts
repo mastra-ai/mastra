@@ -37,6 +37,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
   const accumulatedSteps: StepResult<Tools>[] = [];
   // Track previous content to determine what's new in each step
   let previousContentLength = 0;
+  // When continue:false + feedback, allow one more LLM turn then stop
+  let pendingFeedbackStop = false;
 
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
     messageId: messageId!,
@@ -70,6 +72,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
+
+      if (pendingFeedbackStop) {
+        hasFinishedSteps = true;
+        pendingFeedbackStop = false;
+      }
 
       const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
@@ -126,7 +133,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         );
 
         const hasStopped = conditions.some(condition => condition);
-        hasFinishedSteps = hasStopped;
+        hasFinishedSteps = hasFinishedSteps || hasStopped;
       }
 
       // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
@@ -161,13 +168,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           const iterationResult = await rest.onIterationComplete(iterationContext);
 
           if (iterationResult) {
-            // Check if iteration should stop (only apply if we're still continuing)
-            if (iterationResult.continue === false && !hasFinishedSteps) {
-              hasFinishedSteps = true;
-            }
-
-            // Add feedback if provided (only if we're continuing to next iteration)
-            if (iterationResult.feedback && typedInputData.stepResult?.isContinued && !hasFinishedSteps) {
+            if (iterationResult.feedback && typedInputData.stepResult?.isContinued) {
               messageList.add(
                 {
                   id: rest.mastra?.generateId() || randomUUID(),
@@ -192,10 +193,15 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
                 } as MastraDBMessage,
                 'response',
               );
-              if (iterationResult.continue && rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
+
+              if (iterationResult.continue === false) {
+                pendingFeedbackStop = true;
+              } else if (rest.maxSteps && accumulatedSteps.length < rest.maxSteps) {
                 hasFinishedSteps = false;
                 typedInputData.stepResult.isContinued = true;
               }
+            } else if (iterationResult.continue === false && !hasFinishedSteps) {
+              hasFinishedSteps = true;
             }
           }
         } catch (error) {
