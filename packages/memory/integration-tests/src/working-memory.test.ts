@@ -6,18 +6,18 @@ import { getWorkingMemoryAdditiveTests } from './shared/working-memory-additive'
 
 // v4
 describe('V4', () => {
-  getWorkingMemoryTests(openai('gpt-4o'));
-  getWorkingMemoryAdditiveTests(openai('gpt-4o'));
+  getWorkingMemoryTests(openai('gpt-4.1'));
+  getWorkingMemoryAdditiveTests(openai('gpt-4.1'));
 });
 
 // v5
 describe('V5', () => {
-  getWorkingMemoryTests('openai/gpt-4o');
-  getWorkingMemoryAdditiveTests('openai/gpt-4o');
+  getWorkingMemoryTests('openai/gpt-4.1');
+  getWorkingMemoryAdditiveTests('openai/gpt-4.1');
 });
 
 // v6
 describe('V6', () => {
-  getWorkingMemoryTests(openaiV6('gpt-4o'));
-  getWorkingMemoryAdditiveTests(openaiV6('gpt-4o'));
+  getWorkingMemoryTests(openaiV6('gpt-4.1'));
+  getWorkingMemoryAdditiveTests(openaiV6('gpt-4.1'));
 });
