@@ -185,6 +185,52 @@ const workspace = new Workspace({
 })
 ```
 
+## Background process callbacks
+
+When agents start background processes, you can receive lifecycle callbacks for stdout, stderr, and process exit. Configure these through the `backgroundProcesses` option on the `execute_command` tool:
+
+```typescript
+import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      backgroundProcesses: {
+        onStdout: (data, { pid }) => console.log(`[${pid}] ${data}`),
+        onStderr: (data, { pid }) => console.error(`[${pid}] ${data}`),
+        onExit: ({ pid, exitCode }) => console.log(`Process ${pid} exited: ${exitCode}`),
+      },
+    },
+  },
+})
+```
+
+These callbacks fire for all background processes started by the agent through the `execute_command` tool.
+
+### Abort signal
+
+By default, background processes inherit the agent's abort signal and are killed when the agent disconnects. Control this behavior with the `abortSignal` option:
+
+- **`undefined`** (default): Uses the agent's abort signal
+- **`AbortSignal`**: Uses a custom signal
+- **`null` or `false`**: Disables abort — processes persist after agent shutdown
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      backgroundProcesses: {
+        abortSignal: null, // Processes survive agent disconnection
+      },
+    },
+  },
+})
+```
+
+Use `null` or `false` for cloud sandboxes (for example, E2B) where processes should outlive the agent.
+
 ## Stream interop
 
 `ProcessHandle` provides `reader` and `writer` properties for Node.js stream interop. This is useful for protocols like LSP or JSON-RPC that communicate over stdio streams:
