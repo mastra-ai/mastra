@@ -4,15 +4,46 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, 0.x]
-    paths-ignore:
-      - 'docs/**'
 
 jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      has_code: ${{ steps.filter.outputs.has_code }}
+      has_examples: ${{ steps.filter.outputs.has_examples }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check for code changes
+        id: filter
+        run: |
+          ALL=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }})
+
+          CODE=$(echo "$ALL" | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
+          if [ -n "$CODE" ]; then
+            echo "has_code=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_code=false" >> $GITHUB_OUTPUT
+          fi
+
+          EXAMPLES=$(echo "$ALL" | grep -E '^examples/' || true)
+          if [ -n "$EXAMPLES" ]; then
+            echo "has_examples=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_examples=false" >> $GITHUB_OUTPUT
+          fi
+
   lint:
     name: Lint
+    needs: changes
     runs-on: ubuntu-latest
-    # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -30,13 +61,13 @@ jobs:
       - name: Lint
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/**/*" --filter "!./explorations/**/*" --filter "!@internal/playground" lint
       - name: Format
-        run: pnpm prettier --check .
+        run: pnpm prettier --check . '!docs/**/*' '!examples/**/*' '!explorations/**/*'
 
   check-bundle:
     name: Validate build outputs
+    needs: changes
     runs-on: ubuntu-latest
-    # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -64,9 +95,9 @@ jobs:
 
   validator:
     name: Validate examples packages.json
+    needs: changes
     runs-on: ubuntu-latest
-    # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: needs.changes.outputs.has_examples == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: read
 
@@ -136,9 +167,9 @@ jobs:
 
   validate-pkg-json:
     name: Validate package.json files
+    needs: changes
     runs-on: ubuntu-latest
-    # Run on main repository or for trusted bot PRs
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       pull-requests: read
 

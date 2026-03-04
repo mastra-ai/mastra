@@ -15,18 +15,20 @@ import {
   handleModeCommand,
   handleSkillsCommand,
   handleNewCommand,
+  handleCloneCommand,
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
   handleThreadTagDirCommand,
   handleSandboxCommand as handleSandboxCmd,
-  handleModelsCommand,
   handleModelsPackCommand,
+  handleCustomProvidersCommand,
   handleSubagentsCommand,
   handleOMCommand,
   handleSettingsCommand,
   handleLoginCommand,
   handleReviewCommand as handleReviewCmd,
+  handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
   handleThemeCommand,
 } from './commands/index.js';
@@ -65,6 +67,9 @@ export async function dispatchSlashCommand(
     case 'new':
       handleNewCommand(buildCtx());
       return true;
+    case 'clone':
+      await handleCloneCommand(buildCtx());
+      return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());
       return true;
@@ -81,10 +86,10 @@ export async function dispatchSlashCommand(
       await handleModeCommand(buildCtx(), args);
       return true;
     case 'models':
-      await handleModelsCommand(buildCtx());
-      return true;
-    case 'models:pack':
       await handleModelsPackCommand(buildCtx());
+      return true;
+    case 'custom-providers':
+      await handleCustomProvidersCommand(buildCtx());
       return true;
     case 'subagents':
       await handleSubagentsCommand(buildCtx());
@@ -136,6 +141,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'review':
       await handleReviewCmd(buildCtx(), args);
+      return true;
+    case 'report-issue':
+      await handleReportIssueCmd(buildCtx(), args);
       return true;
     case 'setup':
       await handleSetupCommand(buildCtx());

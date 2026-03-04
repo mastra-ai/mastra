@@ -12,11 +12,15 @@ const meta: Meta<typeof Chip> = {
   argTypes: {
     color: {
       control: { type: 'select' },
-      options: ['gray', 'red', 'orange', 'blue', 'green'],
+      options: ['gray', 'red', 'orange', 'blue', 'green', 'purple', 'yellow', 'cyan', 'pink'],
     },
     size: {
       control: { type: 'select' },
       options: ['small', 'default', 'large'],
+    },
+    intensity: {
+      control: { type: 'select' },
+      options: ['bright', 'muted'],
     },
   },
 };
@@ -38,6 +42,10 @@ export const Colors: Story = {
       <Chip color="orange">Orange</Chip>
       <Chip color="blue">Blue</Chip>
       <Chip color="green">Green</Chip>
+      <Chip color="purple">Purple</Chip>
+      <Chip color="yellow">Yellow</Chip>
+      <Chip color="cyan">Cyan</Chip>
+      <Chip color="pink">Pink</Chip>
     </div>
   ),
 };
@@ -71,6 +79,37 @@ export const WithIcons: Story = {
       <Chip size="large">
         <FlameIcon /> Large
       </Chip>
+    </div>
+  ),
+};
+
+export const Intensity: Story = {
+  render: () => (
+    <div className="grid gap-3">
+      <div className="flex items-center gap-2">
+        <Chip color="purple">Bright</Chip>
+        <Chip color="purple" intensity="muted">
+          Muted
+        </Chip>
+      </div>
+      <div className="flex items-center gap-2">
+        <Chip color="cyan">Bright</Chip>
+        <Chip color="cyan" intensity="muted">
+          Muted
+        </Chip>
+      </div>
+      <div className="flex items-center gap-2">
+        <Chip color="green">Bright</Chip>
+        <Chip color="green" intensity="muted">
+          Muted
+        </Chip>
+      </div>
+      <div className="flex items-center gap-2">
+        <Chip color="red">Bright</Chip>
+        <Chip color="red" intensity="muted">
+          Muted
+        </Chip>
+      </div>
     </div>
   ),
 };

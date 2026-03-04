@@ -962,6 +962,40 @@ await agent.stream('message for agent', {
 })
 ```
 
+## OpenAI WebSocket Transport
+
+Opt into OpenAI Responses WebSocket streaming via `providerOptions.openai.transport`. This only applies to streaming calls and is currently supported for direct OpenAI models (for example, `openai/gpt-4o`). If WebSocket streaming is unavailable, Mastra falls back to HTTP streaming. By default, Mastra closes the WebSocket when the stream finishes.
+
+```ts title="index.ts"
+const stream = await agent.stream('Hello', {
+  providerOptions: {
+    openai: {
+      transport: 'websocket', // 'websocket' | 'fetch' | 'auto'
+      websocket: {
+        url: 'wss://api.openai.com/v1/responses',
+        closeOnFinish: true, // default
+      },
+    },
+  },
+})
+```
+
+To keep the connection open after the stream finishes, set `closeOnFinish: false` and close it manually.
+
+```ts title="index.ts"
+const stream = await agent.stream('Hello', {
+  providerOptions: {
+    openai: {
+      transport: 'websocket',
+      websocket: { closeOnFinish: false },
+    },
+  },
+})
+
+// Later, when you're done with the connection:
+stream.transport?.close()
+```
+
 ## Related
 
 - [Generating responses](/docs/agents/overview#generating-responses)

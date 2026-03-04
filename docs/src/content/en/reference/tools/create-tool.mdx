@@ -34,6 +34,52 @@ export const tool = createTool({
 })
 ```
 
+## Example with `toModelOutput`
+
+Use `toModelOutput` when your tool should return rich internal data to your app, but the model should receive either a simplified value or multimodal content.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const weatherTool = createTool({
+  id: 'get-weather',
+  description: 'Get weather for a city',
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    city: z.string(),
+    temperature: z.number(),
+    condition: z.string(),
+    radarImageUrl: z.string().url(),
+  }),
+  execute: async ({ city }) => ({
+    city,
+    temperature: 72,
+    condition: 'sunny',
+    radarImageUrl: 'https://example.com/radar/seattle.png',
+  }),
+  toModelOutput: output => {
+    return {
+      type: 'content',
+      value: [
+        { type: 'text', text: `${output.city}: ${output.temperature}F and ${output.condition}` },
+        { type: 'image-url', url: output.radarImageUrl },
+      ],
+    }
+  },
+})
+```
+
+The tool still returns the full `execute` result to your application, while the model receives the transformed `toModelOutput` value.
+
+`toModelOutput` can return:
+
+- `type: 'text'`
+- `type: 'json'`
+- `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
+
 ## Example with MCP Annotations
 
 When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
@@ -100,6 +146,13 @@ name: "outputSchema",
 type: "Zod schema",
 description:
 "A Zod schema defining the expected output structure of the tool's `execute` function.",
+isOptional: true,
+},
+{
+name: "toModelOutput",
+type: "(output: TSchemaOut) => unknown",
+description:
+"Optional function that transforms the tool's `execute` output before it is sent back to the model. Use this to return `text`, `json`, or `content`-shaped outputs (including multimodal parts like images/files) to the model while still keeping the full raw output in your application code.",
 isOptional: true,
 },
 {

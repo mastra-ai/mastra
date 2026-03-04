@@ -24,6 +24,7 @@ import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { shellQuote } from '../utils/shell-quote';
 import { mountS3, mountGCS, LOG_PREFIX, runCommand } from './mounts';
 import type { BlaxelMountConfig, BlaxelS3MountConfig, BlaxelGCSMountConfig, MountContext } from './mounts';
+import { BlaxelProcessManager } from './process-manager';
 
 /** Allowlist pattern for mount paths — absolute path with safe characters only. */
 const SAFE_MOUNT_PATH = /^\/[a-zA-Z0-9_.\-/]+$/;
@@ -65,13 +66,16 @@ export type SandboxRuntime = 'node' | 'python' | 'bash' | 'ruby' | 'go' | 'rust'
 /**
  * Blaxel sandbox provider configuration.
  */
-export interface BlaxelSandboxOptions extends MastraSandboxOptions {
+export interface BlaxelSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /**
    * Docker image to use for the sandbox.
    *
-   * @default 'blaxel/py-app:latest'
+   * Debian-based images (`ts-app`, `py-app`, `jupyter-*`) support both S3 and GCS mounts.
+   * Alpine-based images (`node`, `nextjs`, `vite`) support S3 mounts only (gcsfuse is unavailable on Alpine).
+   *
+   * @default 'blaxel/ts-app:latest'
    */
   image?: string;
   /**
@@ -163,10 +167,14 @@ export class BlaxelSandbox extends MastraSandbox {
   declare readonly mounts: MountManager; // Non-optional (initialized by BaseSandbox)
 
   constructor(options: BlaxelSandboxOptions = {}) {
-    super({ ...options, name: 'BlaxelSandbox' });
+    super({
+      ...options,
+      name: 'BlaxelSandbox',
+      processes: new BlaxelProcessManager({ env: options.env }),
+    });
 
     this.id = options.id ?? this.generateId();
-    this.image = options.image ?? 'blaxel/py-app:latest';
+    this.image = options.image ?? 'blaxel/ts-app:latest';
     this.memory = options.memory ?? 4096;
     this.timeout = options.timeout;
     this.env = options.env ?? {};
@@ -623,7 +631,6 @@ export class BlaxelSandbox extends MastraSandbox {
         image: this.image,
         memory: this.memory,
         ...(this.timeout && { ttl: this.timeout }),
-        envs: Object.entries(this.env).map(([name, value]) => ({ name, value })),
         labels: {
           ...this.labels,
           'mastra-sandbox-id': this.id,
@@ -645,6 +652,7 @@ export class BlaxelSandbox extends MastraSandbox {
 
     this._createdAt = new Date();
     this.logger.debug(`${LOG_PREFIX} Sandbox ready: ${sandboxName} (status: ${this._sandbox.status})`);
+
     // Note: processPending is called by base class after start completes
   }
 
@@ -697,6 +705,16 @@ export class BlaxelSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async stop(): Promise<void> {
+    // Kill all tracked processes before stopping
+    if (this.processes) {
+      try {
+        const procs = await this.processes.list();
+        await Promise.all(procs.filter(p => p.running).map(p => this.processes!.kill(p.pid)));
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+
     // Unmount all filesystems before stopping
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
@@ -716,6 +734,16 @@ export class BlaxelSandbox extends MastraSandbox {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
+    // Kill all tracked processes before destroying
+    if (this.processes) {
+      try {
+        const procs = await this.processes.list();
+        await Promise.all(procs.filter(p => p.running).map(p => this.processes!.kill(p.pid)));
+      } catch {
+        // Best-effort cleanup
+      }
+    }
+
     // Unmount all filesystems
     // Collect keys first since unmount() mutates the map
     for (const mountPath of [...this.mounts.entries.keys()]) {
@@ -775,7 +803,7 @@ export class BlaxelSandbox extends MastraSandbox {
   getInstructions(): string {
     const mountCount = this.mounts.entries.size;
     const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
-    return `Cloud sandbox with /home/user as working directory.${mountInfo}`;
+    return `Cloud sandbox.${mountInfo}`;
   }
 
   // ---------------------------------------------------------------------------
@@ -798,11 +826,12 @@ export class BlaxelSandbox extends MastraSandbox {
    */
   private isSandboxDeadError(error: unknown): boolean {
     if (!error) return false;
-    const errorStr = errorToString(error);
+    const errorStr = errorToString(error).toLowerCase();
     return (
-      errorStr.includes('TERMINATED') ||
+      errorStr.includes('terminated') ||
       errorStr.includes('sandbox was not found') ||
-      errorStr.includes('Sandbox not found')
+      errorStr.includes('sandbox not found') ||
+      errorStr.includes('"not found"')
     );
   }
 
@@ -824,6 +853,32 @@ export class BlaxelSandbox extends MastraSandbox {
     }
 
     this.status = 'stopped';
+  }
+
+  /**
+   * Execute an operation with automatic retry if the sandbox is found to be dead.
+   *
+   * When the Blaxel sandbox times out or crashes mid-operation, this method
+   * resets sandbox state, restarts it, and retries the operation once.
+   *
+   * @internal Used by BlaxelProcessManager to handle dead sandboxes during spawn.
+   */
+  async retryOnDead<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (error) {
+      if (this.isSandboxDeadError(error) && !this._isRetrying) {
+        this.handleSandboxTimeout();
+        this._isRetrying = true;
+        try {
+          await this.ensureRunning();
+          return await fn();
+        } finally {
+          this._isRetrying = false;
+        }
+      }
+      throw error;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -848,6 +903,10 @@ export class BlaxelSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Executing: ${fullCommand}`);
 
+    // Accumulate output so partial stdout/stderr is available when abort/timeout wins the race
+    let capturedStdout = '';
+    let capturedStderr = '';
+
     try {
       // Merge sandbox default env with per-command env (per-command overrides)
       // Filter out undefined values to get Record<string, string>
@@ -856,24 +915,81 @@ export class BlaxelSandbox extends MastraSandbox {
         Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
       );
 
-      const result = await sandbox.process.exec({
+      // Pass timeout to Blaxel API (in seconds) AND enforce client-side via Promise.race.
+      // The API enforces timeout for non-streaming requests, but when onStdout/onStderr
+      // callbacks are present the SDK uses a streaming path that ignores the timeout param.
+      // Promise.race ensures timeout is always enforced regardless of code path.
+      const apiTimeout = options.timeout ? Math.ceil(options.timeout / 1000) : undefined;
+
+      const execPromise = sandbox.process.exec({
         command: fullCommand,
         workingDir: options.cwd,
         env: envRecord,
         waitForCompletion: true,
-        ...(options.timeout && { timeout: Math.ceil(options.timeout / 1000) }),
-        ...(options.onStdout || options.onStderr
-          ? {
-              onStdout: options.onStdout,
-              onStderr: options.onStderr,
-            }
-          : {}),
+        ...(apiTimeout && { timeout: apiTimeout }),
+        onStdout: (data: string) => {
+          capturedStdout += data;
+          options.onStdout?.(data);
+        },
+        onStderr: (data: string) => {
+          capturedStderr += data;
+          options.onStderr?.(data);
+        },
       });
+
+      // Build race competitors: timeout and abort signal
+      const racePromises: Promise<never>[] = [];
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let abortHandler: (() => void) | undefined;
+
+      if (options.timeout) {
+        racePromises.push(
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+              // Best-effort cleanup: kill the process on the sandbox.
+              // The streaming exec path doesn't expose the process ID until it completes,
+              // so we attempt to kill by command string.
+              runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
+              reject(new Error(`Command timed out after ${options.timeout}ms`));
+            }, options.timeout!);
+          }),
+        );
+      }
+
+      if (options.abortSignal) {
+        if (options.abortSignal.aborted) {
+          runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
+          throw new Error('Process aborted');
+        }
+        racePromises.push(
+          new Promise<never>((_, reject) => {
+            abortHandler = () => {
+              runCommand(sandbox, `pkill -f ${shellQuote(fullCommand)}`, { timeout: 5000 }).catch(() => {});
+              reject(new Error('Process aborted'));
+            };
+            options.abortSignal!.addEventListener('abort', abortHandler, { once: true });
+          }),
+        );
+      }
+
+      let result;
+      try {
+        if (racePromises.length > 0) {
+          result = await Promise.race([execPromise, ...racePromises]);
+        } else {
+          result = await execPromise;
+        }
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (abortHandler && options.abortSignal) {
+          options.abortSignal.removeEventListener('abort', abortHandler);
+        }
+      }
 
       const executionTimeMs = Date.now() - startTime;
       const exitCode = result.exitCode ?? 0;
-      const stdout = result.stdout ?? '';
-      const stderr = result.stderr ?? '';
+      const stdout = capturedStdout || result.stdout || '';
+      const stderr = capturedStderr || result.stderr || '';
 
       this.logger.debug(`${LOG_PREFIX} Exit code: ${exitCode} (${executionTimeMs}ms)`);
       if (stdout) this.logger.debug(`${LOG_PREFIX} stdout:\n${stdout}`);
@@ -902,15 +1018,11 @@ export class BlaxelSandbox extends MastraSandbox {
 
       const executionTimeMs = Date.now() - startTime;
 
-      const stderr = errorToString(error);
-
-      this.logger.debug(`${LOG_PREFIX} Execution error (${executionTimeMs}ms): ${stderr}`);
-
       return {
         success: false,
         exitCode: 1,
-        stdout: '',
-        stderr,
+        stdout: capturedStdout,
+        stderr: capturedStderr || errorToString(error),
         executionTimeMs,
         command,
         args,

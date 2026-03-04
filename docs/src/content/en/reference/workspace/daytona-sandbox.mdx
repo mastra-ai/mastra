@@ -7,7 +7,7 @@ packages:
 
 # DaytonaSandbox
 
-Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, and network isolation.
+Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, filesystem mounting (S3, GCS), and network isolation.
 
 :::info
 
@@ -129,6 +129,114 @@ await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; 
 ```
 
 Both callbacks are optional and can be used independently.
+
+### Reconnection
+
+Reconnect to an existing sandbox by providing the same `id`. The sandbox resumes with its files and state intact:
+
+```typescript
+const sandbox = new DaytonaSandbox({ id: 'my-persistent-sandbox' })
+
+// First session
+await sandbox._start()
+await sandbox.executeCommand('sh', ['-c', 'echo "session 1" > /tmp/state.txt'])
+await sandbox._stop()
+
+// Later — reconnects to the same sandbox
+const sandbox2 = new DaytonaSandbox({ id: 'my-persistent-sandbox' })
+await sandbox2._start()
+const result = await sandbox2.executeCommand('cat', ['/tmp/state.txt'])
+console.log(result.stdout) // "session 1"
+```
+
+If the sandbox is in a stopped or archived state, it is restarted automatically. If it is in a dead state (destroyed, errored), a fresh sandbox is created instead.
+
+### Filesystem mounting
+
+Mount S3 or GCS buckets as local directories inside the sandbox.
+
+#### Via workspace mounts config
+
+The simplest way — filesystems are mounted automatically when the sandbox starts:
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { DaytonaSandbox } from '@mastra/daytona'
+import { GCSFilesystem } from '@mastra/gcs'
+import { S3Filesystem } from '@mastra/s3'
+
+const workspace = new Workspace({
+  mounts: {
+    '/s3-data': new S3Filesystem({
+      bucket: process.env.S3_BUCKET!,
+      region: 'auto',
+      accessKeyId: process.env.S3_ACCESS_KEY_ID,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+      endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
+    }),
+    '/gcs-data': new GCSFilesystem({
+      bucket: process.env.GCS_BUCKET!,
+      projectId: 'my-project-id',
+      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+    }),
+  },
+  sandbox: new DaytonaSandbox({ language: 'python' }),
+})
+```
+
+When the workspace starts, the filesystems are automatically mounted at the specified paths. Code running in the sandbox can then access files at `/s3-data` and `/gcs-data` as if they were local directories.
+
+#### Via sandbox.mount()
+
+Mount manually at any point after the sandbox has started:
+
+#### S3
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+await sandbox.mount(
+  new S3Filesystem({
+    bucket: process.env.S3_BUCKET!,
+    region: 'us-east-1',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  }),
+  '/data',
+)
+```
+
+#### S3-compatible (Cloudflare R2, MinIO)
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+await sandbox.mount(
+  new S3Filesystem({
+    bucket: process.env.S3_BUCKET!,
+    region: 'auto',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+    endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
+  }),
+  '/data',
+)
+```
+
+#### GCS
+
+```typescript
+import { GCSFilesystem } from '@mastra/gcs'
+
+await sandbox.mount(
+  new GCSFilesystem({
+    bucket: process.env.GCS_BUCKET!,
+    projectId: 'my-project-id',
+    credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+  }),
+  '/data',
+)
+```
 
 ### Network isolation
 
@@ -415,6 +523,35 @@ isOptional: true,
 ]}
 />
 
+### `mount(filesystem, mountPath)`
+
+Mount a filesystem at a path in the sandbox using FUSE tools (`s3fs` for S3, `gcsfuse` for GCS). FUSE tools are installed automatically if not present.
+
+```typescript
+import { S3Filesystem } from '@mastra/s3'
+
+const result = await sandbox.mount(
+  new S3Filesystem({
+    bucket: process.env.S3_BUCKET!,
+    region: 'us-east-1',
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  }),
+  '/data',
+)
+// { success: true, mountPath: '/data' }
+```
+
+Returns a `MountResult`: `{ success: boolean; mountPath: string; error?: string }`.
+
+### `unmount(mountPath)`
+
+Unmount a filesystem from a path in the sandbox.
+
+```typescript
+await sandbox.unmount('/data')
+```
+
 ### `getInfo()`
 
 Get sandbox status and resource information.
@@ -463,6 +600,114 @@ new DaytonaSandbox({
 // 'Cloud sandbox with isolated execution (python runtime). Default working directory: /home/daytona. Command timeout: 60s. Running as user: app. 1 volume(s) attached. Network access is blocked.'
 ```
 
+## Mounting Cloud Storage
+
+Daytona sandboxes can mount S3 or GCS buckets, making cloud storage accessible as local directories inside the sandbox. This is useful for:
+
+- Processing large datasets stored in cloud buckets
+- Writing output files directly to cloud storage
+- Sharing data between sandbox sessions
+
+For usage examples, see [Filesystem mounting](#filesystem-mounting).
+
+Daytona sandboxes use FUSE (Filesystem in Userspace) to mount cloud storage:
+
+- **S3/R2**: Mounted via [s3fs-fuse](https://github.com/s3fs-fuse/s3fs-fuse)
+- **GCS**: Mounted via [gcsfuse](https://github.com/GoogleCloudPlatform/gcsfuse)
+
+The required FUSE tools are installed automatically at mount time if not already present in the sandbox image.
+
+### S3 environment variables
+
+| Variable | Description |
+| - | - |
+| `S3_BUCKET` | Bucket name |
+| `S3_REGION` | AWS region or `auto` for R2/MinIO |
+| `S3_ACCESS_KEY_ID` | Access key ID |
+| `S3_SECRET_ACCESS_KEY` | Secret access key |
+| `S3_ENDPOINT` | Endpoint URL (S3-compatible only) |
+
+### GCS environment variables
+
+| Variable | Description |
+| - | - |
+| `GCS_BUCKET` | Bucket name |
+| `GCS_SERVICE_ACCOUNT_KEY` | Service account key JSON (full JSON string, not a path) |
+
+### Reducing cold start latency with a snapshot
+
+By default, `s3fs` and `gcsfuse` are installed at first mount via `apt`, which adds startup time. To eliminate this, prebake them into a Daytona snapshot and pass the snapshot name via the `snapshot` option.
+
+**Option 1: Declarative image build**
+
+```typescript
+import { Daytona, Image } from '@daytonaio/sdk'
+
+const template = Image.base('daytonaio/sandbox')
+  .runCommands('sudo apt-get update -qq')
+  .runCommands('sudo apt-get install -y s3fs')
+  // gcsfuse requires the Google Cloud apt repository
+  .runCommands(
+    'sudo mkdir -p /etc/apt/keyrings && ' +
+      'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
+      'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
+      // Use gcsfuse-jammy for Ubuntu, gcsfuse-bookworm for Debian
+      'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list',
+  )
+  .runCommands('sudo apt-get update -qq && sudo apt-get install -y gcsfuse')
+
+const daytona = new Daytona()
+
+await daytona.snapshot.create(
+  {
+    name: 'cloud-fs-mounting',
+    image: template,
+  },
+  { onLogs: console.log },
+)
+```
+
+**Option 2: Dockerfile** — using [`Image.fromDockerfile()`](https://www.daytona.io/docs/typescript-sdk/image#fromdockerfile)
+
+```dockerfile
+FROM daytonaio/sandbox
+RUN sudo apt-get update -qq
+RUN sudo apt-get install -y s3fs
+# Use gcsfuse-jammy for Ubuntu, gcsfuse-bookworm for Debian
+RUN sudo mkdir -p /etc/apt/keyrings && curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+RUN sudo apt-get update -qq && sudo apt-get install -y gcsfuse
+```
+
+```typescript
+import { Daytona, Image } from '@daytonaio/sdk'
+
+const daytona = new Daytona()
+
+await daytona.snapshot.create(
+  {
+    name: 'cloud-fs-mounting',
+    image: Image.fromDockerfile('./Dockerfile'),
+  },
+  { onLogs: console.log },
+)
+```
+
+Then use the snapshot name in your sandbox config:
+
+```typescript
+const workspace = new Workspace({
+  mounts: {
+    '/s3-data': new S3Filesystem({
+      /* ... */
+    }),
+    '/gcs-data': new GCSFilesystem({
+      /* ... */
+    }),
+  },
+  sandbox: new DaytonaSandbox({ snapshot: 'cloud-fs-mounting' }),
+})
+```
+
 ## Direct SDK access
 
 Access the underlying Daytona `Sandbox` instance for filesystem, git, and other operations not exposed through the `WorkspaceSandbox` interface:
@@ -495,4 +740,6 @@ Resources are only applied when `image` is set. Passing `resources` without `ima
 
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
 - [Workspace overview](/docs/workspace/overview)

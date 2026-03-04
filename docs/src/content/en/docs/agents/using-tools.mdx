@@ -43,6 +43,40 @@ export const weatherTool = createTool({
 })
 ```
 
+## Shaping output for the model
+
+Use `toModelOutput` when your tool returns rich structured data for your application, but you want the model to receive a smaller or multimodal representation. This keeps model context focused while preserving the full tool result in your app.
+
+```typescript title="src/mastra/tools/weather-tool.ts"
+export const weatherTool = createTool({
+  // ...other config
+  execute: async ({ location }) => {
+    const response = await fetch(`https://wttr.in/${location}?format=j1`)
+    const data = await response.json()
+
+    return {
+      location,
+      temperature: data.current_condition[0].temp_F,
+      condition: data.current_condition[0].weatherDesc[0].value,
+      weatherIconUrl: data.current_condition[0].weatherIconUrl[0].value,
+      source: data,
+    }
+  },
+  toModelOutput: output => {
+    return {
+      type: 'content',
+      value: [
+        {
+          type: 'text',
+          text: `${output.location}: ${output.temperature}F and ${output.condition}`,
+        },
+        { type: 'image-url', url: output.weatherIconUrl },
+      ],
+    }
+  },
+})
+```
+
 ## Adding tools to an agent
 
 To make a tool available to an agent, add it to `tools`. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.

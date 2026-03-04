@@ -1,5 +1,5 @@
 ---
-title: 'Tools | Mastra Code'
+title: 'Tools'
 description: "Learn about Mastra Code's built-in tools for file viewing, editing, search, shell execution, web search, and task management."
 packages:
   - 'mastracode'
@@ -34,10 +34,11 @@ Edit a file by replacing an exact text match with new content. Returns Language 
 - Include enough surrounding context to uniquely identify the replacement location.
 - When `new_str` is omitted or empty, the matched text is deleted.
 - After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
+- Relative `path` values are resolved against the project root.
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
-| `path` | `string` | Yes | Path to the file |
+| `path` | `string` | Yes | Path to the file (relative to project root) |
 | `old_str` | `string` | Yes | Exact text to find and replace |
 | `new_str` | `string` | No | Replacement text (omit to delete the matched text) |
 | `start_line` | `number` | No | Line number to narrow the search region |
@@ -191,7 +192,7 @@ Submit a structured implementation plan for user review and approval (Plan mode 
 
 ## MCP tools
 
-When [MCP servers](/docs/mastra-code/configuration#mcp-servers) are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions with built-in tools.
+When [MCP servers](/configuration#mcp-servers) are configured, their tools are automatically available to the agent. MCP tools are namespaced as `serverName_toolName` to avoid collisions with built-in tools.
 
 MCP tools fall under the `mcp` permission category. When YOLO mode is disabled, they require approval before execution.
 
@@ -235,6 +236,6 @@ You can configure per-category or per-tool overrides through `/settings`, and se
 
 :::note
 
-Visit [Modes](/docs/mastra-code/modes) for details on how modes affect tool access and approval behavior.
+Visit [Modes](/modes) for details on how modes affect tool access and approval behavior.
 
 :::
