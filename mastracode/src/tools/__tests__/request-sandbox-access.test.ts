@@ -12,7 +12,7 @@ function createMockLocalFilesystem() {
   return { fs, setAllowedPaths: spy };
 }
 
-describe('request_sandbox_access', () => {
+describe('request_access', () => {
   it('calls setAllowedPaths on workspace filesystem when access is approved', async () => {
     const { fs, setAllowedPaths } = createMockLocalFilesystem();
 

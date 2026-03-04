@@ -1,5 +1,5 @@
 /**
- * request_sandbox_access tool — requests permission to access a directory outside the project root.
+ * request_access tool — requests permission to access a directory outside the project root.
  * The user can approve or deny the request via TUI dialog.
  */
 
@@ -20,7 +20,7 @@ function expandTilde(p: string): string {
 let requestCounter = 0;
 
 export const requestSandboxAccessTool = createTool({
-  id: 'request_sandbox_access',
+  id: 'request_access',
   description: `Request permission to access a directory outside the current project. Use this when you need to read or write files in a directory that is not within the project root. The user will be prompted to approve or deny the request.`,
   inputSchema: z.object({
     path: z.string().min(1).describe('The absolute path to the directory you need access to.'),
