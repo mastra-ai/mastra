@@ -46,6 +46,15 @@ if (OM_DEBUG_LOG) {
 
 import { addRelativeTimeToObservations } from './date-utils';
 import {
+  createActivationMarker,
+  createBufferingEndMarker,
+  createBufferingFailedMarker,
+  createBufferingStartMarker,
+  createObservationEndMarker,
+  createObservationFailedMarker,
+  createObservationStartMarker,
+} from './markers';
+import {
   buildObserverSystemPrompt,
   buildObserverPrompt,
   buildMultiThreadObserverPrompt,
@@ -68,16 +77,8 @@ import type {
   ThresholdRange,
   ModelSettings,
   ProviderOptions,
-  DataOmObservationStartPart,
-  DataOmObservationEndPart,
-  DataOmObservationFailedPart,
   DataOmStatusPart,
   ObservationMarkerConfig,
-  DataOmBufferingStartPart,
-  DataOmBufferingEndPart,
-  DataOmBufferingFailedPart,
-  DataOmActivationPart,
-  OmOperationType,
 } from './types';
 
 /**
@@ -1375,220 +1376,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Create a start marker for when observation begins.
-   */
-  private createObservationStartMarker(params: {
-    cycleId: string;
-    operationType: 'observation' | 'reflection';
-    tokensToObserve: number;
-    recordId: string;
-    threadId: string;
-    threadIds: string[];
-  }): DataOmObservationStartPart {
-    return {
-      type: 'data-om-observation-start',
-      data: {
-        cycleId: params.cycleId,
-        operationType: params.operationType,
-        startedAt: new Date().toISOString(),
-        tokensToObserve: params.tokensToObserve,
-        recordId: params.recordId,
-        threadId: params.threadId,
-        threadIds: params.threadIds,
-        config: this.getObservationMarkerConfig(),
-      },
-    };
-  }
-
-  /**
-   * Create an end marker for when observation completes successfully.
-   */
-  private createObservationEndMarker(params: {
-    cycleId: string;
-    operationType: 'observation' | 'reflection';
-    startedAt: string;
-    tokensObserved: number;
-    observationTokens: number;
-    observations?: string;
-    currentTask?: string;
-    suggestedResponse?: string;
-    recordId: string;
-    threadId: string;
-  }): DataOmObservationEndPart {
-    const completedAt = new Date().toISOString();
-    const durationMs = new Date(completedAt).getTime() - new Date(params.startedAt).getTime();
-
-    return {
-      type: 'data-om-observation-end',
-      data: {
-        cycleId: params.cycleId,
-        operationType: params.operationType,
-        completedAt,
-        durationMs,
-        tokensObserved: params.tokensObserved,
-        observationTokens: params.observationTokens,
-        observations: params.observations,
-        currentTask: params.currentTask,
-        suggestedResponse: params.suggestedResponse,
-        recordId: params.recordId,
-        threadId: params.threadId,
-      },
-    };
-  }
-
-  /**
-   * Create a failed marker for when observation fails.
-   */
-  private createObservationFailedMarker(params: {
-    cycleId: string;
-    operationType: 'observation' | 'reflection';
-    startedAt: string;
-    tokensAttempted: number;
-    error: string;
-    recordId: string;
-    threadId: string;
-  }): DataOmObservationFailedPart {
-    const failedAt = new Date().toISOString();
-    const durationMs = new Date(failedAt).getTime() - new Date(params.startedAt).getTime();
-
-    return {
-      type: 'data-om-observation-failed',
-      data: {
-        cycleId: params.cycleId,
-        operationType: params.operationType,
-        failedAt,
-        durationMs,
-        tokensAttempted: params.tokensAttempted,
-        error: params.error,
-        recordId: params.recordId,
-        threadId: params.threadId,
-      },
-    };
-  }
-
-  /**
-   * Create a start marker for when async buffering begins.
-   */
-  private createBufferingStartMarker(params: {
-    cycleId: string;
-    operationType: OmOperationType;
-    tokensToBuffer: number;
-    recordId: string;
-    threadId: string;
-    threadIds: string[];
-  }): DataOmBufferingStartPart {
-    return {
-      type: 'data-om-buffering-start',
-      data: {
-        cycleId: params.cycleId,
-        operationType: params.operationType,
-        startedAt: new Date().toISOString(),
-        tokensToBuffer: params.tokensToBuffer,
-        recordId: params.recordId,
-        threadId: params.threadId,
-        threadIds: params.threadIds,
-        config: this.getObservationMarkerConfig(),
-      },
-    };
-  }
-
-  /**
-   * Create an end marker for when async buffering completes successfully.
-   */
-  private createBufferingEndMarker(params: {
-    cycleId: string;
-    operationType: OmOperationType;
-    startedAt: string;
-    tokensBuffered: number;
-    bufferedTokens: number;
-    recordId: string;
-    threadId: string;
-    observations?: string;
-  }): DataOmBufferingEndPart {
-    const completedAt = new Date().toISOString();
-    const durationMs = new Date(completedAt).getTime() - new Date(params.startedAt).getTime();
-
-    return {
-      type: 'data-om-buffering-end',
-      data: {
-        cycleId: params.cycleId,
-        operationType: params.operationType,
-        completedAt,
-        durationMs,
-        tokensBuffered: params.tokensBuffered,
-        bufferedTokens: params.bufferedTokens,
-        recordId: params.recordId,
-        threadId: params.threadId,
-        observations: params.observations,
-      },
-    };
-  }
-
-  /**
-   * Create a failed marker for when async buffering fails.
-   */
-  private createBufferingFailedMarker(params: {
-    cycleId: string;
-    operationType: OmOperationType;
-    startedAt: string;
-    tokensAttempted: number;
-    error: string;
-    recordId: string;
-    threadId: string;
-  }): DataOmBufferingFailedPart {
-    const failedAt = new Date().toISOString();
-    const durationMs = new Date(failedAt).getTime() - new Date(params.startedAt).getTime();
-
-    return {
-      type: 'data-om-buffering-failed',
-      data: {
-        cycleId: params.cycleId,
-        operationType: params.operationType,
-        failedAt,
-        durationMs,
-        tokensAttempted: params.tokensAttempted,
-        error: params.error,
-        recordId: params.recordId,
-        threadId: params.threadId,
-      },
-    };
-  }
-
-  /**
-   * Create an activation marker for when buffered observations are activated.
-   */
-  private createActivationMarker(params: {
-    cycleId: string;
-    operationType: OmOperationType;
-    chunksActivated: number;
-    tokensActivated: number;
-    observationTokens: number;
-    messagesActivated: number;
-    recordId: string;
-    threadId: string;
-    generationCount: number;
-    observations?: string;
-  }): DataOmActivationPart {
-    return {
-      type: 'data-om-activation',
-      data: {
-        cycleId: params.cycleId,
-        operationType: params.operationType,
-        activatedAt: new Date().toISOString(),
-        chunksActivated: params.chunksActivated,
-        tokensActivated: params.tokensActivated,
-        observationTokens: params.observationTokens,
-        messagesActivated: params.messagesActivated,
-        recordId: params.recordId,
-        threadId: params.threadId,
-        generationCount: params.generationCount,
-        config: this.getObservationMarkerConfig(),
-        observations: params.observations,
-      },
-    };
-  }
-
-  /**
    * Persist a data-om-* marker part on the last assistant message in messageList
    * AND save the updated message to the DB so it survives page reload.
    * (data-* parts are filtered out before sending to the LLM, so they don't affect model calls.)
@@ -2247,7 +2034,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
       // Emit failed marker and start marker for next retry
       if (streamContext?.writer) {
-        const failedMarker = this.createObservationFailedMarker({
+        const failedMarker = createObservationFailedMarker({
           cycleId: streamContext.cycleId,
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
@@ -2261,13 +2048,14 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         const retryCycleId = crypto.randomUUID();
         streamContext.cycleId = retryCycleId;
 
-        const startMarker = this.createObservationStartMarker({
+        const startMarker = createObservationStartMarker({
           cycleId: retryCycleId,
           operationType: 'reflection',
           tokensToObserve: originalTokens,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
           threadIds: [streamContext.threadId],
+          config: this.getObservationMarkerConfig(),
         });
         streamContext.startedAt = startMarker.data.startedAt;
         await streamContext.writer.custom(startMarker).catch(() => {});
@@ -3934,13 +3722,14 @@ ${formattedMessages}
     const startedAt = new Date().toISOString();
 
     if (lastMessage?.id) {
-      const startMarker = this.createObservationStartMarker({
+      const startMarker = createObservationStartMarker({
         cycleId,
         operationType: 'observation',
         tokensToObserve,
         recordId: record.id,
         threadId,
         threadIds: [threadId],
+        config: this.getObservationMarkerConfig(),
       });
       // Stream the start marker to the UI first - this adds the part via stream handler
       if (writer) {
@@ -4047,7 +3836,7 @@ ${formattedMessages}
       // ════════════════════════════════════════════════════════════════════════
       const actualTokensObserved = this.tokenCounter.countMessages(messagesToObserve);
       if (lastMessage?.id) {
-        const endMarker = this.createObservationEndMarker({
+        const endMarker = createObservationEndMarker({
           cycleId,
           operationType: 'observation',
           startedAt,
@@ -4099,7 +3888,7 @@ ${formattedMessages}
     } catch (error) {
       // Insert FAILED marker on error
       if (lastMessage?.id) {
-        const failedMarker = this.createObservationFailedMarker({
+        const failedMarker = createObservationFailedMarker({
           cycleId,
           operationType: 'observation',
           startedAt,
@@ -4295,13 +4084,14 @@ ${formattedMessages}
 
     // Emit buffering start marker
     if (writer) {
-      const startMarker = this.createBufferingStartMarker({
+      const startMarker = createBufferingStartMarker({
         cycleId,
         operationType: 'observation',
         tokensToBuffer,
         recordId: freshRecord.id,
         threadId,
         threadIds: [threadId],
+        config: this.getObservationMarkerConfig(),
       });
       void writer.custom(startMarker).catch(() => {});
     }
@@ -4328,7 +4118,7 @@ ${formattedMessages}
     } catch (error) {
       // Emit buffering failed marker
       if (writer) {
-        const failedMarker = this.createBufferingFailedMarker({
+        const failedMarker = createBufferingFailedMarker({
           cycleId,
           operationType: 'observation',
           startedAt,
@@ -4424,7 +4214,7 @@ ${formattedMessages}
       const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
       const updatedChunks = this.getBufferedChunks(updatedRecord);
       const totalBufferedTokens = updatedChunks.reduce((sum, c) => sum + (c.tokenCount ?? 0), 0) || newTokenCount;
-      const endMarker = this.createBufferingEndMarker({
+      const endMarker = createBufferingEndMarker({
         cycleId,
         operationType: 'observation',
         startedAt,
@@ -4591,7 +4381,7 @@ ${formattedMessages}
       const perChunkMap = new Map(activationResult.perChunk?.map(c => [c.cycleId, c]));
       for (const cycleId of activationResult.activatedCycleIds) {
         const chunkData = perChunkMap.get(cycleId);
-        const activationMarker = this.createActivationMarker({
+        const activationMarker = createActivationMarker({
           cycleId, // Use the original buffering cycleId so UI can link them
           operationType: 'observation',
           chunksActivated: 1,
@@ -4602,6 +4392,7 @@ ${formattedMessages}
           threadId: updatedRecord.threadId ?? record.threadId ?? '',
           generationCount: updatedRecord.generationCount ?? 0,
           observations: chunkData?.observations ?? activationResult.observations,
+          config: this.getObservationMarkerConfig(),
         });
         void writer.custom(activationMarker).catch(() => {});
         await this.persistMarkerToMessage(
@@ -4660,7 +4451,7 @@ ${formattedMessages}
       .catch(async error => {
         // Emit buffering failed marker
         if (writer) {
-          const failedMarker = this.createBufferingFailedMarker({
+          const failedMarker = createBufferingFailedMarker({
             cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
             operationType: 'reflection',
             startedAt: new Date().toISOString(),
@@ -4743,13 +4534,14 @@ ${formattedMessages}
 
     // Emit buffering start marker (after slice so we report the actual token count)
     if (writer) {
-      const startMarker = this.createBufferingStartMarker({
+      const startMarker = createBufferingStartMarker({
         cycleId,
         operationType: 'reflection',
         tokensToBuffer: sliceTokenEstimate,
         recordId: record.id,
         threadId: record.threadId ?? '',
         threadIds: record.threadId ? [record.threadId] : [],
+        config: this.getObservationMarkerConfig(),
       });
       void writer.custom(startMarker).catch(() => {});
     }
@@ -4786,7 +4578,7 @@ ${formattedMessages}
 
     // Emit buffering end marker
     if (writer) {
-      const endMarker = this.createBufferingEndMarker({
+      const endMarker = createBufferingEndMarker({
         cycleId,
         operationType: 'reflection',
         startedAt,
@@ -4886,7 +4678,7 @@ ${formattedMessages}
 
     if (writer) {
       const originalCycleId = ObservationalMemory.reflectionBufferCycleIds.get(bufferKey);
-      const activationMarker = this.createActivationMarker({
+      const activationMarker = createActivationMarker({
         cycleId: originalCycleId ?? `reflect-act-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         operationType: 'reflection',
         chunksActivated: 1,
@@ -4897,6 +4689,7 @@ ${formattedMessages}
         threadId: freshRecord.threadId ?? '',
         generationCount: afterRecord?.generationCount ?? freshRecord.generationCount ?? 0,
         observations: afterRecord?.activeObservations,
+        config: this.getObservationMarkerConfig(),
       });
       void writer.custom(activationMarker).catch(() => {});
       await this.persistMarkerToMessage(
@@ -5140,13 +4933,14 @@ ${formattedMessages}
         threadTokensToObserve.set(threadId, tokensToObserve);
 
         if (lastMessage?.id) {
-          const startMarker = this.createObservationStartMarker({
+          const startMarker = createObservationStartMarker({
             cycleId,
             operationType: 'observation',
             tokensToObserve,
             recordId: record.id,
             threadId,
             threadIds: allThreadIds,
+            config: this.getObservationMarkerConfig(),
           });
           // Stream the start marker to the UI first - this adds the part via stream handler
           if (writer) {
@@ -5351,7 +5145,7 @@ ${formattedMessages}
         const lastMessage = threadMessages[threadMessages.length - 1];
         if (lastMessage?.id) {
           const tokensObserved = threadTokensToObserve.get(threadId) ?? this.tokenCounter.countMessages(threadMessages);
-          const endMarker = this.createObservationEndMarker({
+          const endMarker = createObservationEndMarker({
             cycleId,
             operationType: 'observation',
             startedAt: observationStartedAt,
@@ -5391,7 +5185,7 @@ ${formattedMessages}
         const lastMessage = msgs[msgs.length - 1];
         if (lastMessage?.id) {
           const tokensAttempted = threadTokensToObserve.get(threadId) ?? 0;
-          const failedMarker = this.createObservationFailedMarker({
+          const failedMarker = createObservationFailedMarker({
             cycleId,
             operationType: 'observation',
             startedAt: observationStartedAt,
@@ -5568,13 +5362,14 @@ ${formattedMessages}
 
     // Stream START marker for reflection
     if (writer) {
-      const startMarker = this.createObservationStartMarker({
+      const startMarker = createObservationStartMarker({
         cycleId,
         operationType: 'reflection',
         tokensToObserve: observationTokens,
         recordId: record.id,
         threadId,
         threadIds: [threadId],
+        config: this.getObservationMarkerConfig(),
       });
       await writer.custom(startMarker).catch(() => {});
     }
@@ -5621,7 +5416,7 @@ ${formattedMessages}
 
       // Stream END marker for reflection (use streamContext values which may have been updated during retry)
       if (writer && streamContext) {
-        const endMarker = this.createObservationEndMarker({
+        const endMarker = createObservationEndMarker({
           cycleId: streamContext.cycleId,
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
@@ -5648,7 +5443,7 @@ ${formattedMessages}
     } catch (error) {
       // Stream FAILED marker for reflection (use streamContext values which may have been updated during retry)
       if (writer && streamContext) {
-        const failedMarker = this.createObservationFailedMarker({
+        const failedMarker = createObservationFailedMarker({
           cycleId: streamContext.cycleId,
           operationType: 'reflection',
           startedAt: streamContext.startedAt,
