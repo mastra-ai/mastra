@@ -32,7 +32,10 @@ function LandingContent() {
         <meta property="og:title" content={`${course.title} - Free Full Course`} />
         <meta property="og:description" content={course.description} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://mastra.ai/img/guil-hernandez.jpg" />
+        <meta
+          property="og:image"
+          content={`https://mastra.ai/api/og/blog?title=${encodeURIComponent(course.title)}&author=${encodeURIComponent('Free Full Course')}`}
+        />
         <meta name="author" content="Guil Hernandez" />
         <script type="application/ld+json">
           {JSON.stringify({
@@ -103,7 +106,7 @@ function LandingContent() {
 
 export default function LearnLandingPage() {
   return (
-    <LearnLayout title={`${course.title} - Free Full Course`} description={course.description}>
+    <LearnLayout title={course.title} description={course.description}>
       <LandingContent />
     </LearnLayout>
   )
