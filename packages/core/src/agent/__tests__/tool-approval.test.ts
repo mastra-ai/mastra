@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
-import { SkillsProcessor } from '../../processors/processors/skills';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { Workspace } from '../../workspace';
@@ -185,9 +184,6 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           refresh: vi.fn().mockResolvedValue(undefined),
           maybeRefresh: vi.fn().mockResolvedValue(undefined),
           search: vi.fn().mockResolvedValue([]),
-          create: vi.fn(),
-          update: vi.fn(),
-          delete: vi.fn(),
           getReference: vi.fn().mockResolvedValue(null),
           getScript: vi.fn().mockResolvedValue(null),
           getAsset: vi.fn().mockResolvedValue(null),
@@ -195,7 +191,13 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           listScripts: vi.fn().mockResolvedValue([]),
           listAssets: vi.fn().mockResolvedValue([]),
         };
-        const mockWorkspace = { skills: mockWorkspaceSkills } as unknown as Workspace;
+        const mockWorkspace = {
+          skills: mockWorkspaceSkills,
+          __setLogger: vi.fn(),
+          getToolsConfig: () => undefined,
+          filesystem: undefined,
+          sandbox: undefined,
+        } as unknown as Workspace;
 
         let callCount = 0;
         const mockModel = new MockLanguageModelV2({
@@ -211,7 +213,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
                   {
                     type: 'tool-call',
                     toolCallId: 'call-skill-1',
-                    toolName: 'skill-activate',
+                    toolName: 'skill',
                     input: '{"name":"test-skill"}',
                     providerExecuted: false,
                   },
@@ -230,7 +232,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
                 { type: 'stream-start', warnings: [] },
                 { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
                 { type: 'text-start', id: 'text-1' },
-                { type: 'text-delta', id: 'text-1', delta: 'Skill activated successfully' },
+                { type: 'text-delta', id: 'text-1', delta: 'Skill loaded successfully' },
                 { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
@@ -242,14 +244,14 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           },
         });
 
-        const skillsProcessor = new SkillsProcessor({ workspace: mockWorkspace });
-
+        // Skill tools are now provided via Agent.listSkillTools() / convertTools()
+        // by passing the workspace to the agent, not via an input processor
         const userAgent = new Agent({
           id: 'skill-approval-agent',
           name: 'Skill Approval Agent',
           instructions: 'You are an agent with skills.',
           model: mockModel,
-          inputProcessors: [skillsProcessor],
+          workspace: mockWorkspace,
         });
 
         const mastra = new Mastra({
@@ -260,7 +262,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
 
         const agentOne = mastra.getAgent('userAgent');
 
-        const stream = await agentOne.stream('Activate the test skill', {
+        const stream = await agentOne.stream('Load the test skill', {
           requireToolApproval: true,
         });
 
