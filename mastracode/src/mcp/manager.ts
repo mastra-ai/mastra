@@ -42,14 +42,13 @@ export function createMcpManager(
   projectDir: string,
   extraServers?: Record<string, McpServerConfig>,
 ): McpManager {
-  let config = loadMcpConfig(projectDir);
-  // Programmatic servers override file-based configs (highest priority)
-  if (extraServers && Object.keys(extraServers).length > 0) {
-    config = {
-      ...config,
-      mcpServers: { ...config.mcpServers, ...extraServers },
-    };
-  }
+  /** Merge programmatic servers into a base config (highest priority). */
+  const applyExtraServers = (base: McpConfig): McpConfig => {
+    if (!extraServers || Object.keys(extraServers).length === 0) return base;
+    return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
+  };
+
+  let config = applyExtraServers(loadMcpConfig(projectDir));
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
@@ -137,13 +136,7 @@ export function createMcpManager(
 
     async reload() {
       await disconnect();
-      config = loadMcpConfig(projectDir);
-      if (extraServers && Object.keys(extraServers).length > 0) {
-        config = {
-          ...config,
-          mcpServers: { ...config.mcpServers, ...extraServers },
-        };
-      }
+      config = applyExtraServers(loadMcpConfig(projectDir));
       tools = {};
       serverStatuses = new Map();
       initialized = false;
