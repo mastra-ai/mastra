@@ -4,7 +4,7 @@
  * Creates the built-in skill tools for agents. These tools let the model
  * discover and read skill instructions on demand.
  *
- * Design: stateless. `skill-activate` returns the full skill instructions
+ * Design: stateless. The `skill` tool returns the full skill instructions
  * in its tool result — no activation state tracking needed. Instructions
  * persist naturally in conversation history. If context gets compacted,
  * the model just calls the tool again.
@@ -30,10 +30,8 @@ import type { WorkspaceSkills } from './types';
 export function createSkillTools(skills: WorkspaceSkills) {
   return {
     skill: createSkillTool(skills),
-    'skill-search': createSkillSearchTool(skills),
-    'skill-read-reference': createSkillReadReferenceTool(skills),
-    'skill-read-script': createSkillReadScriptTool(skills),
-    'skill-read-asset': createSkillReadAssetTool(skills),
+    skill_search: createSkillSearchTool(skills),
+    skill_read: createSkillReadTool(skills),
   };
 }
 
@@ -80,7 +78,7 @@ function createSkillTool(skills: WorkspaceSkills) {
 
 function createSkillSearchTool(skills: WorkspaceSkills) {
   const tool = createTool({
-    id: 'skill-search',
+    id: 'skill_search',
     description:
       'Search across skill content to find relevant information. Useful when you need to find specific details within skills.',
     inputSchema: z.object({
@@ -92,23 +90,16 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
       const results = await skills.search(query, { topK, skillNames });
 
       if (results.length === 0) {
-        return {
-          success: true,
-          message: 'No results found',
-          results: [],
-        };
+        return 'No results found.';
       }
 
-      return {
-        success: true,
-        results: results.map(r => ({
-          skillName: r.skillName,
-          source: r.source,
-          score: r.score,
-          preview: r.content.substring(0, 200) + (r.content.length > 200 ? '...' : ''),
-          lineRange: r.lineRange,
-        })),
-      };
+      return results
+        .map(r => {
+          const preview = r.content.substring(0, 200) + (r.content.length > 200 ? '...' : '');
+          const location = r.lineRange ? ` (lines ${r.lineRange.start}-${r.lineRange.end})` : '';
+          return `[${r.skillName}]${location} (score: ${r.score.toFixed(2)})\n${preview}`;
+        })
+        .join('\n\n');
     },
   });
 
@@ -116,158 +107,79 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
   return tool;
 }
 
-function createSkillReadReferenceTool(skills: WorkspaceSkills) {
+function createSkillReadTool(skills: WorkspaceSkills) {
   const tool = createTool({
-    id: 'skill-read-reference',
-    description: 'Read a reference file from a skill. Optionally specify line range to read a portion of the file.',
-    inputSchema: z.object({
-      skillName: z.string().describe('The name of the skill'),
-      referencePath: z
-        .string()
-        .describe(
-          'Path to the reference file (relative to the skill root directory, e.g. "references/colors.md" or "docs/schema.md")',
-        ),
-      startLine: z
-        .number()
-        .optional()
-        .describe('Starting line number (1-indexed). If omitted, starts from the beginning.'),
-      endLine: z
-        .number()
-        .optional()
-        .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
-    }),
-    execute: async ({ skillName, referencePath, startLine, endLine }) => {
-      if (!(await skills.has(skillName))) {
-        return {
-          success: false,
-          message: `Skill "${skillName}" not found.`,
-        };
-      }
-
-      const fullContent = await skills.getReference(skillName, referencePath);
-
-      if (fullContent === null) {
-        const availableRefs = await skills.listReferences(skillName);
-        return {
-          success: false,
-          message: `Reference file "${referencePath}" not found in skill "${skillName}". Available references: ${availableRefs.join(', ') || 'none'}`,
-        };
-      }
-
-      const result = extractLines(fullContent, startLine, endLine);
-
-      return {
-        success: true,
-        content: result.content,
-        lines: result.lines,
-        totalLines: result.totalLines,
-      };
-    },
-  });
-
-  (tool as any).needsApprovalFn = () => false as const;
-  return tool;
-}
-
-function createSkillReadScriptTool(skills: WorkspaceSkills) {
-  const tool = createTool({
-    id: 'skill-read-script',
-    description: 'Read a script file from a skill. Scripts contain executable code. Optionally specify line range.',
-    inputSchema: z.object({
-      skillName: z.string().describe('The name of the skill'),
-      scriptPath: z
-        .string()
-        .describe('Path to the script file (relative to the skill root directory, e.g. "scripts/run.sh")'),
-      startLine: z
-        .number()
-        .optional()
-        .describe('Starting line number (1-indexed). If omitted, starts from the beginning.'),
-      endLine: z
-        .number()
-        .optional()
-        .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
-    }),
-    execute: async ({ skillName, scriptPath, startLine, endLine }) => {
-      if (!(await skills.has(skillName))) {
-        return {
-          success: false,
-          message: `Skill "${skillName}" not found.`,
-        };
-      }
-
-      const fullContent = await skills.getScript(skillName, scriptPath);
-
-      if (fullContent === null) {
-        const availableScripts = await skills.listScripts(skillName);
-        return {
-          success: false,
-          message: `Script file "${scriptPath}" not found in skill "${skillName}". Available scripts: ${availableScripts.join(', ') || 'none'}`,
-        };
-      }
-
-      const result = extractLines(fullContent, startLine, endLine);
-
-      return {
-        success: true,
-        content: result.content,
-        lines: result.lines,
-        totalLines: result.totalLines,
-      };
-    },
-  });
-
-  (tool as any).needsApprovalFn = () => false as const;
-  return tool;
-}
-
-function createSkillReadAssetTool(skills: WorkspaceSkills) {
-  const tool = createTool({
-    id: 'skill-read-asset',
+    id: 'skill_read',
     description:
-      'Read an asset file from a skill. Assets include templates, data files, and other static resources. Binary files are returned as base64.',
+      'Read a file from a skill directory (references, scripts, or assets). The path is relative to the skill root.',
     inputSchema: z.object({
       skillName: z.string().describe('The name of the skill'),
-      assetPath: z
+      path: z
         .string()
-        .describe('Path to the asset file (relative to the skill root directory, e.g. "assets/logo.png")'),
+        .describe('Path to the file relative to the skill root (e.g. "references/colors.md", "scripts/run.sh")'),
+      startLine: z
+        .number()
+        .optional()
+        .describe('Starting line number (1-indexed). If omitted, starts from the beginning.'),
+      endLine: z
+        .number()
+        .optional()
+        .describe('Ending line number (1-indexed, inclusive). If omitted, reads to the end.'),
     }),
-    execute: async ({ skillName, assetPath }) => {
+    execute: async ({ skillName, path, startLine, endLine }) => {
       if (!(await skills.has(skillName))) {
-        return {
-          success: false,
-          message: `Skill "${skillName}" not found.`,
-        };
+        return `Skill "${skillName}" not found.`;
       }
 
-      const content = await skills.getAsset(skillName, assetPath);
+      // Route to the appropriate reader based on path prefix
+      const normalizedPath = path.replace(/\\/g, '/');
+      let content: string | Buffer | null = null;
+      let availableFiles: string[] = [];
+
+      if (normalizedPath.startsWith('references/') || normalizedPath.startsWith('references\\')) {
+        content = await skills.getReference(skillName, path);
+        if (content === null) {
+          availableFiles = (await skills.listReferences(skillName)).map(f => `references/${f}`);
+        }
+      } else if (normalizedPath.startsWith('scripts/') || normalizedPath.startsWith('scripts\\')) {
+        content = await skills.getScript(skillName, path);
+        if (content === null) {
+          availableFiles = (await skills.listScripts(skillName)).map(f => `scripts/${f}`);
+        }
+      } else if (normalizedPath.startsWith('assets/') || normalizedPath.startsWith('assets\\')) {
+        content = await skills.getAsset(skillName, path);
+        if (content === null) {
+          availableFiles = (await skills.listAssets(skillName)).map(f => `assets/${f}`);
+        }
+      } else {
+        // Try each type in order
+        content = await skills.getReference(skillName, path);
+        if (content === null) content = await skills.getScript(skillName, path);
+        if (content === null) content = await skills.getAsset(skillName, path);
+
+        if (content === null) {
+          const refs = (await skills.listReferences(skillName)).map(f => `references/${f}`);
+          const scripts = (await skills.listScripts(skillName)).map(f => `scripts/${f}`);
+          const assets = (await skills.listAssets(skillName)).map(f => `assets/${f}`);
+          availableFiles = [...refs, ...scripts, ...assets];
+        }
+      }
 
       if (content === null) {
-        const availableAssets = await skills.listAssets(skillName);
-        return {
-          success: false,
-          message: `Asset file "${assetPath}" not found in skill "${skillName}". Available assets: ${availableAssets.join(', ') || 'none'}`,
-        };
+        const fileList = availableFiles.length > 0 ? `\nAvailable files: ${availableFiles.join(', ')}` : '';
+        return `File "${path}" not found in skill "${skillName}".${fileList}`;
       }
 
-      // Try to return as string for text files, base64 for binary
-      try {
-        const textContent = content.toString('utf-8');
-        if (!textContent.slice(0, 1000).includes('\0')) {
-          return {
-            success: true,
-            content: textContent,
-            encoding: 'utf-8' as const,
-          };
-        }
-      } catch {
-        // Fall through to base64
+      // Convert Buffer to string for text display
+      const textContent = typeof content === 'string' ? content : content.toString('base64');
+      const isBase64 = typeof content !== 'string';
+
+      if (isBase64) {
+        return `[base64 encoded]\n${textContent}`;
       }
 
-      return {
-        success: true,
-        content: content.toString('base64'),
-        encoding: 'base64' as const,
-      };
+      const result = extractLines(textContent, startLine, endLine);
+      return result.content;
     },
   });
 

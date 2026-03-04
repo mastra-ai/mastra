@@ -198,7 +198,7 @@ describe('SkillsProcessor', () => {
       // Processor should NOT add tools (tools are now in Agent.listSkillTools)
       expect(result.tools).not.toHaveProperty('skill-activate');
       expect(result.tools).not.toHaveProperty('skill');
-      expect(result.tools).not.toHaveProperty('skill-search');
+      expect(result.tools).not.toHaveProperty('skill_search');
     });
 
     it('should inject available skills in JSON format', async () => {

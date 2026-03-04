@@ -224,17 +224,13 @@ describe('stateless skill tool behavior', () => {
       expect(turn1ToolNames).toContain('skill');
       expect(turn2ToolNames).toContain('skill');
 
-      // Both turns should have skill-search
-      expect(turn1ToolNames).toContain('skill-search');
-      expect(turn2ToolNames).toContain('skill-search');
+      // Both turns should have skill_search
+      expect(turn1ToolNames).toContain('skill_search');
+      expect(turn2ToolNames).toContain('skill_search');
 
-      // Both turns should have skill-read-* tools (no activation gate)
-      expect(turn1ToolNames).toContain('skill-read-reference');
-      expect(turn2ToolNames).toContain('skill-read-reference');
-      expect(turn1ToolNames).toContain('skill-read-script');
-      expect(turn2ToolNames).toContain('skill-read-script');
-      expect(turn1ToolNames).toContain('skill-read-asset');
-      expect(turn2ToolNames).toContain('skill-read-asset');
+      // Both turns should have skill_read
+      expect(turn1ToolNames).toContain('skill_read');
+      expect(turn2ToolNames).toContain('skill_read');
     });
 
     it('should have <available_skills> in system messages on every turn', async () => {
