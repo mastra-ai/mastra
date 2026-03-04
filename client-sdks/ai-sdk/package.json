@@ -29,7 +29,8 @@
   },
   "files": [
     "dist",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "./**/*.d.ts"
   ],
   "peerDependencies": {
     "@mastra/core": ">=1.5.0-0 <2.0.0-0",
@@ -56,7 +57,8 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "build": "tsup --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "test": "vitest run"
   },
   "keywords": [
