@@ -30,7 +30,7 @@ Usage:
       .optional()
       .default('.')
       .describe(
-        'File, directory, or glob pattern to search within (default: "./"). ' +
+        'File, directory, or glob pattern to search within (default: "."). ' +
           'A plain path searches that file or directory. ' +
           'A glob pattern (e.g., "**/*.ts", "src/**/*.test.ts") filters which files to search.',
       ),
