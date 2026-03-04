@@ -1,3 +1,5 @@
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   StorageScorerDefinitionType,
   StorageCreateScorerDefinitionInput,
@@ -5,8 +7,6 @@ import type {
   StorageListScorerDefinitionsInput,
   StorageListScorerDefinitionsOutput,
 } from '../../types';
-import type { FilesystemDB } from '../../filesystem-db';
-import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   ScorerDefinitionVersion,
   CreateScorerDefinitionVersionInput,

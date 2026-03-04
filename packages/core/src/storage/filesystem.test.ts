@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { MastraCompositeStore } from './base';
-import { FilesystemDB } from './filesystem-db';
 import { FilesystemStore } from './filesystem';
+import { FilesystemDB } from './filesystem-db';
 import { InMemoryStore } from './mock';
 
 // =============================================================================

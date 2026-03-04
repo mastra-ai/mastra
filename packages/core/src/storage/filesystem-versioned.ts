@@ -1,5 +1,4 @@
 import { normalizePerPage, calculatePagination } from './base';
-import type { StorageOrderBy } from './types';
 import type {
   VersionBase,
   ListVersionsInputBase,
@@ -9,6 +8,7 @@ import type {
 
 import type { FilesystemDB } from './filesystem-db';
 import { GitHistory } from './git-history';
+import type { StorageOrderBy } from './types';
 
 /**
  * Prefix for version IDs that come from git history.

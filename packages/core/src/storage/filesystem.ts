@@ -2,14 +2,14 @@ import { resolve } from 'node:path';
 
 import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
-import { FilesystemDB } from './filesystem-db';
 import { FilesystemAgentsStorage } from './domains/agents/filesystem';
-import { FilesystemPromptBlocksStorage } from './domains/prompt-blocks/filesystem';
-import { FilesystemScorerDefinitionsStorage } from './domains/scorer-definitions/filesystem';
 import { FilesystemMCPClientsStorage } from './domains/mcp-clients/filesystem';
 import { FilesystemMCPServersStorage } from './domains/mcp-servers/filesystem';
-import { FilesystemWorkspacesStorage } from './domains/workspaces/filesystem';
+import { FilesystemPromptBlocksStorage } from './domains/prompt-blocks/filesystem';
+import { FilesystemScorerDefinitionsStorage } from './domains/scorer-definitions/filesystem';
 import { FilesystemSkillsStorage } from './domains/skills/filesystem';
+import { FilesystemWorkspacesStorage } from './domains/workspaces/filesystem';
+import { FilesystemDB } from './filesystem-db';
 
 export interface FilesystemStoreConfig {
   /**

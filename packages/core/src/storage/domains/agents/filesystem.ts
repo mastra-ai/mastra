@@ -1,3 +1,5 @@
+import type { FilesystemDB } from '../../filesystem-db';
+import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type {
   StorageAgentType,
   StorageCreateAgentInput,
@@ -5,8 +7,6 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
 } from '../../types';
-import type { FilesystemDB } from '../../filesystem-db';
-import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
 import type { AgentVersion, CreateVersionInput, ListVersionsInput, ListVersionsOutput } from './base';
 import { AgentsStorage } from './base';
 

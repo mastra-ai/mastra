@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
+import type { AgentVersion } from './domains/agents/base';
+import { FilesystemDB } from './filesystem-db';
+import { FilesystemVersionedHelpers } from './filesystem-versioned';
 import { GitHistory } from './git-history';
+import type { StorageAgentType } from './types';
 
 /**
  * Helper to run git commands in a directory.
@@ -174,11 +178,6 @@ describe('GitHistory', () => {
 // Integration: FilesystemAgentsStorage + Git history
 // =============================================================================
 
-import { FilesystemDB } from './filesystem-db';
-import { FilesystemVersionedHelpers } from './filesystem-versioned';
-import type { StorageAgentType } from './types';
-import type { AgentVersion } from './domains/agents/base';
-
 describe('FilesystemVersionedHelpers - Git integration', () => {
   let repoDir: string;
   let storageDir: string;
@@ -197,7 +196,6 @@ describe('FilesystemVersionedHelpers - Git integration', () => {
     await rm(repoDir, { recursive: true, force: true });
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function versionInput(agentId: string, opts: { page?: number; perPage?: number } = {}): any {
     return { agentId, page: opts.page ?? 0, perPage: opts.perPage ?? 100 };
   }
