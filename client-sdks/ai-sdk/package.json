@@ -37,6 +37,8 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^2.0.0",
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
