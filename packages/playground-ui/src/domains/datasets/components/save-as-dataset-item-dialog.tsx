@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { DatabaseIcon } from 'lucide-react';
 import type { DatasetRecord } from '@mastra/core/storage';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
@@ -34,22 +34,18 @@ export function SaveAsDatasetItemDialog({
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [input, setInput] = useState('');
   const [groundTruth, setGroundTruth] = useState('');
-  const [initialized, setInitialized] = useState(false);
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
 
   const datasets: DatasetRecord[] = (data as { datasets: DatasetRecord[] } | undefined)?.datasets ?? [];
 
-  if (isOpen && !initialized) {
-    setInput(initialInput);
-    setGroundTruth(initialGroundTruth);
-    setInitialized(true);
-  }
-
-  if (!isOpen && initialized) {
-    setInitialized(false);
-  }
+  useEffect(() => {
+    if (isOpen) {
+      setInput(initialInput);
+      setGroundTruth(initialGroundTruth);
+    }
+  }, [isOpen, initialInput, initialGroundTruth]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +86,6 @@ export function SaveAsDatasetItemDialog({
       setSelectedDatasetId('');
       setInput('{}');
       setGroundTruth('');
-      setInitialized(false);
       onClose();
     } catch (error) {
       toast.error(`Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -99,7 +94,6 @@ export function SaveAsDatasetItemDialog({
 
   const handleCancel = () => {
     setSelectedDatasetId('');
-    setInitialized(false);
     onClose();
   };
 
@@ -112,8 +106,7 @@ export function SaveAsDatasetItemDialog({
       level={level}
     >
       <SideDialog.Top>
-        {breadcrumb}
-        ›
+        {breadcrumb}›
         <TextAndIcon>
           <DatabaseIcon /> Save as Dataset Item
         </TextAndIcon>

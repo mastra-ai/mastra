@@ -34,7 +34,7 @@ export function TraceAsItemDialog({ traceDetails, traceId, isOpen, onClose, leve
   return (
     <SaveAsDatasetItemDialog
       initialInput={getInitialInput(traceDetails)}
-      initialGroundTruth={traceDetails?.output ? JSON.stringify(traceDetails.output, null, 2) : ''}
+      initialGroundTruth={traceDetails?.output != null ? JSON.stringify(traceDetails.output, null, 2) : ''}
       breadcrumb={
         <TextAndIcon>
           <EyeIcon /> {getShortId(traceId)}
