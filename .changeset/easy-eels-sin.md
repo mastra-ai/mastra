@@ -1,5 +1,6 @@
 ---
 '@mastra/core': patch
+'@mastra/playground-ui': patch
 ---
 
 **Fixed skill tools losing state across turns**
@@ -14,5 +15,6 @@ Skill tools (`skill-activate`, `skill-search`, `skill-read-*`) were previously c
 - Moved all skill tools from `SkillsProcessor` to the Agent class via `createSkillTools()` and `listSkillTools()`, matching how workspace tools are managed
 - `SkillsProcessor` now only handles injecting `<available_skills>` into the system message (sorted deterministically for prompt cache stability)
 - Fixed `CoreToolBuilder` to carry `needsApprovalFn` from non-Vercel tools, so skill tools correctly bypass approval
+- Renamed `ActivatedSkillsContext` to `LoadedSkillsContext` in playground UI — skill badges now show "Loaded" status derived from `skill` tool calls in the message stream
 
-**Migration:** If you were using the `skill-activate` tool name, update to `skill`. If using `skill-read-reference`/`skill-read-script`/`skill-read-asset`, update to `skill_read`. If using `skill-search`, update to `skill_search`.
+**Migration:** If you were using the `skill-activate` tool name, update to `skill`. If using `skill-read-reference`/`skill-read-script`/`skill-read-asset`, update to `skill_read`. If using `skill-search`, update to `skill_search`. If importing `ActivatedSkillsProvider` or `useActivatedSkills`, update to `LoadedSkillsProvider` and `useLoadedSkills`.
