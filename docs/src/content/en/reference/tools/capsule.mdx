@@ -1,0 +1,48 @@
+---
+title: "Reference: Capsule tools | Tools & MCP"
+description: "Use Capsule to safely execute Python and JavaScript code from Mastra agents in isolated WebAssembly sandboxes."
+packages:
+  - "@capsule-run/mastra"
+---
+
+# Capsule tools
+
+Capsule runs untrusted code in isolated WebAssembly sandboxes. The `@capsule-run/mastra` package exposes two Mastra tools that execute Python and JavaScript code through Capsule.
+
+## Installation
+
+```bash npm2yarn
+npm install @capsule-run/mastra
+```
+
+## Tools
+
+- `capsulePythonTool` — id: `python_repl`, input: `{ code: string }`, output: `string`
+- `capsuleJsTool` — id: `javascript_repl`, input: `{ code: string }`, output: `string`
+
+Both tools return the last evaluated expression or returned value as a string.
+
+## Usage
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { capsulePythonTool, capsuleJsTool } from '@capsule-run/mastra'
+
+export const simpleAgent = new Agent({
+  id: 'simple-agent',
+  name: 'Simple Agent',
+  instructions:
+    'You can safely execute Python and JavaScript code using the available tools. End your code with an expression or return statement so the result is captured.',
+  model: 'openai/gpt-4o',
+  tools: {
+    capsulePythonTool,
+    capsuleJsTool,
+  },
+})
+```
+
+## Related
+
+- [Capsule](https://github.com/mavdol/capsule)
+- [Mastra Capsule integration](https://github.com/mavdol/mastra-capsule)
+- [createTool()](./create-tool)
