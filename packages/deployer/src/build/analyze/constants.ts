@@ -1,4 +1,4 @@
-export const DEPS_TO_IGNORE = ['#tools'];
+export const DEPS_TO_IGNORE = ['#tools', 'execa'];
 
 export const GLOBAL_EXTERNALS = [
   'pino',
