@@ -355,8 +355,12 @@ export class FilesystemVersionedHelpers<
     const updatedEntity = updated as TEntity;
     this.entities.set(id, structuredClone(updatedEntity));
 
-    // If status changed to 'published' and we have an activeVersionId, persist to disk
-    if (updatedEntity.status === 'published' && updatedEntity.activeVersionId) {
+    // Persist to disk when publication state changes:
+    // - entity becomes published (write to disk)
+    // - entity was published but status changed (remove from disk)
+    const wasPublished = existing.status === 'published';
+    const isPublished = updatedEntity.status === 'published' && updatedEntity.activeVersionId;
+    if (isPublished || (wasPublished && updates['status'] !== undefined)) {
       this.persistToDisk();
     }
 
