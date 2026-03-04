@@ -3,7 +3,9 @@
  */
 
 import { execFile } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 declare const MASTRACODE_VERSION: string | undefined;
 
@@ -105,9 +107,10 @@ export function getCurrentVersion(): string {
     return MASTRACODE_VERSION;
   }
   // Fallback for running from source (e.g. pnpx tsx mastracode/src/main.ts)
-  const { createRequire } = require('node:module');
-  const req = createRequire(import.meta.url ?? __filename);
-  return req('../../package.json').version;
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const pkgPath = resolve(dir, '../../package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  return pkg.version;
 }
 
 /**
