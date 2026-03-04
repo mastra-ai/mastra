@@ -118,6 +118,7 @@ const filterSchema = z.preprocess(
         })
         .optional(),
       roles: z.array(z.string()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
 );

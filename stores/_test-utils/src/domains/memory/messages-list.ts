@@ -425,6 +425,197 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages.every(m => new Date(m.createdAt) >= cutoffDate)).toBe(true);
     });
 
+    describe('metadata filtering', () => {
+      it('should filter messages by a single metadata key-value pair', async () => {
+        const metaThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: metaThread });
+
+        const metaMessages = [
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'With traceId', metadata: { traceId: 'trace-abc' } },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'With different traceId', metadata: { traceId: 'trace-xyz' } },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'No metadata' },
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: metaMessages });
+
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { traceId: 'trace-abc' } },
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.metadata.traceId).toBe('trace-abc');
+      });
+
+      it('should filter messages by multiple metadata keys with AND logic', async () => {
+        const metaThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: metaThread });
+
+        const metaMessages = [
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Both keys', metadata: { department: 'sales', region: 'us' } },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Only department', metadata: { department: 'sales', region: 'eu' } },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Only region', metadata: { department: 'eng', region: 'us' } },
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: metaMessages });
+
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { department: 'sales', region: 'us' } },
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.content).toBe('Both keys');
+      });
+
+      it('should return empty results when no messages match metadata filter', async () => {
+        const metaThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: metaThread });
+
+        const metaMessages = [
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Has metadata', metadata: { traceId: 'trace-abc' } },
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: metaMessages });
+
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { traceId: 'non-existent' } },
+        });
+
+        expect(result.total).toBe(0);
+        expect(result.messages).toHaveLength(0);
+      });
+
+      it('should return all messages when metadata filter is empty object', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          filter: { metadata: {} },
+        });
+
+        expect(result.total).toBe(5);
+        expect(result.messages).toHaveLength(5);
+      });
+
+      it('should combine metadata filter with dateRange filter', async () => {
+        const metaThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: metaThread });
+
+        const now = new Date();
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+
+        const metaMessages = [
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Old tagged', metadata: { tag: 'important' } },
+            createdAt: twoDaysAgo,
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Recent tagged', metadata: { tag: 'important' } },
+            createdAt: now,
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Recent untagged', metadata: { tag: 'normal' } },
+            createdAt: now,
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: metaMessages });
+
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: {
+            metadata: { tag: 'important' },
+            dateRange: { start: yesterday },
+          },
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.content).toBe('Recent tagged');
+      });
+
+      it('should reject invalid metadata keys', async () => {
+        await expect(
+          memoryStorage.listMessages({
+            threadId: thread.id,
+            filter: { metadata: { 'invalid-key!': 'malicious' } },
+          }),
+        ).rejects.toThrow('Invalid metadata key');
+      });
+
+      it('should filter by non-primitive metadata values (object/array)', async () => {
+        const metaThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: metaThread });
+
+        const metaMessages = [
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: {
+              content: 'With nested metadata',
+              metadata: { traceContext: { spanId: 'span-1', traceId: 'trace-1' } },
+            },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: {
+              content: 'Different nested metadata',
+              metadata: { traceContext: { spanId: 'span-2', traceId: 'trace-2' } },
+            },
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'No traceContext' },
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: metaMessages });
+
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { traceContext: { spanId: 'span-1', traceId: 'trace-1' } } },
+        });
+
+        expect(result.total).toBe(1);
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.metadata.traceContext.spanId).toBe('span-1');
+      });
+    });
+
     describe('perPage and page parameters', () => {
       it('should use perPage to restrict number of messages returned', async () => {
         const result = await memoryStorage.listMessages({

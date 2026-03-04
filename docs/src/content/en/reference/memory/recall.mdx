@@ -63,9 +63,9 @@ isOptional: true,
 },
 {
 name: "filter",
-type: "{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }",
+type: "{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }; metadata?: Record<string, unknown> }",
 description:
-"Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date. Use `startExclusive` or `endExclusive` to exclude boundary dates (useful for cursor-based pagination).",
+"Filter options for message retrieval. `dateRange` filters messages by creation date (use `startExclusive` or `endExclusive` to exclude boundary dates). `metadata` filters by key-value pairs stored in message content metadata (AND logic - all must match).",
 isOptional: true,
 },
 {
@@ -172,6 +172,15 @@ console.log(messages) // MastraDBMessage[]
 const allMessages = await memory!.recall({
   threadId: 'thread-123',
   perPage: false, // Fetch all
+})
+
+// Filter by metadata key-value pairs
+const filtered = await memory!.recall({
+  threadId: 'thread-123',
+  filter: {
+    metadata: { traceId: 'abc-123' },
+  },
+  perPage: 1,
 })
 
 // Convert to AI SDK format if needed

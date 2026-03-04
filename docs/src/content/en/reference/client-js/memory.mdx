@@ -159,6 +159,12 @@ const result = await thread.listMessages({
 const result = await thread.listMessages({
   orderBy: { field: 'createdAt', direction: 'ASC' },
 })
+
+// Filter messages by metadata
+const result = await thread.listMessages({
+  filter: { metadata: { traceId: 'abc-123' } },
+  perPage: 1,
+})
 ```
 
 ### Delete Messages
