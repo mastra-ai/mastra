@@ -244,12 +244,7 @@ describe('createDynamicTools – disabledTools filtering', () => {
       execute: async () => ({ result: 'custom' }),
     });
 
-    const getDynamicTools = createDynamicTools(
-      undefined,
-      { my_tool: myTool },
-      undefined,
-      ['my_tool'],
-    );
+    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, undefined, ['my_tool']);
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('my_tool');
   });

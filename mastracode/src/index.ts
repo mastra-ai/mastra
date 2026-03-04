@@ -67,8 +67,16 @@ export interface MastraCodeConfig {
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
   extraTools?:
-    | Record<string, { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }>
-    | ((ctx: { requestContext: RequestContext }) => Record<string, { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }>);
+    | Record<
+        string,
+        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
+      >
+    | ((ctx: {
+        requestContext: RequestContext;
+      }) => Record<
+        string,
+        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
+      >);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */

@@ -70,7 +70,12 @@ describe('createDynamicTools', () => {
   it('blocks tool execution when PreToolUse denies access', async () => {
     const execute = vi.fn(async () => ({ ok: true }));
     const hookManager = {
-      runPreToolUse: vi.fn(async () => ({ allowed: false, blockReason: 'blocked by policy', results: [], warnings: [] })),
+      runPreToolUse: vi.fn(async () => ({
+        allowed: false,
+        blockReason: 'blocked by policy',
+        results: [],
+        warnings: [],
+      })),
       runPostToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
     };
 
@@ -124,11 +129,6 @@ describe('createDynamicTools', () => {
     });
 
     await expect(tools.custom_tool.execute({ foo: 'bar' }, {})).rejects.toThrow('boom');
-    expect(hookManager.runPostToolUse).toHaveBeenCalledWith(
-      'custom_tool',
-      { foo: 'bar' },
-      { error: 'boom' },
-      true,
-    );
+    expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', { foo: 'bar' }, { error: 'boom' }, true);
   });
 });
