@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/docs/getting-started/start",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/index",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/:path*",
       "destination": "/docs/:path*",
       "permanent": true
