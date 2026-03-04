@@ -412,7 +412,10 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             if (!processor.processOutputResult) {
               throw new HTTPException(400, { message: 'Processor does not support outputResult phase' });
             }
-            result = await processor.processOutputResult(baseContext);
+            result = await processor.processOutputResult({
+              ...baseContext,
+              streamParts: [],
+            });
             break;
 
           case 'outputStep':
