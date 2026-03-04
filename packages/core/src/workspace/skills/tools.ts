@@ -131,54 +131,27 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         return `Skill "${skillName}" not found.`;
       }
 
-      // Route to the appropriate reader based on path prefix
-      const normalizedPath = path.replace(/\\/g, '/');
+      // Try each reader — they all do the same thing (resolve path + readFile)
       let content: string | Buffer | null = null;
-      let availableFiles: string[] = [];
-
-      if (normalizedPath.startsWith('references/') || normalizedPath.startsWith('references\\')) {
-        content = await skills.getReference(skillName, path);
-        if (content === null) {
-          availableFiles = (await skills.listReferences(skillName)).map(f => `references/${f}`);
-        }
-      } else if (normalizedPath.startsWith('scripts/') || normalizedPath.startsWith('scripts\\')) {
-        content = await skills.getScript(skillName, path);
-        if (content === null) {
-          availableFiles = (await skills.listScripts(skillName)).map(f => `scripts/${f}`);
-        }
-      } else if (normalizedPath.startsWith('assets/') || normalizedPath.startsWith('assets\\')) {
-        content = await skills.getAsset(skillName, path);
-        if (content === null) {
-          availableFiles = (await skills.listAssets(skillName)).map(f => `assets/${f}`);
-        }
-      } else {
-        // Try each type in order
-        content = await skills.getReference(skillName, path);
-        if (content === null) content = await skills.getScript(skillName, path);
-        if (content === null) content = await skills.getAsset(skillName, path);
-
-        if (content === null) {
-          const refs = (await skills.listReferences(skillName)).map(f => `references/${f}`);
-          const scripts = (await skills.listScripts(skillName)).map(f => `scripts/${f}`);
-          const assets = (await skills.listAssets(skillName)).map(f => `assets/${f}`);
-          availableFiles = [...refs, ...scripts, ...assets];
-        }
-      }
+      content = await skills.getReference(skillName, path);
+      if (content === null) content = await skills.getScript(skillName, path);
+      if (content === null) content = await skills.getAsset(skillName, path);
 
       if (content === null) {
-        const fileList = availableFiles.length > 0 ? `\nAvailable files: ${availableFiles.join(', ')}` : '';
+        const refs = (await skills.listReferences(skillName)).map(f => `references/${f}`);
+        const scripts = (await skills.listScripts(skillName)).map(f => `scripts/${f}`);
+        const assets = (await skills.listAssets(skillName)).map(f => `assets/${f}`);
+        const allFiles = [...refs, ...scripts, ...assets];
+        const fileList = allFiles.length > 0 ? `\nAvailable files: ${allFiles.join(', ')}` : '';
         return `File "${path}" not found in skill "${skillName}".${fileList}`;
       }
 
-      // Convert Buffer to string for text display
-      const textContent = typeof content === 'string' ? content : content.toString('base64');
-      const isBase64 = typeof content !== 'string';
-
-      if (isBase64) {
-        return `[base64 encoded]\n${textContent}`;
+      // Buffer means binary (e.g. images) — return as base64
+      if (typeof content !== 'string') {
+        return `[base64 encoded]\n${content.toString('base64')}`;
       }
 
-      const result = extractLines(textContent, startLine, endLine);
+      const result = extractLines(content, startLine, endLine);
       return result.content;
     },
   });
