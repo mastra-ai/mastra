@@ -1771,12 +1771,10 @@ describe('MastraMCPClient fetch with requestContext', () => {
   let client: InternalMastraMCPClient;
 
   afterEach(async () => {
-    if (client) {
-      await client.disconnect();
-    }
-    if (testServer) {
-      testServer.httpServer.close();
-    }
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
   });
 
   it('should pass requestContext to the custom fetch function during tool execution', async () => {
