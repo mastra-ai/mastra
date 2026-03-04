@@ -255,7 +255,7 @@ export class MastraCompositeStore extends MastraBase {
 
       if (!hasDefaultDomains && !hasEditorDomains && !hasOverrideDomains) {
         throw new Error(
-          'MastraCompositeStore requires at least one storage source. Provide either a default storage with domains or domain overrides.',
+          'MastraCompositeStore requires at least one storage source. Provide a default storage, an editor storage, or domain overrides.',
         );
       }
 
