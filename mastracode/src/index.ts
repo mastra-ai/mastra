@@ -69,6 +69,8 @@ export interface MastraCodeConfig {
   extraTools?: Record<string, any> | ((ctx: { requestContext: RequestContext }) => Record<string, any>);
   /** Custom storage config instead of auto-detected default */
   storage?: StorageConfig;
+  /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
+  omScope?: 'thread' | 'resource';
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
@@ -264,6 +266,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
   globalInitialState.thinkingLevel = globalSettings.preferences.thinkingLevel;
+  if (config?.omScope) {
+    globalInitialState.omScope = config.omScope;
+  }
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
     if (key === '_default') {

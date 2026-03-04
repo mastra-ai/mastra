@@ -44,7 +44,7 @@ function getReflectorModel({ requestContext }: { requestContext: RequestContext 
 export function getDynamicMemory(storage: MastraCompositeStore) {
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
-    const omScope = getOmScope(state?.projectPath);
+    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
 
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
