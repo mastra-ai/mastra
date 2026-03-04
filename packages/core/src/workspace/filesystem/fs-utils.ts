@@ -5,9 +5,26 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { FileNotFoundError } from '../errors';
+
+// =============================================================================
+// Tilde Expansion
+// =============================================================================
+
+/**
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Shell commands handle this automatically, but Node.js path APIs do not.
+ */
+export function expandTilde(p: string): string {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
 
 // =============================================================================
 // Types

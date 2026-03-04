@@ -1063,6 +1063,190 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 });
 
 /**
+ * Working memory persistence across multiple delegations.
+ * Tests that when a supervisor delegates to the same sub-agent multiple times,
+ * the sub-agent can access resource-scoped working memory saved in a previous delegation.
+ */
+describe('Supervisor Pattern - Working memory across delegations', () => {
+  it('should persist resource-scoped working memory across multiple delegations to the same sub-agent', async () => {
+    const sharedStore = new InMemoryStore();
+    const sharedMemory = new MockMemory({
+      storage: sharedStore,
+      enableWorkingMemory: true,
+    });
+
+    // Track sub-agent thread/resource IDs from each delegation
+    const delegationIds: { subAgentThreadId?: string; subAgentResourceId?: string }[] = [];
+
+    // Sub-agent model:
+    // Delegation 1, call 1: call updateWorkingMemory to save entity data
+    // Delegation 1, call 2: respond with text
+    // Delegation 2, call 1: respond with text
+    let subCallCount = 0;
+    let secondDelegationSawPersistedMemory = false;
+
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subCallCount++;
+
+        if (subCallCount === 1) {
+          // First delegation, first call: save entity data to working memory
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'wm-call-1',
+                toolName: 'updateWorkingMemory',
+                input: JSON.stringify({
+                  memory: '# Entity Data\n- **entityId**: 401881\n- **name**: Record X',
+                }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+
+        // Delegation 2 should include previously saved working-memory content in context
+        if (subCallCount >= 3) {
+          secondDelegationSawPersistedMemory = JSON.stringify(prompt).includes('401881');
+        }
+
+        // All subsequent calls: respond with text
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: subCallCount === 2 ? 'Found entity 401881' : 'Updated entity',
+          content: [
+            {
+              type: 'text' as const,
+              text: subCallCount === 2 ? 'Found entity 401881' : 'Updated entity',
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'worker-agent',
+      name: 'worker-agent',
+      description: 'A worker agent that handles entity operations',
+      instructions: 'You handle entity operations. Use working memory to remember entity data.',
+      model: subAgentModel,
+    });
+
+    // Supervisor model: always delegates to worker-agent, alternating between tool-call and stop
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount % 2 === 1) {
+          // Odd calls: delegate to sub-agent
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call-${supervisorCallCount}`,
+                toolName: 'agent-workerAgent',
+                input: JSON.stringify({
+                  prompt: supervisorCallCount === 1 ? 'Find record X' : 'Update the entity',
+                }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        // Even calls: final response
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You orchestrate sub-agents for entity operations.',
+      model: supervisorModel,
+      agents: { workerAgent: subAgent },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'supervisor-thread';
+    const resourceId = 'test-user';
+
+    // First generate call: supervisor delegates to sub-agent, sub-agent saves working memory
+    await supervisor.generate('Find record X', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+      delegation: {
+        onDelegationComplete: ctx => {
+          delegationIds.push({
+            subAgentThreadId: ctx.result?.subAgentThreadId,
+            subAgentResourceId: ctx.result?.subAgentResourceId,
+          });
+        },
+      },
+    });
+
+    // Verify first delegation completed and working memory was saved
+    expect(delegationIds).toHaveLength(1);
+    const firstDelegationResourceId = delegationIds[0]!.subAgentResourceId;
+    expect(firstDelegationResourceId).toBeDefined();
+
+    // Verify working memory was persisted under the sub-agent's resource ID
+    const savedWorkingMemory = await sharedMemory.getWorkingMemory({
+      threadId: delegationIds[0]!.subAgentThreadId!,
+      resourceId: firstDelegationResourceId,
+    });
+    expect(savedWorkingMemory).toContain('401881');
+
+    // Second generate call: supervisor delegates to same sub-agent again
+    await supervisor.generate('Now update the entity', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+      delegation: {
+        onDelegationComplete: ctx => {
+          delegationIds.push({
+            subAgentThreadId: ctx.result?.subAgentThreadId,
+            subAgentResourceId: ctx.result?.subAgentResourceId,
+          });
+        },
+      },
+    });
+
+    expect(delegationIds).toHaveLength(2);
+    const secondDelegationResourceId = delegationIds[1]!.subAgentResourceId;
+
+    // The sub-agent resource ID is deterministic (parentResourceId-agentName)
+    // so it stays stable across delegations, allowing resource-scoped working memory to persist
+    expect(secondDelegationResourceId).toBe(firstDelegationResourceId);
+
+    // Working memory saved during delegation 1 should be retrievable using delegation 2's IDs
+    const retrievedWorkingMemory = await sharedMemory.getWorkingMemory({
+      threadId: delegationIds[1]!.subAgentThreadId!,
+      resourceId: secondDelegationResourceId,
+    });
+    expect(retrievedWorkingMemory).toContain('401881');
+    expect(secondDelegationSawPersistedMemory).toBe(true);
+  });
+});
+
+/**
  * Suspension in supervisor pattern.
  * Tests that when a sub-agent calls suspend(), the suspension propagates
  * through the supervisor's generate() and can be resumed.
@@ -1539,6 +1723,201 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
 
     // Hook returns continue: false at iteration >= 2, so exactly 2 iterations fire
     expect(iterations).toEqual([1, 2]);
+  });
+
+  it('should deliver feedback and allow one more LLM turn when continue:false with feedback', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const simpleTool = createTool({
+      id: 'lookup-tool',
+      description: 'Looks up data',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ result: `Found: ${query}` }),
+    });
+
+    const agent = new Agent({
+      id: 'feedback-stop-agent',
+      name: 'Feedback Stop Agent',
+      instructions: 'You look up data and summarize findings.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          callCount++;
+          if (callCount <= 2) {
+            // First two calls: make tool calls (isContinued = true)
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call-start',
+                  id: `call-${callCount}`,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'lookup-tool',
+                },
+                {
+                  type: 'tool-call-args-delta',
+                  id: `call-${callCount}`,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'lookup-tool',
+                  argsDelta: `{"query":"item-${callCount}"}`,
+                },
+                {
+                  type: 'tool-call-end',
+                  id: `call-${callCount}`,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'lookup-tool',
+                  args: { query: `item-${callCount}` },
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+          // Third call (after feedback): produce final text
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-final', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Summary of findings' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      tools: { simpleTool },
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: { 'feedback-stop-agent': agent },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('feedback-stop-agent');
+
+    const result = await testAgent.stream('Find items', {
+      maxSteps: 10,
+      onIterationComplete: ctx => {
+        iterations.push(ctx.iteration);
+        if (ctx.iteration >= 2) {
+          return { continue: false, feedback: 'Stop and summarize your findings.' };
+        }
+        return { continue: true };
+      },
+    });
+
+    const reader = result.fullStream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    const text = await result.text;
+
+    // Iteration 2 returns continue:false + feedback → model gets one more turn (iteration 3)
+    expect(iterations.length).toBeGreaterThanOrEqual(3);
+    // The final LLM turn should produce text (not empty)
+    expect(text).toBe('Summary of findings');
+    // The model should have been called 3 times: 2 tool-call iterations + 1 final text
+    expect(callCount).toBe(3);
+  });
+
+  it('should force-stop after the feedback turn even if model keeps making tool calls', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const simpleTool = createTool({
+      id: 'fetch-tool',
+      description: 'Fetches data',
+      inputSchema: z.object({ id: z.string() }),
+      execute: async ({ id }) => ({ data: `result-${id}` }),
+    });
+
+    const agent = new Agent({
+      id: 'stubborn-agent',
+      name: 'Stubborn Agent',
+      instructions: 'You keep fetching data.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          callCount++;
+          // Always return tool calls — model never voluntarily stops
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call-start',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'fetch-tool',
+              },
+              {
+                type: 'tool-call-args-delta',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'fetch-tool',
+                argsDelta: `{"id":"${callCount}"}`,
+              },
+              {
+                type: 'tool-call-end',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'fetch-tool',
+                args: { id: `${callCount}` },
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      tools: { simpleTool },
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: { 'stubborn-agent': agent },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('stubborn-agent');
+
+    const result = await testAgent.stream('Fetch everything', {
+      maxSteps: 20,
+      onIterationComplete: ctx => {
+        iterations.push(ctx.iteration);
+        if (ctx.iteration === 1) {
+          return { continue: false, feedback: 'Wrap up now.' };
+        }
+      },
+    });
+
+    const reader = result.fullStream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    // Iteration 1: tool call, hook returns continue:false + feedback
+    // Iteration 2: model gets one more turn (feedback delivered), then pendingFeedbackStop fires
+    // Iteration 3 should NOT happen — loop is force-stopped
+    expect(iterations).toEqual([1, 2]);
+    expect(callCount).toBe(2);
   });
 
   it('should add feedback to conversation when provided', async () => {

@@ -30,8 +30,8 @@ export function getAuthStorage(): AuthStorage {
 /**
  * Set a custom AuthStorage instance (useful for TUI integration)
  */
-export function setAuthStorage(storage: AuthStorage): void {
-  authStorageInstance = storage;
+export function setAuthStorage(storage: AuthStorage | undefined): void {
+  authStorageInstance = storage ?? null;
 }
 
 /**

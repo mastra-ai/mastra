@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 
 import type { Agent } from '../agent';
-import type { ToolsInput } from '../agent/types';
+import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
@@ -82,8 +82,11 @@ export interface HarnessSubagent {
   /** Description of what this subagent does (used in auto-generated tool description) */
   description: string;
 
-  /** System prompt for this subagent */
-  instructions: string;
+  /**
+   * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+   * array of system messages, or a function that returns any of these types dynamically.
+   */
+  instructions: DynamicArgument<AgentInstructions>;
 
   /** Tools this subagent has direct access to */
   tools?: ToolsInput;
@@ -605,6 +608,7 @@ export type HarnessEvent =
   | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: HarnessThread }
+  | { type: 'thread_deleted'; threadId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' }

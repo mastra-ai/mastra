@@ -1,8 +1,15 @@
 import { Agent } from '@mastra/core/agent';
 import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
-import type { CustomAvailableModel, HeartbeatHandler, HarnessMode, HarnessSubagent } from '@mastra/core/harness';
+import type {
+  CustomAvailableModel,
+  HeartbeatHandler,
+  HarnessConfig,
+  HarnessMode,
+  HarnessSubagent,
+} from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
+import type { RequestContext } from '@mastra/core/request-context';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -58,8 +65,18 @@ export interface MastraCodeConfig {
   modes?: HarnessMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
-  /** Extra tools merged into the dynamic tool set */
-  extraTools?: Record<string, any>;
+  /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
+  extraTools?:
+    | Record<
+        string,
+        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
+      >
+    | ((ctx: {
+        requestContext: RequestContext;
+      }) => Record<
+        string,
+        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
+      >);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
@@ -68,6 +85,8 @@ export interface MastraCodeConfig {
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
+  /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
+  workspace?: HarnessConfig['workspace'];
   /** Disable MCP server discovery. Default: false */
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
@@ -136,11 +155,21 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const writeFileTool = createWriteFileTool(project.rootPath);
   const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
 
-  const readOnlyTools = {
+  // Filter disabled tools from a tool map so subagents respect disabledTools config.
+  const filterDisabled = <T extends Record<string, unknown>>(tools: T): T => {
+    if (!config?.disabledTools?.length) return tools;
+    const filtered = { ...tools };
+    for (const name of config.disabledTools) {
+      delete (filtered as Record<string, unknown>)[name];
+    }
+    return filtered;
+  };
+
+  const readOnlyTools = filterDisabled({
     view: viewTool,
     search_content: grepTool,
     find_files: globTool,
-  };
+  });
 
   const defaultSubagents: HarnessSubagent[] = [
     {
@@ -165,14 +194,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       description:
         "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
       instructions: executeSubagent.instructions,
-      tools: {
+      tools: filterDisabled({
         ...readOnlyTools,
         string_replace_lsp: stringReplaceLspTool,
         write_file: writeFileTool,
         execute_command: executeCommandTool,
         task_write: taskWriteTool,
         task_check: taskCheckTool,
-      },
+      }),
     },
   ];
 
@@ -274,6 +303,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
+  globalInitialState.thinkingLevel = globalSettings.preferences.thinkingLevel;
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
     if (key === '_default') {
@@ -299,7 +329,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       ...globalInitialState,
       ...config?.initialState,
     },
-    workspace: getDynamicWorkspace,
+    workspace: config?.workspace ?? getDynamicWorkspace,
     modes,
     heartbeatHandlers: config?.heartbeatHandlers ?? defaultHeartbeatHandlers,
     modelAuthChecker: provider => {
@@ -372,5 +402,5 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     });
   }
 
-  return { harness, mcpManager, hookManager, authStorage, storageWarning };
+  return { harness, mcpManager, hookManager, authStorage, resolveModel, storageWarning };
 }
