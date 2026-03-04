@@ -20,3 +20,4 @@
 
 - [ ] I have made corresponding changes to the documentation (if applicable)
 - [ ] I have added tests that prove my fix is effective or that my feature works
+- [ ] I have resolved all Coderabbit comments on this PR
