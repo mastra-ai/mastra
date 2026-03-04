@@ -55,23 +55,22 @@ function createSkillTool(skills: WorkspaceSkills) {
       if (!skill) {
         const skillsList = await skills.list();
         const skillNames = skillsList.map(s => s.name);
-        return {
-          success: false,
-          message: `Skill "${name}" not found. Available skills: ${skillNames.join(', ')}`,
-        };
+        return `Skill "${name}" not found. Available skills: ${skillNames.join(', ')}`;
       }
 
-      return {
-        success: true,
-        name: skill.name,
-        description: skill.description,
-        location: `${skill.path}/SKILL.md`,
-        source: skill.source.type,
-        instructions: skill.instructions,
-        references: skill.references,
-        scripts: skill.scripts,
-        assets: skill.assets,
-      };
+      const parts = [`# Skill: ${skill.name}\n\n${skill.instructions}`];
+
+      if (skill.references?.length) {
+        parts.push(`\n\n## References\n${skill.references.map(r => `- ${r}`).join('\n')}`);
+      }
+      if (skill.scripts?.length) {
+        parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- ${s}`).join('\n')}`);
+      }
+      if (skill.assets?.length) {
+        parts.push(`\n\n## Assets\n${skill.assets.map(a => `- ${a}`).join('\n')}`);
+      }
+
+      return parts.join('');
     },
   });
 
