@@ -22,7 +22,7 @@ export function createDynamicTools(
     // management tools are now provided by the workspace (see workspace.ts).
     // Only tools without a workspace equivalent remain here.
     const tools: Record<string, any> = {
-      request_sandbox_access: requestSandboxAccessTool,
+      request_access: requestSandboxAccessTool,
     };
 
     if (hasTavilyKey()) {

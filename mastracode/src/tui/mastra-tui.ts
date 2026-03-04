@@ -75,6 +75,7 @@ const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
 export class MastraTUI {
   private state: TUIState;
   private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private hasShownUpdateBanner = false;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
@@ -868,31 +869,36 @@ export class MastraTUI {
     const latestVersion = await fetchLatestVersion();
     if (!latestVersion || !isNewerVersion(currentVersion, latestVersion)) return;
 
-    const pm = await detectPackageManager();
-
-    // Passive mode or previously dismissed — show info message only
+    // Passive mode or previously dismissed — show info message only once
     if (passive) {
-      const cmd = getInstallCommand(pm);
-      showInfo(
-        this.state,
-        `Update available: v${latestVersion} (current: v${currentVersion}). Run \`${cmd}\` to update.`,
-      );
+      if (!this.hasShownUpdateBanner) {
+        this.hasShownUpdateBanner = true;
+        showInfo(
+          this.state,
+          `Update available: v${latestVersion} (current: v${currentVersion}). Run /update to update.`,
+        );
+      }
       return;
     }
 
     const settings = loadSettings();
 
-    // User previously dismissed this exact version — show passive banner note only
+    // User previously dismissed this exact version — show passive banner note only once
     if (settings.updateDismissedVersion && !isNewerVersion(settings.updateDismissedVersion, latestVersion)) {
-      const cmd = getInstallCommand(pm);
-      showInfo(
-        this.state,
-        `Update available: v${latestVersion} (current: v${currentVersion}). Run \`${cmd}\` to update.`,
-      );
+      if (!this.hasShownUpdateBanner) {
+        this.hasShownUpdateBanner = true;
+        showInfo(
+          this.state,
+          `Update available: v${latestVersion} (current: v${currentVersion}). Run /update to update.`,
+        );
+      }
       return;
     }
 
-    // Prompt the user
+    const pm = await detectPackageManager();
+
+    // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
+    this.hasShownUpdateBanner = true;
     await this.showUpdatePrompt(currentVersion, latestVersion, pm);
   }
 
@@ -931,8 +937,7 @@ export class MastraTUI {
               const settings = loadSettings();
               settings.updateDismissedVersion = latestVersion;
               saveSettings(settings);
-              const cmd = getInstallCommand(pm);
-              showInfo(this.state, `Update skipped. Run \`${cmd}\` to update manually.`);
+              showInfo(this.state, `Update skipped. Run /update to update later.`);
             }
             resolve();
           },
