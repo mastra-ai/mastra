@@ -87,47 +87,52 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       const encoder = (counter as any).encoder;
       const originalEncode = encoder.encode.bind(encoder);
       let encodeCalls = 0;
-      encoder.encode = (...args: any[]) => {
-        encodeCalls += 1;
-        return originalEncode(...args);
-      };
 
-      const cachedMessage = createSampleMessageV2({
-        threadId: thread.id,
-        resourceId: thread.resourceId,
-        role: 'assistant',
-        content: {
-          parts: [
-            {
-              type: 'text',
-              text: 'message with cached token estimate from counter',
-            } as any,
-          ],
-        },
-      });
+      try {
+        encoder.encode = (...args: any[]) => {
+          encodeCalls += 1;
+          return originalEncode(...args);
+        };
 
-      const firstCount = counter.countMessage(cachedMessage);
-      const callsAfterFirst = encodeCalls;
-      const firstEstimate = (cachedMessage.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+        const cachedMessage = createSampleMessageV2({
+          threadId: thread.id,
+          resourceId: thread.resourceId,
+          role: 'assistant',
+          content: {
+            parts: [
+              {
+                type: 'text',
+                text: 'message with cached token estimate from counter',
+              } as any,
+            ],
+          },
+        });
 
-      expect(firstCount).toBeGreaterThan(0);
-      expect(firstEstimate).toBeTruthy();
-      expect(callsAfterFirst).toBeGreaterThan(1);
+        const firstCount = counter.countMessage(cachedMessage);
+        const callsAfterFirst = encodeCalls;
+        const firstEstimate = (cachedMessage.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
 
-      await memoryStorage.saveMessages({ messages: [cachedMessage] });
+        expect(firstCount).toBeGreaterThan(0);
+        expect(firstEstimate).toBeTruthy();
+        expect(callsAfterFirst).toBeGreaterThan(1);
 
-      const result = await memoryStorage.listMessages({
-        threadId: thread.id,
-      });
+        await memoryStorage.saveMessages({ messages: [cachedMessage] });
 
-      const reloaded = result.messages.find(m => m.id === cachedMessage.id);
-      expect(reloaded).toBeTruthy();
-      expect((reloaded!.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate).toEqual(firstEstimate);
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+        });
 
-      const secondCount = counter.countMessage(reloaded!);
-      const callsAfterSecond = encodeCalls;
-      expect(secondCount).toBe(firstCount);
-      expect(callsAfterSecond - callsAfterFirst).toBe(1);
+        const reloaded = result.messages.find(m => m.id === cachedMessage.id);
+        expect(reloaded).toBeTruthy();
+        expect((reloaded!.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate).toEqual(firstEstimate);
+
+        const secondCount = counter.countMessage(reloaded!);
+        const callsAfterSecond = encodeCalls;
+        expect(secondCount).toBe(firstCount);
+        expect(callsAfterSecond - callsAfterFirst).toBe(1);
+      } finally {
+        encoder.encode = originalEncode;
+      }
     });
 
     it('should list messages with pagination', async () => {

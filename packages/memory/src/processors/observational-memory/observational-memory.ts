@@ -3094,7 +3094,9 @@ ${suggestedResponse}
         }
 
         if (typeof minRemaining === 'number') {
-          const nextRemainingMessages = allMsgs.filter(m => m?.id && !idsToRemove.has(m.id) && m.id !== msg.id);
+          const nextRemainingMessages = allMsgs.filter(
+            m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
+          );
           const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
           if (remainingIfRemoved < minRemaining) {
             skipped += 1;

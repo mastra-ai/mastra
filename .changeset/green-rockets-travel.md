@@ -2,6 +2,6 @@
 '@mastra/memory': patch
 ---
 
-Persist OM token-counter tiktoken estimates on message metadata so repeated token counting can reuse prior part/string payload estimates.
+Persist message token estimates in metadata so repeated counting can reuse previously computed values after messages are saved and loaded.
 
-This keeps token accounting semantics unchanged: per-message and per-conversation overhead are still recomputed on each pass, and `data-*`/`reasoning` parts continue to be skipped.
+Token totals stay consistent with prior behavior: message and conversation overhead is still recalculated each pass, and `data-*`/`reasoning` parts are still excluded from estimate caching.

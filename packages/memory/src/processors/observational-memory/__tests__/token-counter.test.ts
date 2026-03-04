@@ -84,33 +84,38 @@ describe('TokenCounter', () => {
       const encoder = (counter as any).encoder;
       const originalEncode = encoder.encode.bind(encoder);
       let encodeCalls = 0;
-      encoder.encode = (...args: any[]) => {
-        encodeCalls += 1;
-        return originalEncode(...args);
-      };
 
-      const first = counter.countMessage(message);
-      expect(first).toBeGreaterThan(0);
-      expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
+      try {
+        encoder.encode = (...args: any[]) => {
+          encodeCalls += 1;
+          return originalEncode(...args);
+        };
 
-      const callsAfterFirst = encodeCalls;
-      const second = counter.countMessage(message);
-      const callsAfterSecond = encodeCalls;
+        const first = counter.countMessage(message);
+        expect(first).toBeGreaterThan(0);
+        expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
 
-      expect(second).toBe(first);
-      expect(callsAfterSecond - callsAfterFirst).toBe(1);
+        const callsAfterFirst = encodeCalls;
+        const second = counter.countMessage(message);
+        const callsAfterSecond = encodeCalls;
 
-      const reloaded = {
-        ...JSON.parse(JSON.stringify(message)),
-        createdAt: new Date(message.createdAt),
-      };
+        expect(second).toBe(first);
+        expect(callsAfterSecond - callsAfterFirst).toBe(1);
 
-      const third = counter.countMessage(reloaded as any);
-      const callsAfterThird = encodeCalls;
+        const reloaded = {
+          ...JSON.parse(JSON.stringify(message)),
+          createdAt: new Date(message.createdAt),
+        };
 
-      expect(third).toBe(first);
-      expect(callsAfterThird - callsAfterSecond).toBe(1);
-      expect(reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
+        const third = counter.countMessage(reloaded as any);
+        const callsAfterThird = encodeCalls;
+
+        expect(third).toBe(first);
+        expect(callsAfterThird - callsAfterSecond).toBe(1);
+        expect(reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
+      } finally {
+        encoder.encode = originalEncode;
+      }
     });
 
     it('ignores stale cache entries when the cache key no longer matches', () => {
@@ -121,13 +126,16 @@ describe('TokenCounter', () => {
       });
 
       counter.countMessage(message);
-      const firstEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const firstEstimateMap = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const firstEntry = Object.values(firstEstimateMap)[0] as any;
 
       message.content.parts[0].text = 'Mutated text payload with different size and tokens';
       const recounted = counter.countMessage(message);
-      const secondEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const secondEstimateMap = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const secondEntry = Object.values(secondEstimateMap).find((entry: any) => entry?.key !== firstEntry.key) as any;
 
       expect(recounted).toBeGreaterThan(0);
+      expect(secondEntry).toBeTruthy();
       expect(secondEntry.key).not.toBe(firstEntry.key);
       expect(secondEntry.tokens).not.toBe(firstEntry.tokens);
     });
@@ -140,23 +148,30 @@ describe('TokenCounter', () => {
       });
 
       counter.countMessage(message);
-      const entry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const estimateMap = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const [entryKey, entry] = Object.entries(estimateMap)[0] as [string, any];
 
       message.content.parts[0].providerMetadata.mastra.tokenEstimate = {
-        ...entry,
-        v: entry.v + 1,
+        ...estimateMap,
+        [entryKey]: {
+          ...entry,
+          v: entry.v + 1,
+        },
       };
       counter.countMessage(message);
-      const versionRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
-      expect(versionRefreshed.v).toBe(1);
+      const versionRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate[entryKey];
+      expect(versionRefreshed.v).toBe(entry.v);
 
       message.content.parts[0].providerMetadata.mastra.tokenEstimate = {
-        ...versionRefreshed,
-        source: 'other-encoding',
+        ...message.content.parts[0].providerMetadata.mastra.tokenEstimate,
+        [entryKey]: {
+          ...versionRefreshed,
+          source: `${versionRefreshed.source}-mismatch`,
+        },
       };
       counter.countMessage(message);
-      const sourceRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
-      expect(sourceRefreshed.source).toBe('o200k_base');
+      const sourceRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate[entryKey];
+      expect(sourceRefreshed.source).toBe(entry.source);
     });
 
     it('keeps data-* and reasoning skipped/uncached while caching eligible parts', () => {
