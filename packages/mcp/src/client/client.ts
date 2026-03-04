@@ -37,6 +37,7 @@ import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import type {
+  FetchLike,
   LogHandler,
   ElicitationHandler,
   ProgressHandler,
@@ -52,6 +53,7 @@ export type {
   LogHandler,
   ElicitationHandler,
   ProgressHandler,
+  MastraFetchLike,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   Root,
@@ -295,7 +297,14 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch } = this.serverConfig;
+
+    // Wrap the user's fetch function to inject requestContext as the third argument.
+    // The transport calls fetch with standard (url, init) signature, but we forward
+    // the current operation context so users can access request-scoped data (e.g., auth cookies).
+    const fetch: FetchLike | undefined = userFetch
+      ? (url: string | URL, init?: RequestInit) => userFetch(url, init, this.currentOperationContext)
+      : undefined;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 

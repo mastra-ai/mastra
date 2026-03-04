@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -1758,4 +1759,146 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
 
     await client.disconnect();
   }, 30000);
+});
+
+describe('MastraMCPClient fetch with requestContext', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  afterEach(async () => {
+    if (client) {
+      await client.disconnect();
+    }
+    if (testServer) {
+      testServer.httpServer.close();
+    }
+  });
+
+  it('should pass requestContext to the custom fetch function during tool execution', async () => {
+    testServer = await setupTestServer(false);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-context-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+    expect(greetTool).toBeDefined();
+
+    type TestContext = { userId: string; authToken: string };
+    const requestContext = new RequestContext<TestContext>();
+    requestContext.set('userId', 'user-123');
+    requestContext.set('authToken', 'bearer-abc');
+
+    await greetTool.execute({ name: 'Test' }, { requestContext });
+
+    // Find a fetch call that was made with the requestContext (during tool execution)
+    const callsWithContext = fetchSpy.mock.calls.filter(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('userId') === 'user-123';
+    });
+
+    expect(callsWithContext.length).toBeGreaterThan(0);
+    const capturedContext = callsWithContext[0]![2]!;
+    expect(capturedContext.get('userId')).toBe('user-123');
+    expect(capturedContext.get('authToken')).toBe('bearer-abc');
+  }, 15000);
+
+  it('should pass different requestContexts for sequential tool calls', async () => {
+    testServer = await setupTestServer(false);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-seq-context-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+
+    // First call with context A
+    type ContextA = { sessionId: string };
+    const contextA = new RequestContext<ContextA>();
+    contextA.set('sessionId', 'session-A');
+    await greetTool.execute({ name: 'Alice' }, { requestContext: contextA });
+
+    const callsWithA = fetchSpy.mock.calls.filter(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-A';
+    });
+    expect(callsWithA.length).toBeGreaterThan(0);
+
+    fetchSpy.mockClear();
+
+    // Second call with context B
+    type ContextB = { sessionId: string };
+    const contextB = new RequestContext<ContextB>();
+    contextB.set('sessionId', 'session-B');
+    await greetTool.execute({ name: 'Bob' }, { requestContext: contextB });
+
+    const callsWithB = fetchSpy.mock.calls.filter(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-B';
+    });
+    expect(callsWithB.length).toBeGreaterThan(0);
+
+    // Ensure context A didn't leak into context B's calls
+    const contextALeak = fetchSpy.mock.calls.some(call => {
+      const ctx = call[2];
+      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-A';
+    });
+    expect(contextALeak).toBe(false);
+  }, 15000);
+
+  it('should pass requestContext to fetch even when an empty context is auto-created', async () => {
+    testServer = await setupTestServer(false);
+    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
+      return fetch(url, init);
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'fetch-no-context-test',
+      server: {
+        url: testServer.baseUrl,
+        fetch: fetchSpy,
+      },
+    });
+
+    await client.connect();
+
+    // Clear fetch calls from the connection phase
+    fetchSpy.mockClear();
+
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+
+    // Call without explicit requestContext — the tool framework auto-creates an empty one
+    await greetTool.execute({ name: 'NoContext' });
+
+    // Fetch should still have been called with the third argument (requestContext)
+    const callsDuringToolExec = fetchSpy.mock.calls;
+    expect(callsDuringToolExec.length).toBeGreaterThan(0);
+    // The third argument should be defined (either null or an empty RequestContext)
+    const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
+    expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
+  }, 15000);
 });
