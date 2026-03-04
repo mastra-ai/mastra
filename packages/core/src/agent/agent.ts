@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
-import type { ModelInformation, StandardSchemaWithJSON } from '@mastra/schema-compat';
 import { applyOpenAICompatTransforms } from '@mastra/schema-compat';
+import type { ModelInformation } from '@mastra/schema-compat';
+import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';

@@ -96,7 +96,6 @@
   "dependencies": {
     "@babel/core": "^7.29.0",
     "@babel/preset-typescript": "^7.28.5",
-    "@mastra/server": "workspace:*",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "6.0.0",
     "@rollup/plugin-commonjs": "29.0.0",
@@ -128,6 +127,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
+    "@mastra/server": "workspace:*",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.19.7",

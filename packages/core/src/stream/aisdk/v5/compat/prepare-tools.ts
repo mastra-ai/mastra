@@ -10,7 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 
 /** Model specification version for tool type conversion */
 export type ModelSpecVersion = 'v2' | 'v3';

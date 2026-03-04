@@ -2896,9 +2896,6 @@ importers:
       '@babel/preset-typescript':
         specifier: ^7.28.5
         version: 7.28.5(@babel/core@7.29.0)
-      '@mastra/server':
-        specifier: workspace:*
-        version: link:../server
       '@optimize-lodash/rollup-plugin':
         specifier: ^5.0.2
         version: 5.0.2(rollup@4.55.3)
@@ -2987,6 +2984,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../server
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
