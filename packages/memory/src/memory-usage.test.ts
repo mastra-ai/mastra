@@ -28,8 +28,13 @@ vi.mock('@internal/ai-sdk-v4', () => ({
   }),
 }));
 
+// Token counts must match the vi.mock return values above so tests pass
+// even when vi.mock doesn't intercept (e.g. CI sharded runs with isolate: false)
+const TOKEN_COUNTS: Record<string, number> = { v1: 33, v2: 55, v3: 42 };
+
 // Helper to create a Memory instance with specific embedder version
 function createMemoryWithEmbedder(specVersion: 'v1' | 'v2' | 'v3') {
+  const tokens = TOKEN_COUNTS[specVersion]!;
   return new Memory({
     storage: new InMemoryStore(),
     vector: {
@@ -42,7 +47,7 @@ function createMemoryWithEmbedder(specVersion: 'v1' | 'v2' | 'v3') {
       specificationVersion: specVersion,
       provider: 'test',
       modelId: 'test-model',
-      doEmbed: vi.fn(),
+      doEmbed: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2]], usage: { tokens } }),
     } as any,
     options: {
       semanticRecall: true,
