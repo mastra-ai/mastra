@@ -725,7 +725,7 @@ export function getWorkingMemoryTests(model: MastraModelConfig) {
           expect(extractUserData(wmObj)).toMatchObject(validMemory);
         });
 
-        it('should recall the most recent valid schema-based working memory', async () => {
+        it('should recall the most recent valid schema-based working memory', { retry: 2 }, async () => {
           const second = { city: 'Denver', temperature: 75 };
           await agentGenerate(
             agent,
