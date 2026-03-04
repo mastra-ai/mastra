@@ -2693,6 +2693,7 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-codex',
     'openai/gpt-5.2-pro',
     'openai/gpt-5.2-pro-2025-12-11',
+    'openai/gpt-5.3-chat-latest',
     'openai/gpt-5.3-codex',
     'openai/o3',
     'openai/o3-mini',
