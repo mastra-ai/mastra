@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
@@ -67,13 +68,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private currentModeId: string;
   private currentThreadId: string | null = null;
   private resourceId: string;
+  private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
   private currentOperationId: number = 0;
-  private followUpQueue: string[] = [];
-  private pendingApprovalResolve: ((decision: 'approve' | 'decline') => void) | null = null;
+  private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
+  private pendingApprovalResolve:
+    | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
+    | null = null;
   private pendingApprovalToolName: string | null = null;
   private pendingQuestions = new Map<string, (answer: string) => void>();
   private pendingPlanApprovals = new Map<
@@ -100,6 +104,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
+    this.defaultResourceId = this.resourceId;
 
     // Initialize state from schema defaults + initial state
     this.state = {
@@ -428,6 +433,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+
+    try {
+      const availableModels = await this.listAvailableModels();
+      const currentModel = availableModels.find(model => model.id === modelId);
+      if (currentModel) {
+        if (currentModel.hasApiKey) {
+          return { hasAuth: true };
+        }
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+      }
+    } catch {
+      // Ignore catalog lookup errors and fall through to provider-based checks.
+    }
+
     const provider = modelId.split('/')[0];
     if (!provider) return { hasAuth: true };
 
@@ -457,7 +476,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   /**
    * Get all available models from the provider registry with auth status.
-   * Uses the optional `modelAuthChecker` and `modelUseCountProvider` hooks.
+   * Uses the optional `modelAuthChecker`, `modelUseCountProvider`, and
+   * `customModelCatalogProvider` hooks.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
     try {
@@ -471,7 +491,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       >;
       const providers = Object.keys(registry);
       const useCounts = this.config.modelUseCountProvider?.() ?? {};
-      const models: AvailableModel[] = [];
+      const modelsById = new Map<string, AvailableModel>();
+
+      const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
+        if (!model.id || !model.provider || !model.modelName) return;
+        modelsById.set(model.id, {
+          ...model,
+          useCount: useCounts[model.id] ?? 0,
+        });
+      };
 
       for (const provider of providers) {
         const providerConfig = registry[provider];
@@ -487,20 +515,35 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
         if (providerConfig?.models && Array.isArray(providerConfig.models)) {
           for (const modelName of providerConfig.models) {
-            const id = `${provider}/${modelName}`;
-            models.push({
-              id,
+            upsertModel({
+              id: `${provider}/${modelName}`,
               provider,
               modelName,
               hasApiKey,
               apiKeyEnvVar: apiKeyEnvVar || undefined,
-              useCount: useCounts[id] ?? 0,
             });
           }
         }
       }
 
-      return models;
+      if (this.config.customModelCatalogProvider) {
+        try {
+          const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
+          for (const model of customModels) {
+            upsertModel({
+              id: model.id,
+              provider: model.provider,
+              modelName: model.modelName,
+              hasApiKey: model.hasApiKey,
+              apiKeyEnvVar: model.apiKeyEnvVar,
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to load custom available models:', error);
+        }
+      }
+
+      return [...modelsById.values()];
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
@@ -535,6 +578,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.currentThreadId = null;
   }
 
+  getDefaultResourceId(): string {
+    return this.defaultResourceId;
+  }
+
+  async getKnownResourceIds(): Promise<string[]> {
+    const threads = await this.listThreads({ allResources: true });
+    const ids = new Set(threads.map(t => t.resourceId));
+    return [...ids].sort();
+  }
+
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
     const now = new Date();
     const thread: HarnessThread = {
@@ -561,20 +614,6 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       metadata.projectPath = projectPath;
     }
 
-    if (this.config.storage) {
-      const memoryStorage = await this.getMemoryStorage();
-      await memoryStorage.saveThread({
-        thread: {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title!,
-          createdAt: thread.createdAt,
-          updatedAt: thread.updatedAt,
-          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-        },
-      });
-    }
-
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
     const oldThreadId = this.currentThreadId;
@@ -596,6 +635,42 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
+    if (this.config.storage) {
+      const memoryStorage = await this.getMemoryStorage();
+      try {
+        await memoryStorage.saveThread({
+          thread: {
+            id: thread.id,
+            resourceId: thread.resourceId,
+            title: thread.title!,
+            createdAt: thread.createdAt,
+            updatedAt: thread.updatedAt,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+          },
+        });
+      } catch (err) {
+        // saveThread failed after lock was swapped; restore previous lock state
+        let reacquired = false;
+        if (this.config.threadLock) {
+          try {
+            await this.config.threadLock.release(thread.id);
+          } catch {
+            // Best-effort release of new thread lock
+          }
+          if (oldThreadId) {
+            try {
+              await this.config.threadLock.acquire(oldThreadId);
+              reacquired = true;
+            } catch {
+              // Re-acquire failed; no lock is held
+            }
+          }
+        }
+        this.currentThreadId = reacquired ? oldThreadId : null;
+        throw err;
+      }
+    }
+
     this.currentThreadId = thread.id;
 
     if (modelId && !currentStateModel) {
@@ -606,6 +681,45 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.emit({ type: 'thread_created', thread });
 
     return thread;
+  }
+
+  /**
+   * Returns a memory accessor with thread and message management methods.
+   */
+  get memory() {
+    return {
+      createThread: this.createThread.bind(this),
+      switchThread: this.switchThread.bind(this),
+      listThreads: this.listThreads.bind(this),
+      renameThread: this.renameThread.bind(this),
+      deleteThread: this.deleteThread.bind(this),
+    };
+  }
+
+  private async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    if (!this.config.storage) return;
+
+    const memoryStorage = await this.getMemoryStorage();
+    const thread = await memoryStorage.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+
+    const isDeletingCurrentThread = this.currentThreadId === threadId;
+
+    await memoryStorage.deleteThread({ threadId });
+
+    if (isDeletingCurrentThread) {
+      try {
+        await this.config.threadLock?.release(threadId);
+      } catch {
+        // Lock release failed; proceed with state cleanup regardless
+      }
+      this.currentThreadId = null;
+      this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    }
+
+    this.emit({ type: 'thread_deleted', threadId });
   }
 
   async renameThread({ title }: { title: string }): Promise<void> {
@@ -620,8 +734,79 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
+  async cloneThread({
+    sourceThreadId,
+    title,
+    resourceId,
+  }: {
+    sourceThreadId?: string;
+    title?: string;
+    resourceId?: string;
+  } = {}): Promise<HarnessThread> {
+    const sourceId = sourceThreadId ?? this.currentThreadId;
+    if (!sourceId) {
+      throw new Error('No source thread to clone');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+
+    const memory = await this.resolveMemory();
+
+    const result = await memory.cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.resourceId,
+      title,
+    });
+
+    const clonedThread: HarnessThread = {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
+    };
+
+    // Acquire lock on new thread before releasing old one
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        await this.config.threadLock.acquire(clonedThread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            await this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        await this.config.threadLock.release(oldThreadId);
+      }
+    }
+
+    this.currentThreadId = clonedThread.id;
+    await this.loadThreadMetadata();
+    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.emit({ type: 'thread_created', thread: clonedThread });
+
+    return clonedThread;
+  }
+
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
     this.abort();
+
+    // Acquire lock on new thread before releasing old one.
+    // Lock operations must be adjacent (no intermediate awaits) so callers
+    // can rely on a single microtask tick to observe both acquire and release.
+    await this.config.threadLock?.acquire(threadId);
+    const previousThreadId = this.currentThreadId;
+    if (previousThreadId) {
+      await this.config.threadLock?.release(previousThreadId);
+    }
 
     if (this.config.storage) {
       const memoryStorage = await this.getMemoryStorage();
@@ -631,13 +816,6 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
-    // Acquire lock on new thread before releasing old one
-    await this.config.threadLock?.acquire(threadId);
-
-    const previousThreadId = this.currentThreadId;
-    if (previousThreadId) {
-      await this.config.threadLock?.release(previousThreadId);
-    }
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
@@ -756,6 +934,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
           });
         }
+      }
+
+      // Restore observer/reflector model IDs
+      if (meta?.observerModelId) {
+        updates.observerModelId = meta.observerModelId;
+      }
+      if (meta?.reflectorModelId) {
+        updates.reflectorModelId = meta.reflectorModelId;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -1059,14 +1245,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async sendMessage({
     content,
-    images,
+    files,
     tracingContext,
     tracingOptions,
+    requestContext: requestContextInput,
   }: {
     content: string;
-    images?: Array<{ data: string; mimeType: string }>;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
   }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
@@ -1076,11 +1264,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const operationId = ++this.currentOperationId;
     this.abortController = new AbortController();
     const agent = this.getCurrentAgent();
-
     this.emit({ type: 'agent_start' });
 
     try {
-      const requestContext = await this.buildRequestContext();
+      const requestContext = await this.buildRequestContext(requestContextInput);
 
       const isYolo = (this.state as Record<string, unknown>).yolo === true;
 
@@ -1098,22 +1285,38 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       streamOptions.toolsets = await this.buildToolsets(requestContext);
 
       let messageInput: string | Record<string, unknown> = content;
-      if (images?.length) {
+      if (files?.length) {
+        const fileParts = files.map(f => {
+          const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+          if (isText) {
+            let textContent = f.data;
+            // Decode data URI to plain text
+            const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+            if (base64Match) {
+              try {
+                textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+              } catch {
+                // Fall through with raw data
+              }
+            }
+            const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+            return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
+          }
+          return {
+            type: 'file' as const,
+            data: f.data,
+            mimeType: f.mediaType,
+            filename: f.filename,
+          };
+        });
         messageInput = {
           role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...images.map((img: { data: string; mimeType: string }) => ({
-              type: 'file',
-              data: img.data,
-              mediaType: img.mimeType,
-            })),
-          ],
+          content: [{ type: 'text', text: content }, ...fileParts],
         };
       }
 
       const response = await agent.stream(messageInput as any, streamOptions as any);
-      await this.processStream(response);
+      await this.processStream(response, requestContext);
 
       if (this.currentOperationId === operationId) {
         const reason = this.abortRequested ? 'aborted' : 'complete';
@@ -1131,9 +1334,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           error: new Error(`Unknown tool "${badTool}".`),
           retryable: true,
         });
-        this.followUpQueue.push(
-          `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
-        );
+        this.followUpQueue.push({
+          content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
+          requestContext: requestContextInput,
+        });
         this.emit({ type: 'agent_end', reason: 'error' });
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
@@ -1148,7 +1352,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage({ content: next, tracingContext, tracingOptions });
+        await this.sendMessage({
+          content: next.content,
+          requestContext: next.requestContext,
+          tracingContext,
+          tracingOptions,
+        });
       }
     }
   }
@@ -1297,6 +1506,32 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           });
           break;
         }
+        case 'file':
+          content.push({
+            type: 'file',
+            data: typeof part.data === 'string' ? part.data : '',
+            mediaType:
+              (part as { mediaType?: string }).mediaType ??
+              (part as { mimeType?: string }).mimeType ??
+              'application/octet-stream',
+            ...((part as { filename?: string }).filename ? { filename: (part as { filename?: string }).filename } : {}),
+          });
+          break;
+        case 'image': {
+          const imgData =
+            typeof part.data === 'string'
+              ? part.data
+              : typeof (part as { image?: string }).image === 'string'
+                ? (part as { image?: string }).image!
+                : '';
+          content.push({
+            type: 'file',
+            data: imgData,
+            mediaType:
+              (part as { mimeType?: string }).mimeType ?? (part as { mediaType?: string }).mediaType ?? 'image/png',
+          });
+          break;
+        }
         // Skip other part types (step-start, data-om-status, etc.)
       }
     }
@@ -1307,7 +1542,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Process a stream response (shared between sendMessage and tool approval).
    */
-  private async processStream(response: { fullStream: AsyncIterable<any> }): Promise<{ message: HarnessMessage }> {
+  private async processStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContext: RequestContext,
+  ): Promise<{ message: HarnessMessage }> {
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -1450,13 +1688,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           const policy = this.resolveToolApproval(toolName);
 
           if (policy === 'allow') {
-            const result = await this.handleToolApprove(toolCallId);
+            const result = await this.handleToolApprove({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
 
           if (policy === 'deny') {
-            const result = await this.handleToolDecline(toolCallId);
+            const result = await this.handleToolDecline({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
@@ -1464,17 +1702,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           this.pendingApprovalToolName = toolName;
           this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
-          const decision = await new Promise<'approve' | 'decline'>(resolve => {
-            this.pendingApprovalResolve = resolve;
-          });
+          const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+            resolve => {
+              this.pendingApprovalResolve = resolve;
+            },
+          );
           this.pendingApprovalToolName = null;
 
-          if (decision === 'approve') {
-            const result = await this.handleToolApprove(toolCallId);
+          if (approval.decision === 'approve') {
+            const result = await this.handleToolApprove({
+              toolCallId,
+              requestContext: approval.requestContext ?? requestContext,
+            });
             currentMessage = result.message;
             return { message: currentMessage };
           } else {
-            const result = await this.handleToolDecline(toolCallId);
+            const result = await this.handleToolDecline({
+              toolCallId,
+              requestContext: approval.requestContext ?? requestContext,
+            });
             currentMessage = result.message;
             return { message: currentMessage };
           }
@@ -1490,8 +1736,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         case 'step-finish': {
           const usage = chunk.payload?.output?.usage;
           if (usage) {
-            const promptTokens = usage.promptTokens ?? 0;
-            const completionTokens = usage.completionTokens ?? 0;
+            const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
+            const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
             const totalTokens = promptTokens + completionTokens;
 
             this.tokenUsage.promptTokens += promptTokens;
@@ -1693,6 +1939,22 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
 
+        // Sandbox streaming data chunks (from workspace execute_command tool)
+        case 'data-sandbox-stdout': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
+          }
+          break;
+        }
+        case 'data-sandbox-stderr': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
+          }
+          break;
+        }
+
         default:
           break;
       }
@@ -1722,21 +1984,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
-  async steer({ content }: { content: string }): Promise<void> {
+  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
-    await this.sendMessage({ content });
+    await this.sendMessage({ content, requestContext });
   }
 
   /**
    * Queue a follow-up message to be processed after the current operation completes.
    */
-  async followUp({ content }: { content: string }): Promise<void> {
+  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (this.isRunning()) {
-      this.followUpQueue.push(content);
+      this.followUpQueue.push({ content, requestContext });
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
     } else {
-      await this.sendMessage({ content });
+      await this.sendMessage({ content, requestContext });
     }
   }
 
@@ -1788,7 +2050,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Respond to a pending tool approval from the UI.
    * "always_allow_category" grants the tool's category for the rest of the session, then approves.
    */
-  respondToToolApproval({ decision }: { decision: 'approve' | 'decline' | 'always_allow_category' }): void {
+  respondToToolApproval({
+    decision,
+    requestContext,
+  }: {
+    decision: 'approve' | 'decline' | 'always_allow_category';
+    requestContext?: RequestContext;
+  }): void {
     if (!this.pendingApprovalResolve) return;
 
     if (decision === 'always_allow_category') {
@@ -1799,9 +2067,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           this.grantSessionCategory({ category });
         }
       }
-      this.pendingApprovalResolve('approve');
+      this.pendingApprovalResolve({ decision: 'approve', requestContext });
     } else {
-      this.pendingApprovalResolve(decision);
+      this.pendingApprovalResolve({ decision, requestContext });
     }
     this.pendingApprovalResolve = null;
   }
@@ -1870,7 +2138,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     resolve(response);
   }
 
-  private async handleToolApprove(toolCallId?: string): Promise<{ message: HarnessMessage }> {
+  private async handleToolApprove({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to approve tool call for');
     }
@@ -1881,7 +2155,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -1892,10 +2166,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
-  private async handleToolDecline(toolCallId?: string): Promise<{ message: HarnessMessage }> {
+  private async handleToolDecline({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -1905,7 +2185,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -1916,7 +2196,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
   // ===========================================================================
@@ -2312,6 +2592,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
         break;
 
+      case 'thread_deleted':
+        if (!this.currentThreadId) {
+          this.resetThreadDisplayState();
+          ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        }
+        break;
+
       // ── State changes (for OM threshold overrides) ──────────────────────
       case 'state_changed': {
         const keys = event.changedKeys;
@@ -2385,7 +2672,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Build request context for agent execution.
    * Tools can access harness state via requestContext.get('harness').
    */
-  private async buildRequestContext(): Promise<RequestContext> {
+  private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
+    requestContext ??= new RequestContext();
     const harnessContext: HarnessRequestContext<TState> = {
       harnessId: this.id,
       state: this.getState(),
@@ -2402,7 +2690,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       getSubagentModelId: params => this.getSubagentModelId(params),
     };
 
-    const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
+    requestContext.set('harness', harnessContext);
 
     if (this.workspaceFn) {
       const resolved = await Promise.resolve(this.workspaceFn({ requestContext }));
@@ -2412,6 +2700,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     return requestContext;
+  }
+
+  /**
+   * Resolve memory from config — handles both static instances and dynamic factory functions.
+   */
+  private async resolveMemory(): Promise<MastraMemory> {
+    const mem = this.config.memory;
+    if (!mem) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    if (typeof mem !== 'function') {
+      return mem;
+    }
+    const requestContext = await this.buildRequestContext();
+    const resolved = await Promise.resolve(mem({ requestContext }));
+    if (!resolved) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+    return resolved;
   }
 
   // ===========================================================================
@@ -2455,11 +2762,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * this triggers resolution and caches the result so getWorkspace() returns it.
    * Useful for code paths outside the request flow (e.g. slash commands).
    */
-  async resolveWorkspace(): Promise<Workspace | undefined> {
+  async resolveWorkspace({
+    requestContext,
+  }: {
+    requestContext?: RequestContext;
+  } = {}): Promise<Workspace | undefined> {
     if (this.workspace) return this.workspace;
     if (this.workspaceFn) {
       // buildRequestContext resolves the workspace and caches it on this.workspace
-      await this.buildRequestContext();
+      await this.buildRequestContext(requestContext);
       return this.workspace;
     }
     return undefined;

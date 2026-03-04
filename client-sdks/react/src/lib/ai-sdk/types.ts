@@ -1,5 +1,5 @@
-import { UIMessage } from '@ai-sdk/react';
-import { CompleteAttachment } from '@assistant-ui/react';
+import type { UIMessage } from '@ai-sdk/react';
+import type { CompleteAttachment } from '@assistant-ui/react';
 
 /**
  * Tripwire metadata included when a processor triggers a tripwire

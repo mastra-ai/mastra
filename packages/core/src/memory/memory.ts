@@ -444,7 +444,14 @@ https://mastra.ai/en/docs/memory/overview`,
       threadConfig?: MemoryConfig;
       vectorSearchString?: string;
     },
-  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
+  ): Promise<{
+    messages: MastraDBMessage[];
+    usage?: { tokens: number };
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  }>;
 
   /**
    * Helper method to create a new thread

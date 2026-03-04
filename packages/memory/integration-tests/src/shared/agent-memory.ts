@@ -463,6 +463,7 @@ export async function getAgentMemoryTests({
 
     it.skipIf(!reasoningModel)(
       'should consolidate reasoning into single part when saving to memory',
+      { retry: 2 },
       async () => {
         const reasoningAgent = new Agent({
           id: 'reasoning-test-agent',

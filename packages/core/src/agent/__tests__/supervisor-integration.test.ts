@@ -1063,6 +1063,190 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 });
 
 /**
+ * Working memory persistence across multiple delegations.
+ * Tests that when a supervisor delegates to the same sub-agent multiple times,
+ * the sub-agent can access resource-scoped working memory saved in a previous delegation.
+ */
+describe('Supervisor Pattern - Working memory across delegations', () => {
+  it('should persist resource-scoped working memory across multiple delegations to the same sub-agent', async () => {
+    const sharedStore = new InMemoryStore();
+    const sharedMemory = new MockMemory({
+      storage: sharedStore,
+      enableWorkingMemory: true,
+    });
+
+    // Track sub-agent thread/resource IDs from each delegation
+    const delegationIds: { subAgentThreadId?: string; subAgentResourceId?: string }[] = [];
+
+    // Sub-agent model:
+    // Delegation 1, call 1: call updateWorkingMemory to save entity data
+    // Delegation 1, call 2: respond with text
+    // Delegation 2, call 1: respond with text
+    let subCallCount = 0;
+    let secondDelegationSawPersistedMemory = false;
+
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subCallCount++;
+
+        if (subCallCount === 1) {
+          // First delegation, first call: save entity data to working memory
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'wm-call-1',
+                toolName: 'updateWorkingMemory',
+                input: JSON.stringify({
+                  memory: '# Entity Data\n- **entityId**: 401881\n- **name**: Record X',
+                }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+
+        // Delegation 2 should include previously saved working-memory content in context
+        if (subCallCount >= 3) {
+          secondDelegationSawPersistedMemory = JSON.stringify(prompt).includes('401881');
+        }
+
+        // All subsequent calls: respond with text
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: subCallCount === 2 ? 'Found entity 401881' : 'Updated entity',
+          content: [
+            {
+              type: 'text' as const,
+              text: subCallCount === 2 ? 'Found entity 401881' : 'Updated entity',
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const subAgent = new Agent({
+      id: 'worker-agent',
+      name: 'worker-agent',
+      description: 'A worker agent that handles entity operations',
+      instructions: 'You handle entity operations. Use working memory to remember entity data.',
+      model: subAgentModel,
+    });
+
+    // Supervisor model: always delegates to worker-agent, alternating between tool-call and stop
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount % 2 === 1) {
+          // Odd calls: delegate to sub-agent
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call-${supervisorCallCount}`,
+                toolName: 'agent-workerAgent',
+                input: JSON.stringify({
+                  prompt: supervisorCallCount === 1 ? 'Find record X' : 'Update the entity',
+                }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        // Even calls: final response
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'You orchestrate sub-agents for entity operations.',
+      model: supervisorModel,
+      agents: { workerAgent: subAgent },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'supervisor-thread';
+    const resourceId = 'test-user';
+
+    // First generate call: supervisor delegates to sub-agent, sub-agent saves working memory
+    await supervisor.generate('Find record X', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+      delegation: {
+        onDelegationComplete: ctx => {
+          delegationIds.push({
+            subAgentThreadId: ctx.result?.subAgentThreadId,
+            subAgentResourceId: ctx.result?.subAgentResourceId,
+          });
+        },
+      },
+    });
+
+    // Verify first delegation completed and working memory was saved
+    expect(delegationIds).toHaveLength(1);
+    const firstDelegationResourceId = delegationIds[0]!.subAgentResourceId;
+    expect(firstDelegationResourceId).toBeDefined();
+
+    // Verify working memory was persisted under the sub-agent's resource ID
+    const savedWorkingMemory = await sharedMemory.getWorkingMemory({
+      threadId: delegationIds[0]!.subAgentThreadId!,
+      resourceId: firstDelegationResourceId,
+    });
+    expect(savedWorkingMemory).toContain('401881');
+
+    // Second generate call: supervisor delegates to same sub-agent again
+    await supervisor.generate('Now update the entity', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+      delegation: {
+        onDelegationComplete: ctx => {
+          delegationIds.push({
+            subAgentThreadId: ctx.result?.subAgentThreadId,
+            subAgentResourceId: ctx.result?.subAgentResourceId,
+          });
+        },
+      },
+    });
+
+    expect(delegationIds).toHaveLength(2);
+    const secondDelegationResourceId = delegationIds[1]!.subAgentResourceId;
+
+    // The sub-agent resource ID is deterministic (parentResourceId-agentName)
+    // so it stays stable across delegations, allowing resource-scoped working memory to persist
+    expect(secondDelegationResourceId).toBe(firstDelegationResourceId);
+
+    // Working memory saved during delegation 1 should be retrievable using delegation 2's IDs
+    const retrievedWorkingMemory = await sharedMemory.getWorkingMemory({
+      threadId: delegationIds[1]!.subAgentThreadId!,
+      resourceId: secondDelegationResourceId,
+    });
+    expect(retrievedWorkingMemory).toContain('401881');
+    expect(secondDelegationSawPersistedMemory).toBe(true);
+  });
+});
+
+/**
  * Suspension in supervisor pattern.
  * Tests that when a sub-agent calls suspend(), the suspension propagates
  * through the supervisor's generate() and can be resumed.
@@ -2760,5 +2944,153 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
         expect(allSavedContent).not.toContain('I live in Paris');
       }
     }
+  });
+
+  describe('Sub-agent instructions merge', () => {
+    it('should preserve sub-agent own instructions when parent LLM provides instructions via tool call', async () => {
+      const capturedSystemMessages: string[] = [];
+
+      const subAgentModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          const messages = Array.isArray(prompt) ? prompt : [prompt];
+          for (const msg of messages) {
+            if ((msg as any).role === 'system') {
+              const content = (msg as any).content;
+              if (typeof content === 'string') {
+                capturedSystemMessages.push(content);
+              } else if (Array.isArray(content)) {
+                for (const part of content) {
+                  if (part.type === 'text') capturedSystemMessages.push(part.text);
+                }
+              }
+            }
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: 'Sub-agent response',
+            content: [{ type: 'text', text: 'Sub-agent response' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const subAgent = new Agent({
+        id: 'research-agent',
+        name: 'research-agent',
+        description: 'A research sub-agent',
+        instructions: 'You are a research assistant. Always cite your sources.',
+        model: subAgentModel,
+      });
+
+      let callCount = 0;
+      const supervisorModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: '',
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'agent-researchAgent',
+                  input: JSON.stringify({
+                    prompt: 'Find information about TypeScript',
+                    instructions: 'Be concise and use bullet points',
+                  }),
+                },
+              ],
+              warnings: [],
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Done',
+            content: [{ type: 'text', text: 'Done' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { researchAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Research TypeScript', { maxSteps: 3 });
+
+      const allSystemText = capturedSystemMessages.join('\n');
+      expect(allSystemText).toContain('You are a research assistant. Always cite your sources.');
+      expect(allSystemText).toContain('Be concise and use bullet points');
+
+      const ownIdx = allSystemText.indexOf('You are a research assistant. Always cite your sources.');
+      const llmIdx = allSystemText.indexOf('Be concise and use bullet points');
+      expect(ownIdx).toBeLessThan(llmIdx);
+    });
+
+    it('should use only agent own instructions when parent LLM does not provide instructions', async () => {
+      const capturedSystemMessages: string[] = [];
+
+      const subAgentModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          const messages = Array.isArray(prompt) ? prompt : [prompt];
+          for (const msg of messages) {
+            if ((msg as any).role === 'system') {
+              const content = (msg as any).content;
+              if (typeof content === 'string') {
+                capturedSystemMessages.push(content);
+              } else if (Array.isArray(content)) {
+                for (const part of content) {
+                  if (part.type === 'text') capturedSystemMessages.push(part.text);
+                }
+              }
+            }
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: 'Sub-agent response',
+            content: [{ type: 'text', text: 'Sub-agent response' }],
+            warnings: [],
+          };
+        },
+      });
+
+      const subAgent = new Agent({
+        id: 'helper-agent',
+        name: 'helper-agent',
+        description: 'A helper sub-agent',
+        instructions: 'You are a helpful assistant. Be thorough.',
+        model: subAgentModel,
+      });
+
+      const supervisorModel = makeSupervisorModel('helperAgent', 'Help me with something');
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { helperAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      await supervisorAgent.generate('Help me', { maxSteps: 3 });
+
+      const allSystemText = capturedSystemMessages.join('\n');
+      expect(allSystemText).toContain('You are a helpful assistant. Be thorough.');
+    });
   });
 });

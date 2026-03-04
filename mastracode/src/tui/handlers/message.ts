@@ -144,10 +144,14 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   }
 
   const trailingParts = getTrailingContentParts(message);
-  state.streamingComponent.updateContent({
-    ...message,
-    content: trailingParts,
-  });
+  // Avoid replacing visible assistant text with an empty trailing segment
+  // (commonly happens immediately after tool_result-only updates).
+  if (trailingParts.length > 0) {
+    state.streamingComponent.updateContent({
+      ...message,
+      content: trailingParts,
+    });
+  }
 
   state.ui.requestRender();
 }
@@ -159,10 +163,14 @@ export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessa
   if (state.streamingComponent && message.role === 'assistant') {
     state.streamingMessage = message;
     const trailingParts = getTrailingContentParts(message);
-    state.streamingComponent.updateContent({
-      ...message,
-      content: trailingParts,
-    });
+    // If the final assistant chunk has no trailing text/thinking after tools,
+    // keep the last rendered content instead of blanking the component.
+    if (trailingParts.length > 0 || message.stopReason === 'aborted' || message.stopReason === 'error') {
+      state.streamingComponent.updateContent({
+        ...message,
+        content: trailingParts,
+      });
+    }
 
     if (message.stopReason === 'aborted' || message.stopReason === 'error') {
       const errorMessage = message.errorMessage || 'Operation aborted';

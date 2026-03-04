@@ -99,13 +99,11 @@ The result is a three-tier system:
 
 ## Models
 
-The Observer and Reflector run in the background. Any model that works with Mastra's model routing (e.g. `openai/...`, `google/...`, `deepseek/...`) can be used.
+The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
 
-When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
+Generally speaking, we recommend using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-We recommend `google/gemini-2.5-flash` — it works well for both observation and reflection, and its 1M token context window gives the Reflector headroom.
-
-We've also tested `deepseek`, `qwen3`, and `glm-4.7` for the Observer. For the Reflector, make sure the model's context window can fit all observations. Note that Claude 4.5 models currently don't work well as observer or reflector.
+If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `openai/gpt-5-mini`, `anthropic/claude-haiku-4-5`, `deepseek/deepseek-reasoner`, `qwen3`, and `glm-4.7`.
 
 ```typescript
 const memory = new Memory({
@@ -190,6 +188,15 @@ const memory = new Memory({
   },
 })
 ```
+
+### Token counting cache
+
+OM caches tiktoken part estimates in message metadata to reduce repeat counting work during threshold checks and buffering decisions.
+
+- Per-part estimates are stored on `part.providerMetadata.mastra` and reused on subsequent passes when the cache version/tokenizer source matches.
+- For string-only message content (without parts), OM uses a message-level metadata fallback cache.
+- Message and conversation overhead are still recalculated on every pass. The cache only stores payload estimates, so counting semantics stay the same.
+- `data-*` and `reasoning` parts are still skipped and are not cached.
 
 ## Async Buffering
 
