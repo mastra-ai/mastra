@@ -263,6 +263,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
+  globalInitialState.thinkingLevel = globalSettings.preferences.thinkingLevel;
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
     if (key === '_default') {
