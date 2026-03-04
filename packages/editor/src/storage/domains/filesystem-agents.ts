@@ -94,7 +94,15 @@ export class FilesystemAgentsStorage extends AgentsStorage {
 
   async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
     const { id, ...updates } = input;
-    return this.helpers.updateEntity(id, updates);
+    // Strip snapshot config fields that don't belong on the entity record
+    const entityUpdates: Record<string, unknown> = {};
+    const entityFields = new Set(['authorId', 'metadata', 'activeVersionId', 'status']);
+    for (const [key, value] of Object.entries(updates)) {
+      if (entityFields.has(key)) {
+        entityUpdates[key] = value;
+      }
+    }
+    return this.helpers.updateEntity(id, entityUpdates);
   }
 
   async delete(id: string): Promise<void> {
