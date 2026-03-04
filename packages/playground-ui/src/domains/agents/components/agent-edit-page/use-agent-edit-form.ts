@@ -25,7 +25,11 @@ function createAgentFormResolver({
     const blocks = values.instructionBlocks;
     const hasBlockContent =
       blocks &&
-      blocks.some(b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content.trim() !== ''));
+      blocks.some(
+        b =>
+          (b.type === 'prompt_block_ref' && b.promptBlockId?.trim() !== '') ||
+          (b.type === 'prompt_block' && b.content.trim() !== ''),
+      );
     const hasPlainInstructions = values.instructions && values.instructions.trim() !== '';
 
     if (!hasBlockContent && !hasPlainInstructions) {
