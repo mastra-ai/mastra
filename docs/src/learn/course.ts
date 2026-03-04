@@ -17,7 +17,7 @@ AI agents are the next platform shift. Understanding how to build them is now a 
       title: 'What is an Agent?',
       durationMin: 5,
       status: 'published',
-      youtubeId: '7CwciY0fwHo',
+      youtubeId: 'G8tXjcseNjg',
       module: 'Agents',
       preview: {
         intro:
