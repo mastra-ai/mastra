@@ -193,21 +193,21 @@ export const testTool = createTool({
 })
 ```
 
-When `requireApproval` is `true`, the stream includes chunks of type `tool-call-approval` to indicate that the call is paused. Call `resumeStream` with the `resumeSchema` data and `runId` to continue:
+When `requireApproval` is `true`, the stream emits `tool-call-approval` chunks the same way agent-level approval does. Use `approveToolCall()` or `declineToolCall()` to continue:
 
 ```typescript
 const stream = await agent.stream("What's the weather in London?")
 
 for await (const chunk of stream.fullStream) {
   if (chunk.type === 'tool-call-approval') {
-    console.log('Approval required.')
+    console.log('Approval required for:', chunk.payload.toolName)
   }
 }
 
-const handleResume = async () => {
-  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId })
+const handleApproval = async () => {
+  const approvedStream = await agent.approveToolCall({ runId: stream.runId })
 
-  for await (const chunk of resumedStream.textStream) {
+  for await (const chunk of approvedStream.textStream) {
     process.stdout.write(chunk)
   }
   process.stdout.write('\n')
