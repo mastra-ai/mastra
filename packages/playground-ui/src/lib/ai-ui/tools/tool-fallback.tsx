@@ -29,10 +29,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const { markSkillLoaded } = useLoadedSkills();
 
   useEffect(() => {
-    if (toolName === 'skill' && args?.name) {
-      markSkillLoaded(args.name);
-    }
-  }, [toolName, args, markSkillLoaded]);
+    if (toolName !== 'skill') return;
+    if (!args?.name) return;
+    if (props.status?.type !== 'complete') return;
+    markSkillLoaded(args.name);
+  }, [toolName, args?.name, props.status?.type, markSkillLoaded]);
 
   useWorkflowStream(result);
 
