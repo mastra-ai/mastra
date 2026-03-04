@@ -7,6 +7,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { createTool } from '@mastra/core/tools';
+import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
 import { isPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
@@ -79,8 +80,8 @@ export const requestSandboxAccessTool = createTool({
         // Also update the workspace filesystem immediately so tools in the
         // same turn can access the path without waiting for the next turn.
         const fs = context?.workspace?.filesystem;
-        if (fs && 'setAllowedPaths' in fs && typeof (fs as any).setAllowedPaths === 'function') {
-          (fs as any).setAllowedPaths((prev: readonly string[]) => [...prev, absolutePath]);
+        if (fs instanceof LocalFilesystem) {
+          fs.setAllowedPaths((prev: readonly string[]) => [...prev, absolutePath]);
         }
 
         return {

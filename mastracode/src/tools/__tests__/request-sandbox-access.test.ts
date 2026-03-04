@@ -1,11 +1,20 @@
 import * as os from 'node:os';
+import * as path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { LocalFilesystem } from '@mastra/core/workspace';
 
 import { requestSandboxAccessTool } from '../request-sandbox-access.js';
 
+function createMockLocalFilesystem() {
+  const tmpDir = os.tmpdir();
+  const fs = new LocalFilesystem({ basePath: path.join(tmpDir, 'test-sandbox-access'), contained: true });
+  const spy = vi.spyOn(fs, 'setAllowedPaths');
+  return { fs, setAllowedPaths: spy };
+}
+
 describe('request_sandbox_access', () => {
   it('calls setAllowedPaths on workspace filesystem when access is approved', async () => {
-    const setAllowedPaths = vi.fn();
+    const { fs, setAllowedPaths } = createMockLocalFilesystem();
 
     const mockHarnessCtx = {
       emitEvent: vi.fn(),
@@ -22,7 +31,7 @@ describe('request_sandbox_access', () => {
         get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
       },
       workspace: {
-        filesystem: { setAllowedPaths },
+        filesystem: fs,
       },
     };
 
@@ -36,15 +45,16 @@ describe('request_sandbox_access', () => {
 
     // The key assertion: setAllowedPaths must be called mid-turn
     expect(setAllowedPaths).toHaveBeenCalledTimes(1);
-    const updater = setAllowedPaths.mock.calls[0][0];
-    expect(typeof updater).toBe('function');
+    const arg = setAllowedPaths.mock.calls[0]![0];
+    expect(typeof arg).toBe('function');
     // The updater should append the new path
+    const updater = arg as (current: readonly string[]) => string[];
     expect(updater([])).toEqual(['/outside/project/dir']);
     expect(updater(['/existing'])).toEqual(['/existing', '/outside/project/dir']);
   });
 
   it('does not call setAllowedPaths when access is denied', async () => {
-    const setAllowedPaths = vi.fn();
+    const { fs, setAllowedPaths } = createMockLocalFilesystem();
 
     const mockHarnessCtx = {
       emitEvent: vi.fn(),
@@ -60,7 +70,7 @@ describe('request_sandbox_access', () => {
         get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
       },
       workspace: {
-        filesystem: { setAllowedPaths },
+        filesystem: fs,
       },
     };
 
@@ -101,7 +111,7 @@ describe('request_sandbox_access', () => {
   });
 
   it('expands tilde paths instead of nesting under project root', async () => {
-    const setAllowedPaths = vi.fn();
+    const { fs, setAllowedPaths } = createMockLocalFilesystem();
 
     const mockHarnessCtx = {
       emitEvent: vi.fn(),
@@ -117,7 +127,7 @@ describe('request_sandbox_access', () => {
         get: (key: string) => (key === 'harness' ? mockHarnessCtx : undefined),
       },
       workspace: {
-        filesystem: { setAllowedPaths },
+        filesystem: fs,
       },
     };
 
@@ -135,7 +145,8 @@ describe('request_sandbox_access', () => {
 
     // setAllowedPaths should be called with the expanded path
     expect(setAllowedPaths).toHaveBeenCalledTimes(1);
-    const updater = setAllowedPaths.mock.calls[0][0];
+    const arg = setAllowedPaths.mock.calls[0]![0];
+    const updater = arg as (current: readonly string[]) => string[];
     expect(updater([])).toEqual([expectedPath]);
   });
 
