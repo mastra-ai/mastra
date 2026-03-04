@@ -165,7 +165,7 @@ When a sandbox has a process manager, Mastra automatically gives agents three to
 | `get_process_output` | Read stdout, stderr, and exit status of a background process by PID. Supports `tail` to limit lines and `wait: true` to block until exit. |
 | `kill_process` | Kill a background process by PID. Returns the last 50 lines of output. |
 
-Output from all tools is automatically truncated to the last 200 lines (configurable via `tail`) with a 2,000 token safety limit.
+Output from all tools is automatically truncated to the last 200 lines (configurable via `tail`) with a 2,000-token safety limit.
 
 You can configure these tools through the workspace's `tools` option:
 
