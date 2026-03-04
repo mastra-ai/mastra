@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../../constants.js';
 
 // Filenames to check, in order of preference
 const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md'];
@@ -43,7 +44,7 @@ function findInstructionFile(basePath: string): string | null {
  * Load all agent instruction files from global and project locations.
  * Returns an array of instruction sources, with global ones first.
  */
-export function loadAgentInstructions(projectPath: string, configDirName = '.mastracode'): InstructionSource[] {
+export function loadAgentInstructions(projectPath: string, configDirName = DEFAULT_CONFIG_DIR): InstructionSource[] {
   const sources: InstructionSource[] = [];
   const home = homedir();
 

@@ -7,6 +7,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig } from '@mastra/core/workspace';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { stateSchema } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
@@ -109,7 +110,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   }
 
   const projectPath = path.resolve(rawProjectPath);
-  const configDir = state?.configDir ?? '.mastracode';
+  const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const skillPaths = buildSkillPaths(projectPath, configDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];

@@ -2,6 +2,7 @@
  * HookManager — high-level orchestration for the hooks system.
  * Created once at startup, provides methods for each lifecycle event.
  */
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadHooksConfig, getProjectHooksPath, getGlobalHooksPath } from './config.js';
 import { runHooksForEvent } from './executor.js';
 import type {
@@ -20,7 +21,7 @@ export class HookManager {
   private sessionId: string;
   private configDirName: string;
 
-  constructor(projectDir: string, sessionId: string, configDirName = '.mastracode') {
+  constructor(projectDir: string, sessionId: string, configDirName = DEFAULT_CONFIG_DIR) {
     this.projectDir = projectDir;
     this.sessionId = sessionId;
     this.configDirName = configDirName;

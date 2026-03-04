@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const { buildSkillPathsMock } = vi.hoisted(() => ({
+  buildSkillPathsMock: vi.fn((_projectPath: string, _configDir: string) => ['/mock/skills/dir-a', '/mock/skills/dir-b']),
+}));
+
 // Mock the workspace module to control buildSkillPaths
 vi.mock('../../agents/workspace.js', () => ({
-  buildSkillPaths: (_projectPath: string, _configDir: string) => ['/mock/skills/dir-a', '/mock/skills/dir-b'],
+  buildSkillPaths: buildSkillPathsMock,
 }));
 
 import { getAllowedPathsFromContext } from '../utils.js';
@@ -23,6 +27,7 @@ describe('getAllowedPathsFromContext', () => {
   });
 
   it('merges skill paths with sandbox paths from harness state (getState)', () => {
+    buildSkillPathsMock.mockClear();
     const toolContext = {
       requestContext: {
         get: (key: string) => {
@@ -40,6 +45,7 @@ describe('getAllowedPathsFromContext', () => {
       },
     };
     const result = getAllowedPathsFromContext(toolContext);
+    expect(buildSkillPathsMock).toHaveBeenCalledWith('/test/project', '.mastracode');
     expect(result).toEqual([
       '/mock/skills/dir-a',
       '/mock/skills/dir-b',

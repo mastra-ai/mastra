@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { buildSkillPaths } from '../agents/workspace.js';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 import { ToolError } from './types.js';
 
@@ -156,7 +157,7 @@ export function getAllowedPathsFromContext(
 
   const state = harnessCtx?.getState?.() ?? harnessCtx?.state;
   const projectPath = state?.projectPath ? path.resolve(state.projectPath) : process.cwd();
-  const configDir = state?.configDir ?? '.mastracode';
+  const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const skillPaths = buildSkillPaths(projectPath, configDir);
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
 

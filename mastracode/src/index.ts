@@ -37,6 +37,7 @@ import { getToolCategory } from './permissions.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
+import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { stateSchema } from './schema.js';
 import {
   createViewTool,
@@ -85,7 +86,10 @@ export interface MastraCodeConfig {
 
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
-  const configDir = config?.configDir ?? '.mastracode';
+  const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
+  if (configDir !== DEFAULT_CONFIG_DIR) {
+    validateConfigDirName(configDir);
+  }
 
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
   const authStorage = new AuthStorage();
@@ -288,10 +292,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       projectPath: project.rootPath,
       projectName: project.name,
       gitBranch: project.gitBranch,
-      configDir,
       yolo: true,
       ...globalInitialState,
       ...config?.initialState,
+      // configDir must always win over initialState spreads to stay in sync
+      // with MCP/hooks/storage which were already initialized with this value.
+      configDir,
     },
     workspace: config?.workspace ?? getDynamicWorkspace,
     modes,

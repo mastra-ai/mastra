@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 export interface ProjectInfo {
   /** Unique resource ID for this project (used for thread grouping) */
   resourceId: string;
@@ -249,7 +250,7 @@ export type StorageConfig = LibSQLStorageConfig | PgStorageConfig;
  * For LibSQL, the legacy env vars still work:
  *   MASTRA_DB_URL + MASTRA_DB_AUTH_TOKEN
  */
-export function getStorageConfig(projectDir?: string, storageSettings?: StorageSettings, configDirName = '.mastracode'): StorageConfig {
+export function getStorageConfig(projectDir?: string, storageSettings?: StorageSettings, configDirName = DEFAULT_CONFIG_DIR): StorageConfig {
   // 1. Environment variable — explicit backend selection
   const envBackend = process.env.MASTRA_STORAGE_BACKEND as StorageBackend | undefined;
 
@@ -402,7 +403,7 @@ export type OmScope = 'thread' | 'resource';
  *   3. Global config: ~/.mastracode/database.json → omScope
  *   4. Default: "thread"
  */
-export function getOmScope(projectDir?: string, configDirName = '.mastracode'): OmScope {
+export function getOmScope(projectDir?: string, configDirName = DEFAULT_CONFIG_DIR): OmScope {
   // 1. Environment variable
   const envScope = process.env.MASTRA_OM_SCOPE;
   if (envScope === 'thread' || envScope === 'resource') {
@@ -449,7 +450,7 @@ function loadOmScopeFromConfig(filePath: string): OmScope | null {
  *   3. Global config: ~/.mastracode/database.json → resourceId
  *   4. null (use auto-detected value)
  */
-export function getResourceIdOverride(projectDir?: string, configDirName = '.mastracode'): string | null {
+export function getResourceIdOverride(projectDir?: string, configDirName = DEFAULT_CONFIG_DIR): string | null {
   // 1. Environment variable
   if (process.env.MASTRA_RESOURCE_ID) {
     return process.env.MASTRA_RESOURCE_ID;
