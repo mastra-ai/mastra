@@ -28,13 +28,14 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/name', description: 'Rename current thread' },
     { key: '/resource', description: 'Show/switch resource ID' },
     { key: '/skills', description: 'List available skills' },
-    { key: '/models', description: 'Configure model' },
-    { key: '/models:pack', description: 'Switch model pack' },
+    { key: '/models', description: 'Switch model pack' },
+    { key: '/custom-providers', description: 'Manage custom providers and models' },
     { key: '/subagents', description: 'Configure subagent models' },
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
     { key: '/om', description: 'Configure Observational Memory' },
     { key: '/review', description: 'Review a GitHub pull request' },
+    { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },
     { key: '/diff', description: 'Modified files or git diff' },
     { key: '/sandbox', description: 'Manage sandbox allowed paths' },
@@ -65,7 +66,8 @@ function getShortcuts(modes: number): HelpEntry[] {
     { key: 'Ctrl+T', description: 'Toggle thinking blocks' },
     { key: 'Ctrl+E', description: 'Expand/collapse tool outputs' },
     { key: 'Ctrl+Y', description: 'Toggle YOLO mode' },
-    { key: 'Ctrl+Z', description: 'Undo last clear' },
+    { key: 'Ctrl+Z', description: 'Suspend process (fg to resume)' },
+    { key: 'Alt+Z', description: 'Undo last clear' },
   ];
 
   if (modes > 1) {

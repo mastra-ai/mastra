@@ -7,7 +7,8 @@
 
 import matter from 'gray-matter';
 
-import { isGlobPattern, extractGlobBase, createGlobMatcher } from '../glob';
+import { isGlobPattern, resolvePathPattern } from '../glob';
+import type { ReaddirEntry } from '../glob';
 import type { IndexDocument, SearchResult } from '../search';
 import { validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
@@ -422,26 +423,58 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    * Discover skills from all skills paths.
    * Uses currently resolved paths (must be set before calling).
    *
-   * Paths can be plain directories (e.g., '/skills') or glob patterns
-   * (e.g., '**\/skills'). Glob patterns resolve to directories that match
-   * the pattern, each of which is then scanned for skills.
+   * Paths can be plain directories, glob patterns, or direct
+   * skill references (e.g., '/skills/my-skill/SKILL.md').
+   *
+   * Uses resolvePathPattern for unified glob resolution. File matches
+   * pointing to SKILL.md are loaded directly; directory matches are
+   * tried as direct skills first, then scanned for subdirectories.
    */
   async #discoverSkills(): Promise<void> {
     // Clear glob cache so discovery gets fresh results
     this.#globDirCache.clear();
     this.#globResolveTimes.clear();
 
-    for (const skillsPath of this.#resolvedPaths) {
+    // Adapt SkillSource.readdir to the ReaddirEntry interface used by resolvePathPattern
+    const readdir = async (dir: string): Promise<ReaddirEntry[]> => {
+      const entries = await this.#source.readdir(dir);
+      return entries.map(e => ({ name: e.name, type: e.type, isSymlink: e.isSymlink }));
+    };
+
+    for (const rawSkillsPath of this.#resolvedPaths) {
+      // Strip trailing slash for consistent path handling (e.g. '/skills/' → '/skills')
+      const skillsPath =
+        rawSkillsPath.length > 1 && rawSkillsPath.endsWith('/') ? rawSkillsPath.slice(0, -1) : rawSkillsPath;
       const source = this.#determineSource(skillsPath);
 
       if (isGlobPattern(skillsPath)) {
-        // Glob pattern: resolve to matching directories, then discover in each
-        const matchingDirs = await this.#resolveGlobToDirectories(skillsPath);
-        // Cache for subsequent staleness checks
-        this.#globDirCache.set(skillsPath, matchingDirs);
+        // Glob pattern: resolve to matching entries, then discover skills from each
+        const resolved = await resolvePathPattern(skillsPath, readdir, { dot: true, maxDepth: 4 });
+
+        // Cache directories for staleness checks: matched dirs directly,
+        // and parent dirs for matched files (e.g. **/SKILL.md → parent skill dir)
+        const dirs = new Set<string>();
+        for (const entry of resolved) {
+          if (entry.type === 'directory') {
+            dirs.add(entry.path);
+          } else {
+            dirs.add(this.#getParentPath(entry.path));
+          }
+        }
+        this.#globDirCache.set(skillsPath, [...dirs]);
         this.#globResolveTimes.set(skillsPath, Date.now());
-        for (const dir of matchingDirs) {
-          await this.#discoverSkillsInPath(dir, source);
+
+        for (const entry of resolved) {
+          if (entry.type === 'file') {
+            // File match (e.g., **/SKILL.md) — load as direct skill
+            await this.#discoverDirectSkill(entry.path, source);
+          } else {
+            // Directory match — try as direct skill first, then scan subdirectories
+            const isDirect = await this.#discoverDirectSkill(entry.path, source);
+            if (!isDirect) {
+              await this.#discoverSkillsInPath(entry.path, source);
+            }
+          }
         }
       } else {
         // Check if the path is a direct skill reference (directory with SKILL.md or SKILL.md file)
@@ -454,56 +487,6 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     }
     // Track when discovery completed for staleness check
     this.#lastDiscoveryTime = Date.now();
-  }
-
-  /**
-   * Resolve a glob pattern to a list of matching directories.
-   * Walks from extractGlobBase() and tests each directory against the pattern.
-   *
-   * Note: Broad patterns like `/** /skills` resolve to a walk root of `/`,
-   * scanning the entire workspace tree. This is cached per-pattern with a
-   * TTL (GLOB_RESOLVE_INTERVAL) to limit I/O. For large workspaces, prefer
-   * more specific patterns like `/src/** /skills` to narrow the walk root.
-   */
-  async #resolveGlobToDirectories(pattern: string): Promise<string[]> {
-    const walkRoot = extractGlobBase(pattern);
-    const matcher = createGlobMatcher(pattern, { dot: true });
-    const matchingDirs: string[] = [];
-
-    await this.#walkForDirectories(walkRoot, dirPath => {
-      if (matcher(dirPath)) {
-        matchingDirs.push(dirPath);
-      }
-    });
-
-    return matchingDirs;
-  }
-
-  /**
-   * Walk a directory tree and call callback for each directory found.
-   */
-  async #walkForDirectories(
-    basePath: string,
-    callback: (dirPath: string) => void,
-    depth: number = 0,
-    maxDepth: number = 4,
-  ): Promise<void> {
-    if (depth >= maxDepth) return;
-
-    try {
-      const entries = await this.#source.readdir(basePath);
-      for (const entry of entries) {
-        // Skip symlink directories to prevent infinite recursion from cycles
-        if (entry.type !== 'directory' || entry.isSymlink) continue;
-        // Use explicit path construction to handle root '/' correctly
-        // (#joinPath strips root '/', so we handle it directly)
-        const entryPath = basePath === '/' ? `/${entry.name}` : `${basePath}/${entry.name}`;
-        callback(entryPath);
-        await this.#walkForDirectories(entryPath, callback, depth + 1, maxDepth);
-      }
-    } catch {
-      // Directory doesn't exist or can't be read, skip
-    }
   }
 
   /**
@@ -637,12 +620,27 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       let pathsToCheck: string[];
 
       if (isGlobPattern(skillsPath)) {
-        // Use cached glob dirs, re-resolve periodically to discover new directories
+        // Use cached glob dirs, re-resolve periodically to discover new entries
         const now = Date.now();
         const lastResolved = this.#globResolveTimes.get(skillsPath) ?? 0;
         if (now - lastResolved > WorkspaceSkillsImpl.GLOB_RESOLVE_INTERVAL || !this.#globDirCache.has(skillsPath)) {
-          const dirs = await this.#resolveGlobToDirectories(skillsPath);
-          this.#globDirCache.set(skillsPath, dirs);
+          const readdir = async (dir: string): Promise<ReaddirEntry[]> => {
+            const entries = await this.#source.readdir(dir);
+            return entries.map(e => ({ name: e.name, type: e.type, isSymlink: e.isSymlink }));
+          };
+          const resolved = await resolvePathPattern(skillsPath, readdir, { dot: true, maxDepth: 4 });
+          // For staleness checks we need directories: matched dirs directly,
+          // and parent dirs for matched files (e.g. **/SKILL.md → parent skill dir)
+          const dirs = new Set<string>();
+          for (const entry of resolved) {
+            if (entry.type === 'directory') {
+              dirs.add(entry.path);
+            } else {
+              dirs.add(this.#getParentPath(entry.path));
+            }
+          }
+          const dirList = [...dirs];
+          this.#globDirCache.set(skillsPath, dirList);
           this.#globResolveTimes.set(skillsPath, now);
         }
         pathsToCheck = this.#globDirCache.get(skillsPath) ?? [];

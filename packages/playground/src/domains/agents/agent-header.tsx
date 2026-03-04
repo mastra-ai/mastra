@@ -1,5 +1,3 @@
-import { Link } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -14,6 +12,7 @@ import {
   useIsCmsAvailable,
 } from '@mastra/playground-ui';
 import { EyeIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
   const { isCmsAvailable } = useIsCmsAvailable();

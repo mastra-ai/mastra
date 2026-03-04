@@ -9,6 +9,12 @@ packages:
 
 **Added in:** `@mastra/core@1.5.0`
 
+:::warning
+
+The `Harness` class is in alpha stage and subject to change. It won't follow semantic versioning guarantees until it graduates from experimental status. Use with caution and expect breaking changes in minor versions.
+
+:::
+
 The `Harness` class orchestrates multiple agent modes, shared state, memory, and storage. It provides a control layer that a TUI or other UI can drive to manage threads, switch models and modes, send messages, handle tool approvals, and track events.
 
 ## Usage example
@@ -243,6 +249,18 @@ type: "string",
 description: "Default model ID for this subagent type.",
 isOptional: true,
 },
+{
+name: "maxSteps",
+type: "number",
+description: "Optional maximum number of steps for the spawned subagent. Defaults to `50` when omitted.",
+isOptional: true,
+},
+{
+name: "stopWhen",
+type: "LoopOptions['stopWhen']",
+description: "Optional stop condition for the spawned subagent.",
+isOptional: true,
+},
 ]}
 />
 
@@ -450,6 +468,23 @@ Update the title of the current thread.
 await harness.renameThread({ title: 'Updated title' })
 ```
 
+#### `cloneThread({ sourceThreadId?, title?, resourceId? })`
+
+Clone an existing thread and switch to the clone. Copies all messages, acquires a lock on the new thread, releases the lock on the previous thread, and emits a `thread_created` event. If `sourceThreadId` is omitted, the current thread is cloned. When [Observational Memory](/docs/memory/observational-memory) is enabled, OM records are cloned with remapped message IDs.
+
+```typescript
+// Clone the current thread
+const cloned = await harness.cloneThread()
+
+// Clone a specific thread with a custom title
+const cloned = await harness.cloneThread({
+  sourceThreadId: 'thread-abc123',
+  title: 'Alternative approach',
+})
+```
+
+See [`Memory.cloneThread()`](/reference/memory/cloneThread) for details on what gets cloned.
+
 #### `getResourceId()`
 
 Return the current resource ID.
@@ -477,9 +512,9 @@ const session = await harness.getSession()
 
 ### Messages
 
-#### `sendMessage({ content, images? })`
+#### `sendMessage({ content, files?, requestContext? })`
 
-Send a message to the current agent. Creates a thread if none exists, builds a `RequestContext` and toolsets, and streams the agent's response. Handles tool calls, approvals, and errors automatically.
+Send a message to the current agent. Creates a thread if none exists, builds a `RequestContext` and toolsets, and streams the agent's response. Handles tool calls, approvals, and errors automatically. If you provide `requestContext`, the harness forwards it to tools and subagents during the run.
 
 ```typescript
 await harness.sendMessage({ content: 'Explain the authentication flow' })
@@ -512,6 +547,34 @@ Retrieve the first user message for a given thread.
 const firstMsg = await harness.getFirstUserMessageForThread({ threadId: 'thread-abc123' })
 ```
 
+### Memory
+
+The `memory` property exposes thread management operations. These are also available as top-level methods on the harness.
+
+#### `memory.createThread({ title? })`
+
+Create a new thread. Same as `harness.createThread()`.
+
+#### `memory.switchThread({ threadId })`
+
+Switch to a different thread. Same as `harness.switchThread()`.
+
+#### `memory.listThreads(options?)`
+
+List threads from storage. Same as `harness.listThreads()`.
+
+#### `memory.renameThread({ title })`
+
+Update the title of the current thread. Same as `harness.renameThread()`.
+
+#### `memory.deleteThread({ threadId })`
+
+Delete a thread and all its messages from storage. If the deleted thread is the currently active thread, the thread lock is released and the harness clears its active thread. Emits a `thread_deleted` event.
+
+```typescript
+await harness.memory.deleteThread({ threadId: 'thread-abc123' })
+```
+
 ### Flow control
 
 #### `abort()`
@@ -522,7 +585,7 @@ Abort any in-progress generation.
 harness.abort()
 ```
 
-#### `steer({ content })`
+#### `steer({ content, requestContext? })`
 
 Steer the agent mid-stream by injecting an instruction into the current generation.
 
@@ -530,7 +593,7 @@ Steer the agent mid-stream by injecting an instruction into the current generati
 harness.steer({ content: 'Focus on security implications' })
 ```
 
-#### `followUp({ content })`
+#### `followUp({ content, requestContext? })`
 
 Queue a follow-up message to be sent after the current generation completes. If no operation is running, sends the message immediately.
 
@@ -540,7 +603,7 @@ harness.followUp({ content: 'Now apply those changes' })
 
 ### Tool approvals
 
-#### `respondToToolApproval({ decision })`
+#### `respondToToolApproval({ decision, requestContext? })`
 
 Respond to a pending tool approval request. Called when a `tool_approval_required` event is received.
 
@@ -642,7 +705,7 @@ Return the current workspace instance, or `undefined` if no workspace is configu
 const workspace = harness.getWorkspace()
 ```
 
-#### `resolveWorkspace()`
+#### `resolveWorkspace({ requestContext? })`
 
 Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
 
@@ -807,6 +870,7 @@ The harness emits events through registered listeners. The following table lists
 | `model_changed` | The active model changed. |
 | `thread_changed` | The active thread changed. |
 | `thread_created` | A new thread was created. |
+| `thread_deleted` | A thread was deleted. |
 | `state_changed` | Harness state was updated. |
 | `agent_start` | The agent started processing. |
 | `agent_end` | The agent finished processing. |

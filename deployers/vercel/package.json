@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-vercel",
-  "version": "1.0.8",
+  "version": "1.1.0",
   "description": "",
   "type": "module",
   "files": [
@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/fs-extra": "^11.0.4",

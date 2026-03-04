@@ -4,16 +4,32 @@
  */
 import { Spacer } from '@mariozechner/pi-tui';
 
+import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
+import type { TUIState } from '../state.js';
 import { theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
 
 /**
+ * Process the next pending inline question from the queue.
+ * Called when the current active question is resolved (submitted or cancelled).
+ */
+function processNextInlineQuestion(state: TUIState): void {
+  const next = state.pendingInlineQuestions.shift();
+  if (next) {
+    next();
+  }
+}
+
+/**
  * Handle an ask_question event from the ask_user tool.
  * Shows a dialog overlay and resolves the tool's pending promise.
+ *
+ * If another inline question is already active, the new question is queued
+ * and will be shown once the current one is answered.
  */
 export async function handleAskQuestion(
   ctx: EventHandlerContext,
@@ -24,71 +40,86 @@ export async function handleAskQuestion(
   const { state } = ctx;
   return new Promise(resolve => {
     if (state.options.inlineQuestions) {
-      // Inline mode: Add question component to chat
-      const questionComponent = new AskQuestionInlineComponent(
-        {
-          question,
-          options,
-          onSubmit: answer => {
-            state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer });
-            resolve();
+      // Capture the current ask_user component reference now, before it can be
+      // overwritten by a subsequent parallel tool call.
+      const askUserComponent = state.lastAskUserComponent;
+
+      const activate = () => {
+        // Inline mode: Add question component to chat
+        const questionComponent = new AskQuestionInlineComponent(
+          {
+            question,
+            options,
+            onSubmit: answer => {
+              state.activeInlineQuestion = undefined;
+              state.harness.respondToQuestion({ questionId, answer });
+              resolve();
+              processNextInlineQuestion(state);
+            },
+            onCancel: () => {
+              state.activeInlineQuestion = undefined;
+              state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+              resolve();
+              processNextInlineQuestion(state);
+            },
           },
-          onCancel: () => {
-            state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
-            resolve();
-          },
-        },
-        state.ui,
-      );
+          state.ui,
+        );
 
-      // Store as active question
-      state.activeInlineQuestion = questionComponent;
+        // Store as active question
+        state.activeInlineQuestion = questionComponent;
 
-      // Insert the question right after the ask_user tool component
-      if (state.lastAskUserComponent) {
-        // Find the position of the ask_user component
-        const children = [...state.chatContainer.children];
-        const askUserIndex = children.indexOf(state.lastAskUserComponent as any);
+        // Insert the question right after the ask_user tool component
+        if (askUserComponent) {
+          // Find the position of the ask_user component
+          const children = [...state.chatContainer.children];
+          const askUserIndex = children.indexOf(askUserComponent as any);
 
-        if (askUserIndex >= 0) {
-          // Clear and rebuild with question in the right place
-          state.chatContainer.clear();
-          // Add all children up to and including the ask_user tool
-          for (let i = 0; i <= askUserIndex; i++) {
-            state.chatContainer.addChild(children[i]!);
-          }
+          if (askUserIndex >= 0) {
+            // Clear and rebuild with question in the right place
+            state.chatContainer.clear();
+            // Add all children up to and including the ask_user tool
+            for (let i = 0; i <= askUserIndex; i++) {
+              state.chatContainer.addChild(children[i]!);
+            }
 
-          // Add the question component with spacing
-          state.chatContainer.addChild(new Spacer(1));
-          state.chatContainer.addChild(questionComponent);
-          state.chatContainer.addChild(new Spacer(1));
+            // Add the question component with spacing
+            state.chatContainer.addChild(new Spacer(1));
+            state.chatContainer.addChild(questionComponent);
+            state.chatContainer.addChild(new Spacer(1));
 
-          // Add remaining children
-          for (let i = askUserIndex + 1; i < children.length; i++) {
-            state.chatContainer.addChild(children[i]!);
+            // Add remaining children
+            for (let i = askUserIndex + 1; i < children.length; i++) {
+              state.chatContainer.addChild(children[i]!);
+            }
+          } else {
+            // Fallback: add at the end
+            state.chatContainer.addChild(new Spacer(1));
+            state.chatContainer.addChild(questionComponent);
+            state.chatContainer.addChild(new Spacer(1));
           }
         } else {
-          // Fallback: add at the end
+          // Fallback: add at the end if no ask_user component tracked
           state.chatContainer.addChild(new Spacer(1));
           state.chatContainer.addChild(questionComponent);
           state.chatContainer.addChild(new Spacer(1));
         }
+
+        state.ui.requestRender();
+
+        // Ensure the chat scrolls to show the question
+        state.chatContainer.invalidate();
+
+        // Focus the question component
+        questionComponent.focused = true;
+      };
+
+      // If another inline question is already active, queue this one
+      if (state.activeInlineQuestion) {
+        state.pendingInlineQuestions.push(activate);
       } else {
-        // Fallback: add at the end if no ask_user component tracked
-        state.chatContainer.addChild(new Spacer(1));
-        state.chatContainer.addChild(questionComponent);
-        state.chatContainer.addChild(new Spacer(1));
+        activate();
       }
-
-      state.ui.requestRender();
-
-      // Ensure the chat scrolls to show the question
-      state.chatContainer.invalidate();
-
-      // Focus the question component
-      questionComponent.focused = true;
     } else {
       // Dialog mode: Show overlay
       const dialog = new AskQuestionDialogComponent({
@@ -116,6 +147,9 @@ export async function handleAskQuestion(
 /**
  * Handle a sandbox_access_request event from the request_sandbox_access tool.
  * Shows an inline prompt for the user to approve or deny directory access.
+ *
+ * If another inline question is already active, the new prompt is queued
+ * and will be shown once the current one is answered.
  */
 export async function handleSandboxAccessRequest(
   ctx: EventHandlerContext,
@@ -125,42 +159,53 @@ export async function handleSandboxAccessRequest(
 ): Promise<void> {
   const { state } = ctx;
   return new Promise(resolve => {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: `Grant sandbox access to "${requestedPath}"?\n${theme.fg('dim', `Reason: ${reason}`)}`,
-        options: [
-          { label: 'Yes', description: 'Allow access to this directory' },
-          { label: 'No', description: 'Deny access' },
-        ],
-        onSubmit: answer => {
-          state.activeInlineQuestion = undefined;
-          state.harness.respondToQuestion({ questionId, answer });
-          resolve();
+    const activate = () => {
+      const questionComponent = new AskQuestionInlineComponent(
+        {
+          question: `Grant sandbox access to "${requestedPath}"?\n${theme.fg('dim', `Reason: ${reason}`)}`,
+          options: [
+            { label: 'Yes', description: 'Allow access to this directory' },
+            { label: 'No', description: 'Deny access' },
+          ],
+          onSubmit: answer => {
+            state.activeInlineQuestion = undefined;
+            state.harness.respondToQuestion({ questionId, answer });
+            resolve();
+            processNextInlineQuestion(state);
+          },
+          onCancel: () => {
+            state.activeInlineQuestion = undefined;
+            state.harness.respondToQuestion({ questionId, answer: 'No' });
+            resolve();
+            processNextInlineQuestion(state);
+          },
+          formatResult: answer => {
+            const approved = answer.toLowerCase().startsWith('y');
+            return approved ? `Granted access to ${requestedPath}` : `Denied access to ${requestedPath}`;
+          },
+          isNegativeAnswer: answer => !answer.toLowerCase().startsWith('y'),
         },
-        onCancel: () => {
-          state.activeInlineQuestion = undefined;
-          state.harness.respondToQuestion({ questionId, answer: 'No' });
-          resolve();
-        },
-        formatResult: answer => {
-          const approved = answer.toLowerCase().startsWith('y');
-          return approved ? `Granted access to ${requestedPath}` : `Denied access to ${requestedPath}`;
-        },
-        isNegativeAnswer: answer => !answer.toLowerCase().startsWith('y'),
-      },
-      state.ui,
-    );
+        state.ui,
+      );
 
-    // Store as active question so input routing works
-    state.activeInlineQuestion = questionComponent;
+      // Store as active question so input routing works
+      state.activeInlineQuestion = questionComponent;
 
-    // Add to chat
-    state.chatContainer.addChild(new Spacer(1));
-    state.chatContainer.addChild(questionComponent);
-    state.chatContainer.addChild(new Spacer(1));
-    questionComponent.focused = true;
-    state.ui.requestRender();
-    state.chatContainer.invalidate();
+      // Add to chat
+      state.chatContainer.addChild(new Spacer(1));
+      state.chatContainer.addChild(questionComponent);
+      state.chatContainer.addChild(new Spacer(1));
+      questionComponent.focused = true;
+      state.ui.requestRender();
+      state.chatContainer.invalidate();
+    };
+
+    // If another inline question is already active, queue this one
+    if (state.activeInlineQuestion) {
+      state.pendingInlineQuestions.push(activate);
+    } else {
+      activate();
+    }
 
     ctx.notify('sandbox_access', `Sandbox access requested: ${requestedPath}`);
   });
@@ -193,6 +238,12 @@ export async function handlePlanApproval(
               approvedAt: new Date().toISOString(),
             },
           });
+          // Persist plan to disk (fire-and-forget, best-effort)
+          savePlanToDisk({
+            title,
+            plan,
+            resourceId: state.harness.getResourceId(),
+          }).catch(() => {});
           // Wait for plan approval to complete (switches mode, aborts stream)
           await state.harness.respondToPlanApproval({
             planId,

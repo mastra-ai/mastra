@@ -7,7 +7,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { GitHistory } from './git-history';
 
-
 /**
  * Helper to run git commands in a directory.
  */

@@ -7,12 +7,7 @@ import type {
 } from '../../types';
 import type { FilesystemDB } from '../../filesystem-db';
 import { FilesystemVersionedHelpers } from '../../filesystem-versioned';
-import type {
-  SkillVersion,
-  CreateSkillVersionInput,
-  ListSkillVersionsInput,
-  ListSkillVersionsOutput,
-} from './base';
+import type { SkillVersion, CreateSkillVersionInput, ListSkillVersionsInput, ListSkillVersionsOutput } from './base';
 import { SkillsStorage } from './base';
 
 export class FilesystemSkillsStorage extends SkillsStorage {

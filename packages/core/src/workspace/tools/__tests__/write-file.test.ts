@@ -23,10 +23,13 @@ describe('workspace_write_file', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
-      path: '/new.txt',
-      content: 'New content',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+      {
+        path: '/new.txt',
+        content: 'New content',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Wrote 11 bytes to /new.txt');
@@ -43,10 +46,13 @@ describe('workspace_write_file', () => {
     // Read first (required by safety)
     await workspace.filesystem!.readFile('/existing.txt');
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute({
-      path: '/existing.txt',
-      content: 'updated',
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE].execute(
+      {
+        path: '/existing.txt',
+        content: 'updated',
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toContain('Wrote');

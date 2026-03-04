@@ -1,6 +1,6 @@
 /**
  * Thinking level settings component.
- * Simple selector for extended thinking budget levels (Anthropic models).
+ * Simple selector for reasoning depth levels.
  *
  * Changes apply immediately — Esc closes the panel.
  */
@@ -22,13 +22,45 @@ export interface ThinkingSettingsCallbacks {
 // Thinking Levels
 // =============================================================================
 
-export const THINKING_LEVELS = [
-  { id: 'off', label: 'Off', description: 'No extended thinking' },
-  { id: 'minimal', label: 'Minimal', description: '~1k budget tokens' },
-  { id: 'low', label: 'Low', description: '~4k budget tokens' },
-  { id: 'medium', label: 'Medium', description: '~10k budget tokens' },
-  { id: 'high', label: 'High', description: '~32k budget tokens' },
-] as const;
+export type ThinkingLevelId = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
+export interface ThinkingLevelOption {
+  id: ThinkingLevelId;
+  label: string;
+  providerValue: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+  description: string;
+}
+
+const BASE_THINKING_LEVELS: ThinkingLevelOption[] = [
+  { id: 'off', label: 'Off', providerValue: 'none', description: 'Reasoning disabled' },
+  { id: 'low', label: 'Low', providerValue: 'low', description: 'Light reasoning' },
+  { id: 'medium', label: 'Medium', providerValue: 'medium', description: 'Balanced reasoning' },
+  { id: 'high', label: 'High', providerValue: 'high', description: 'Deep reasoning' },
+  { id: 'xhigh', label: 'Very High', providerValue: 'xhigh', description: 'Maximum reasoning depth' },
+];
+
+function isOpenAIModel(modelId: string): boolean {
+  return modelId.startsWith('openai/');
+}
+
+export function getThinkingLevelsForModel(modelId: string): ThinkingLevelOption[] {
+  if (!isOpenAIModel(modelId)) {
+    return [...BASE_THINKING_LEVELS];
+  }
+
+  return BASE_THINKING_LEVELS.map(level => ({
+    ...level,
+    label: level.providerValue,
+  }));
+}
+
+export const THINKING_LEVELS = getThinkingLevelsForModel('');
+
+export function getThinkingLevelForModel(modelId: string, levelId: string): ThinkingLevelOption {
+  return (
+    getThinkingLevelsForModel(modelId).find(level => level.id === levelId) ?? getThinkingLevelsForModel(modelId)[0]!
+  );
+}
 
 // =============================================================================
 // Thinking Settings Component

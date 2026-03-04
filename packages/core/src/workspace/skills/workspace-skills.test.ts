@@ -934,6 +934,123 @@ Instructions for the new skill.`;
     });
   });
 
+  describe('maybeRefresh with file-level globs', () => {
+    it('should detect new skills when using **/SKILL.md glob', async () => {
+      vi.useFakeTimers();
+      try {
+        let modifiedAt = new Date(Date.now() - 10000);
+        const filesMap: Record<string, string> = {
+          '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+
+        (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+          async (path: string): Promise<SkillSourceStat> => ({
+            name: path.split('/').pop() || path,
+            type: path.includes('.') ? ('file' as const) : ('directory' as const),
+            size: 0,
+            createdAt: modifiedAt,
+            modifiedAt,
+          }),
+        );
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['**/SKILL.md'],
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+        expect(initialList[0]!.name).toBe('test-skill');
+
+        // Advance past the staleness check cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Add a new skill
+        const newSkillMd = `---
+name: new-skill
+description: A newly added skill
+---
+
+# New Skill
+
+Instructions for the new skill.`;
+        filesMap['/other/new-skill/SKILL.md'] = newSkillMd;
+        await filesystem.writeFile('/other/new-skill/SKILL.md', newSkillMd);
+
+        // Update modification time
+        modifiedAt = new Date(Date.now() + 1000);
+
+        // maybeRefresh should detect the change and pick up the new skill
+        await skills.maybeRefresh();
+        const updatedList = await skills.list();
+
+        expect(updatedList).toHaveLength(2);
+        expect(updatedList.map(s => s.name).sort()).toEqual(['new-skill', 'test-skill']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should detect new skills when using /skills/**/SKILL.md glob', async () => {
+      vi.useFakeTimers();
+      try {
+        let modifiedAt = new Date(Date.now() - 10000);
+        const filesMap: Record<string, string> = {
+          '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        };
+
+        const filesystem = createMockFilesystem(filesMap);
+
+        (filesystem.stat as ReturnType<typeof vi.fn>).mockImplementation(
+          async (path: string): Promise<SkillSourceStat> => ({
+            name: path.split('/').pop() || path,
+            type: path.includes('.') ? ('file' as const) : ('directory' as const),
+            size: 0,
+            createdAt: modifiedAt,
+            modifiedAt,
+          }),
+        );
+
+        const skills = new WorkspaceSkillsImpl({
+          source: filesystem,
+          skills: ['/skills/**/SKILL.md'],
+        });
+
+        // Initial discovery
+        const initialList = await skills.list();
+        expect(initialList).toHaveLength(1);
+
+        // Advance past the staleness check cooldown
+        vi.advanceTimersByTime(WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN + 100);
+
+        // Add a new skill under /skills
+        const newSkillMd = `---
+name: new-skill
+description: A newly added skill
+---
+
+# New Skill
+
+Instructions for the new skill.`;
+        filesMap['/skills/new-skill/SKILL.md'] = newSkillMd;
+        await filesystem.writeFile('/skills/new-skill/SKILL.md', newSkillMd);
+
+        modifiedAt = new Date(Date.now() + 1000);
+
+        await skills.maybeRefresh();
+        const updatedList = await skills.list();
+
+        expect(updatedList).toHaveLength(2);
+        expect(updatedList.map(s => s.name).sort()).toEqual(['new-skill', 'test-skill']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('read-only mode (SkillSource)', () => {
     // Create a mock read-only source (no write methods)
     function createMockReadOnlySource(files: Record<string, string | Buffer> = {}) {
@@ -1223,6 +1340,117 @@ Instructions for the new skill.`;
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
         skills: ['/a/b/**/skills'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('test-skill');
+    });
+
+    it('should discover skills with /skills/** glob', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills/**'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should discover skills with **/skills/** glob', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/src/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['**/skills/**'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should discover skills with file-level glob **/SKILL.md', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/other/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['**/SKILL.md'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should discover skills with /skills/**/SKILL.md glob', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/nested/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills/**/SKILL.md'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should discover a specific skill with **/skills/test-skill/SKILL.md glob', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['**/skills/test-skill/SKILL.md'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(1);
+      expect(result[0]?.name).toBe('test-skill');
+    });
+
+    it('should discover skills with trailing slash /skills/', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+        '/skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills/'],
+      });
+
+      const result = await skills.list();
+      expect(result).toHaveLength(2);
+      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
+    });
+
+    it('should not produce duplicate skills when multiple patterns match the same skill', async () => {
+      const filesystem = createMockFilesystem({
+        '/skills/test-skill/SKILL.md': VALID_SKILL_MD,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['/skills', '**/skills'],
       });
 
       const result = await skills.list();

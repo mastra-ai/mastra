@@ -1,6 +1,3 @@
-import { useCallback, useEffect, useMemo } from 'react';
-import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-
 import {
   useLinkComponent,
   useAgent,
@@ -22,11 +19,13 @@ import {
   Button,
   AlertTitle,
   Badge,
-  type AgentDataSource,
   mapAgentResponseToDataSource,
   AlertDescription,
 } from '@mastra/playground-ui';
+import type { AgentDataSource } from '@mastra/playground-ui';
 import { Check, Save } from 'lucide-react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 function EditFormContent({
   agentId,

@@ -33,42 +33,6 @@ function omError(msg: string, err?: unknown) {
 
 omDebug(`[OM:process-start] OM module loaded, pid=${process.pid}`);
 
-// ════════════════════════════════════════════════════════════════════════════════
-// PROCESS-LEVEL OPERATION REGISTRY
-// Tracks which operations (reflecting, observing, buffering) are actively running
-// in THIS process. Used to detect stale DB flags left by crashed processes.
-// Key format: `${recordId}:${operationType}`
-// ════════════════════════════════════════════════════════════════════════════════
-const activeOps = new Set<string>();
-
-function opKey(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): string {
-  return `${recordId}:${op}`;
-}
-
-function registerOp(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): void {
-  activeOps.add(opKey(recordId, op));
-}
-
-function unregisterOp(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): void {
-  activeOps.delete(opKey(recordId, op));
-}
-
-function isOpActiveInProcess(
-  recordId: string,
-  op: 'reflecting' | 'observing' | 'bufferingObservation' | 'bufferingReflection',
-): boolean {
-  return activeOps.has(opKey(recordId, op));
-}
-
 // Wrap console.error so any unexpected errors also land in the debug log
 if (OM_DEBUG_LOG) {
   const _origConsoleError = console.error;
@@ -80,6 +44,7 @@ if (OM_DEBUG_LOG) {
   };
 }
 
+import { addRelativeTimeToObservations } from './date-utils';
 import {
   buildObserverSystemPrompt,
   buildObserverPrompt,
@@ -89,6 +54,7 @@ import {
   optimizeObservationsForContext,
   formatMessagesForObserver,
 } from './observer-agent';
+import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
   buildReflectorSystemPrompt,
   buildReflectorPrompt,
@@ -114,229 +80,6 @@ import type {
   OmOperationType,
 } from './types';
 
-/**
- * Format a relative time string like "5 days ago", "2 weeks ago", "today", etc.
- */
-function formatRelativeTime(date: Date, currentDate: Date): string {
-  const diffMs = currentDate.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return 'today';
-  if (diffDays === 1) return 'yesterday';
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 14) return '1 week ago';
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-  if (diffDays < 60) return '1 month ago';
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-  return `${Math.floor(diffDays / 365)} year${Math.floor(diffDays / 365) > 1 ? 's' : ''} ago`;
-}
-
-/**
- * Add relative time annotations to date headers in observations.
- * Transforms "Date: May 15, 2023" to "Date: May 15, 2023 (5 days ago)"
- */
-function formatGapBetweenDates(prevDate: Date, currDate: Date): string | null {
-  const diffMs = currDate.getTime() - prevDate.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays <= 1) {
-    return null; // No gap marker for consecutive days
-  } else if (diffDays < 7) {
-    return `[${diffDays} days later]`;
-  } else if (diffDays < 14) {
-    return `[1 week later]`;
-  } else if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return `[${weeks} weeks later]`;
-  } else if (diffDays < 60) {
-    return `[1 month later]`;
-  } else {
-    const months = Math.floor(diffDays / 30);
-    return `[${months} months later]`;
-  }
-}
-
-/**
- * Expand inline estimated dates with relative time.
- * Matches patterns like "(estimated May 27-28, 2023)" or "(meaning May 30, 2023)"
- * and expands them to "(meaning May 30, 2023 - which was 3 weeks ago)"
- */
-/**
- * Parses a date string like "May 30, 2023", "May 27-28, 2023", "late April 2023", etc.
- * Returns the parsed Date or null if unparseable.
- */
-function parseDateFromContent(dateContent: string): Date | null {
-  let targetDate: Date | null = null;
-
-  // Try simple date format first: "May 30, 2023"
-  const simpleDateMatch = dateContent.match(/([A-Z][a-z]+)\s+(\d{1,2}),?\s+(\d{4})/);
-  if (simpleDateMatch) {
-    const parsed = new Date(`${simpleDateMatch[1]} ${simpleDateMatch[2]}, ${simpleDateMatch[3]}`);
-    if (!isNaN(parsed.getTime())) {
-      targetDate = parsed;
-    }
-  }
-
-  // Try range format: "May 27-28, 2023" - use first date
-  if (!targetDate) {
-    const rangeMatch = dateContent.match(/([A-Z][a-z]+)\s+(\d{1,2})-\d{1,2},?\s+(\d{4})/);
-    if (rangeMatch) {
-      const parsed = new Date(`${rangeMatch[1]} ${rangeMatch[2]}, ${rangeMatch[3]}`);
-      if (!isNaN(parsed.getTime())) {
-        targetDate = parsed;
-      }
-    }
-  }
-
-  // Try "late/early/mid Month Year" format
-  if (!targetDate) {
-    const vagueMatch = dateContent.match(
-      /(late|early|mid)[- ]?(?:to[- ]?(?:late|early|mid)[- ]?)?([A-Z][a-z]+)\s+(\d{4})/i,
-    );
-    if (vagueMatch) {
-      const month = vagueMatch[2];
-      const year = vagueMatch[3];
-      const modifier = vagueMatch[1]!.toLowerCase();
-      let day = 15; // default to middle
-      if (modifier === 'early') day = 7;
-      if (modifier === 'late') day = 23;
-      const parsed = new Date(`${month} ${day}, ${year}`);
-      if (!isNaN(parsed.getTime())) {
-        targetDate = parsed;
-      }
-    }
-  }
-
-  // Try "Month to Month Year" format (cross-month range)
-  if (!targetDate) {
-    const crossMonthMatch = dateContent.match(/([A-Z][a-z]+)\s+to\s+(?:early\s+)?([A-Z][a-z]+)\s+(\d{4})/i);
-    if (crossMonthMatch) {
-      // Use the middle of the range - approximate with second month
-      const parsed = new Date(`${crossMonthMatch[2]} 1, ${crossMonthMatch[3]}`);
-      if (!isNaN(parsed.getTime())) {
-        targetDate = parsed;
-      }
-    }
-  }
-
-  return targetDate;
-}
-
-/**
- * Detects if an observation line indicates future intent (will do, plans to, looking forward to, etc.)
- */
-function isFutureIntentObservation(line: string): boolean {
-  const futureIntentPatterns = [
-    /\bwill\s+(?:be\s+)?(?:\w+ing|\w+)\b/i,
-    /\bplans?\s+to\b/i,
-    /\bplanning\s+to\b/i,
-    /\blooking\s+forward\s+to\b/i,
-    /\bgoing\s+to\b/i,
-    /\bintends?\s+to\b/i,
-    /\bwants?\s+to\b/i,
-    /\bneeds?\s+to\b/i,
-    /\babout\s+to\b/i,
-  ];
-  return futureIntentPatterns.some(pattern => pattern.test(line));
-}
-
-function expandInlineEstimatedDates(observations: string, currentDate: Date): string {
-  // Match patterns like:
-  // (estimated May 27-28, 2023)
-  // (meaning May 30, 2023)
-  // (estimated late April to early May 2023)
-  // (estimated mid-to-late May 2023)
-  // These should now be at the END of observation lines
-  const inlineDateRegex = /\((estimated|meaning)\s+([^)]+\d{4})\)/gi;
-
-  return observations.replace(inlineDateRegex, (match, prefix: string, dateContent: string) => {
-    const targetDate = parseDateFromContent(dateContent);
-
-    if (targetDate) {
-      const relative = formatRelativeTime(targetDate, currentDate);
-
-      // Check if this is a future-intent observation that's now in the past
-      // We need to look at the text BEFORE this match to determine intent
-      const matchIndex = observations.indexOf(match);
-      const lineStart = observations.lastIndexOf('\n', matchIndex) + 1;
-      const lineBeforeDate = observations.substring(lineStart, matchIndex);
-
-      const isPastDate = targetDate < currentDate;
-      const isFutureIntent = isFutureIntentObservation(lineBeforeDate);
-
-      if (isPastDate && isFutureIntent) {
-        // This was a planned action that should have happened by now
-        return `(${prefix} ${dateContent} - ${relative}, likely already happened)`;
-      }
-
-      return `(${prefix} ${dateContent} - ${relative})`;
-    }
-
-    // Couldn't parse, return original
-    return match;
-  });
-}
-
-function addRelativeTimeToObservations(observations: string, currentDate: Date): string {
-  // First, expand inline estimated dates with relative time
-  const withInlineDates = expandInlineEstimatedDates(observations, currentDate);
-
-  // Match date headers like "Date: May 15, 2023" or "Date: January 1, 2024"
-  const dateHeaderRegex = /^(Date:\s*)([A-Z][a-z]+ \d{1,2}, \d{4})$/gm;
-
-  // First pass: collect all dates in order
-  const dates: { index: number; date: Date; match: string; prefix: string; dateStr: string }[] = [];
-  let regexMatch: RegExpExecArray | null;
-  while ((regexMatch = dateHeaderRegex.exec(withInlineDates)) !== null) {
-    const dateStr = regexMatch[2]!;
-    const parsed = new Date(dateStr);
-    if (!isNaN(parsed.getTime())) {
-      dates.push({
-        index: regexMatch.index,
-        date: parsed,
-        match: regexMatch[0],
-        prefix: regexMatch[1]!,
-        dateStr,
-      });
-    }
-  }
-
-  // If no dates found, return the inline-expanded version
-  if (dates.length === 0) {
-    return withInlineDates;
-  }
-
-  // Second pass: build result with relative times and gap markers
-  let result = '';
-  let lastIndex = 0;
-
-  for (let i = 0; i < dates.length; i++) {
-    const curr = dates[i]!;
-    const prev = i > 0 ? dates[i - 1]! : null;
-
-    // Add text before this date header
-    result += withInlineDates.slice(lastIndex, curr.index);
-
-    // Add gap marker if there's a significant gap from previous date
-    if (prev) {
-      const gap = formatGapBetweenDates(prev.date, curr.date);
-      if (gap) {
-        result += `\n${gap}\n\n`;
-      }
-    }
-
-    // Add the date header with relative time
-    const relative = formatRelativeTime(curr.date, currentDate);
-    result += `${curr.prefix}${curr.dateStr} (${relative})`;
-
-    lastIndex = curr.index + curr.match.length;
-  }
-
-  // Add remaining text after last date header
-  result += withInlineDates.slice(lastIndex);
-
-  return result;
-}
 /**
  * Debug event emitted when observation-related events occur.
  * Useful for understanding what the Observer is doing.
@@ -1086,6 +829,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       config.reflection?.observationTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.observationTokens;
     const isSharedBudget = config.shareTokenBudget ?? false;
 
+    const isDefaultModelSelection = (model: AgentConfig['model'] | undefined) =>
+      model === undefined || model === 'default';
+
+    const observationSelectedModel = config.model ?? config.observation?.model ?? config.reflection?.model;
+    const reflectionSelectedModel = config.model ?? config.reflection?.model ?? config.observation?.model;
+
+    const observationDefaultMaxOutputTokens =
+      config.observation?.modelSettings?.maxOutputTokens ??
+      (isDefaultModelSelection(observationSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens
+        : undefined);
+
+    const reflectionDefaultMaxOutputTokens =
+      config.reflection?.modelSettings?.maxOutputTokens ??
+      (isDefaultModelSelection(reflectionSelectedModel)
+        ? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens
+        : undefined);
+
     // Total context budget when shared budget is enabled
     const totalBudget = messageTokens + observationTokens;
 
@@ -1132,9 +893,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature:
           config.observation?.modelSettings?.temperature ??
           OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.temperature,
-        maxOutputTokens:
-          config.observation?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings.maxOutputTokens,
+        ...(observationDefaultMaxOutputTokens !== undefined
+          ? { maxOutputTokens: observationDefaultMaxOutputTokens }
+          : {}),
       },
       providerOptions: config.observation?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.providerOptions,
       maxTokensPerBatch:
@@ -1169,9 +930,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         temperature:
           config.reflection?.modelSettings?.temperature ??
           OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.temperature,
-        maxOutputTokens:
-          config.reflection?.modelSettings?.maxOutputTokens ??
-          OBSERVATIONAL_MEMORY_DEFAULTS.reflection.modelSettings.maxOutputTokens,
+        ...(reflectionDefaultMaxOutputTokens !== undefined
+          ? { maxOutputTokens: reflectionDefaultMaxOutputTokens }
+          : {}),
       },
       providerOptions: config.reflection?.providerOptions ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.providerOptions,
       bufferActivation: asyncBufferingDisabled
@@ -2195,19 +1956,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
 
     const doGenerate = async () => {
-      const result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.observationConfig.modelSettings,
-            },
-            providerOptions: this.observationConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
-          }),
-        abortSignal,
-      );
-      return result;
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.observationConfig.modelSettings,
+          },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
     };
 
     let result = await doGenerate();
@@ -2286,18 +2046,18 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     const doGenerate = async () => {
-      return this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.observationConfig.modelSettings,
-            },
-            providerOptions: this.observationConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(requestContext ? { requestContext } : {}),
-          }),
-        abortSignal,
-      );
+      return this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.observationConfig.modelSettings,
+          },
+          providerOptions: this.observationConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
     };
 
     let result = await doGenerate();
@@ -2407,45 +2167,45 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       );
 
       let chunkCount = 0;
-      const result = await this.withAbortCheck(
-        () =>
-          agent.generate(prompt, {
-            modelSettings: {
-              ...this.reflectionConfig.modelSettings,
-            },
-            providerOptions: this.reflectionConfig.providerOptions as any,
-            ...(abortSignal ? { abortSignal } : {}),
-            ...(requestContext ? { requestContext } : {}),
-            ...(attemptNumber === 1
-              ? {
-                  onChunk(chunk: any) {
-                    chunkCount++;
-                    if (chunkCount === 1 || chunkCount % 50 === 0) {
-                      const preview =
-                        chunk.type === 'text-delta'
-                          ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
-                          : chunk.type === 'tool-call'
-                            ? ` tool=${chunk.toolName}`
-                            : '';
-                      omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
-                    }
-                  },
-                  onFinish(event: any) {
-                    omDebug(
-                      `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
-                    );
-                  },
-                  onAbort(event: any) {
-                    omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
-                  },
-                  onError({ error }: { error: unknown }) {
-                    omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
-                  },
-                }
-              : {}),
-          }),
-        abortSignal,
-      );
+      const result = await this.withAbortCheck(async () => {
+        const streamResult = await agent.stream(prompt, {
+          modelSettings: {
+            ...this.reflectionConfig.modelSettings,
+          },
+          providerOptions: this.reflectionConfig.providerOptions as any,
+          ...(abortSignal ? { abortSignal } : {}),
+          ...(requestContext ? { requestContext } : {}),
+          ...(attemptNumber === 1
+            ? {
+                onChunk(chunk: any) {
+                  chunkCount++;
+                  if (chunkCount === 1 || chunkCount % 50 === 0) {
+                    const preview =
+                      chunk.type === 'text-delta'
+                        ? ` text="${chunk.textDelta?.slice(0, 80)}..."`
+                        : chunk.type === 'tool-call'
+                          ? ` tool=${chunk.toolName}`
+                          : '';
+                    omDebug(`[OM:callReflector] chunk#${chunkCount}: type=${chunk.type}${preview}`);
+                  }
+                },
+                onFinish(event: any) {
+                  omDebug(
+                    `[OM:callReflector] onFinish: chunks=${chunkCount}, finishReason=${event.finishReason}, inputTokens=${event.usage?.inputTokens}, outputTokens=${event.usage?.outputTokens}, textLen=${event.text?.length}`,
+                  );
+                },
+                onAbort(event: any) {
+                  omDebug(`[OM:callReflector] onAbort: chunks=${chunkCount}, reason=${event?.reason ?? 'unknown'}`);
+                },
+                onError({ error }: { error: unknown }) {
+                  omError(`[OM:callReflector] onError after ${chunkCount} chunks`, error);
+                },
+              }
+            : {}),
+        });
+
+        return streamResult.getFullOutput();
+      }, abortSignal);
 
       omDebug(
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
@@ -2939,20 +2699,19 @@ ${suggestedResponse}
             `[OM:threshold] activation succeeded, obsTokens=${updatedRecord.observationTokenCount}, activeObsLen=${updatedRecord.activeObservations?.length}`,
           );
 
-          // Propagate continuation hints from activation to thread metadata
-          if (activationResult.suggestedContinuation || activationResult.currentTask) {
-            const thread = await this.storage.getThreadById({ threadId });
-            if (thread) {
-              const newMetadata = setThreadOMMetadata(thread.metadata, {
-                suggestedResponse: activationResult.suggestedContinuation,
-                currentTask: activationResult.currentTask,
-              });
-              await this.storage.updateThread({
-                id: threadId,
-                title: thread.title ?? '',
-                metadata: newMetadata,
-              });
-            }
+          // Propagate continuation hints from activation to thread metadata.
+          // Explicitly write undefined when omitted so stale values are cleared.
+          const thread = await this.storage.getThreadById({ threadId });
+          if (thread) {
+            const newMetadata = setThreadOMMetadata(thread.metadata, {
+              suggestedResponse: activationResult.suggestedContinuation,
+              currentTask: activationResult.currentTask,
+            });
+            await this.storage.updateThread({
+              id: threadId,
+              title: thread.title ?? '',
+              metadata: newMetadata,
+            });
           }
 
           // Note: lastBufferedBoundary is updated by the caller AFTER cleanupAfterObservation
@@ -3476,19 +3235,18 @@ ${suggestedResponse}
 
             // Propagate continuation hints from activation to thread metadata so
             // injectObservationsIntoContext can include them immediately.
-            if (activationResult.suggestedContinuation || activationResult.currentTask) {
-              const thread = await this.storage.getThreadById({ threadId });
-              if (thread) {
-                const newMetadata = setThreadOMMetadata(thread.metadata, {
-                  suggestedResponse: activationResult.suggestedContinuation,
-                  currentTask: activationResult.currentTask,
-                });
-                await this.storage.updateThread({
-                  id: threadId,
-                  title: thread.title ?? '',
-                  metadata: newMetadata,
-                });
-              }
+            // Explicitly write undefined when omitted so stale values are cleared.
+            const thread = await this.storage.getThreadById({ threadId });
+            if (thread) {
+              const newMetadata = setThreadOMMetadata(thread.metadata, {
+                suggestedResponse: activationResult.suggestedContinuation,
+                currentTask: activationResult.currentTask,
+              });
+              await this.storage.updateThread({
+                id: threadId,
+                title: thread.title ?? '',
+                metadata: newMetadata,
+              });
             }
 
             // Check if reflection should be triggered or activated
@@ -3816,11 +3574,10 @@ ${suggestedResponse}
   }
 
   /**
-   * Save messages to storage, regenerating IDs for any messages that were
-   * previously saved with observation markers (sealed).
+   * Save messages to storage while preventing duplicate inserts for sealed messages.
    *
-   * After saving, tracks which messages now have observation markers
-   * so their IDs won't be reused in future save cycles.
+   * Sealed messages that do not yet contain a completed observation boundary are
+   * skipped because async buffering already persisted them.
    */
   private async saveMessagesWithSealedIdTracking(
     messagesToSave: MastraDBMessage[],
@@ -3829,23 +3586,33 @@ ${suggestedResponse}
     resourceId: string | undefined,
     state: Record<string, unknown>,
   ): Promise<void> {
-    // Regenerate IDs for messages that were already saved with observation markers
-    // This prevents overwriting sealed messages in the DB
+    // Handle sealed messages:
+    // - Messages with observation markers: keep the same ID so storage upserts instead of inserting duplicates
+    // - Messages without observation markers (e.g., sealed for async buffering): skip entirely,
+    //   they were already persisted by runAsyncBufferedObservation (fixes #13089)
+    const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
       if (sealedIds.has(msg.id)) {
-        msg.id = crypto.randomUUID();
+        if (this.findLastCompletedObservationBoundary(msg) !== -1) {
+          filteredMessages.push(msg);
+        }
+        // else: sealed for buffering only, already persisted — skip to avoid duplication
+      } else {
+        filteredMessages.push(msg);
       }
     }
 
-    await this.messageHistory.persistMessages({
-      messages: messagesToSave,
-      threadId,
-      resourceId,
-    });
+    if (filteredMessages.length > 0) {
+      await this.messageHistory.persistMessages({
+        messages: filteredMessages,
+        threadId,
+        resourceId,
+      });
+    }
 
     // After successful save, track IDs of messages that now have observation markers (sealed)
     // These IDs cannot be reused in future cycles
-    for (const msg of messagesToSave) {
+    for (const msg of filteredMessages) {
       if (this.findLastCompletedObservationBoundary(msg) !== -1) {
         sealedIds.add(msg.id);
       }
@@ -4253,19 +4020,17 @@ ${formattedMessages}
       // This ensures a consistent lock ordering (mastra_threads → mastra_observational_memory)
       // that matches the order used by saveMessages, preventing PostgreSQL deadlocks
       // when concurrent agents share a resourceId.
-      if (result.suggestedContinuation || result.currentTask) {
-        const thread = await this.storage.getThreadById({ threadId });
-        if (thread) {
-          const newMetadata = setThreadOMMetadata(thread.metadata, {
-            suggestedResponse: result.suggestedContinuation,
-            currentTask: result.currentTask,
-          });
-          await this.storage.updateThread({
-            id: threadId,
-            title: thread.title ?? '',
-            metadata: newMetadata,
-          });
-        }
+      const thread = await this.storage.getThreadById({ threadId });
+      if (thread) {
+        const newMetadata = setThreadOMMetadata(thread.metadata, {
+          suggestedResponse: result.suggestedContinuation,
+          currentTask: result.currentTask,
+        });
+        await this.storage.updateThread({
+          id: threadId,
+          title: thread.title ?? '',
+          metadata: newMetadata,
+        });
       }
 
       await this.storage.updateActiveObservations({
@@ -4601,13 +4366,13 @@ ${formattedMessages}
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
     // Call observer with combined context
-    // Allow the observer to produce suggestedResponse/currentTask so they survive
-    // activation and maintain continuity when the context window shrinks
+    // Skip continuation hints during async buffering — they reflect the observer's
+    // understanding at buffering time and become stale by activation.
     const result = await this.callObserver(
       combinedObservations,
       messagesToBuffer,
       undefined, // No abort signal for background ops
-      { requestContext },
+      { skipContinuationHints: true, requestContext },
     );
 
     // If the observer returned empty observations, skip buffering
@@ -5515,14 +5280,14 @@ ${formattedMessages}
 
         // Update thread-specific metadata:
         // - lastObservedAt: ALWAYS update to track per-thread observation progress
-        // - currentTask, suggestedResponse: only if present in result
+        // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
         const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
           const newMetadata = setThreadOMMetadata(thread.metadata, {
             lastObservedAt: threadLastObservedAt.toISOString(),
-            ...(result.suggestedContinuation && { suggestedResponse: result.suggestedContinuation }),
-            ...(result.currentTask && { currentTask: result.currentTask }),
+            suggestedResponse: result.suggestedContinuation,
+            currentTask: result.currentTask,
           });
           await this.storage.updateThread({
             id: threadId,

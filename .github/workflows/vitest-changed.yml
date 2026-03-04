@@ -93,7 +93,7 @@ jobs:
       - name: Build packages
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
         env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
+          NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Run changed tests (Shard ${{ matrix.shard }}/4)
         run: |
@@ -107,7 +107,7 @@ jobs:
             --shard=${{ matrix.shard }}/4 \
             --passWithNoTests
         env:
-          NODE_OPTIONS: '--max_old_space_size=6144'
+          NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Upload test results
         if: always()
@@ -182,7 +182,7 @@ jobs:
   #     - name: Build packages
   #       run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
 
   #     - name: Normalize project name
   #       id: normalize
@@ -199,7 +199,7 @@ jobs:
   #           --outputFile.blob=.vitest-reports/blob-${{ steps.normalize.outputs.project_id }}.json \
   #           --passWithNoTests
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
   #         # LLM API Keys
   #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   #         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -317,7 +317,7 @@ jobs:
   #       if: steps.check-changes.outputs.changed == 'true'
   #       run: pnpm turbo build --filter "./stores/*" --filter "mastra" --filter "@mastra/memory" --filter "@mastra/fastembed"
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
 
   #     - name: Install integration test dependencies
   #       if: steps.check-changes.outputs.changed == 'true'
@@ -334,7 +334,7 @@ jobs:
   #       run: pnpm run test:${{ matrix.suite }}
   #       working-directory: packages/memory/integration-tests
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
   #         DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
   #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   #         KV_REST_API_URL: ${{ secrets.KV_REST_API_URL }}
@@ -402,7 +402,7 @@ jobs:
   #       if: steps.check-changes.outputs.changed == 'true'
   #       run: pnpm turbo build --filter "@mastra/mcp"
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
 
   #     - name: Run MCP unit tests (server)
   #       if: steps.check-changes.outputs.changed == 'true'
@@ -424,7 +424,7 @@ jobs:
   #       run: pnpm run test:mcp
   #       working-directory: packages/mcp/integration-tests
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
   #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
   # agent-builder-integration:
@@ -487,13 +487,13 @@ jobs:
   #       if: steps.check-changes.outputs.changed == 'true'
   #       run: pnpm turbo build --filter "@mastra/agent-builder"
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
 
   #     - name: Run agent-builder unit tests
   #       if: steps.check-changes.outputs.changed == 'true'
   #       run: pnpm --filter "@mastra/agent-builder" test
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
   #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
   #     - name: Install integration test dependencies
@@ -506,7 +506,7 @@ jobs:
   #       run: pnpm test
   #       working-directory: packages/agent-builder/integration-tests
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
   #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
   # observability-test:
@@ -569,13 +569,13 @@ jobs:
   #       if: steps.check-changes.outputs.changed == 'true'
   #       run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
 
   #     - name: Run observability tests
   #       if: steps.check-changes.outputs.changed == 'true'
   #       run: node scripts/test-observability.cjs
   #       env:
-  #         NODE_OPTIONS: '--max_old_space_size=6144'
+  #         NODE_OPTIONS: '--max_old_space_size=8192'
   #         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   #         GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
 
