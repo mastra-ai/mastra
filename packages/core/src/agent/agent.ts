@@ -3539,7 +3539,9 @@ export class Agent<
     runId?: string;
   }) {
     try {
-      messageList.add(result.response.messages, 'response');
+      // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+      // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+      messageList.add(result.response.dbMessages || result.response.messages, 'response');
       // Message saving is now handled by MessageHistory output processor
     } catch (e) {
       this.logger.error('Error adding messages on step finish', {
@@ -4005,29 +4007,31 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
     const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
 
+    // Add LLM response messages to the list
+    // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+    // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+    let responseMessages: MessageInput[] | undefined = result.response.dbMessages || result.response.messages;
+    if (!responseMessages && result.object) {
+      responseMessages = [
+        {
+          id: result.response.id,
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: outputText, // outputText contains the stringified object
+            },
+          ],
+        },
+      ];
+    }
+
+    if (responseMessages) {
+      messageList.add(responseMessages, 'response');
+    }
+
     if (memory && resourceId && thread && !readOnlyMemory) {
       try {
-        // Add LLM response messages to the list
-        let responseMessages = result.response.messages;
-        if (!responseMessages && result.object) {
-          responseMessages = [
-            {
-              id: result.response.id,
-              role: 'assistant',
-              content: [
-                {
-                  type: 'text',
-                  text: outputText, // outputText contains the stringified object
-                },
-              ],
-            },
-          ];
-        }
-
-        if (responseMessages) {
-          messageList.add(responseMessages, 'response');
-        }
-
         if (!threadExists) {
           await memory.createThread({
             threadId: thread.id,
@@ -4091,25 +4095,6 @@ export class Agent<
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
         throw mastraError;
-      }
-    } else {
-      let responseMessages = result.response.messages;
-      if (!responseMessages && result.object) {
-        responseMessages = [
-          {
-            id: result.response.id,
-            role: 'assistant',
-            content: [
-              {
-                type: 'text',
-                text: outputText, // outputText contains the stringified object
-              },
-            ],
-          },
-        ];
-      }
-      if (responseMessages) {
-        messageList.add(responseMessages, 'response');
       }
     }
 
