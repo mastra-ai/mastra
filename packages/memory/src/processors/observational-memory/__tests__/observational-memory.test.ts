@@ -8329,7 +8329,7 @@ describe('Single-thread replay red tests', () => {
       storage,
       scope: 'thread',
       model: new MockLanguageModelV2({}) as any,
-      observation: { messageTokens: 50 },
+      observation: { messageTokens: 5_000 },
       reflection: { observationTokens: 200_000 },
     });
 
@@ -8383,7 +8383,7 @@ describe('Single-thread replay red tests', () => {
       'memory',
     );
 
-    (om as any).filterAlreadyObservedMessages(messageList, {
+    await (om as any).filterAlreadyObservedMessages(messageList, {
       lastObservedAt: t0,
     });
 
@@ -8430,7 +8430,7 @@ describe('Single-thread replay red tests', () => {
       'memory',
     );
 
-    (om as any).filterAlreadyObservedMessages(messageList, {
+    await (om as any).filterAlreadyObservedMessages(messageList, {
       lastObservedAt: t1,
     });
 
@@ -8490,7 +8490,7 @@ describe('Single-thread replay red tests', () => {
     const reminted = messagesAfterRemint.find((m: any) => m.id !== 'A');
     expect(reminted).toBeDefined();
 
-    (om as any).filterAlreadyObservedMessages(messageList, {
+    await (om as any).filterAlreadyObservedMessages(messageList, {
       observedMessageIds: ['A'],
       lastObservedAt: t0,
     });
@@ -8544,7 +8544,7 @@ describe('Single-thread replay red tests', () => {
     expect(reminted).toBeDefined();
     expect(reminted!.createdAt.getTime()).toBe(t0.getTime() + 1);
 
-    (om as any).filterAlreadyObservedMessages(messageList, {
+    await (om as any).filterAlreadyObservedMessages(messageList, {
       observedMessageIds: ['A'],
       lastObservedAt: t0,
     });
@@ -8612,7 +8612,7 @@ describe('Single-thread replay red tests', () => {
         content: {
           format: 2,
           parts: [
-            { type: 'text', text: 'old-observed' },
+            { type: 'text', text: 'old-observed', metadata: { mastra: { sealedAt: '2025-01-01T10:00:00.000Z' } } },
             { type: 'text', text: 'fresh-tail' },
           ],
         },
@@ -8621,11 +8621,11 @@ describe('Single-thread replay red tests', () => {
       'memory',
     );
 
-    (left.om as any).filterAlreadyObservedMessages(left.messageList, {
+    await (left.om as any).filterAlreadyObservedMessages(left.messageList, {
       observedMessageIds: ['m1'],
       lastObservedAt: t0,
     });
-    (right.om as any).filterAlreadyObservedMessages(right.messageList, {
+    await (right.om as any).filterAlreadyObservedMessages(right.messageList, {
       observedMessageIds: ['m1'],
       lastObservedAt: t0,
     });
@@ -8913,6 +8913,46 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).not.toContain('already-observed');
   });
 
+  it('T4-E: activation ID cleanup should not drop fresh tail when observed boundary is inside same message', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'partial-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed-partial' },
+            { type: 'data-om-observation-end', data: { cycleId: 'c-partial' } },
+            { type: 'text', text: 'fresh-tail-partial' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    await (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      ['partial-1'],
+      undefined,
+    );
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-tail-partial');
+    expect(remainingText).not.toContain('already-observed-partial');
+  });
+
   it('T4-A: activation/save ordering race should not replay previously observed content', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
@@ -8963,13 +9003,13 @@ describe('Single-thread replay red tests', () => {
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(saveStarted.value).toBe(true);
 
-    (om as any).filterAlreadyObservedMessages(
+    await (om as any).filterAlreadyObservedMessages(
       messageList,
       {
         observedMessageIds: ['race-old'],
         lastObservedAt: t0,
       },
-      { allowMarkerFiltering: true },
+      { useMarkerBoundaryPruning: true },
     );
 
     const duringRaceText = getModelVisibleText(messageList);
@@ -9067,7 +9107,7 @@ describe('Single-thread replay red tests', () => {
 
     messageList.add(observed, 'memory');
     messageList.add(fresh, 'memory');
-    (om as any).filterAlreadyObservedMessages(messageList, record);
+    await (om as any).filterAlreadyObservedMessages(messageList, record);
 
     const remainingIds = messageList.get.all.db().map((m: any) => m.id);
     expect(remainingIds).toEqual(unobservedIds);

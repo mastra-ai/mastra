@@ -2323,9 +2323,12 @@ ${suggestedResponse}
           // Explicitly write undefined when omitted so stale values are cleared.
           const thread = await this.storage.getThreadById({ threadId });
           if (thread) {
+            const activatedSet = new Set(activationResult.activatedMessageIds ?? []);
+            const activatedMessages = messageList.get.all.db().filter(msg => msg?.id && activatedSet.has(msg.id));
             const newMetadata = setThreadOMMetadata(thread.metadata, {
               suggestedResponse: activationResult.suggestedContinuation,
               currentTask: activationResult.currentTask,
+              lastObservedMessageCursor: this.getLastObservedMessageCursor(activatedMessages),
             });
             await this.storage.updateThread({
               id: threadId,
@@ -2457,6 +2460,16 @@ ${suggestedResponse}
 
       for (const msg of allMsgs) {
         if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
+          continue;
+        }
+
+        const unobservedParts = this.getUnobservedParts(msg);
+        const totalParts = msg.content?.parts?.length ?? 0;
+
+        // Activation can target a message ID whose observed boundary is inside the same message.
+        // In that case, keep the fresh tail visible to the model instead of removing the whole message.
+        if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
+          msg.content.parts = unobservedParts;
           continue;
         }
 
@@ -2658,13 +2671,17 @@ ${suggestedResponse}
    * For step > 0, the list may include mid-loop mutations (sealing/splitting/trim),
    * so we prefer record-based fallback pruning over position-based marker pruning.
    */
-  private filterAlreadyObservedMessages(
+  private async filterAlreadyObservedMessages(
     messageList: MessageList,
     record?: ObservationalMemoryRecord,
     options?: { useMarkerBoundaryPruning?: boolean },
-  ): void {
+  ): Promise<void> {
     const allMessages = messageList.get.all.db();
     const useMarkerBoundaryPruning = options?.useMarkerBoundaryPruning ?? true;
+    const fallbackCursor = record?.threadId
+      ? getThreadOMMetadata((await this.storage.getThreadById({ threadId: record.threadId }))?.metadata)
+          ?.lastObservedMessageCursor
+      : undefined;
 
     // Find the message with the last observation end marker
     let markerMessageIndex = -1;
@@ -2713,67 +2730,54 @@ ${suggestedResponse}
       // for the LLM to see. Only observedMessageIds and lastObservedAt determine what's
       // been truly observed.
 
-      const observedTextPrefixes = allMessages
-        .filter(msg => !!msg?.id && observedIds.has(msg.id))
-        .map(msg => (msg?.content?.parts ?? []).filter(part => part.type === 'text').map(part => part.text))
-        .filter(parts => parts.length > 0);
-      const observedTextParts = new Set(observedTextPrefixes.flat());
-      if (record.activeObservations) {
-        for (const line of record.activeObservations.split('\n')) {
-          const normalized = line.replace(/^\s*[-*]\s*/, '').trim();
-          if (normalized) {
-            observedTextParts.add(normalized);
-          }
-        }
-      }
-
+      const derivedCursor =
+        fallbackCursor ??
+        this.getLastObservedMessageCursor(
+          allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt),
+        );
       const lastObservedAt = record.lastObservedAt;
       const messagesToRemove: string[] = [];
 
       for (const msg of allMessages) {
         if (!msg?.id || msg.id === 'om-continuation') continue;
 
-        // Remove if explicitly tracked in observedMessageIds or buffered chunks
         if (observedIds.has(msg.id)) {
           messagesToRemove.push(msg.id);
           continue;
         }
 
-        // Remove if created before lastObservedAt (these messages' content is
-        // already captured in activeObservations via buffered activation)
-        if (lastObservedAt && msg.createdAt) {
-          const msgDate = new Date(msg.createdAt);
-          if (msgDate <= lastObservedAt) {
+        const parts = Array.isArray(msg.content?.parts) ? msg.content.parts : [];
+        if (derivedCursor && parts.length > 0) {
+          let observedPrefixPartCount = 0;
+          for (const part of parts as Array<{ metadata?: { mastra?: { sealedAt?: string | number | Date } } }>) {
+            const sealedAt = part?.metadata?.mastra?.sealedAt;
+            if (!sealedAt) break;
+            const sealedAtIso = new Date(sealedAt).toISOString();
+            if (sealedAtIso <= derivedCursor.createdAt) {
+              observedPrefixPartCount += 1;
+              continue;
+            }
+            break;
+          }
+
+          if (observedPrefixPartCount >= parts.length) {
             messagesToRemove.push(msg.id);
             continue;
           }
-        }
 
-        if (!msg.content?.parts) continue;
-
-        for (const prefix of observedTextPrefixes) {
-          if (msg.content.parts.length <= prefix.length) continue;
-
-          let matches = true;
-          for (let i = 0; i < prefix.length; i++) {
-            const part = msg.content.parts[i];
-            if (!part || part.type !== 'text' || part.text !== prefix[i]) {
-              matches = false;
-              break;
-            }
+          if (observedPrefixPartCount > 0) {
+            msg.content.parts = parts.slice(observedPrefixPartCount);
           }
-
-          if (!matches) continue;
-
-          msg.content.parts = msg.content.parts.slice(prefix.length);
-          break;
         }
 
-        if (!useMarkerBoundaryPruning && observedTextParts.size > 0 && msg.content.parts.length > 1) {
-          msg.content.parts = msg.content.parts.filter(
-            part => !(part.type === 'text' && observedTextParts.has(part.text)),
-          );
-          if (msg.content.parts.length === 0 && msg.id) {
+        if (derivedCursor && this.isMessageAtOrBeforeCursor(msg, derivedCursor)) {
+          messagesToRemove.push(msg.id);
+          continue;
+        }
+
+        if (lastObservedAt && msg.createdAt) {
+          const msgDate = new Date(msg.createdAt);
+          if (msgDate <= lastObservedAt) {
             messagesToRemove.push(msg.id);
           }
         }
@@ -2937,9 +2941,12 @@ ${suggestedResponse}
             // Explicitly write undefined when omitted so stale values are cleared.
             const thread = await this.storage.getThreadById({ threadId });
             if (thread) {
+              const activatedSet = new Set(activationResult.activatedMessageIds ?? []);
+              const activatedMessages = messageList.get.all.db().filter(msg => msg?.id && activatedSet.has(msg.id));
               const newMetadata = setThreadOMMetadata(thread.metadata, {
                 suggestedResponse: activationResult.suggestedContinuation,
                 currentTask: activationResult.currentTask,
+                lastObservedMessageCursor: this.getLastObservedMessageCursor(activatedMessages),
               });
               await this.storage.updateThread({
                 id: threadId,
@@ -3170,7 +3177,7 @@ ${suggestedResponse}
     // If step-level cleanup already ran after threshold handling, skip this pass to avoid
     // a second timestamp-based prune that can undercut retention-floor guarantees.
     if (!didThresholdCleanup) {
-      this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
+      await this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -3493,6 +3500,29 @@ ${formattedMessages}
     return maxTime > 0 ? new Date(maxTime) : new Date();
   }
 
+  private getLastObservedMessageCursor(messages: MastraDBMessage[]): { createdAt: string; id: string } | undefined {
+    let cursor: { createdAt: string; id: string } | undefined;
+
+    for (const msg of messages) {
+      if (!msg?.id || !msg.createdAt) continue;
+      const createdAt = new Date(msg.createdAt).toISOString();
+      if (!cursor || createdAt > cursor.createdAt || (createdAt === cursor.createdAt && msg.id > cursor.id)) {
+        cursor = { createdAt, id: msg.id };
+      }
+    }
+
+    return cursor;
+  }
+
+  private isMessageAtOrBeforeCursor(message: MastraDBMessage, cursor: { createdAt: string; id: string }): boolean {
+    if (!message.id || !message.createdAt) return false;
+
+    const messageCreatedAt = new Date(message.createdAt).toISOString();
+    if (messageCreatedAt < cursor.createdAt) return true;
+    if (messageCreatedAt > cursor.createdAt) return false;
+    return message.id <= cursor.id;
+  }
+
   /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
@@ -3731,6 +3761,7 @@ ${formattedMessages}
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: result.suggestedContinuation,
           currentTask: result.currentTask,
+          lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
         });
         await this.storage.updateThread({
           id: threadId,
@@ -4999,6 +5030,7 @@ ${formattedMessages}
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
             currentTask: result.currentTask,
+            lastObservedMessageCursor: this.getLastObservedMessageCursor(threadMessages),
           });
           await this.storage.updateThread({
             id: threadId,
