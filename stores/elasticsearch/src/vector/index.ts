@@ -50,7 +50,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       node: url,
       ...(auth && { auth }),
       name: 'mastra-elasticsearch',
-      headers: { 'user-agent': `mastra-elasticsearch/${packageJson.version}` },
+      headers: { 'user-agent': `mastra-es/${packageJson.version}` },
     });
   }
 
