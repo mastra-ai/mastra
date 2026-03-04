@@ -3541,7 +3541,12 @@ export class Agent<
     try {
       // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
       // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
-      messageList.add(result.response.dbMessages || result.response.messages, 'response');
+      const stepResponseMessages = result.response.dbMessages?.length
+        ? result.response.dbMessages
+        : result.response.messages;
+      if (stepResponseMessages?.length) {
+        messageList.add(stepResponseMessages, 'response');
+      }
       // Message saving is now handled by MessageHistory output processor
     } catch (e) {
       this.logger.error('Error adding messages on step finish', {
@@ -4010,8 +4015,10 @@ export class Agent<
     // Add LLM response messages to the list
     // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
     // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
-    let responseMessages: MessageInput[] | undefined = result.response.dbMessages || result.response.messages;
-    if (!responseMessages && result.object) {
+    let responseMessages: MessageInput[] | undefined = result.response.dbMessages?.length
+      ? result.response.dbMessages
+      : result.response.messages;
+    if ((!responseMessages || responseMessages.length === 0) && result.object) {
       responseMessages = [
         {
           id: result.response.id,
@@ -4026,7 +4033,7 @@ export class Agent<
       ];
     }
 
-    if (responseMessages) {
+    if (responseMessages?.length) {
       messageList.add(responseMessages, 'response');
     }
 
