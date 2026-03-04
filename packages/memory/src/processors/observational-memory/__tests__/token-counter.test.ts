@@ -74,22 +74,43 @@ describe('TokenCounter', () => {
   });
 
   describe('token estimate cache', () => {
-    it('writes and reuses part-level token estimates on text parts', () => {
+    it('writes and reuses part-level token estimates on text parts without re-encoding payload on cache hit', () => {
       const counter = new TokenCounter();
       const message = createMessage({
         format: 2,
         parts: [{ type: 'text', text: 'Hello from cached text part' }],
       });
 
+      const encoder = (counter as any).encoder;
+      const originalEncode = encoder.encode.bind(encoder);
+      let encodeCalls = 0;
+      encoder.encode = (...args: any[]) => {
+        encodeCalls += 1;
+        return originalEncode(...args);
+      };
+
       const first = counter.countMessage(message);
       expect(first).toBeGreaterThan(0);
       expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
 
-      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const callsAfterFirst = encodeCalls;
       const second = counter.countMessage(message);
+      const callsAfterSecond = encodeCalls;
 
       expect(second).toBe(first);
-      expect(message.content.parts[0].providerMetadata.mastra.tokenEstimate).toEqual(cachedEntry);
+      expect(callsAfterSecond - callsAfterFirst).toBe(1);
+
+      const reloaded = {
+        ...JSON.parse(JSON.stringify(message)),
+        createdAt: new Date(message.createdAt),
+      };
+
+      const third = counter.countMessage(reloaded as any);
+      const callsAfterThird = encodeCalls;
+
+      expect(third).toBe(first);
+      expect(callsAfterThird - callsAfterSecond).toBe(1);
+      expect(reloaded.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
     });
 
     it('ignores stale cache entries when the cache key no longer matches', () => {
