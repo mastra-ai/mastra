@@ -3,7 +3,7 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { getBufferedChunks, getUnobservedMessages, applySealToMessages } from '../message-parts';
+import { getUnobservedMessages, applySealToMessages } from '../message-parts';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
@@ -4672,38 +4672,6 @@ describe('Async Buffering Processor Logic', () => {
       });
       expect(unobservedExcluded).toHaveLength(2);
       expect(unobservedExcluded.map((m: MastraDBMessage) => m.id)).toEqual(['msg-2', 'msg-3']);
-    });
-  });
-
-  describe('getBufferedChunks defensive parsing', () => {
-    it('should return empty array for null record', () => {
-      expect(getBufferedChunks(null)).toEqual([]);
-      expect(getBufferedChunks(undefined)).toEqual([]);
-    });
-
-    it('should return empty array for record without chunks', () => {
-      expect(getBufferedChunks({})).toEqual([]);
-      expect(getBufferedChunks({ bufferedObservationChunks: undefined })).toEqual([]);
-    });
-
-    it('should parse JSON string chunks', () => {
-      const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }];
-      const result = getBufferedChunks({
-        bufferedObservationChunks: JSON.stringify(chunks),
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].observations).toBe('- test');
-    });
-
-    it('should return empty array for invalid JSON string', () => {
-      expect(getBufferedChunks({ bufferedObservationChunks: 'not-json' })).toEqual([]);
-      expect(getBufferedChunks({ bufferedObservationChunks: '42' })).toEqual([]);
-    });
-
-    it('should pass through array chunks directly', () => {
-      const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }];
-      expect(getBufferedChunks({ bufferedObservationChunks: chunks })).toBe(chunks);
     });
   });
 
