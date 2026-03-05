@@ -7,7 +7,7 @@ import rehypeParse from 'rehype-parse'
 import rehypeRemark from 'rehype-remark'
 import remarkStringify from 'remark-stringify'
 import remarkGfm from 'remark-gfm'
-import type { Root as HastRoot, Element, Text, Comment, ElementContent } from 'hast'
+import type { Root as HastRoot, Element, Text, Comment, ElementContent, Parents } from 'hast'
 import type { Root as MdastRoot } from 'mdast'
 
 import { handleCodeBlock } from './code-block-handler'
@@ -43,7 +43,11 @@ const htmlParser = unified().use(rehypeParse, { fragment: false })
  * Custom handler for div elements
  * Checks for special div types (admonitions, tabs, card grids, properties tables) and handles them appropriately
  */
-function handleDiv(state: State, node: Element): BlockContent | Array<BlockContent | DefinitionContent> | undefined {
+function handleDiv(
+  state: State,
+  node: Element,
+  parent: Parents | undefined,
+): BlockContent | Array<BlockContent | DefinitionContent> | undefined {
   // Check if this is an admonition
   if (isAdmonition(node)) {
     return handleAdmonition(state, node)
@@ -66,7 +70,7 @@ function handleDiv(state: State, node: Element): BlockContent | Array<BlockConte
 
   // Check if this is a PropertiesTable
   if (isPropertiesTable(node)) {
-    return handlePropertiesTable(state, node)
+    return handlePropertiesTable(state, node, parent)
   }
 
   // For regular divs, process children and return them (default behavior)

@@ -2,7 +2,7 @@
  * Custom handlers for Docusaurus components (tabs, details, etc.)
  */
 
-import type { Element, ElementContent } from 'hast'
+import type { Element, ElementContent, Parents } from 'hast'
 import type { BlockContent, DefinitionContent, Paragraph, Text, Strong } from 'mdast'
 import type { State } from 'hast-util-to-mdast'
 
@@ -361,13 +361,54 @@ export function isPropertiesTable(node: Element): boolean {
 }
 
 /**
- * Handle PropertiesTable - format as definition-style list
+ * Find the nearest preceding heading sibling of a node within its parent.
+ * Walks backwards through parent's children to find the closest h1-h6.
+ * Returns the heading text and level, or undefined if none found.
+ */
+function findPrecedingHeading(node: Element, parent: Parents | undefined): { text: string; level: number } | undefined {
+  if (!parent) return undefined
+
+  const siblings = parent.children
+  const nodeIndex = siblings.indexOf(node)
+  if (nodeIndex <= 0) return undefined
+
+  for (let i = nodeIndex - 1; i >= 0; i--) {
+    const sibling = siblings[i]
+    if (sibling.type === 'element' && /^h[1-6]$/.test(sibling.tagName)) {
+      const level = parseInt(sibling.tagName[1], 10)
+      return { text: getTextContent(sibling).trim(), level }
+    }
+  }
+  return undefined
+}
+
+/**
+ * Extract a parent property name from a sub-heading like "### X parameters".
+ * Only applies to h3+ (sub-headings), not h1/h2 (main section headings),
+ * since top-level properties don't need a prefix.
+ * e.g. "### Options parameters" → "options", "### Config properties" → "config"
+ */
+function extractParentPropertyFromHeading(heading: { text: string; level: number } | undefined): string | undefined {
+  if (!heading || heading.level <= 2) return undefined
+  const match = heading.text.match(/^(\w+)\s+(?:parameters|properties|options|config)\s*$/i)
+  if (!match) return undefined
+  return match[1].charAt(0).toLowerCase() + match[1].slice(1)
+}
+
+/**
+ * Handle PropertiesTable - format as definition-style list.
+ * When preceded by a heading like "X parameters", properties are prefixed
+ * with the parent name (e.g. "options.generateTitle") so the nesting is clear.
  */
 export function handlePropertiesTable(
   _state: State,
   node: Element,
+  parent?: Parents,
 ): BlockContent | Array<BlockContent | DefinitionContent> {
   const result: Array<BlockContent | DefinitionContent> = []
+
+  const heading = findPrecedingHeading(node, parent)
+  const parentProp = extractParentPropertyFromHeading(heading)
 
   for (const child of node.children) {
     if (child.type !== 'element') continue
@@ -377,7 +418,8 @@ export function handlePropertiesTable(
 
     // Find the h3 with property name
     const h3 = findElementByTag(child, 'h3')
-    const propName = h3 ? getTextContent(h3).trim() : propId
+    const rawPropName = h3 ? getTextContent(h3).trim() : propId
+    const propName = parentProp ? `${parentProp}.${rawPropName}` : rawPropName
 
     // Find type and default value in the first row div
     let propType = ''
