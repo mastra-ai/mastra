@@ -82,7 +82,12 @@ const agent = new Agent({
 - `getModelList()` now correctly handles dynamic functions that return arrays
 - Added validation for empty arrays returned from dynamic functions
 - Added type guard optimization to prevent double normalization of static arrays
+- Preserved backward-compatible `getLLM()` and `getModel()` return behavior while adding dynamic fallback array support
 - Comprehensive test coverage for edge cases (async functions, nested dynamics, error handling)
+
+## Documentation
+
+- Added dynamic fallback array example in Models docs under **Model fallbacks**
 
 ## Migration Guide
 
