@@ -1,15 +1,23 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import * as React from 'react';
 
-import type { Rule } from '../types';
+import type { RuleGroup } from '../types';
 
 import { RuleBuilder } from './rule-builder';
 import type { JsonSchema } from './types';
 import { complexSchema } from './fixtures';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const meta: Meta<typeof RuleBuilder> = {
   title: 'Rule Engine/RuleBuilder',
   component: RuleBuilder,
+  decorators: [
+    Story => (
+      <TooltipProvider>
+        <Story />
+      </TooltipProvider>
+    ),
+  ],
   parameters: {
     layout: 'centered',
   },
@@ -71,16 +79,16 @@ const nestedSchema: JsonSchema = {
 };
 
 // Wrapper component to manage state
-const RuleBuilderWithState = ({ schema, initialRules = [] }: { schema: JsonSchema; initialRules?: Rule[] }) => {
-  const [rules, setRules] = React.useState<Rule[]>(initialRules);
+const RuleBuilderWithState = ({ schema, initialRuleGroup }: { schema: JsonSchema; initialRuleGroup?: RuleGroup }) => {
+  const [ruleGroup, setRuleGroup] = React.useState<RuleGroup | undefined>(initialRuleGroup);
 
   return (
     <div className="w-[600px]">
-      <RuleBuilder schema={schema} rules={rules} onChange={setRules} />
-      {rules.length > 0 && (
+      <RuleBuilder schema={schema} ruleGroup={ruleGroup} onChange={setRuleGroup} />
+      {ruleGroup && (
         <div className="mt-4 p-3 bg-surface3 rounded-md">
-          <p className="text-xs text-neutral3 mb-2">Current rules:</p>
-          <pre className="text-xs text-neutral5 overflow-auto">{JSON.stringify(rules, null, 2)}</pre>
+          <p className="text-xs text-neutral3 mb-2">Current rule group:</p>
+          <pre className="text-xs text-neutral5 overflow-auto">{JSON.stringify(ruleGroup, null, 2)}</pre>
         </div>
       )}
     </div>
@@ -95,10 +103,13 @@ export const WithInitialRules: Story = {
   render: () => (
     <RuleBuilderWithState
       schema={simpleSchema}
-      initialRules={[
-        { field: 'country', operator: 'equals', value: 'US' },
-        { field: 'age', operator: 'greater_than', value: 18 },
-      ]}
+      initialRuleGroup={{
+        operator: 'AND',
+        conditions: [
+          { field: 'country', operator: 'equals', value: 'US' },
+          { field: 'age', operator: 'greater_than', value: 18 },
+        ],
+      }}
     />
   ),
 };
@@ -111,11 +122,14 @@ export const NestedFieldsWithRules: Story = {
   render: () => (
     <RuleBuilderWithState
       schema={nestedSchema}
-      initialRules={[
-        { field: 'user.email', operator: 'contains', value: '@gmail' },
-        { field: 'user.profile.age', operator: 'greater_than', value: 21 },
-        { field: 'subscription.plan', operator: 'in', value: ['pro', 'enterprise'] },
-      ]}
+      initialRuleGroup={{
+        operator: 'AND',
+        conditions: [
+          { field: 'user.email', operator: 'contains', value: '@gmail' },
+          { field: 'user.profile.age', operator: 'greater_than', value: 21 },
+          { field: 'subscription.plan', operator: 'in', value: ['pro', 'enterprise'] },
+        ],
+      }}
     />
   ),
 };
@@ -128,20 +142,72 @@ export const AllOperators: Story = {
   render: () => (
     <RuleBuilderWithState
       schema={simpleSchema}
-      initialRules={[
-        { field: 'name', operator: 'equals', value: 'John' },
-        { field: 'name', operator: 'not_equals', value: 'Jane' },
-        { field: 'name', operator: 'contains', value: 'oh' },
-        { field: 'name', operator: 'not_contains', value: 'xx' },
-        { field: 'age', operator: 'greater_than', value: 18 },
-        { field: 'age', operator: 'less_than', value: 65 },
-        { field: 'country', operator: 'in', value: ['US', 'CA', 'UK'] },
-        { field: 'country', operator: 'not_in', value: ['RU', 'CN'] },
-      ]}
+      initialRuleGroup={{
+        operator: 'AND',
+        conditions: [
+          { field: 'name', operator: 'equals', value: 'John' },
+          { field: 'name', operator: 'not_equals', value: 'Jane' },
+          { field: 'name', operator: 'contains', value: 'oh' },
+          { field: 'name', operator: 'not_contains', value: 'xx' },
+          { field: 'age', operator: 'greater_than', value: 18 },
+          { field: 'age', operator: 'less_than', value: 65 },
+          { field: 'country', operator: 'in', value: ['US', 'CA', 'UK'] },
+          { field: 'country', operator: 'not_in', value: ['RU', 'CN'] },
+        ],
+      }}
     />
   ),
 };
 
 export const EmptySchema: Story = {
   render: () => <RuleBuilderWithState schema={{ type: 'object', properties: {} }} />,
+};
+
+export const NestedGroups: Story = {
+  render: () => (
+    <RuleBuilderWithState
+      schema={simpleSchema}
+      initialRuleGroup={{
+        operator: 'AND',
+        conditions: [
+          { field: 'country', operator: 'equals', value: 'US' },
+          {
+            operator: 'OR',
+            conditions: [
+              { field: 'age', operator: 'greater_than', value: 18 },
+              { field: 'name', operator: 'contains', value: 'admin' },
+            ],
+          },
+          { field: 'isActive', operator: 'equals', value: true },
+        ],
+      }}
+    />
+  ),
+};
+
+export const DeeplyNested: Story = {
+  render: () => (
+    <RuleBuilderWithState
+      schema={simpleSchema}
+      initialRuleGroup={{
+        operator: 'AND',
+        conditions: [
+          { field: 'country', operator: 'equals', value: 'US' },
+          {
+            operator: 'OR',
+            conditions: [
+              { field: 'age', operator: 'greater_than', value: 18 },
+              {
+                operator: 'AND',
+                conditions: [
+                  { field: 'name', operator: 'contains', value: 'admin' },
+                  { field: 'isActive', operator: 'equals', value: true },
+                ],
+              },
+            ],
+          },
+        ],
+      }}
+    />
+  ),
 };

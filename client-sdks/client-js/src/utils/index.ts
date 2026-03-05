@@ -114,6 +114,20 @@ export function toQueryParams<T extends Record<string, unknown>>(params: T, flat
   return searchParams.toString();
 }
 
+/**
+ * Parses a JSON string that may have been serialized with superjson.
+ * superjson wraps values as `{json: ..., meta: ...}` — this unwraps to the inner value.
+ * Also handles plain JSON strings for forward compatibility.
+ * @throws {SyntaxError} if `value` is not valid JSON
+ */
+export function parseSuperJsonString(value: string): unknown {
+  const parsed = JSON.parse(value);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'json' in parsed) {
+    return parsed.json;
+  }
+  return parsed;
+}
+
 export function parseClientRequestContext(requestContext?: RequestContext | Record<string, any>) {
   if (requestContext) {
     if (requestContext instanceof RequestContext) {
@@ -126,7 +140,11 @@ export function parseClientRequestContext(requestContext?: RequestContext | Reco
 
 export function base64RequestContext(requestContext?: Record<string, any>): string | undefined {
   if (requestContext) {
-    return btoa(JSON.stringify(requestContext));
+    // Encode as UTF-8 bytes first so non-Latin1 characters (e.g. CJK, em-dashes)
+    // don't cause btoa() to throw InvalidCharacterError.
+    // Server-side decode already uses Buffer.from(str, 'base64').toString('utf-8').
+    const bytes = new TextEncoder().encode(JSON.stringify(requestContext));
+    return btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
   }
   return undefined;
 }

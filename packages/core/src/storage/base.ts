@@ -3,10 +3,18 @@ import { MastraBase } from '../base';
 import type {
   AgentsStorage,
   PromptBlocksStorage,
+  ScorerDefinitionsStorage,
+  MCPClientsStorage,
+  MCPServersStorage,
+  WorkspacesStorage,
+  SkillsStorage,
   ScoresStorage,
   WorkflowsStorage,
   MemoryStorage,
   ObservabilityStorage,
+  BlobStore,
+  DatasetsStorage,
+  ExperimentsStorage,
 } from './domains';
 
 export type StorageDomains = {
@@ -15,8 +23,31 @@ export type StorageDomains = {
   memory: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
+  datasets?: DatasetsStorage;
+  experiments?: ExperimentsStorage;
   promptBlocks?: PromptBlocksStorage;
+  scorerDefinitions?: ScorerDefinitionsStorage;
+  mcpClients?: MCPClientsStorage;
+  mcpServers?: MCPServersStorage;
+  workspaces?: WorkspacesStorage;
+  skills?: SkillsStorage;
+  blobs?: BlobStore;
 };
+
+/**
+ * Domain keys used by the Mastra Editor.
+ * Used by the `editor` shorthand on MastraCompositeStoreConfig to route
+ * all editor-related domains to a single store.
+ */
+export const EDITOR_DOMAINS = [
+  'agents',
+  'promptBlocks',
+  'scorerDefinitions',
+  'mcpClients',
+  'mcpServers',
+  'workspaces',
+  'skills',
+] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 /**
  * Normalizes perPage input for pagination queries.
@@ -92,8 +123,29 @@ export interface MastraCompositeStoreConfig {
   default?: MastraCompositeStore;
 
   /**
+   * Storage adapter for editor-related domains (agents, promptBlocks, scorerDefinitions,
+   * mcpClients, mcpServers, workspaces, skills).
+   *
+   * This is a shorthand that routes all editor domains to a single store instead of
+   * specifying each individually in `domains`. Useful for filesystem-based storage
+   * where editor configs are stored as JSON files in the repository.
+   *
+   * Priority: domains > editor > default
+   *
+   * @example
+   * ```typescript
+   * new MastraCompositeStore({
+   *   id: 'my-store',
+   *   default: postgresStore,
+   *   editor: filesystemStore,
+   * })
+   * ```
+   */
+  editor?: MastraCompositeStore;
+
+  /**
    * Individual domain overrides. Each domain can come from a different storage adapter.
-   * These take precedence over the default storage.
+   * These take precedence over both `editor` and `default` storage.
    *
    * @example
    * ```typescript
@@ -151,6 +203,13 @@ export interface MastraCompositeStoreConfig {
  *   },
  * });
  *
+ * // Use `editor` shorthand to route all editor domains to a filesystem store
+ * const storage2 = new MastraCompositeStore({
+ *   id: 'with-fs-editor',
+ *   default: pgStore,
+ *   editor: filesystemStore,
+ * });
+ *
  * // Access domains
  * const memory = await storage.getStore('memory');
  * await memory?.saveThread({ thread });
@@ -183,30 +242,48 @@ export class MastraCompositeStore extends MastraBase {
     this.id = config.id;
     this.disableInit = config.disableInit ?? false;
 
-    // If composition config is provided (default or domains), compose the stores
-    if (config.default || config.domains) {
+    // If composition config is provided (default, editor, or domains), compose the stores
+    if (config.default || config.editor || config.domains) {
       const defaultStores = config.default?.stores;
+      const editorStores = config.editor?.stores;
       const domainOverrides = config.domains ?? {};
 
       // Validate that at least one storage source is provided
       const hasDefaultDomains = defaultStores && Object.values(defaultStores).some(v => v !== undefined);
+      const hasEditorDomains = editorStores && Object.values(editorStores).some(v => v !== undefined);
       const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined);
 
-      if (!hasDefaultDomains && !hasOverrideDomains) {
+      if (!hasDefaultDomains && !hasEditorDomains && !hasOverrideDomains) {
         throw new Error(
-          'MastraCompositeStore requires at least one storage source. Provide either a default storage with domains or domain overrides.',
+          'MastraCompositeStore requires at least one storage source. Provide a default storage, an editor storage, or domain overrides.',
         );
       }
 
+      const editorDomainSet = new Set<string>(EDITOR_DOMAINS);
+
+      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default
+      const resolve = <K extends keyof StorageDomains>(key: K): StorageDomains[K] | undefined => {
+        if (domainOverrides[key] !== undefined) return domainOverrides[key];
+        if (editorDomainSet.has(key) && editorStores?.[key] !== undefined) return editorStores[key];
+        return defaultStores?.[key];
+      };
+
       // Build the composed stores object
-      // Domain overrides take precedence over default storage
       this.stores = {
-        memory: domainOverrides.memory ?? defaultStores?.memory,
-        workflows: domainOverrides.workflows ?? defaultStores?.workflows,
-        scores: domainOverrides.scores ?? defaultStores?.scores,
-        observability: domainOverrides.observability ?? defaultStores?.observability,
-        agents: domainOverrides.agents ?? defaultStores?.agents,
-        promptBlocks: domainOverrides.promptBlocks ?? defaultStores?.promptBlocks,
+        memory: resolve('memory'),
+        workflows: resolve('workflows'),
+        scores: resolve('scores'),
+        observability: resolve('observability'),
+        agents: resolve('agents'),
+        datasets: resolve('datasets'),
+        experiments: resolve('experiments'),
+        promptBlocks: resolve('promptBlocks'),
+        scorerDefinitions: resolve('scorerDefinitions'),
+        mcpClients: resolve('mcpClients'),
+        mcpServers: resolve('mcpServers'),
+        workspaces: resolve('workspaces'),
+        skills: resolve('skills'),
+        blobs: resolve('blobs'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -263,8 +340,40 @@ export class MastraCompositeStore extends MastraBase {
       initTasks.push(this.stores.agents.init());
     }
 
+    if (this.stores?.datasets) {
+      initTasks.push(this.stores.datasets.init());
+    }
+
+    if (this.stores?.experiments) {
+      initTasks.push(this.stores.experiments.init());
+    }
+
     if (this.stores?.promptBlocks) {
       initTasks.push(this.stores.promptBlocks.init());
+    }
+
+    if (this.stores?.scorerDefinitions) {
+      initTasks.push(this.stores.scorerDefinitions.init());
+    }
+
+    if (this.stores?.mcpClients) {
+      initTasks.push(this.stores.mcpClients.init());
+    }
+
+    if (this.stores?.mcpServers) {
+      initTasks.push(this.stores.mcpServers.init());
+    }
+
+    if (this.stores?.workspaces) {
+      initTasks.push(this.stores.workspaces.init());
+    }
+
+    if (this.stores?.skills) {
+      initTasks.push(this.stores.skills.init());
+    }
+
+    if (this.stores?.blobs) {
+      initTasks.push(this.stores.blobs.init());
     }
 
     this.hasInitialized = Promise.all(initTasks).then(() => true);
