@@ -6,7 +6,7 @@ import type { MastraScorers } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { Processor, ProcessorStepOutput } from '@mastra/core/processors';
+import type { Processor, ProcessorStepOutput, OutputResult } from '@mastra/core/processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { ChunkType, OutputSchema, SchemaWithValidation } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
@@ -881,7 +881,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
-              const outputResult = passThrough.result ?? {
+              const outputResult = (passThrough.result as OutputResult | undefined) ?? {
                 text: '',
                 usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
                 finishReason: 'unknown',
