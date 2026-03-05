@@ -189,40 +189,41 @@ Each tool can be configured with these options:
 
 <PropertiesTable
   content={[
-{
-name: "enabled",
-type: "boolean",
-description: "Whether the tool is available to agents",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "requireApproval",
-type: "boolean",
-description: "Whether the tool requires user approval before execution",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "name",
-type: "string",
-description: "Custom name to expose this tool as. Replaces the default mastra_workspace_* name. The config key must still use the original WORKSPACE_TOOLS constant.",
-isOptional: true,
-},
-{
-name: "requireReadBeforeWrite",
-type: "boolean",
-description: "For write tools: require reading the file first to prevent overwrites",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "maxOutputTokens",
-type: "number",
-description: "Maximum tokens for tool output. Output exceeding this limit is truncated using tiktoken.",
-isOptional: true,
-defaultValue: "2000",
-},
+  {
+    name: 'enabled',
+    type: 'boolean',
+    description: 'Whether the tool is available to agents',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'requireApproval',
+    type: 'boolean',
+    description: 'Whether the tool requires user approval before execution',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      'Custom name to expose this tool as. Replaces the default mastra_workspace_* name. The config key must still use the original WORKSPACE_TOOLS constant.',
+    isOptional: true,
+  },
+  {
+    name: 'requireReadBeforeWrite',
+    type: 'boolean',
+    description: 'For write tools: require reading the file first to prevent overwrites',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'maxOutputTokens',
+    type: 'number',
+    description: 'Maximum tokens for tool output. Output exceeding this limit is truncated using tiktoken.',
+    isOptional: true,
+    defaultValue: '2000',
+  },
 ]}
 />
 
@@ -399,7 +400,7 @@ const config = workspace.getToolsConfig()
 
 **Returns:** `WorkspaceToolsConfig | undefined`
 
-#### `setToolsConfig()`
+#### `setToolsConfig(config?)`
 
 Replace the per-tool configuration at runtime. This performs a full replacement — it does not merge with the previous config. Pass `undefined` to reset to defaults. Changes take effect on the next agent interaction (the next `createWorkspaceTools()` call).
 
@@ -420,11 +421,11 @@ workspace.setToolsConfig(undefined)
 
 <PropertiesTable
   content={[
-{
-name: "config",
-type: "WorkspaceToolsConfig | undefined",
-description: "New tool configuration to apply. Pass undefined to reset to defaults.",
-},
+  {
+    name: 'config',
+    type: 'WorkspaceToolsConfig | undefined',
+    description: 'New tool configuration to apply. Pass undefined to reset to defaults.',
+  },
 ]}
 />
 
