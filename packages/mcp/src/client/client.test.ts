@@ -8,7 +8,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 import { InternalMastraMCPClient } from './client.js';
 

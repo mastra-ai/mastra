@@ -2735,7 +2735,9 @@ describe('MCPServer - Tool Input Validation', () => {
     if (result.error) {
       expect(result.error).toBe(true);
       expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
-      expect(result.message).toMatch(/String must contain at least 3|at least 3 characters/i);
+      expect(result.message).toMatch(
+        /String must contain at least 3|at least 3 characters|must NOT have fewer than 3 characters/i,
+      );
     } else {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
@@ -2797,12 +2799,14 @@ describe('MCPServer - Tool Input Validation', () => {
     if (result.error) {
       expect(result.error).toBe(true);
       expect(result.message).toMatch(/Tool(?: input)? validation failed/i);
-      expect(result.message).toMatch(/Array must contain at least 1|Too small: expected array to have >=1 items/i);
+      expect(result.message).toMatch(
+        /Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items/i,
+      );
     } else {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toMatch(/Tool(?: input)? validation failed/i);
       expect(result.content[0].text).toMatch(
-        /Array must contain at least 1|Too small: expected array to have >=1 items/i,
+        /Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items/i,
       );
     }
   });
@@ -2846,7 +2850,9 @@ describe('MCPServer - Tool Input Validation', () => {
       expect(errorText).toMatch(/Tool(?: input)? validation failed/i);
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
-      expect(errorText).toMatch(/tags: (Array must contain at least 1|Too small: expected array to have >=1 items)/i);
+      expect(errorText).toMatch(
+        /tags: (Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items)/i,
+      );
       expect(errorText).toContain('Provided arguments:');
     } else {
       expect(result.isError).toBe(true);
@@ -2854,7 +2860,9 @@ describe('MCPServer - Tool Input Validation', () => {
       expect(errorText).toMatch(/Tool(?: input)? validation failed/i);
       // Should contain multiple validation errors
       // Note: Some validations might not trigger when there are other errors
-      expect(errorText).toMatch(/tags: (Array must contain at least 1|Too small: expected array to have >=1 items)/i);
+      expect(errorText).toMatch(
+        /tags: (Array must contain at least 1|Too small: expected array to have >=1 items|must NOT have fewer than 1 items)/i,
+      );
       expect(errorText).toContain('Provided arguments:');
     }
   });

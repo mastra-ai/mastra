@@ -49,7 +49,7 @@ import type {
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
-import { z } from 'zod/v3';
+
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from './types';
@@ -63,7 +63,7 @@ import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from '.
  * ```typescript
  * import { MCPServer } from '@mastra/mcp';
  * import { createTool } from '@mastra/core/tools';
- * import { z } from 'zod/v3';
+ * import { z } from 'zod';
  *
  * const weatherTool = createTool({
  *   id: 'getWeather',
@@ -210,7 +210,7 @@ export class MCPServer extends MCPServerBase {
    * import { MCPServer } from '@mastra/mcp';
    * import { Agent } from '@mastra/core/agent';
    * import { createTool } from '@mastra/core/tools';
-   * import { z } from 'zod/v3';
+   * import { z } from 'zod';
    *
    * const myAgent = new Agent({
    *   id: 'helper',
@@ -552,17 +552,18 @@ export class MCPServer extends MCPServerBase {
         return response;
       } catch (error) {
         const duration = Date.now() - startTime;
-        if (error instanceof z.ZodError) {
+        if (error instanceof Error && 'issues' in error && Array.isArray((error as any).issues)) {
+          const issues: Array<{ path: string[]; message: string }> = (error as any).issues;
           this.logger.warn('Invalid tool arguments', {
             tool: request.params.name,
-            errors: error.issues,
+            errors: issues,
             duration: `${duration}ms`,
           });
           return {
             content: [
               {
                 type: 'text',
-                text: `Invalid arguments: ${error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+                text: `Invalid arguments: ${issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
               },
             ],
             isError: true,
@@ -836,12 +837,18 @@ export class MCPServer extends MCPServerBase {
       const agentToolDefinition = createTool({
         id: agentToolName,
         description: `Ask agent '${agent.name}' a question. Agent description: ${agentDescription}`,
-        inputSchema: z.object({
-          message: z.string().describe('The question or input for the agent.'),
-        }),
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            message: { type: 'string', description: 'The question or input for the agent.' },
+          },
+          required: ['message'],
+          additionalProperties: false,
+        },
         execute: async (inputData, context) => {
+          const { message } = inputData as { message: string };
           this.logger.debug(
-            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${inputData.message}"`,
+            `Executing agent tool '${agentToolName}' for agent '${agent.name}' with message: "${message}"`,
           );
           try {
             const proxiedContext = context?.requestContext || new RequestContext();
@@ -852,7 +859,7 @@ export class MCPServer extends MCPServerBase {
               });
             }
 
-            const response = await agent.generate(inputData.message, {
+            const response = await agent.generate(message, {
               ...(context ?? {}),
               requestContext: proxiedContext,
             });
