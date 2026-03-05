@@ -785,6 +785,41 @@ article p {
   justify-content: flex-end;
 }
 
+.accordion-group {
+  margin-bottom: var(--ifm-leading);
+}
+
+.accordion-group details {
+  margin-bottom: 0;
+  border-radius: 0;
+  border: 0.5px solid var(--border);
+  border-bottom: none !important;
+  background-color: color-mix(in oklab, var(--mastra-surface-2) 40%, transparent);
+
+  --docusaurus-details-decoration-color: var(--mastra-green-accent-3) !important;
+}
+
+[data-theme='dark'] {
+  .accordion-group details {
+    --docusaurus-details-decoration-color: var(--mastra-green-accent) !important;
+  }
+}
+
+.accordion-group details > div > div {
+  border-top: 0;
+}
+
+.accordion-group details:first-of-type {
+  border-top-left-radius: var(--radius-xl);
+  border-top-right-radius: var(--radius-xl);
+}
+
+.accordion-group details:last-of-type {
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+  border-bottom: 0.5px solid var(--border) !important;
+}
+
 @media (min-width: 62.25rem) {
   #doc-item-container {
     gap: 2rem;
