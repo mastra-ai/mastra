@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import type { Processor } from '../../processors';
 import { Agent } from '../agent';
 
 describe('Stream ID Consistency', () => {
@@ -276,6 +277,75 @@ describe('Stream ID Consistency', () => {
     expect(savedMessages).toHaveLength(1);
     expect(savedMessages[0].id).toBe(messageId!);
     expect(customIdGenerator).toHaveBeenCalled();
+  });
+
+  it('should let processInputStep rotate the active response message ID for stream output and persistence', async () => {
+    let initialMessageId: string | undefined;
+    let rotatedMessageId: string | undefined;
+
+    const rotateMessageIdProcessor = {
+      id: 'rotate-response-message-id-processor',
+      processInputStep: async ({ messageId, rotateResponseMessageId }) => {
+        initialMessageId = messageId;
+        rotatedMessageId = rotateResponseMessageId();
+        return {};
+      },
+    } satisfies Processor;
+
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'provider-msg-xyz123', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'rotated ' },
+          { type: 'text-delta', id: 'text-1', delta: 'response id' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent V2 Rotated Response ID',
+      instructions: 'You are a helpful assistant.',
+      model,
+      memory,
+      inputProcessors: [rotateMessageIdProcessor],
+    });
+
+    agent.__registerMastra(mastra);
+
+    const threadId = randomUUID();
+    const resourceId = 'test-resource';
+    const stream = await agent.stream('Hello!', { memory: { thread: threadId, resource: resourceId } });
+    const chunks: any[] = [];
+
+    for await (const chunk of stream.fullStream) {
+      chunks.push(chunk);
+    }
+
+    const res = await stream.response;
+    const messageId = res?.uiMessages?.[0]?.id;
+
+    expect(initialMessageId).toBeDefined();
+    expect(rotatedMessageId).toBeDefined();
+    expect(rotatedMessageId).not.toBe(initialMessageId);
+    expect(messageId).toBe(rotatedMessageId);
+
+    const rotatedResult = await memory.recall({ threadId, perPage: 0, include: [{ id: rotatedMessageId! }] });
+    expect(rotatedResult.messages).toHaveLength(1);
+    expect(rotatedResult.messages[0].id).toBe(rotatedMessageId!);
+
+    const initialResult = await memory.recall({ threadId, perPage: 0, include: [{ id: initialMessageId! }] });
+    expect(initialResult.messages).toHaveLength(0);
   });
 
   describe('onFinish callback with structured output', () => {

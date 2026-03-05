@@ -125,6 +125,8 @@ export type ProcessorInputStepPhaseType = {
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
 };
 
 export type ProcessorOutputStreamPhaseType = {
@@ -183,6 +185,8 @@ export type ProcessorStepOutputType = {
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
 };
 
 // =========================================================================
@@ -630,6 +634,8 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
   structuredOutput: z.custom<StructuredOutputOptions<InferSchemaOutput<OutputSchema>>>().optional(),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
+  messageId: z.string().optional(),
+  rotateResponseMessageId: z.custom<() => string>().optional(),
 });
 
 /**

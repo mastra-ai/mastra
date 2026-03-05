@@ -807,6 +807,7 @@ export class ProcessorRunner {
 
     // Initialize with all provided values - processors will modify this object in order
     const stepInput: RunProcessInputStepResult = {
+      messageId: args.messageId ?? '',
       tools: args.tools,
       toolChoice: args.toolChoice,
       model: args.model,
@@ -840,6 +841,7 @@ export class ProcessorRunner {
             messageList,
             stepNumber,
             systemMessages: currentSystemMessages,
+            rotateResponseMessageId: args.rotateResponseMessageId,
             ...stepInput,
           },
           observabilityContext,
@@ -870,6 +872,7 @@ export class ProcessorRunner {
         messages: processableMessages,
         stepNumber,
         steps,
+        messageId: stepInput.messageId!,
         systemMessages: currentSystemMessages,
         tools: stepInput.tools,
         toolChoice: stepInput.toolChoice,
@@ -915,6 +918,11 @@ export class ProcessorRunner {
           ...inputData,
           state: processorState.customState,
           abort,
+          rotateResponseMessageId: () => {
+            const nextMessageId = args.rotateResponseMessageId?.() ?? inputData.messageId;
+            stepInput.messageId = nextMessageId;
+            return nextMessageId;
+          },
           ...createObservabilityContext({ currentSpan: processorSpan }),
           retryCount: args.retryCount ?? 0,
           writer,
