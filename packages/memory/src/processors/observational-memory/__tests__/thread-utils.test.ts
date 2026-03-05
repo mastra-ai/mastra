@@ -138,6 +138,31 @@ Date: March 5, 2026
       expect(result).toBe(`${existing}\n\n${newSection}`);
     });
 
+    it('should merge with the correct date section when multiple sections share the same thread ID', () => {
+      const existing = `<thread id="t1">
+Date: March 1, 2026
+- early obs
+</thread>
+
+<thread id="t1">
+Date: March 5, 2026
+- later obs
+</thread>`;
+      const newSection = `<thread id="t1">
+Date: March 5, 2026
+- newest obs
+</thread>`;
+      const result = replaceOrAppendThreadSection(existing, 't1', newSection);
+      // Should merge into the March 5 section, not the March 1 section
+      expect(result).toContain('early obs');
+      expect(result).toContain('later obs');
+      expect(result).toContain('newest obs');
+      // The March 1 section should remain untouched
+      const march1Section = result.match(/<thread id="t1">\nDate: March 1, 2026\n[\s\S]*?<\/thread>/);
+      expect(march1Section).toBeTruthy();
+      expect(march1Section![0]).not.toContain('newest obs');
+    });
+
     it('should preserve other thread sections when merging', () => {
       const existing = `<thread id="t1">
 Date: March 5, 2026

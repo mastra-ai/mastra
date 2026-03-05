@@ -66,24 +66,32 @@ export function replaceOrAppendThreadSection(
   const newDate = dateMatch[1]!;
 
   // Look for existing section with same thread ID and date.
+  // Iterate all occurrences to handle multiple sections with the same thread ID but different dates.
   const threadOpen = `<thread id="${newThreadId}">`;
   const threadClose = '</thread>';
-  const startIdx = existingObservations.indexOf(threadOpen);
   let existingSection: string | null = null;
   let existingSectionStart = -1;
   let existingSectionEnd = -1;
+  let searchFrom = 0;
 
-  if (startIdx !== -1) {
+  while (searchFrom < existingObservations.length) {
+    const startIdx = existingObservations.indexOf(threadOpen, searchFrom);
+    if (startIdx === -1) break;
+
     const closeIdx = existingObservations.indexOf(threadClose, startIdx);
-    if (closeIdx !== -1) {
-      existingSectionEnd = closeIdx + threadClose.length;
+    if (closeIdx === -1) break;
+
+    const sectionEnd = closeIdx + threadClose.length;
+    const section = existingObservations.slice(startIdx, sectionEnd);
+
+    if (section.includes(`Date: ${newDate}`) || section.includes(`Date:${newDate}`)) {
+      existingSection = section;
       existingSectionStart = startIdx;
-      const section = existingObservations.slice(startIdx, existingSectionEnd);
-      // Verify this section contains the matching date
-      if (section.includes(`Date: ${newDate}`) || section.includes(`Date:${newDate}`)) {
-        existingSection = section;
-      }
+      existingSectionEnd = sectionEnd;
+      break;
     }
+
+    searchFrom = sectionEnd;
   }
 
   if (existingSection) {

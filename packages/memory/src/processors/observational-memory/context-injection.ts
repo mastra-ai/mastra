@@ -73,7 +73,7 @@ ${OBSERVATION_CONTEXT_INSTRUCTIONS}`;
 
   // Add unobserved context from other threads (resource scope only)
   if (unobservedContextBlocks) {
-    content += `\n\nThe following content is from OTHER conversations different from the current conversation, they're here for reference,  but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`;
+    content += `\n\nThe following content is from OTHER conversations different from the current conversation, they're here for reference, but they're not necessarily your focus:\nSTART_OTHER_CONVERSATIONS_BLOCK\n${unobservedContextBlocks}\nEND_OTHER_CONVERSATIONS_BLOCK`;
   }
 
   // Dynamically inject current-task from thread metadata (not stored in observations)
@@ -170,12 +170,15 @@ export async function injectObservationsIntoContext({
   const currentTask = threadOMMetadata?.currentTask;
   const suggestedResponse = threadOMMetadata?.suggestedResponse;
   const rawCurrentDate = requestContext?.get('currentDate');
-  const currentDate =
-    rawCurrentDate instanceof Date
-      ? rawCurrentDate
-      : typeof rawCurrentDate === 'string'
-        ? new Date(rawCurrentDate)
-        : new Date();
+  let currentDate: Date;
+  if (rawCurrentDate instanceof Date) {
+    currentDate = rawCurrentDate;
+  } else if (typeof rawCurrentDate === 'string') {
+    const parsed = new Date(rawCurrentDate);
+    currentDate = isNaN(parsed.getTime()) ? new Date() : parsed;
+  } else {
+    currentDate = new Date();
+  }
 
   if (!record.activeObservations) {
     return;
