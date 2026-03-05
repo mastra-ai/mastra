@@ -57,47 +57,47 @@ const handle = await sandbox.processes.spawn('npm run dev', {
 
 <PropertiesTable
   content={[
-{
-name: "command",
-type: "string",
-description: "The command to run. Interpreted by the shell.",
-},
-{
-name: "options.timeout",
-type: "number",
-description: "Timeout in milliseconds. Kills the process if exceeded.",
-isOptional: true,
-},
-{
-name: "options.env",
-type: "NodeJS.ProcessEnv",
-description: "Environment variables for the process.",
-isOptional: true,
-},
-{
-name: "options.cwd",
-type: "string",
-description: "Working directory for the process.",
-isOptional: true,
-},
-{
-name: "options.onStdout",
-type: "(data: string) => void",
-description: "Callback for stdout chunks. Called as data arrives.",
-isOptional: true,
-},
-{
-name: "options.onStderr",
-type: "(data: string) => void",
-description: "Callback for stderr chunks. Called as data arrives.",
-isOptional: true,
-},
-{
-name: "options.abortSignal",
-type: "AbortSignal",
-description: "Signal to abort the process. When aborted, the process is killed.",
-isOptional: true,
-},
+  {
+    name: 'command',
+    type: 'string',
+    description: 'The command to run. Interpreted by the shell.',
+  },
+  {
+    name: 'options.timeout',
+    type: 'number',
+    description: 'Timeout in milliseconds. Kills the process if exceeded.',
+    isOptional: true,
+  },
+  {
+    name: 'options.env',
+    type: 'NodeJS.ProcessEnv',
+    description: 'Environment variables for the process.',
+    isOptional: true,
+  },
+  {
+    name: 'options.cwd',
+    type: 'string',
+    description: 'Working directory for the process.',
+    isOptional: true,
+  },
+  {
+    name: 'options.onStdout',
+    type: '(data: string) => void',
+    description: 'Callback for stdout chunks. Called as data arrives.',
+    isOptional: true,
+  },
+  {
+    name: 'options.onStderr',
+    type: '(data: string) => void',
+    description: 'Callback for stderr chunks. Called as data arrives.',
+    isOptional: true,
+  },
+  {
+    name: 'options.abortSignal',
+    type: 'AbortSignal',
+    description: 'Signal to abort the process. When aborted, the process is killed.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -146,42 +146,40 @@ Information about a tracked process, returned by `list()`.
 
 <PropertiesTable
   content={[
-{
-name: "pid",
-type: "number",
-description: "Process ID.",
-},
-{
-name: "command",
-type: "string",
-description: "The command that was executed.",
-isOptional: true,
-},
-{
-name: "running",
-type: "boolean",
-description: "Whether the process is still running.",
-},
-{
-name: "exitCode",
-type: "number",
-description: "Exit code if the process has finished.",
-isOptional: true,
-},
+  {
+    name: 'pid',
+    type: 'number',
+    description: 'Process ID.',
+  },
+  {
+    name: 'command',
+    type: 'string',
+    description: 'The command that was executed.',
+    isOptional: true,
+  },
+  {
+    name: 'running',
+    type: 'boolean',
+    description: 'Whether the process is still running.',
+  },
+  {
+    name: 'exitCode',
+    type: 'number',
+    description: 'Exit code if the process has finished.',
+    isOptional: true,
+  },
 ]}
 />
 
 ---
 
-# ProcessHandle
-
-**Added in:** `@mastra/core@1.7.0`
+## ProcessHandle
 
 Handle to a spawned background process. Provides methods to read output, send stdin, wait for completion, and kill the process.
 
-You don't create `ProcessHandle` instances directly. They're returned by `sandbox.processes.spawn()` and `sandbox.processes.get()`.
+You don't create `ProcessHandle` instances directly — they're returned by `spawn()` and `get()`.
 
-## Usage example
+### Usage example
 
 ```typescript
 const handle = await sandbox.processes.spawn('npm run dev', {
@@ -204,51 +202,51 @@ await handle.sendStdin('input data\n')
 await handle.kill()
 ```
 
-## Properties
+### Properties
 
 <PropertiesTable
   content={[
-{
-name: "pid",
-type: "number",
-description: "Process ID.",
-},
-{
-name: "stdout",
-type: "string",
-description: "Accumulated stdout output so far.",
-},
-{
-name: "stderr",
-type: "string",
-description: "Accumulated stderr output so far.",
-},
-{
-name: "exitCode",
-type: "number | undefined",
-description: "Exit code. undefined while the process is still running.",
-},
-{
-name: "command",
-type: "string | undefined",
-description: "The command that was spawned. Set automatically by the process manager.",
-},
-{
-name: "reader",
-type: "Readable",
-description: "Readable stream of stdout. Useful for protocols like LSP or JSON-RPC that communicate over stdio.",
-},
-{
-name: "writer",
-type: "Writable",
-description: "Writable stream to stdin. Useful for protocols like LSP or JSON-RPC that communicate over stdio.",
-},
+  {
+    name: 'pid',
+    type: 'number',
+    description: 'Process ID.',
+  },
+  {
+    name: 'stdout',
+    type: 'string',
+    description: 'Accumulated stdout output so far.',
+  },
+  {
+    name: 'stderr',
+    type: 'string',
+    description: 'Accumulated stderr output so far.',
+  },
+  {
+    name: 'exitCode',
+    type: 'number | undefined',
+    description: 'Exit code. undefined while the process is still running.',
+  },
+  {
+    name: 'command',
+    type: 'string | undefined',
+    description: 'The command that was spawned. Set automatically by the process manager.',
+  },
+  {
+    name: 'reader',
+    type: 'Readable',
+    description: 'Readable stream of stdout. Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
+  },
+  {
+    name: 'writer',
+    type: 'Writable',
+    description: 'Writable stream to stdin. Useful for protocols like LSP or JSON-RPC that communicate over stdio.',
+  },
 ]}
 />
 
-## Methods
+### Methods
 
-### `wait(options?)`
+#### `wait(options?)`
 
 Wait for the process to exit and return the result. Optionally pass `onStdout`/`onStderr` callbacks to stream output while waiting. Callbacks are automatically removed when `wait()` resolves.
 
@@ -268,18 +266,18 @@ const result = await handle.wait({
 
 <PropertiesTable
   content={[
-{
-name: "options.onStdout",
-type: "(data: string) => void",
-description: "Callback for stdout chunks while waiting.",
-isOptional: true,
-},
-{
-name: "options.onStderr",
-type: "(data: string) => void",
-description: "Callback for stderr chunks while waiting.",
-isOptional: true,
-},
+  {
+    name: 'options.onStdout',
+    type: '(data: string) => void',
+    description: 'Callback for stdout chunks while waiting.',
+    isOptional: true,
+  },
+  {
+    name: 'options.onStderr',
+    type: '(data: string) => void',
+    description: 'Callback for stderr chunks while waiting.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -289,47 +287,47 @@ The `CommandResult` object contains:
 
 <PropertiesTable
   content={[
-{
-name: "success",
-type: "boolean",
-description: "true if exit code is 0.",
-},
-{
-name: "exitCode",
-type: "number",
-description: "Numeric exit code.",
-},
-{
-name: "stdout",
-type: "string",
-description: "Full stdout output.",
-},
-{
-name: "stderr",
-type: "string",
-description: "Full stderr output.",
-},
-{
-name: "executionTimeMs",
-type: "number",
-description: "Execution time in milliseconds.",
-},
-{
-name: "timedOut",
-type: "boolean",
-description: "true if the process was killed due to timeout.",
-isOptional: true,
-},
-{
-name: "killed",
-type: "boolean",
-description: "true if the process was killed by a signal.",
-isOptional: true,
-},
+  {
+    name: 'success',
+    type: 'boolean',
+    description: 'true if exit code is 0.',
+  },
+  {
+    name: 'exitCode',
+    type: 'number',
+    description: 'Numeric exit code.',
+  },
+  {
+    name: 'stdout',
+    type: 'string',
+    description: 'Full stdout output.',
+  },
+  {
+    name: 'stderr',
+    type: 'string',
+    description: 'Full stderr output.',
+  },
+  {
+    name: 'executionTimeMs',
+    type: 'number',
+    description: 'Execution time in milliseconds.',
+  },
+  {
+    name: 'timedOut',
+    type: 'boolean',
+    description: 'true if the process was killed due to timeout.',
+    isOptional: true,
+  },
+  {
+    name: 'killed',
+    type: 'boolean',
+    description: 'true if the process was killed by a signal.',
+    isOptional: true,
+  },
 ]}
 />
 
-### `kill()`
+#### `kill()`
 
 Kill the process. Returns `true` if the process was killed, `false` if it had already exited.
 
@@ -339,7 +337,7 @@ const killed = await handle.kill()
 
 **Returns:** `Promise<boolean>`
 
-### `sendStdin(data)`
+#### `sendStdin(data)`
 
 Send data to the process's stdin. Throws if the process has already exited or stdin is not available.
 
