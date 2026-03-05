@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
