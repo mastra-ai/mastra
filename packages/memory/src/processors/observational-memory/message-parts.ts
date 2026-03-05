@@ -124,12 +124,26 @@ export function getUnobservedParts(message: MastraDBMessage): MastraDBMessage['c
 
   const endMarkerIndex = findLastCompletedObservationBoundary(message);
   if (endMarkerIndex === -1) {
-    // No completed observation - all parts are unobserved
-    // (This includes the case where observation is in progress)
+    if (hasInProgressObservation(message)) {
+      // In-progress observation: only return parts before the latest start marker
+      let lastStartIndex = -1;
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const type = (parts[i] as { type?: string })?.type;
+        if (type === 'data-om-observation-start') {
+          lastStartIndex = i;
+          break;
+        }
+      }
+      return parts.slice(0, lastStartIndex).filter(p => {
+        const type = (p as { type?: string })?.type;
+        return !type?.startsWith('data-om-observation-');
+      });
+    }
+    // No in-progress observation and no completed boundary — return all parts,
+    // filtering any stale observation markers (e.g. from a failed observation)
     return parts.filter(p => {
-      const part = p as { type?: string };
-      // Exclude start markers that are in progress
-      return part?.type !== 'data-om-observation-start';
+      const type = (p as { type?: string })?.type;
+      return !type?.startsWith('data-om-observation-');
     });
   }
 
@@ -223,7 +237,6 @@ export function getUnobservedMessages(
       const virtualMsg = createUnobservedMessage(msg);
       if (virtualMsg) {
         result.push(virtualMsg);
-      } else {
       }
     } else {
       // No observation markers - fall back to timestamp-based filtering
@@ -235,7 +248,6 @@ export function getUnobservedMessages(
         const msgDate = new Date(msg.createdAt);
         if (msgDate > lastObservedAt) {
           result.push(msg);
-        } else {
         }
       }
     }

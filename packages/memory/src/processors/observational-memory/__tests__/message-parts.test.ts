@@ -270,10 +270,32 @@ describe('getUnobservedParts', () => {
     expect(getUnobservedParts(msg)).toEqual([]);
   });
 
-  it('filters out start markers from in-progress observations', () => {
+  it('returns only parts before start marker for in-progress observations', () => {
     const msg = makeMessage([textPart('content'), startMarker()]);
     const result = getUnobservedParts(msg);
     expect(result).toEqual([textPart('content')]);
+  });
+
+  it('excludes parts after start marker during in-progress observation', () => {
+    const msg = makeMessage([textPart('before'), startMarker(), textPart('during-obs')]);
+    const result = getUnobservedParts(msg);
+    expect(result).toEqual([textPart('before')]);
+  });
+
+  it('treats failed marker as closing an in-progress observation', () => {
+    // start + failed = not in-progress (failed terminates the observation)
+    // but findLastCompletedObservationBoundary only looks for 'end', not 'failed'
+    // so this falls to the fallback branch → returns all non-observation parts
+    const msg = makeMessage([textPart('old'), startMarker(), failedMarker(), textPart('new')]);
+    const result = getUnobservedParts(msg);
+    expect(result).toEqual([textPart('old'), textPart('new')]);
+  });
+
+  it('filters failed markers from messages with no start or end', () => {
+    const msg = makeMessage([textPart('a'), failedMarker(), textPart('b')]);
+    const result = getUnobservedParts(msg);
+    // No start/end markers → fallback branch filters stale observation markers
+    expect(result).toEqual([textPart('a'), textPart('b')]);
   });
 
   it('filters out observation markers from parts after end marker', () => {
@@ -417,6 +439,31 @@ describe('getUnobservedMessages', () => {
     const result = getUnobservedMessages([msg], record);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('msg-1');
+  });
+
+  it('includes messages with failed markers via timestamp filtering', () => {
+    // start + failed = not in-progress, endMarkerIndex = -1 → falls to timestamp filtering
+    const recent = new Date('2025-06-01T00:00:00Z');
+    const msg = makeMessage([textPart('old'), startMarker(), failedMarker(), textPart('new')], {
+      id: 'msg-1',
+      createdAt: recent,
+    });
+    const record = makeRecord({ lastObservedAt: new Date('2025-03-01T00:00:00Z') });
+    const result = getUnobservedMessages([msg], record);
+    expect(result).toHaveLength(1);
+    // Full message is included (timestamp-based), not a virtual message
+    expect(result[0].id).toBe('msg-1');
+  });
+
+  it('excludes old messages with failed markers via timestamp filtering', () => {
+    const old = new Date('2025-01-01T00:00:00Z');
+    const msg = makeMessage([textPart('old'), startMarker(), failedMarker()], {
+      id: 'msg-1',
+      createdAt: old,
+    });
+    const record = makeRecord({ lastObservedAt: new Date('2025-03-01T00:00:00Z') });
+    const result = getUnobservedMessages([msg], record);
+    expect(result).toHaveLength(0);
   });
 
   describe('excludeBuffered option', () => {
