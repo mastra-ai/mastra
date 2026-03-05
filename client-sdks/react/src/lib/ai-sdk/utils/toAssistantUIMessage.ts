@@ -106,8 +106,12 @@ export const toAssistantUIMessage = (message: MastraUIMessage): ThreadMessageLik
         return { ...baseToolCall, result: part.errorText, isError: true };
       }
 
-      // Only add result and isError if the tool has completed
       if ('output' in part) {
+        // Tag with _mastraStreaming while the sub-agent is still running so the UI badge
+        // stays expanded; the flag is absent once state reaches output-available.
+        if (part.state !== 'output-available') {
+          return { ...baseToolCall, result: { ...(part.output as any), _mastraStreaming: true } };
+        }
         return { ...baseToolCall, result: part.output };
       }
 
