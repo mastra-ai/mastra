@@ -27,6 +27,8 @@ function safeCaptureJson(value: unknown): unknown {
       if (typeof current === 'bigint') return current.toString();
       if (typeof current === 'function') return '[function]';
       if (current instanceof Error) return { name: current.name, message: current.message, stack: current.stack };
+      if (current instanceof Set) return { __type: 'Set', values: Array.from(current.values()) };
+      if (current instanceof Map) return { __type: 'Map', entries: Array.from(current.entries()) };
       return current;
     }),
   );
@@ -2190,6 +2192,7 @@ ${suggestedResponse}
         .filter((id): id is string => Boolean(id) && !preMessageIds.has(id));
       const idRemap = inferReproIdRemap(params.preMessages, contextMessages);
 
+      const rawState = (params.args.state as Record<string, unknown>) ?? {};
       const inputPayload = safeCaptureJson({
         stepNumber: params.stepNumber,
         threadId: params.threadId,
@@ -2197,7 +2200,20 @@ ${suggestedResponse}
         readOnly: memoryContext?.memoryConfig?.readOnly,
         messageCount: contextMessages.length,
         messageIds: contextMessages.map(message => message.id),
-        stateKeys: Object.keys((params.args.state as Record<string, unknown>) ?? {}),
+        stateKeys: Object.keys(rawState),
+        state: rawState,
+        args: {
+          messages: params.args.messages,
+          steps: params.args.steps,
+          systemMessages: params.args.systemMessages,
+          retryCount: params.args.retryCount,
+          tools: params.args.tools,
+          toolChoice: params.args.toolChoice,
+          activeTools: params.args.activeTools,
+          providerOptions: params.args.providerOptions,
+          modelSettings: params.args.modelSettings,
+          structuredOutput: params.args.structuredOutput,
+        },
       });
 
       const preStatePayload = safeCaptureJson({
