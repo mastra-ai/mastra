@@ -18,6 +18,7 @@ import type {
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
+import { isDevPlaygroundRequest } from '../auth/helpers';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -108,6 +109,17 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
   handler: async ctx => {
     try {
       const { mastra, request } = ctx as any;
+
+      // In dev playground mode, return auth as disabled so the UI doesn't show login gates.
+      // The server already bypasses auth for dev playground requests, so the UI should match.
+      const serverConfig = mastra.getServer?.();
+      const authConfig = serverConfig?.auth || {};
+      const getHeader = (name: string) => request.headers.get(name) ?? undefined;
+
+      if (isDevPlaygroundRequest('/api/auth/capabilities', 'GET', getHeader, authConfig)) {
+        return { enabled: false, login: null };
+      }
+
       const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 

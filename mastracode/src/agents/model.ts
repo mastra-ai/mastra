@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV1 } from '@ai-sdk/provider';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
@@ -27,7 +28,8 @@ type ResolvedModel =
   | ReturnType<typeof openaiCodexProvider>
   | ReturnType<typeof opencodeClaudeMaxProvider>
   | ModelRouterLanguageModel
-  | ReturnType<ReturnType<typeof createAnthropic>>;
+  | ReturnType<ReturnType<typeof createAnthropic>>
+  | ReturnType<ReturnType<typeof createOpenAI>>;
 
 export function remapOpenAIModelForCodexOAuth(modelId: string): string {
   if (!modelId.startsWith(OPENAI_PREFIX)) {
@@ -49,18 +51,26 @@ export function remapOpenAIModelForCodexOAuth(modelId: string): string {
 }
 
 /**
- * Resolve the Anthropic API key from environment or stored credentials.
+ * Resolve the Anthropic API key from stored credentials.
  * Returns the key if available, undefined otherwise.
  */
 export function getAnthropicApiKey(): string | undefined {
-  // Environment variable takes priority
-  if (process.env.ANTHROPIC_API_KEY) {
-    return process.env.ANTHROPIC_API_KEY;
-  }
-  // Check stored API key credential (set via /apikey or TUI prompt)
+  // Check stored API key credential (set via /apikey or UI prompt)
   const storedCred = authStorage.get('anthropic');
-  if (storedCred?.type === 'api_key') {
-    return storedCred.key;
+  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
+    return storedCred.key.trim();
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the OpenAI API key from stored credentials.
+ * Returns the key if available, undefined otherwise.
+ */
+export function getOpenAIApiKey(): string | undefined {
+  const storedCred = authStorage.get('openai-codex');
+  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
+    return storedCred.key.trim();
   }
   return undefined;
 }
@@ -79,11 +89,21 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string): LanguageModel
 }
 
 /**
+ * Create an OpenAI model using a direct API key from AuthStorage.
+ */
+function openaiApiKeyProvider(modelId: string, apiKey: string): LanguageModelV1 {
+  const openai = createOpenAI({ apiKey });
+  return wrapLanguageModel({
+    model: openai.responses(modelId),
+  });
+}
+
+/**
  * Resolve a model ID to the correct provider instance.
  * Shared by the main agent, observer, and reflector.
  *
- * - For anthropic/* models: Prefers Claude Max OAuth, falls back to direct API key
- * - For openai/* models with OAuth: Uses OpenAI Codex OAuth provider
+ * - For anthropic/* models: Uses stored OAuth credentials when present, otherwise direct API key
+ * - For openai/* models: Uses OAuth when configured, otherwise direct API key from AuthStorage
  * - For moonshotai/* models: Uses Moonshot AI Anthropic-compatible endpoint
  * - For all other providers: Uses Mastra's model router (models.dev gateway)
  */
@@ -124,22 +144,42 @@ export function resolveModel(
     })(modelId.substring('moonshotai/'.length));
   } else if (isAnthropicModel) {
     const bareModelId = modelId.substring('anthropic/'.length);
-    // Primary path: Claude Max OAuth
-    if (authStorage.isLoggedIn('anthropic')) {
+    const storedCred = authStorage.get('anthropic');
+
+    // Primary path: explicit OAuth credential
+    if (storedCred?.type === 'oauth') {
       return opencodeClaudeMaxProvider(bareModelId);
     }
-    // Fallback: direct API key (env var or stored credential)
+
+    // Secondary path: explicit stored API key credential
+    if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
+      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim());
+    }
+
+    // Fallback: direct API key from AuthStorage
     const apiKey = getAnthropicApiKey();
     if (apiKey) {
       return anthropicApiKeyProvider(bareModelId, apiKey);
     }
     // No auth configured — attempt OAuth provider which will prompt login
     return opencodeClaudeMaxProvider(bareModelId);
-  } else if (isOpenAIModel && authStorage.isLoggedIn('openai-codex')) {
-    const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
-    return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-      thinkingLevel: options?.thinkingLevel,
-    });
+  } else if (isOpenAIModel) {
+    const bareModelId = modelId.substring(OPENAI_PREFIX.length);
+    const storedCred = authStorage.get('openai-codex');
+
+    if (storedCred?.type === 'oauth') {
+      const resolvedModelId = options?.remapForCodexOAuth ? remapOpenAIModelForCodexOAuth(modelId) : modelId;
+      return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
+        thinkingLevel: options?.thinkingLevel,
+      });
+    }
+
+    const apiKey = getOpenAIApiKey();
+    if (apiKey) {
+      return openaiApiKeyProvider(bareModelId, apiKey);
+    }
+
+    return new ModelRouterLanguageModel(modelId);
   } else {
     return new ModelRouterLanguageModel(modelId);
   }

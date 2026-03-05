@@ -10,6 +10,7 @@ import { execSync } from 'node:child_process';
 import { execa } from 'execa';
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
+import { getExeca } from './execa';
 import type { LocalSandbox } from './local-sandbox';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
@@ -187,6 +188,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       extendEnv: false,
     };
 
+    const execa = await getExeca();
     const subprocess = execa(wrapped.command, wrapped.args, execaOptions);
 
     // execa sets pid synchronously when the process spawns successfully.
