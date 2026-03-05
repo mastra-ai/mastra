@@ -257,6 +257,92 @@ describe('TokenCounter', () => {
       expect(withToolResult).not.toBe(initial);
       expect(withToolResultAgain).toBe(withToolResult);
     });
+
+    it('prefers stored mastra.modelOutput over raw tool results for token counting', () => {
+      const counter = new TokenCounter();
+      const rawResult = {
+        longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
+      };
+
+      const withoutModelOutput = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'lookup',
+              result: rawResult,
+            },
+          },
+        ],
+      });
+
+      const withModelOutput = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'lookup',
+              result: rawResult,
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: { type: 'text', value: 'sunny, 72°F' },
+              },
+            },
+          },
+        ],
+      });
+
+      const rawResultTokens = counter.countMessage(withoutModelOutput);
+      const modelOutputTokens = counter.countMessage(withModelOutput);
+
+      expect(modelOutputTokens).toBeLessThan(rawResultTokens);
+    });
+
+    it('recomputes tool-result estimates when stored modelOutput changes', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'lookup',
+              result: {
+                longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
+              },
+            },
+            providerMetadata: {
+              mastra: {
+                modelOutput: { type: 'text', value: 'brief output' },
+              },
+            },
+          },
+        ],
+      });
+
+      const first = counter.countMessage(message);
+      const firstEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      message.content.parts[0].providerMetadata.mastra.modelOutput = {
+        type: 'text',
+        value: 'expanded output '.repeat(40),
+      };
+
+      const second = counter.countMessage(message);
+      const secondEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(second).toBeGreaterThan(first);
+      expect(secondEstimate.key).not.toBe(firstEstimate.key);
+    });
   });
 
   describe('countObservations', () => {
