@@ -5,6 +5,7 @@ import type {
   LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
+import { wrapLanguageModel } from '@internal/ai-sdk-v5';
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
@@ -21,7 +22,6 @@ import type { MemoryStorage } from '@mastra/core/storage';
 import { convertFullStreamChunkToMastra } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
-import { wrapLanguageModel } from 'ai';
 import { toAISDKFinishReason } from './helpers';
 
 /**
@@ -420,7 +420,7 @@ class StreamOutputAccumulator {
  *
  * @example
  * ```typescript
- * import { wrapLanguageModel, generateText } from 'ai';
+ * import { wrapLanguageModel, generateText } from '@internal/ai-sdk-v5';
  * import { openai } from '@ai-sdk/openai';
  * import { createProcessorMiddleware } from '@mastra/ai-sdk';
  *

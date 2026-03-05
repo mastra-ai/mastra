@@ -36,169 +36,162 @@ const results = await store.query({
 <OperatorsTable
   title="Basic Comparison"
   operators={[
-{
-name: "$eq",
-description: "Matches values equal to specified value",
-example: "{ age: { $eq: 25 } }",
-supportedBy: ["All except Couchbase"],
-},
-{
-name: "$ne",
-description: "Matches values not equal",
-example: "{ status: { $ne: 'inactive' } }",
-supportedBy: ["All except Couchbase"],
-},
-{
-name: "$gt",
-description: "Greater than",
-example: "{ price: { $gt: 100 } }",
-supportedBy: ["All except Couchbase"],
-},
-{
-name: "$gte",
-description: "Greater than or equal",
-example: "{ rating: { $gte: 4.5 } }",
-supportedBy: ["All except Couchbase"],
-},
-{
-name: "$lt",
-description: "Less than",
-example: "{ stock: { $lt: 20 } }",
-supportedBy: ["All except Couchbase"],
-},
-{
-name: "$lte",
-description: "Less than or equal",
-example: "{ priority: { $lte: 3 } }",
-supportedBy: ["All except Couchbase"],
-},
+  {
+    name: '$eq',
+    description: 'Matches values equal to specified value',
+    example: '{ age: { $eq: 25 } }',
+    supportedBy: ['All except Couchbase'],
+  },
+  {
+    name: '$ne',
+    description: 'Matches values not equal',
+    example: "{ status: { $ne: 'inactive' } }",
+    supportedBy: ['All except Couchbase'],
+  },
+  {
+    name: '$gt',
+    description: 'Greater than',
+    example: '{ price: { $gt: 100 } }',
+    supportedBy: ['All except Couchbase'],
+  },
+  {
+    name: '$gte',
+    description: 'Greater than or equal',
+    example: '{ rating: { $gte: 4.5 } }',
+    supportedBy: ['All except Couchbase'],
+  },
+  {
+    name: '$lt',
+    description: 'Less than',
+    example: '{ stock: { $lt: 20 } }',
+    supportedBy: ['All except Couchbase'],
+  },
+  {
+    name: '$lte',
+    description: 'Less than or equal',
+    example: '{ priority: { $lte: 3 } }',
+    supportedBy: ['All except Couchbase'],
+  },
 ]}
 />
 
 <OperatorsTable
   title="Array Operators"
   operators={[
-{
-name: "$in",
-description: "Matches any value in array",
-example: '{ category: { $in: ["A", "B"] } }',
-supportedBy: ["All except Couchbase"],
-},
-{
-name: "$nin",
-description: "Matches none of the values",
-example: '{ status: { $nin: ["deleted", "archived"] } }',
-supportedBy: ["All except Couchbase"],
-},
-{
-name: "$all",
-description: "Matches arrays containing all elements",
-example: '{ tags: { $all: ["urgent", "high"] } }',
-supportedBy: ["Astra", "Pinecone", "Upstash", "MongoDB"],
-},
-{
-name: "$elemMatch",
-description: "Matches array elements meeting criteria",
-example: "{ scores: { $elemMatch: { $gt: 80 } } }",
-supportedBy: ["libSQL", "PgVector", "MongoDB"],
-},
+  {
+    name: '$in',
+    description: 'Matches any value in array',
+    example: '{ category: { $in: ["A", "B"] } }',
+    supportedBy: ['All except Couchbase'],
+  },
+  {
+    name: '$nin',
+    description: 'Matches none of the values',
+    example: '{ status: { $nin: ["deleted", "archived"] } }',
+    supportedBy: ['All except Couchbase'],
+  },
+  {
+    name: '$all',
+    description: 'Matches arrays containing all elements',
+    example: '{ tags: { $all: ["urgent", "high"] } }',
+    supportedBy: ['Astra', 'Pinecone', 'Upstash', 'MongoDB'],
+  },
+  {
+    name: '$elemMatch',
+    description: 'Matches array elements meeting criteria',
+    example: '{ scores: { $elemMatch: { $gt: 80 } } }',
+    supportedBy: ['libSQL', 'PgVector', 'MongoDB'],
+  },
 ]}
 />
 
 <OperatorsTable
   title="Logical Operators"
   operators={[
-{
-name: "$and",
-description: "Logical AND",
-example: "{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }",
-supportedBy: ["All except Vectorize, Couchbase"],
-},
-{
-name: "$or",
-description: "Logical OR",
-example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
-supportedBy: ["All except Vectorize, Couchbase"],
-},
-{
-name: "$not",
-description: "Logical NOT",
-example: "{ price: { $not: { $lt: 100 } } }",
-supportedBy: [
-"Astra",
-"Qdrant",
-"Upstash",
-"PgVector",
-"libSQL",
-"MongoDB",
-],
-},
-{
-name: "$nor",
-description: "Logical NOR",
-example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
-supportedBy: ["Qdrant", "Upstash", "PgVector", "libSQL", "MongoDB"],
-},
+  {
+    name: '$and',
+    description: 'Logical AND',
+    example: '{ $and: [{ price: { $gt: 100 } }, { stock: { $gt: 0 } }] }',
+    supportedBy: ['All except Vectorize, Couchbase'],
+  },
+  {
+    name: '$or',
+    description: 'Logical OR',
+    example: '{ $or: [{ status: "active" }, { priority: "high" }] }',
+    supportedBy: ['All except Vectorize, Couchbase'],
+  },
+  {
+    name: '$not',
+    description: 'Logical NOT',
+    example: '{ price: { $not: { $lt: 100 } } }',
+    supportedBy: ['Astra', 'Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB'],
+  },
+  {
+    name: '$nor',
+    description: 'Logical NOR',
+    example: '{ $nor: [{ status: "deleted" }, { archived: true }] }',
+    supportedBy: ['Qdrant', 'Upstash', 'PgVector', 'libSQL', 'MongoDB'],
+  },
 ]}
 />
 
 <OperatorsTable
   title="Element Operators"
   operators={[
-{
-name: "$exists",
-description: "Matches documents with field",
-example: "{ rating: { $exists: true } }",
-supportedBy: ["All except Vectorize, Chroma, Couchbase"],
-},
+  {
+    name: '$exists',
+    description: 'Matches documents with field',
+    example: '{ rating: { $exists: true } }',
+    supportedBy: ['All except Vectorize, Chroma, Couchbase'],
+  },
 ]}
 />
 
 <OperatorsTable
   title="Custom Operators"
   operators={[
-{
-name: "$contains",
-description: "Text contains substring",
-example: '{ description: { $contains: "sale" } }',
-supportedBy: ["Upstash", "libSQL", "PgVector"],
-},
-{
-name: "$regex",
-description: "Regular expression match",
-example: '{ name: { $regex: "^test" } }',
-supportedBy: ["Qdrant", "PgVector", "Upstash", "MongoDB"],
-},
-{
-name: "$size",
-description: "Array length check",
-example: "{ tags: { $size: { $gt: 2 } } }",
-supportedBy: ["Astra", "libSQL", "PgVector", "MongoDB"],
-},
-{
-name: "$geo",
-description: "Geospatial query",
-example: '{ location: { $geo: { type: "radius", ... } } }',
-supportedBy: ["Qdrant"],
-},
-{
-name: "$datetime",
-description: "Datetime range query",
-example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
-supportedBy: ["Qdrant"],
-},
-{
-name: "$hasId",
-description: "Vector ID existence check",
-example: '{ $hasId: ["id1", "id2"] }',
-supportedBy: ["Qdrant"],
-},
-{
-name: "$hasVector",
-description: "Vector existence check",
-example: "{ $hasVector: true }",
-supportedBy: ["Qdrant"],
-},
+  {
+    name: '$contains',
+    description: 'Text contains substring',
+    example: '{ description: { $contains: "sale" } }',
+    supportedBy: ['Upstash', 'libSQL', 'PgVector'],
+  },
+  {
+    name: '$regex',
+    description: 'Regular expression match',
+    example: '{ name: { $regex: "^test" } }',
+    supportedBy: ['Qdrant', 'PgVector', 'Upstash', 'MongoDB'],
+  },
+  {
+    name: '$size',
+    description: 'Array length check',
+    example: '{ tags: { $size: { $gt: 2 } } }',
+    supportedBy: ['Astra', 'libSQL', 'PgVector', 'MongoDB'],
+  },
+  {
+    name: '$geo',
+    description: 'Geospatial query',
+    example: '{ location: { $geo: { type: "radius", ... } } }',
+    supportedBy: ['Qdrant'],
+  },
+  {
+    name: '$datetime',
+    description: 'Datetime range query',
+    example: '{ created: { $datetime: { range: { gt: "2024-01-01" } } } }',
+    supportedBy: ['Qdrant'],
+  },
+  {
+    name: '$hasId',
+    description: 'Vector ID existence check',
+    example: '{ $hasId: ["id1", "id2"] }',
+    supportedBy: ['Qdrant'],
+  },
+  {
+    name: '$hasVector',
+    description: 'Vector existence check',
+    example: '{ $hasVector: true }',
+    supportedBy: ['Qdrant'],
+  },
 ]}
 />
 

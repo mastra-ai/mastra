@@ -49,25 +49,24 @@ interface SensitiveDataFilterOptions {
 
 <PropertiesTable
   props={[
-{
-name: "sensitiveFields",
-type: "string[]",
-description:
-"Field names to redact (case-insensitive, separator-agnostic)",
-required: false,
-},
-{
-name: "redactionToken",
-type: "string",
-description: "Replacement token for full redaction",
-required: false,
-},
-{
-name: "redactionStyle",
-type: "'full' | 'partial'",
-description: "Redaction style",
-required: false,
-},
+  {
+    name: 'sensitiveFields',
+    type: 'string[]',
+    description: 'Field names to redact (case-insensitive, separator-agnostic)',
+    required: false,
+  },
+  {
+    name: 'redactionToken',
+    type: 'string',
+    description: 'Replacement token for full redaction',
+    required: false,
+  },
+  {
+    name: 'redactionStyle',
+    type: "'full' | 'partial'",
+    description: 'Redaction style',
+    required: false,
+  },
 ]}
 />
 
@@ -89,12 +88,12 @@ Process a span by filtering sensitive data across its key fields: attributes, me
 
 <PropertiesTable
   props={[
-{
-name: "span",
-type: "AnySpan",
-description: "The input span to filter",
-required: true,
-},
+  {
+    name: 'span',
+    type: 'AnySpan',
+    description: 'The input span to filter',
+    required: true,
+  },
 ]}
 />
 

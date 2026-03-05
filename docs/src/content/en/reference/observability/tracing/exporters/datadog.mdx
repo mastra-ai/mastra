@@ -39,48 +39,49 @@ Extends `BaseExporterConfig`, which includes:
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "Datadog API key. Required for agentless mode. Falls back to DD_API_KEY env var.",
-required: false,
-},
-{
-name: "mlApp",
-type: "string",
-description: "ML application name for grouping traces. Required. Falls back to DD_LLMOBS_ML_APP env var.",
-required: false,
-},
-{
-name: "site",
-type: "string",
-description: "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
-required: false,
-},
-{
-name: "service",
-type: "string",
-description: "Service name for the application. Defaults to mlApp value.",
-required: false,
-},
-{
-name: "env",
-type: "string",
-description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
-required: false,
-},
-{
-name: "agentless",
-type: "boolean",
-description: "Use direct HTTPS intake (true) or local Datadog Agent (false). Default: true.",
-required: false,
-},
-{
-name: "integrationsEnabled",
-type: "boolean",
-description: "Enable dd-trace automatic integrations. Default: false.",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Datadog API key. Required for agentless mode. Falls back to DD_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'mlApp',
+    type: 'string',
+    description: 'ML application name for grouping traces. Required. Falls back to DD_LLMOBS_ML_APP env var.',
+    required: false,
+  },
+  {
+    name: 'site',
+    type: 'string',
+    description:
+      "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
+    required: false,
+  },
+  {
+    name: 'service',
+    type: 'string',
+    description: 'Service name for the application. Defaults to mlApp value.',
+    required: false,
+  },
+  {
+    name: 'env',
+    type: 'string',
+    description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
+    required: false,
+  },
+  {
+    name: 'agentless',
+    type: 'boolean',
+    description: 'Use direct HTTPS intake (true) or local Datadog Agent (false). Default: true.',
+    required: false,
+  },
+  {
+    name: 'integrationsEnabled',
+    type: 'boolean',
+    description: 'Enable dd-trace automatic integrations. Default: false.',
+    required: false,
+  },
 ]}
 />
 

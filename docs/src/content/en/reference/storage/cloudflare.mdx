@@ -48,44 +48,42 @@ const storageRest = new CloudflareStore({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this storage instance.",
-isOptional: false,
-},
-{
-name: "bindings",
-type: "Record<string, KVNamespace>",
-description: "Cloudflare Workers KV bindings (for Workers runtime)",
-isOptional: true,
-},
-{
-name: "accountId",
-type: "string",
-description: "Cloudflare Account ID (for REST API)",
-isOptional: true,
-},
-{
-name: "apiToken",
-type: "string",
-description: "Cloudflare API Token (for REST API)",
-isOptional: true,
-},
-{
-name: "namespacePrefix",
-type: "string",
-description:
-"Optional prefix for all namespace names (useful for environment isolation)",
-isOptional: true,
-},
-{
-name: "keyPrefix",
-type: "string",
-description:
-"Optional prefix for all keys (useful for environment isolation)",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'bindings',
+    type: 'Record<string, KVNamespace>',
+    description: 'Cloudflare Workers KV bindings (for Workers runtime)',
+    isOptional: true,
+  },
+  {
+    name: 'accountId',
+    type: 'string',
+    description: 'Cloudflare Account ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'apiToken',
+    type: 'string',
+    description: 'Cloudflare API Token (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'namespacePrefix',
+    type: 'string',
+    description: 'Optional prefix for all namespace names (useful for environment isolation)',
+    isOptional: true,
+  },
+  {
+    name: 'keyPrefix',
+    type: 'string',
+    description: 'Optional prefix for all keys (useful for environment isolation)',
+    isOptional: true,
+  },
 ]}
 />
 

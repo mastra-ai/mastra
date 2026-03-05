@@ -25,13 +25,27 @@ await agent.getDefaultGenerateOptionsLegacy()
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "{ requestContext?: RequestContext }",
-isOptional: true,
-defaultValue: "{}",
-description: "Optional configuration object containing request context.",
-},
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'new RequestContext()',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -39,12 +53,12 @@ description: "Optional configuration object containing request context.",
 
 <PropertiesTable
   content={[
-{
-name: "defaultOptions",
-type: "AgentGenerateOptions | Promise<AgentGenerateOptions>",
-description:
-"The default generation options configured for the agent, either as a direct object or a promise that resolves to the options.",
-},
+  {
+    name: 'defaultOptions',
+    type: 'AgentGenerateOptions | Promise<AgentGenerateOptions>',
+    description:
+      'The default generation options configured for the agent, either as a direct object or a promise that resolves to the options.',
+  },
 ]}
 />
 
@@ -55,21 +69,6 @@ await agent.getDefaultGenerateOptionsLegacy({
   requestContext: new RequestContext(),
 })
 ```
-
-### Options parameters
-
-<PropertiesTable
-  content={[
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "new RequestContext()",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-]}
-/>
 
 ## Related
 
