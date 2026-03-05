@@ -1,8 +1,8 @@
 # OM Repro Capture Workflow
 
-This folder stores **sanitized OM repro fixtures** derived from real runtime captures and used to reproduce activation/cleanup regressions.
+This folder documents the OM repro capture workflow and tooling.
 
-Raw `.mastra-om-repro` captures can contain sensitive local paths, tool outputs, and conversation text. Keep raw captures local and sanitize them before committing anything from this folder.
+Raw `.mastra-om-repro` captures can contain sensitive local paths, tool outputs, and conversation text. Keep raw captures local, sanitize them before sharing anything manually, and do not commit full step captures from this workflow.
 
 ## 1) Record a capture
 
@@ -39,34 +39,23 @@ Each step directory contains:
   - `messageDiff` (`removedMessageIds`, `addedMessageIds`, `idRemap`)
 - `post-state.json` — same shape as pre-state after processing
 
-## 3) Copy capture into this fixtures folder
+## 3) Sanitize a local capture before sharing it
 
-Use a descriptive name:
-
-```bash
-cp -R \
-  /path/to/.mastra-om-repro/<threadId> \
-  packages/memory/src/processors/observational-memory/__fixtures__/repro-captures/<good-fixture-name>
-```
-
-Then sanitize the copied fixture before committing it:
+If you need to inspect or share a local capture outside your machine, sanitize it first:
 
 ```bash
 cd packages/memory
-pnpm sanitize:om-repro src/processors/observational-memory/__fixtures__/repro-captures/<good-fixture-name> --write
+pnpm sanitize:om-repro /path/to/.mastra-om-repro/<threadId> --write
 ```
 
-Example naming style:
-
-- `collapse-to-0p3k-step23-1772668741183`
-- `under-removal-after-activation-<timestamp>`
+Use a descriptive local directory name if you copy a thread capture somewhere else for analysis, but do not commit full step captures from this workflow.
 
 ## 4) Analyze a capture
 
 From `packages/memory`:
 
 ```bash
-pnpm analyze:om-repro src/processors/observational-memory/__fixtures__/repro-captures/<fixture-name>
+pnpm analyze:om-repro /path/to/.mastra-om-repro/<threadId>
 ```
 
 The analyzer prints:
@@ -80,9 +69,9 @@ The analyzer prints:
 
 For recording/tooling changes, a focused check is usually enough:
 
-1. Sanitize the copied fixture.
+1. Sanitize the local capture.
 2. Run the analyzer against it.
-3. Spot-check the sanitized JSON for removed paths/tool output before commit.
+3. Spot-check the sanitized JSON for removed paths/tool output before sharing it.
 
 ## 6) Suggested validation command
 
