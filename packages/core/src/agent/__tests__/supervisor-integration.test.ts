@@ -3289,3 +3289,146 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
     });
   });
 });
+
+describe('Supervisor Pattern - Sub-agent context across multiple generate calls', () => {
+  it('should forward prior delegation results to sub-agent on subsequent generate calls via supervisor memory', async () => {
+    // Scenario: Supervisor delegates to a sub-agent which "creates" a record (returns an ID).
+    // On a second generate() call, the supervisor delegates to the same sub-agent again.
+    // The sub-agent should see the prior tool result (with the record ID) in its context
+    // because the supervisor's memory replays the full conversation history.
+
+    const subAgentReceivedPrompts: any[][] = [];
+
+    // Sub-agent model: captures prompts to verify what context it receives
+    let subCallCount = 0;
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt }) => {
+        subCallCount++;
+        subAgentReceivedPrompts.push(prompt as any[]);
+
+        if (subCallCount === 1) {
+          // First delegation: simulate calling a tool to create a record
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'create-call-1',
+                toolName: 'createRecord',
+                input: JSON.stringify({ name: 'Test Record' }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+
+        // All subsequent calls: respond with text
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: subCallCount === 2 ? 'Created record with ID rec_12345' : 'Updated record rec_12345',
+          content: [
+            {
+              type: 'text' as const,
+              text: subCallCount === 2 ? 'Created record with ID rec_12345' : 'Updated record rec_12345',
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const createRecordTool = createTool({
+      id: 'create-record',
+      description: 'Creates a record',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async ({ name }) => ({ id: 'rec_12345', name, status: 'active' }),
+    });
+
+    const subAgent = new Agent({
+      id: 'record-agent',
+      name: 'record-agent',
+      description: 'Manages records - creates and updates them',
+      instructions: 'You manage records.',
+      model: subAgentModel,
+      tools: { createRecord: createRecordTool },
+    });
+
+    // Supervisor model: delegates to record-agent on each generate() call
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        supervisorCallCount++;
+        // Odd calls: delegate to sub-agent
+        if (supervisorCallCount % 2 === 1) {
+          const prompt =
+            supervisorCallCount === 1 ? 'Create a new record named Test Record' : 'Update the record rec_12345';
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `call-${supervisorCallCount}`,
+                toolName: 'agent-recordAgent',
+                input: JSON.stringify({ prompt }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        // Even calls: final response
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const sharedMemory = new MockMemory();
+
+    const supervisor = new Agent({
+      id: 'supervisor-context-test',
+      name: 'supervisor-context-test',
+      instructions: 'You orchestrate record management via sub-agents.',
+      model: supervisorModel,
+      agents: { recordAgent: subAgent },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'ctx-test-thread';
+    const resourceId = 'ctx-test-user';
+
+    // First generate: supervisor delegates to sub-agent, sub-agent "creates" a record
+    await supervisor.generate('Create a new record named Test Record', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    // Second generate: supervisor delegates to same sub-agent for a follow-up action
+    await supervisor.generate('Update the record', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    // The sub-agent should have been called at least twice across both generate() calls:
+    // - Calls 1-2 from first generate (tool-call + text response)
+    // - Call 3 from second generate (text response for update)
+    expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(3);
+
+    // The sub-agent's prompt on the second delegation (index 2) should contain
+    // the record ID from the first delegation's result, forwarded via supervisor memory
+    const secondDelegationPrompt = JSON.stringify(subAgentReceivedPrompts[2]);
+    expect(secondDelegationPrompt).toContain('rec_12345');
+  });
+});
