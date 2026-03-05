@@ -16,6 +16,8 @@ export const stateSchema = z.object({
   // Observational Memory threshold settings
   observationThreshold: z.number().default(30_000),
   reflectionThreshold: z.number().default(40_000),
+  // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
+  omScope: z.enum(['thread', 'resource']).optional(),
   // Thinking level for model reasoning effort
   thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']).default('off'),
   // YOLO mode — auto-approve all tool calls

@@ -67,9 +67,23 @@ export interface MastraCodeConfig {
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: HarnessSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
-  extraTools?: Record<string, any> | ((ctx: { requestContext: RequestContext }) => Record<string, any>);
+  extraTools?:
+    | Record<
+        string,
+        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
+      >
+    | ((ctx: {
+        requestContext: RequestContext;
+      }) => Record<
+        string,
+        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
+      >);
+  /** Tools removed from the dynamic tool set before exposure to the model */
+  disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
   storage?: StorageConfig;
+  /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
+  omScope?: 'thread' | 'resource';
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Record<string, unknown>;
   /** Override heartbeat handlers. Default: gateway-sync */
@@ -84,6 +98,13 @@ export interface MastraCodeConfig {
   disableHooks?: boolean;
 }
 
+export function createAuthStorage() {
+  const authStorage = new AuthStorage();
+  setAuthStorage(authStorage);
+  setOpenAIAuthStorage(authStorage);
+  return authStorage;
+}
+
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
@@ -92,9 +113,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   }
 
   // Auth storage (shared with Claude Max / OpenAI providers and Harness)
-  const authStorage = new AuthStorage();
-  setAuthStorage(authStorage);
-  setOpenAIAuthStorage(authStorage);
+  const authStorage = createAuthStorage();
 
   // Project detection
   const project = detectProject(cwd);
@@ -119,15 +138,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir);
 
-  // Agent
-  const codeAgent = new Agent({
-    id: 'code-agent',
-    name: 'Code Agent',
-    instructions: getDynamicInstructions,
-    model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools),
-  });
-
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init', configDir);
 
@@ -137,6 +147,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     console.info(`Hooks: ${hookCount} hook(s) configured`);
   }
 
+  // Agent
+  const codeAgent = new Agent({
+    id: 'code-agent',
+    name: 'Code Agent',
+    instructions: getDynamicInstructions,
+    model: getDynamicModel,
+    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
+  });
+
   // Build subagent definitions with project-scoped tools
   const viewTool = createViewTool(project.rootPath);
   const grepTool = createGrepTool(project.rootPath);
@@ -145,11 +164,21 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const writeFileTool = createWriteFileTool(project.rootPath);
   const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
 
-  const readOnlyTools = {
+  // Filter disabled tools from a tool map so subagents respect disabledTools config.
+  const filterDisabled = <T extends Record<string, unknown>>(tools: T): T => {
+    if (!config?.disabledTools?.length) return tools;
+    const filtered = { ...tools };
+    for (const name of config.disabledTools) {
+      delete (filtered as Record<string, unknown>)[name];
+    }
+    return filtered;
+  };
+
+  const readOnlyTools = filterDisabled({
     view: viewTool,
     search_content: grepTool,
     find_files: globTool,
-  };
+  });
 
   const defaultSubagents: HarnessSubagent[] = [
     {
@@ -174,14 +203,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       description:
         "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
       instructions: executeSubagent.instructions,
-      tools: {
+      tools: filterDisabled({
         ...readOnlyTools,
         string_replace_lsp: stringReplaceLspTool,
         write_file: writeFileTool,
         execute_command: executeCommandTool,
         task_write: taskWriteTool,
         task_check: taskCheckTool,
-      },
+      }),
     },
   ];
 
@@ -219,11 +248,23 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   ];
 
   // Build lightweight provider access for resolving built-in packs at startup.
-  // OAuth providers are checked via authStorage, env-only providers via process.env.
-  // Also scan the full provider registry so any configured API key satisfies access checks.
+  // Anthropic/OpenAI use AuthStorage only; other providers use env API keys.
+  // Also scan the full provider registry so configured env API keys satisfy access checks.
+  const anthropicCred = authStorage.get('anthropic');
+  const openaiCred = authStorage.get('openai-codex');
   const startupAccess: ProviderAccess = {
-    anthropic: authStorage.isLoggedIn('anthropic') ? 'oauth' : process.env.ANTHROPIC_API_KEY ? 'apikey' : false,
-    openai: authStorage.isLoggedIn('openai-codex') ? 'oauth' : process.env.OPENAI_API_KEY ? 'apikey' : false,
+    anthropic:
+      anthropicCred?.type === 'oauth'
+        ? 'oauth'
+        : anthropicCred?.type === 'api_key' && anthropicCred.key.trim().length > 0
+          ? 'apikey'
+          : false,
+    openai:
+      openaiCred?.type === 'oauth'
+        ? 'oauth'
+        : openaiCred?.type === 'api_key' && openaiCred.key.trim().length > 0
+          ? 'apikey'
+          : false,
     cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
@@ -233,6 +274,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
     for (const [provider, config] of Object.entries(registry)) {
       if (startupAccess[provider] && startupAccess[provider] !== false) continue; // Already enabled above
+      if (provider === 'anthropic' || provider === 'openai') continue;
       const envVars = config?.apiKeyEnvVar;
       const envVarList = Array.isArray(envVars) ? envVars : envVars ? [envVars] : [];
       if (envVarList.some(envVar => process.env[envVar])) {
@@ -270,6 +312,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
+  globalInitialState.thinkingLevel = globalSettings.preferences.thinkingLevel;
+  if (config?.omScope) {
+    globalInitialState.omScope = config.omScope;
+  }
   // Seed subagent models from global settings
   for (const [key, modelId] of Object.entries(globalSettings.models.subagentModels)) {
     if (key === '_default') {
@@ -278,7 +324,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       globalInitialState[`subagentModelId_${key}`] = modelId;
     }
   }
-
   const harness = new Harness({
     id: 'mastra-code',
     resourceId: project.resourceId,
@@ -307,6 +352,18 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       if (oauthId && authStorage.isLoggedIn(oauthId)) {
         return true;
       }
+      if (provider === 'anthropic') {
+        const cred = authStorage.get('anthropic');
+        if (cred?.type === 'api_key' && cred.key.trim().length > 0) {
+          return true;
+        }
+      }
+      if (provider === 'openai') {
+        const cred = authStorage.get('openai-codex');
+        if (cred?.type === 'api_key' && cred.key.trim().length > 0) {
+          return true;
+        }
+      }
 
       const customProvider = loadSettings().customProviders.find(entry => {
         return provider === getCustomProviderId(entry.name);
@@ -314,7 +371,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       if (customProvider) {
         return true;
       }
-
       return undefined;
     },
     modelUseCountProvider: () => loadSettings().modelUseCounts,
