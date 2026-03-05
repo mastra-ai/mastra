@@ -846,10 +846,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       });
   }
 
-  async buildIndex({ indexName, metric = 'cosine', indexConfig }: PgDefineIndexParams): Promise<void> {
+  async buildIndex({ indexName, metric = 'cosine', indexConfig, vectorType }: PgDefineIndexParams): Promise<void> {
     const client = await this.pool.connect();
     try {
-      await this.setupIndex({ indexName, metric, indexConfig }, client);
+      await this.setupIndex({ indexName, metric, indexConfig, vectorType }, client);
     } catch (error: any) {
       const mastraError = new MastraError(
         {
