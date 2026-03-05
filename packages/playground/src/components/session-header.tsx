@@ -1,4 +1,5 @@
 import {
+  AuthStatus,
   Header,
   HeaderTitle,
   HeaderAction,
@@ -29,6 +30,7 @@ export const SessionHeader = () => {
       <HeaderTitle>
         <LogoWithoutText className="h-5 w-8 shrink-0" />
         Mastra Studio
+        <AuthStatus />
       </HeaderTitle>
 
       {presets && Object.keys(presets).length > 0 && (
