@@ -71,14 +71,9 @@ name: "options",
 type: "AgentExecutionOptions<Output, Format>",
 isOptional: true,
 description: "Optional configuration for the generation process.",
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "maxSteps",
 type: "number",
@@ -866,6 +861,10 @@ type: "boolean",
 isOptional: true,
 description:
 "Whether to include raw chunks in the stream output. Not available on all model providers.",
+},
+],
+},
+],
 },
 ]}
 />
