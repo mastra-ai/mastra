@@ -593,6 +593,18 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
     }
   }
 
+  // If a code-defined agent was found, apply stored config overrides (if any)
+  if (agent && mastra.getEditor) {
+    try {
+      const editorAgent = mastra.getEditor()?.agent;
+      if (editorAgent) {
+        agent = await editorAgent.applyStoredOverrides(agent);
+      }
+    } catch (error) {
+      logger.debug('Error applying stored overrides to code agent', error);
+    }
+  }
+
   // If still not found, try to get stored agent
   if (!agent) {
     logger.debug(`Agent ${agentId} not found in code-defined agents, looking in stored agents`);
@@ -786,10 +798,19 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       const isPartial = partial === 'true';
 
-      // Serialize code-defined agents
+      // Apply stored config overrides to code-defined agents before serializing
+      const editor = mastra.getEditor?.();
       const serializedCodeAgentsMap = await Promise.all(
         Object.entries(codeAgents).map(async ([id, agent]) => {
-          return formatAgentList({ id, mastra, agent, requestContext, partial: isPartial });
+          let mergedAgent = agent;
+          if (editor) {
+            try {
+              mergedAgent = await editor.agent.applyStoredOverrides(agent);
+            } catch {
+              // If overrides fail, use the original code agent
+            }
+          }
+          return formatAgentList({ id, mastra, agent: mergedAgent, requestContext, partial: isPartial });
         }),
       );
 

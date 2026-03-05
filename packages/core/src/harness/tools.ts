@@ -427,7 +427,7 @@ Use this tool when:
 
       try {
         const response = await subagent.stream(task, {
-          maxSteps: definition.maxSteps,
+          maxSteps: definition.maxSteps ?? (definition.stopWhen ? undefined : 50),
           stopWhen: definition.stopWhen,
           abortSignal,
           requireToolApproval: false,

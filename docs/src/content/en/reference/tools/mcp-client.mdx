@@ -104,10 +104,10 @@ description:
 },
 {
 name: "fetch",
-type: "FetchLike",
+type: "MastraFetchLike",
 isOptional: true,
 description:
-"For HTTP servers: Custom fetch implementation used for all network requests. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers (e.g., refreshing bearer tokens), customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.",
+"For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.",
 },
 {
 name: "logger",
@@ -964,7 +964,9 @@ MCPClient handles server connections gracefully:
 
 ## Using Custom Fetch for Dynamic Authentication
 
-For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or customize request behavior.
+For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
+
+The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
 
 When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
 
@@ -973,20 +975,29 @@ const mcpClient = new MCPClient({
   servers: {
     apiServer: {
       url: new URL('https://api.example.com/mcp'),
-      fetch: async (url, init) => {
-        // Refresh token on each request
-        const token = await getAuthToken() // Your token refresh logic
-
-        return fetch(url, {
-          ...init,
-          headers: {
-            ...init?.headers,
-            Authorization: `Bearer ${token}`,
-          },
-        })
+      fetch: async (url, init, requestContext) => {
+        const headers = new Headers(init?.headers)
+        // Forward auth cookie from the incoming request
+        const cookie = requestContext?.get('cookie')
+        if (cookie) {
+          headers.set('cookie', cookie)
+        }
+        return fetch(url, { ...init, headers })
       },
     },
   },
+})
+
+// Use with an agent — requestContext is automatically forwarded
+const agent = new Agent({
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant.',
+  model: openai('gpt-4o'),
+  tools: await mcpClient.listTools(),
+})
+
+await agent.generate('Hello!', {
+  requestContext: myRequestContext, // forwarded to the custom fetch
 })
 ```
 
