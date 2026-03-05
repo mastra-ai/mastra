@@ -66,7 +66,7 @@ If your sandbox provider supports running processes in the background, the `exec
 | - | - |
 | `execute_command` | Run a shell command. Returns stdout, stderr, and exit code. Supports `background: true` to spawn a long-running process and return a PID. |
 | `get_process_output` | Get stdout, stderr, and status of a background process by PID. Supports `tail` to limit output lines and `wait: true` to block until exit. |
-| `kill_process` | Stop a background process by PID. Returns the last 50 lines of output. |
+| `kill_process` | Stop a background process by PID. Returns recent output. |
 
 All built-in providers (`LocalSandbox`, `DaytonaSandbox`, `E2BSandbox`) include a process manager. These tools are registered automatically — see [Workspace class reference](/reference/workspace/workspace-class#sandbox-tools) for the full tool name list.
 
