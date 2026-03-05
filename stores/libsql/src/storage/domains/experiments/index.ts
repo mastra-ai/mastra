@@ -196,6 +196,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         updates.push('failedCount = ?');
         values.push(input.failedCount);
       }
+      if (input.totalItems !== undefined) {
+        updates.push('totalItems = ?');
+        values.push(input.totalItems);
+      }
       if (input.startedAt !== undefined) {
         updates.push('startedAt = ?');
         values.push(input.startedAt?.toISOString() ?? null);
@@ -203,6 +207,10 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (input.completedAt !== undefined) {
         updates.push('completedAt = ?');
         values.push(input.completedAt?.toISOString() ?? null);
+      }
+      if (input.totalItems !== undefined) {
+        updates.push('totalItems = ?');
+        values.push(input.totalItems);
       }
       if (input.skippedCount !== undefined) {
         updates.push('skippedCount = ?');

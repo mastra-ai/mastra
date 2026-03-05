@@ -157,6 +157,44 @@ export function createExperimentsTests({ storage }: { storage: MastraStorage }) 
         expect(updated.skippedCount).toBe(1);
       });
 
+      it('updateExperiment updates totalItems', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'totalItems-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 0,
+        });
+
+        const updated = await experimentsStorage.updateExperiment({
+          id: exp.id,
+          totalItems: 10,
+        });
+
+        expect(updated.totalItems).toBe(10);
+      });
+
+      it('updateExperiment updates totalItems', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'total-items-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 0,
+        });
+
+        expect(exp.totalItems).toBe(0);
+
+        const updated = await experimentsStorage.updateExperiment({
+          id: exp.id,
+          totalItems: 10,
+        });
+
+        expect(updated.totalItems).toBe(10);
+      });
+
       it('updateExperiment throws for non-existent experiment', async () => {
         await expect(experimentsStorage.updateExperiment({ id: 'non-existent', status: 'running' })).rejects.toThrow();
       });

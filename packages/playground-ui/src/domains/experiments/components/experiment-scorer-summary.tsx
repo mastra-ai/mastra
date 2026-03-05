@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import type { ClientScoreRowData } from '@mastra/client-js';
+import { GaugeIcon } from 'lucide-react';
+import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 
 export type ExperimentScorerSummaryProps = {
@@ -37,7 +39,17 @@ export function ExperimentScorerSummary({ scoresByItemId }: ExperimentScorerSumm
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId));
   }, [scoresByItemId]);
 
-  if (scorerSummaries.length === 0) return null;
+  if (scorerSummaries.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center py-12">
+        <EmptyState
+          iconSlot={<GaugeIcon className="w-8 h-8 text-neutral3" />}
+          titleSlot="No scorers configured"
+          descriptionSlot="Add scorers when triggering an experiment to evaluate results and see summary metrics here."
+        />
+      </div>
+    );
+  }
 
   return (
     <ItemList>
