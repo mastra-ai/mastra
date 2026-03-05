@@ -3187,6 +3187,7 @@ export class Agent<
           type: 'object',
           properties: inputProperties,
           required: inputRequired,
+          additionalProperties: true,
         };
 
         const outputResultProperties: Record<string, JSONSchema7> = {

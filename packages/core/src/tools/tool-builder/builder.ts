@@ -19,6 +19,7 @@ import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema 
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject } from '../../utils/zod-utils';
+
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
 import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
@@ -72,7 +73,6 @@ export class CoreToolBuilder extends MastraBase {
         schema = z.object({});
       }
 
-      // TODO FIGURE OUT standard schema handling here
       if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
           suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
@@ -81,6 +81,25 @@ export class CoreToolBuilder extends MastraBase {
             .describe('The resumeData object created from the resumeSchema of suspended tool')
             .optional(),
         });
+      } else {
+        // Non-Zod StandardSchemaWithJSON (e.g. JsonSchemaWrapper from JSONSchema7).
+        // Extract JSON Schema, add suspend/resume fields, re-wrap.
+        const jsonSchema = standardSchemaToJSONSchema(schema as any, { io: 'input' });
+        if (jsonSchema && typeof jsonSchema === 'object' && jsonSchema.type === 'object') {
+          jsonSchema.properties = {
+            ...jsonSchema.properties,
+            suspendedToolRunId: {
+              type: 'string',
+              description: 'The runId of the suspended tool',
+              anyOf: [{ type: 'string' }, { type: 'null' }],
+              default: '',
+            },
+            resumeData: {
+              description: 'The resumeData object created from the resumeSchema of suspended tool',
+            },
+          };
+          this.originalTool.inputSchema = toStandardSchema(jsonSchema) as any;
+        }
       }
     }
   }
