@@ -1,6 +1,6 @@
 {
   "name": "@internal/changeset-cli",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Custom changeset CLI for Mastra monorepo versioning",
   "type": "module",
   "main": "dist/src/index.js",
