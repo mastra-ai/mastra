@@ -1967,17 +1967,6 @@ describe('PgVector', () => {
         ).rejects.toThrow('bit vectors support up to 64,000 dimensions for indexes');
       });
 
-      it('should reject sparsevec exceeding 1,000 dimensions', async () => {
-        await expect(
-          validationDB.createIndex({
-            indexName: 'test_sparse_dim_limit',
-            dimension: 1001,
-            metric: 'cosine',
-            vectorType: 'sparsevec',
-          }),
-        ).rejects.toThrow('sparsevec indexes support up to 1,000 non-zero elements');
-      });
-
       it('should reject hamming metric with non-bit vectorType', async () => {
         await expect(
           validationDB.createIndex({

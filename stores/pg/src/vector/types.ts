@@ -5,7 +5,7 @@ export type IndexType = 'ivfflat' | 'hnsw' | 'flat';
  * - 'vector': Full precision (4 bytes per dimension), max 2000 dimensions for indexes
  * - 'halfvec': Half precision (2 bytes per dimension), max 4000 dimensions for indexes
  * - 'bit': Binary vectors using PostgreSQL's native bit type, up to 64,000 dimensions for indexes
- * - 'sparsevec': Sparse vectors storing only non-zero elements, up to 1,000 non-zero elements for indexes
+ * - 'sparsevec': Sparse vectors storing only non-zero elements (HNSW indexes limited to 1,000 non-zero elements at build time)
  *
  * Use 'halfvec' for large dimension models like text-embedding-3-large (3072 dimensions)
  * Use 'bit' for binary quantization (significantly reduces storage and improves search speed)

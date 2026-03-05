@@ -763,9 +763,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       if (vectorType === 'bit' && dimension > 64000) {
         throw new Error('bit vectors support up to 64,000 dimensions for indexes');
       }
-      if (vectorType === 'sparsevec' && dimension > 1000) {
-        throw new Error('sparsevec indexes support up to 1,000 non-zero elements');
-      }
+
       // hamming and jaccard metrics are only valid with bit vectors
       if ((metric === 'hamming' || metric === 'jaccard') && vectorType !== 'bit') {
         throw new Error(`${metric} metric is only valid with vectorType 'bit'`);
