@@ -162,6 +162,10 @@ describe('executeCommandTool data chunks', () => {
       const stderrChunks = getChunks(writerCustom, 'data-sandbox-stderr');
       const exitChunks = getChunks(writerCustom, 'data-sandbox-exit');
 
+      expect(stdoutChunks).toHaveLength(1);
+      expect(stderrChunks).toHaveLength(1);
+      expect(exitChunks).toHaveLength(1);
+
       for (const chunk of stdoutChunks) {
         expect(chunk.transient).toBe(true);
       }
