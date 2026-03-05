@@ -3365,8 +3365,7 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
         supervisorCallCount++;
         // Odd calls: delegate to sub-agent
         if (supervisorCallCount % 2 === 1) {
-          const prompt =
-            supervisorCallCount === 1 ? 'Create a new record named Test Record' : 'Update the record rec_12345';
+          const prompt = supervisorCallCount === 1 ? 'Create a new record named Test Record' : 'Update the record';
           return {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'tool-calls' as const,
@@ -3430,5 +3429,6 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     // the record ID from the first delegation's result, forwarded via supervisor memory
     const secondDelegationPrompt = JSON.stringify(subAgentReceivedPrompts[2]);
     expect(secondDelegationPrompt).toContain('rec_12345');
+    expect(secondDelegationPrompt).toContain('Created record with ID rec_12345');
   });
 });
