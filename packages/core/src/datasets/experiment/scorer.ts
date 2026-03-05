@@ -52,7 +52,7 @@ export async function runScorersForItem(
 
   const settled = await Promise.allSettled(
     scorers.map(async scorer => {
-      const result = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
+      const { result, promptMetadata } = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
 
       // Persist score if storage available and score was computed
       if (storage && result.score !== null) {
@@ -79,6 +79,7 @@ export async function runScorersForItem(
               id: targetId,
               name: targetId,
             },
+            ...promptMetadata,
           });
         } catch (saveError) {
           // Log but don't fail - score persistence is best-effort
@@ -97,8 +98,19 @@ export async function runScorersForItem(
   );
 }
 
+/** Prompt/step metadata returned by scorer.run() for DB persistence. */
+interface ScorerPromptMetadata {
+  generateScorePrompt?: string;
+  generateReasonPrompt?: string;
+  preprocessStepResult?: Record<string, unknown>;
+  preprocessPrompt?: string;
+  analyzeStepResult?: Record<string, unknown>;
+  analyzePrompt?: string;
+}
+
 /**
  * Run a single scorer safely, catching any errors.
+ * Returns both the ScorerResult and prompt metadata for DB persistence.
  */
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
@@ -106,7 +118,7 @@ async function runScorerSafe(
   output: unknown,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
-): Promise<ScorerResult> {
+): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
     const scoreResult = await scorer.run({
       input: scorerInput ?? item.input,
@@ -116,23 +128,37 @@ async function runScorerSafe(
 
     // Extract score and reason with proper null handling
     // Scorer run result types are complex generics, so we cast through any
-    const score = (scoreResult as any).score;
-    const reason = (scoreResult as any).reason;
+    const raw = scoreResult as any;
+    const score = raw.score;
+    const reason = raw.reason;
 
     return {
-      scorerId: scorer.id,
-      scorerName: scorer.name,
-      score: typeof score === 'number' ? score : null,
-      reason: typeof reason === 'string' ? reason : null,
-      error: null,
+      result: {
+        scorerId: scorer.id,
+        scorerName: scorer.name,
+        score: typeof score === 'number' ? score : null,
+        reason: typeof reason === 'string' ? reason : null,
+        error: null,
+      },
+      promptMetadata: {
+        generateScorePrompt: raw.generateScorePrompt,
+        generateReasonPrompt: raw.generateReasonPrompt,
+        preprocessStepResult: raw.preprocessStepResult,
+        preprocessPrompt: raw.preprocessPrompt,
+        analyzeStepResult: raw.analyzeStepResult,
+        analyzePrompt: raw.analyzePrompt,
+      },
     };
   } catch (error) {
     return {
-      scorerId: scorer.id,
-      scorerName: scorer.name,
-      score: null,
-      reason: null,
-      error: error instanceof Error ? error.message : String(error),
+      result: {
+        scorerId: scorer.id,
+        scorerName: scorer.name,
+        score: null,
+        reason: null,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      promptMetadata: {},
     };
   }
 }
