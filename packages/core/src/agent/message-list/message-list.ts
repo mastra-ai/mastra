@@ -828,8 +828,9 @@ export class MessageList {
     const replacementTarget = shouldReplace ? this.messages.find(m => m.id === id) : undefined;
     const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
 
-    // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results.
-    // But if this message is targeting a sealed ID, skip merge so sealed split/remint logic can run deterministically.
+    // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
+    // shouldMerge() only decides whether to append to the latest assistant message,
+    // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
       !hasSealedReplacementTarget &&
