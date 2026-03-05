@@ -453,10 +453,8 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   private toKey(path: string): string {
-    // Normalize '.' and './' to empty (root), then strip leading slashes
-    let cleanPath = path;
-    if (cleanPath === '.' || cleanPath === './') cleanPath = '';
-    else cleanPath = cleanPath.replace(/^\/+/, '');
+    // Remove leading slash and add prefix
+    const cleanPath = path.replace(/^\/+/, '');
     return this.prefix + cleanPath;
   }
 
