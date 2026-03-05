@@ -6,7 +6,7 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
+import type { AnySpan, ObservabilityContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
@@ -18,6 +18,19 @@ import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
 export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+
+/**
+ * Options for `Run.start()` beyond the generic `inputData`/`initialState`/`requestContext` fields.
+ */
+export type WorkflowRunStartOptions = {
+  outputWriter?: OutputWriter;
+  tracingOptions?: TracingOptions;
+  outputOptions?: {
+    includeState?: boolean;
+    includeResumeLabels?: boolean;
+  };
+  perStep?: boolean;
+} & Partial<ObservabilityContext>;
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -36,6 +49,7 @@ export type RestartExecutionParams = {
   activeStepsPath: Record<string, number[]>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   state?: Record<string, any>;
+  stepExecutionPath?: string[];
 };
 
 export type TimeTravelExecutionParams = {
@@ -46,6 +60,7 @@ export type TimeTravelExecutionParams = {
   steps: string[];
   state?: Record<string, any>;
   resumeData?: any;
+  stepExecutionPath?: string[];
 };
 
 export type StepMetadata = Record<string, any>;
@@ -279,6 +294,7 @@ export interface WorkflowState {
   // Execution State
   status: WorkflowRunStatus;
   initialState?: Record<string, any>;
+  stepExecutionPath?: string[];
   // Optional detailed fields (can be excluded for performance)
   activeStepsPath?: Record<string, number[]>;
   serializedStepGraph?: SerializedStepFlowEntry[];
@@ -333,6 +349,7 @@ export interface WorkflowRunState {
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
+  stepExecutionPath?: string[];
 }
 
 /**
@@ -365,6 +382,7 @@ export interface WorkflowFinishCallbackResult {
   logger: IMastraLogger;
   /** The final workflow state */
   state: Record<string, any>;
+  stepExecutionPath?: string[];
 }
 
 /**
@@ -395,6 +413,7 @@ export interface WorkflowErrorCallbackInfo {
   logger: IMastraLogger;
   /** The final workflow state */
   state: Record<string, any>;
+  stepExecutionPath?: string[];
 }
 
 export interface WorkflowOptions {
@@ -614,6 +633,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
   | ({
       status: 'success';
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       result: TOutput;
       input: TInput;
@@ -632,6 +652,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       status: 'failed';
       input: TInput;
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -649,6 +670,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       status: 'tripwire';
       input: TInput;
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -667,6 +689,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       status: 'suspended';
       input: TInput;
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -684,6 +707,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
   | ({
       status: 'paused';
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       input: TInput;
       steps: {
@@ -784,6 +808,7 @@ export type ExecutionContext = {
   workflowId: string;
   runId: string;
   executionPath: number[];
+  stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;
   foreachIndex?: number;
   suspendedPaths: Record<string, number[]>;
@@ -888,7 +913,6 @@ export type RegularStepExecutionParams = {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  tracingContext?: TracingContext;
   writableStream?: WritableStream<ChunkType>;
   startedAt: number;
   resumeDataToUse?: any;
@@ -898,7 +922,7 @@ export type RegularStepExecutionParams = {
   serializedStepGraph: SerializedStepFlowEntry[];
   resourceId?: string;
   disableScorers?: boolean;
-};
+} & Partial<ObservabilityContext>;
 
 /**
  * Result from step execution core logic
@@ -972,4 +996,6 @@ export type FormattedWorkflowResult = {
   suspendPayload?: any;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
+  /** The sequence of step IDs executed in this run */
+  stepExecutionPath?: string[];
 };

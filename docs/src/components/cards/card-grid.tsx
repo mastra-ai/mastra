@@ -1,3 +1,4 @@
+import { cn } from '@site/src/lib/utils'
 import { Card, CardHeader, CardContent, CardTitle } from '../ui/card'
 import Link from '@docusaurus/Link'
 
@@ -26,11 +27,13 @@ export const CardGridItem = ({
   preserveLogoColor?: boolean
   children?: React.ReactNode
 }) => {
+  const hasContent = !!(children || description)
+
   return (
     <Link to={href} className="block h-full w-full text-black! no-underline! dark:text-white!">
       <Card className="h-full w-full cursor-pointer border-(--border) bg-(--mastra-surface-1)/20 shadow-none transition-colors hover:bg-(--mastra-surface-1)/70 dark:border-(--border) dark:hover:bg-(--mastra-surface-2)">
         <CardHeader>
-          <div className="flex items-center gap-3">
+          <div className={cn('flex items-center gap-3', !hasContent ? 'justify-center' : '')}>
             {logo &&
               (typeof logo === 'string' ? (
                 <img
@@ -48,7 +51,7 @@ export const CardGridItem = ({
             <CardTitle className="border-b-0 text-lg">{title}</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="text-sm">{children || description}</CardContent>
+        {hasContent ? <CardContent className="text-sm">{children || description}</CardContent> : null}
       </Card>
     </Link>
   )

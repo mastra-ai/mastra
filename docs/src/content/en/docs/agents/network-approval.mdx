@@ -16,15 +16,15 @@ Agent networks can require the same [human-in-the-loop](/docs/workflows/human-in
 Network approval uses snapshots to capture execution state. Ensure you've enabled a storage provider in your Mastra instance. If storage isn't enabled you'll see an error relating to snapshot not found.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core/mastra";
-import { LibSQLStore } from "@mastra/libsql";
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-    id: "mastra-storage",
-    url: ":memory:"
-  })
-});
+    id: 'mastra-storage',
+    url: ':memory:',
+  }),
+})
 ```
 
 ## Approving network tool calls
@@ -32,25 +32,25 @@ export const mastra = new Mastra({
 When a tool within a network has `requireApproval: true`, the network stream emits an `agent-execution-approval` chunk and pauses. To allow the tool to execute, call `approveNetworkToolCall` with the `runId`.
 
 ```typescript
-const stream = await routingAgent.network("Process this query", {
+const stream = await routingAgent.network('Process this query', {
   memory: {
-    thread: "user-123",
-    resource: "my-app"
-  }
-});
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
 
-let runId: string;
+let runId: string
 
 for await (const chunk of stream) {
-  runId = stream.runId;
+  runId = stream.runId
   // if the requirApproval is in a tool inside a subAgent or the subAgent has requireToolApproval set to true
-  if (chunk.type === "agent-execution-approval") { 
-    console.log("Tool requires approval:", chunk.payload);
+  if (chunk.type === 'agent-execution-approval') {
+    console.log('Tool requires approval:', chunk.payload)
   }
 
   // if the requirApproval is in a tool directly in the network agent
-  if (chunk.type === "tool-execution-approval") {
-    console.log("Tool requires approval:", chunk.payload);
+  if (chunk.type === 'tool-execution-approval') {
+    console.log('Tool requires approval:', chunk.payload)
   }
 }
 
@@ -58,14 +58,14 @@ for await (const chunk of stream) {
 const approvedStream = await routingAgent.approveNetworkToolCall({
   runId,
   memory: {
-    thread: "user-123",
-    resource: "my-app"
-  }
-});
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
 
 for await (const chunk of approvedStream) {
-  if (chunk.type === "network-execution-event-step-finish") {
-    console.log(chunk.payload.result);
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
   }
 }
 ```
@@ -78,14 +78,14 @@ To decline a pending tool call and prevent execution, call `declineNetworkToolCa
 const declinedStream = await routingAgent.declineNetworkToolCall({
   runId,
   memory: {
-    thread: "user-123",
-    resource: "my-app"
-  }
-});
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
 
 for await (const chunk of declinedStream) {
-  if (chunk.type === "network-execution-event-step-finish") {
-    console.log(chunk.payload.result);
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
   }
 }
 ```
@@ -95,54 +95,54 @@ for await (const chunk of declinedStream) {
 When a primitive in the network calls `suspend()`, the stream emits an `agent-execution-suspended`/`tool-execution-suspended`/`workflow-execution-suspended` chunk with a `suspendPayload` containing context from the primitive. Use `resumeNetwork` to provide the data requested by the primitive and continue execution.
 
 ```typescript
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 const confirmationTool = createTool({
-  id: "confirmation-tool",
-  description: "Requests user confirmation before proceeding",
+  id: 'confirmation-tool',
+  description: 'Requests user confirmation before proceeding',
   inputSchema: z.object({
-    action: z.string()
+    action: z.string(),
   }),
   outputSchema: z.object({
     confirmed: z.boolean(),
-    action: z.string()
+    action: z.string(),
   }),
   suspendSchema: z.object({
     message: z.string(),
-    action: z.string()
+    action: z.string(),
   }),
   resumeSchema: z.object({
-    confirmed: z.boolean()
+    confirmed: z.boolean(),
   }),
   execute: async (inputData, context) => {
-    const { resumeData, suspend } = context?.agent ?? {};
+    const { resumeData, suspend } = context?.agent ?? {}
 
     if (!resumeData?.confirmed) {
       return suspend?.({
         message: `Please confirm: ${inputData.action}`,
-        action: inputData.action
-      });
+        action: inputData.action,
+      })
     }
 
-    return { confirmed: true, action: inputData.action };
-  }
-});
+    return { confirmed: true, action: inputData.action }
+  },
+})
 ```
 
 Handle the suspension and resume with user-provided data:
 
 ```typescript
-const stream = await routingAgent.network("Delete the old records", {
+const stream = await routingAgent.network('Delete the old records', {
   memory: {
-    thread: "user-123",
-    resource: "my-app"
-  }
-});
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
 
 for await (const chunk of stream) {
-  if (chunk.type === "workflow-execution-suspended") {
-    console.log(chunk.payload.suspendPayload);
+  if (chunk.type === 'workflow-execution-suspended') {
+    console.log(chunk.payload.suspendPayload)
     // { message: "Please confirm: delete old records", action: "delete old records" }
   }
 }
@@ -153,15 +153,15 @@ const resumedStream = await routingAgent.resumeNetwork(
   {
     runId: stream.runId,
     memory: {
-      thread: "user-123",
-      resource: "my-app"
-    }
-  }
-);
+      thread: 'user-123',
+      resource: 'my-app',
+    },
+  },
+)
 
 for await (const chunk of resumedStream) {
-  if (chunk.type === "network-execution-event-step-finish") {
-    console.log(chunk.payload.result);
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
   }
 }
 ```
@@ -175,30 +175,30 @@ When using primitives that call `suspend()`, you can enable automatic resumption
 Set `autoResumeSuspendedTools` to `true` in the agent's `defaultNetworkOptions` or when calling `network()`:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
 // Option 1: In agent configuration
 const routingAgent = new Agent({
-  id: "routing-agent",
-  name: "Routing Agent",
-  instructions: "You coordinate tasks across multiple agents",
-  model: "openai/gpt-4o-mini",
+  id: 'routing-agent',
+  name: 'Routing Agent',
+  instructions: 'You coordinate tasks across multiple agents',
+  model: 'openai/gpt-4o-mini',
   tools: { confirmationTool },
   memory: new Memory(),
   defaultNetworkOptions: {
     autoResumeSuspendedTools: true,
   },
-});
+})
 
 // Option 2: Per-request
-const stream = await routingAgent.network("Process this request", {
+const stream = await routingAgent.network('Process this request', {
   autoResumeSuspendedTools: true,
   memory: {
-    thread: "user-123",
-    resource: "my-app"
-  }
-});
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
 ```
 
 ### How it works
@@ -206,8 +206,8 @@ const stream = await routingAgent.network("Process this request", {
 When `autoResumeSuspendedTools` is enabled:
 
 1. A primitive suspends execution by calling `suspend()` with a payload
-2. The suspension is persisted to memory along with the conversation
-3. When the user sends their next message on the same thread, the network:
+1. The suspension is persisted to memory along with the conversation
+1. When the user sends their next message on the same thread, the network:
    - Detects the suspended primitive from message history
    - Extracts `resumeData` from the user's message based on the tool's `resumeSchema`
    - Automatically resumes the primitive with the extracted data
@@ -215,33 +215,33 @@ When `autoResumeSuspendedTools` is enabled:
 ### Example
 
 ```typescript
-const stream = await routingAgent.network("Delete the old records", {
+const stream = await routingAgent.network('Delete the old records', {
   autoResumeSuspendedTools: true,
   memory: {
-    thread: "user-123",
-    resource: "my-app"
-  }
-});
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
 
 for await (const chunk of stream) {
-  if (chunk.type === "workflow-execution-suspended") {
-    console.log(chunk.payload.suspendPayload);
+  if (chunk.type === 'workflow-execution-suspended') {
+    console.log(chunk.payload.suspendPayload)
     // { message: "Please confirm: delete old records", action: "delete old records" }
   }
 }
 
 // User provides confirmation in their next message
-const resumedStream = await routingAgent.network("Yes, confirmed", {
+const resumedStream = await routingAgent.network('Yes, confirmed', {
   autoResumeSuspendedTools: true,
   memory: {
-    thread: "user-123",
-    resource: "my-app"
-  }
-});
+    thread: 'user-123',
+    resource: 'my-app',
+  },
+})
 
 for await (const chunk of resumedStream) {
-  if (chunk.type === "network-execution-event-step-finish") {
-    console.log(chunk.payload.result);
+  if (chunk.type === 'network-execution-event-step-finish') {
+    console.log(chunk.payload.result)
   }
 }
 ```
@@ -267,7 +267,7 @@ For automatic tool resumption to work:
 ### Manual vs automatic resumption
 
 | Approach | Use case |
-|----------|----------|
+| - | - |
 | Manual (`resumeNetwork()`) | Programmatic control, webhooks, button clicks, external triggers |
 | Automatic (`autoResumeSuspendedTools`) | Conversational flows where users provide resume data in natural language |
 

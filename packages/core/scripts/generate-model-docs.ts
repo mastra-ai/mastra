@@ -529,7 +529,13 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 
 \`\`\`bash
 # Use gateway API key
-${gatewayName.toUpperCase()}_API_KEY=your-gateway-key
+${(() => {
+  const envVar = providers[0]?.apiKeyEnvVar;
+  if (Array.isArray(envVar)) {
+    return envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
+  }
+  return `${envVar || `${gatewayName.toUpperCase()}_API_KEY`}=your-gateway-key`;
+})()}
 
 # Or use provider API keys directly
 OPENAI_API_KEY=sk-...

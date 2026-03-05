@@ -22,39 +22,39 @@ npm install @mastra/deployer-cloudflare@latest
 Import `CloudflareDeployer` and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { CloudflareDeployer } from "@mastra/deployer-cloudflare";
+import { Mastra } from '@mastra/core'
+import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
 export const mastra = new Mastra({
   deployer: new CloudflareDeployer({
-    name: "your-project-name",
+    name: 'your-project-name',
     routes: [
       {
-        pattern: "example.com/*",
-        zone_name: "example.com",
-        custom_domain: true
-      }
+        pattern: 'example.com/*',
+        zone_name: 'example.com',
+        custom_domain: true,
+      },
     ],
     vars: {
-      NODE_ENV: "production",
-      API_KEY: "<api-key>"
+      NODE_ENV: 'production',
+      API_KEY: '<api-key>',
     },
     d1_databases: [
       {
-        binding: "DB",
-        database_name: "my-database",
-        database_id: "d1-database-id",
-        preview_database_id: "your-preview-database-id"
-      }
+        binding: 'DB',
+        database_name: 'my-database',
+        database_id: 'd1-database-id',
+        preview_database_id: 'your-preview-database-id',
+      },
     ],
     kv_namespaces: [
       {
-        binding: "CACHE",
-        id: "kv-namespace-id"
-      }
-    ]
-  })
-});
+        binding: 'CACHE',
+        id: 'kv-namespace-id',
+      },
+    ],
+  }),
+})
 ```
 
 ## Constructor options

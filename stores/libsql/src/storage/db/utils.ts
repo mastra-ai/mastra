@@ -24,7 +24,8 @@ export function buildSelectColumns(tableName: TABLE_NAMES): string {
     .map(col => {
       const colDef = schema[col];
       const parsedCol = parseSqlIdentifier(col, 'column name');
-      return colDef?.type === 'jsonb' ? `json(${parsedCol}) as ${parsedCol}` : parsedCol;
+      // Quote all column names to handle SQL reserved words (e.g. "references")
+      return colDef?.type === 'jsonb' ? `json("${parsedCol}") as "${parsedCol}"` : `"${parsedCol}"`;
     })
     .join(', ');
 }

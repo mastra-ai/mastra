@@ -6,6 +6,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
+import { createObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { getStepResult } from '../step';
@@ -118,6 +119,11 @@ export class StepExecutor extends MastraBase {
       suspendDataToUse = userSuspendData;
     }
 
+    // Track state updates - don't mutate params.state in place
+    // This matches the default engine's behavior where setState captures
+    // the update and applies it AFTER the step completes
+    let stateUpdate: Record<string, any> | undefined;
+
     try {
       if (validationError) {
         throw validationError;
@@ -136,8 +142,10 @@ export class StepExecutor extends MastraBase {
             inputData,
             state: params.state,
             setState: async (newState: Record<string, any>) => {
-              // Merge new state with existing state (preserves other keys)
-              Object.assign(params.state, newState);
+              // Capture state update - don't mutate params.state in place
+              // This matches default engine behavior where state changes
+              // are applied AFTER the step completes, not during execution
+              stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
             },
             retryCount,
             resumeData: params.resumeData,
@@ -198,7 +206,7 @@ export class StepExecutor extends MastraBase {
             engine: {},
             abortSignal: abortController?.signal,
             // TODO
-            tracingContext: {},
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',
@@ -214,6 +222,9 @@ export class StepExecutor extends MastraBase {
 
       const endedAt = Date.now();
 
+      // Use stateUpdate if setState was called, otherwise use original state
+      const finalState = stateUpdate ?? params.state;
+
       let finalResult: StepResult<any, any, any, any> & { __state?: Record<string, any> };
       if (suspended) {
         finalResult = {
@@ -221,7 +232,7 @@ export class StepExecutor extends MastraBase {
           status: 'suspended',
           suspendedAt: endedAt,
           ...(stepOutput ? { suspendOutput: stepOutput } : {}),
-          __state: params.state,
+          __state: finalState,
         };
 
         if (suspended.payload) {
@@ -234,13 +245,13 @@ export class StepExecutor extends MastraBase {
           status: 'bailed',
           endedAt,
           output: bailed.payload,
-          __state: params.state,
+          __state: finalState,
         };
       } else if (nestedWflowStepPaused) {
         finalResult = {
           ...stepInfo,
           status: 'paused',
-          __state: params.state,
+          __state: finalState,
         };
       } else {
         finalResult = {
@@ -248,7 +259,7 @@ export class StepExecutor extends MastraBase {
           status: 'success',
           endedAt,
           output: stepOutput,
-          __state: params.state,
+          __state: finalState,
         };
       }
 
@@ -407,7 +418,7 @@ export class StepExecutor extends MastraBase {
           engine: {},
           abortSignal: abortController?.signal,
           // TODO
-          tracingContext: {},
+          ...createObservabilityContext(),
           iterationCount,
         },
         {
@@ -487,7 +498,7 @@ export class StepExecutor extends MastraBase {
             engine: {},
             abortSignal: abortController?.signal,
             // TODO
-            tracingContext: {},
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',
@@ -570,7 +581,7 @@ export class StepExecutor extends MastraBase {
             engine: {},
             abortSignal: abortController?.signal,
             // TODO
-            tracingContext: {},
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',

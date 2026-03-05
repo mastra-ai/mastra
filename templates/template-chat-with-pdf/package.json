@@ -1,0 +1,37 @@
+{
+  "name": "chat-with-pdf",
+  "version": "1.0.0",
+  "description": "An AI-powered PDF assistant that lets you chat with any PDF document. Index PDFs from URLs, ask questions about content, and generate quizzes from the material.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.0",
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/rag": "latest",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "@types/pdf-parse": "^1.1.5",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}

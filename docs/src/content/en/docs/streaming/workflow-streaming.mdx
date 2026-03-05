@@ -16,7 +16,7 @@ Streams can be written to in two main ways:
 
 By combining writable workflow streams with agent streaming, you gain fine-grained control over how intermediate results flow through your system and into the user experience.
 
-### Using the `writer` argument
+## Using the `writer` argument
 
 The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
 
@@ -26,7 +26,7 @@ You must `await` the call to `writer.write(...)` or else you will lock the strea
 
 :::
 
-```typescript {5,7,14}
+```typescript {5,7,14} prettier:false
 import { createStep } from "@mastra/core/workflows";
 
 export const testStep = createStep({
@@ -52,46 +52,46 @@ export const testStep = createStep({
 });
 ```
 
-### Inspecting workflow stream payloads
+## Inspecting workflow stream payloads
 
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or step-specific data.
 
 ```typescript
-const testWorkflow = mastra.getWorkflow("testWorkflow");
+const testWorkflow = mastra.getWorkflow('testWorkflow')
 
-const run = await testWorkflow.createRun();
+const run = await testWorkflow.createRun()
 
 const stream = await run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 
-if (result!.status === "suspended") {
+if (result!.status === 'suspended') {
   // if the workflow is suspended, we can resume it with the resumeStream method
   const resumedStream = await run.resumeStream({
-    resumeData: { value: "resume data" },
-  });
+    resumeData: { value: 'resume data' },
+  })
 
   for await (const chunk of resumedStream) {
-    console.log(chunk);
+    console.log(chunk)
   }
 }
 ```
 
-### Resuming an interrupted workflow stream
+## Resuming an interrupted workflow stream
 
 If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStream` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
 
 ```typescript
-const newStream = await run.resumeStream();
+const newStream = await run.resumeStream()
 
 for await (const chunk of newStream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 
@@ -100,21 +100,21 @@ for await (const chunk of newStream) {
 Pipe an agent's `textStream` to the workflow step's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the workflow run.
 
 ```typescript
-import { createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 export const testStep = createStep({
   execute: async ({ inputData, mastra, writer }) => {
-    const { city } = inputData;
+    const { city } = inputData
 
-    const testAgent = mastra?.getAgent("testAgent");
-    const stream = await testAgent?.stream(`What is the weather in ${city}$?`);
+    const testAgent = mastra?.getAgent('testAgent')
+    const stream = await testAgent?.stream(`What is the weather in ${city}$?`)
 
-    await stream!.textStream.pipeTo(writer!);
+    await stream!.textStream.pipeTo(writer!)
 
     return {
       value: await stream!.text,
-    };
+    }
   },
-});
+})
 ```

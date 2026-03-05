@@ -153,7 +153,7 @@ To fix this you have three different options:
    * await mcp.progress.onUpdate('serverName', (params) => {
    *   console.log(`Progress: ${params.progress}%`);
    *   console.log(`Status: ${params.message}`);
-   *   
+   *
    *   if (params.total) {
    *     console.log(`Completed ${params.progress} of ${params.total} items`);
    *   }
@@ -708,7 +708,7 @@ To fix this you have three different options:
         mcpClientInstances.delete(this.id);
 
         // Disconnect all clients in the cache
-        await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+        await Promise.allSettled(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
         this.mcpClientsById.clear();
       } finally {
         this.disconnectPromise = null;
@@ -724,8 +724,8 @@ To fix this you have three different options:
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.
    * This method is intended to be passed directly to an Agent definition.
    *
-   * @returns Object mapping namespaced tool names to tool implementations
-   * @throws {MastraError} If retrieving tools fails
+   * @returns Object mapping namespaced tool names to tool implementations.
+   * Errors for individual servers are logged but don't throw - failed servers are skipped.
    *
    * @example
    * ```typescript
@@ -742,21 +742,28 @@ To fix this you have three different options:
     this.addToInstanceCache();
     const connectedTools: Record<string, Tool<any, any, any, any>> = {};
 
-    try {
-      await this.eachClientTools(async ({ serverName, tools }) => {
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      try {
+        const client = await this.getConnectedClientForServer(serverName);
+        const tools = await client.tools();
         for (const [toolName, toolConfig] of Object.entries(tools)) {
-          connectedTools[`${serverName}_${toolName}`] = toolConfig; // namespace tool to prevent tool name conflicts between servers
+          connectedTools[`${serverName}_${toolName}`] = toolConfig;
         }
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MCP_CLIENT_GET_TOOLS_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_CLIENT_GET_TOOLS_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              serverName,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Failed to list tools from server:', { error: mastraError.toString() });
+      }
     }
 
     return connectedTools;
@@ -768,8 +775,8 @@ To fix this you have three different options:
    * Unlike listTools(), this returns tools grouped by server without namespacing.
    * This is intended to be passed dynamically to the generate() or stream() method.
    *
-   * @returns Object mapping server names to their tool collections
-   * @throws {MastraError} If retrieving toolsets fails
+   * @returns Object mapping server names to their tool collections.
+   * Errors for individual servers are logged but don't throw - failed servers are skipped.
    *
    * @example
    * ```typescript
@@ -789,21 +796,28 @@ To fix this you have three different options:
     this.addToInstanceCache();
     const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
 
-    try {
-      await this.eachClientTools(async ({ serverName, tools }) => {
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      try {
+        const client = await this.getConnectedClientForServer(serverName);
+        const tools = await client.tools();
         if (tools) {
           connectedToolsets[serverName] = tools;
         }
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              serverName,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Failed to list toolsets from server:', { error: mastraError.toString() });
+      }
     }
 
     return connectedToolsets;
@@ -897,21 +911,5 @@ To fix this you have three different options:
       throw new Error(`Server configuration not found for name: ${serverName}`);
     }
     return this.getConnectedClient(serverName, serverConfig);
-  }
-
-  private async eachClientTools(
-    cb: (args: {
-      serverName: string;
-      tools: Record<string, Tool<any, any, any, any>>;
-      client: InstanceType<typeof InternalMastraMCPClient>;
-    }) => Promise<void>,
-  ) {
-    await Promise.all(
-      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
-        const client = await this.getConnectedClient(serverName, serverConfig);
-        const tools = await client.tools();
-        await cb({ serverName, tools, client });
-      }),
-    );
   }
 }

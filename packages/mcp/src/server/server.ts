@@ -568,6 +568,12 @@ export class MCPServer extends MCPServerBase {
           };
         }
         this.logger.error(`Tool execution failed: ${request.params.name}`, { error });
+        if (error instanceof MastraError) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify(error.toJSON()) }],
+            isError: true,
+          };
+        }
         return {
           content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
           isError: true,

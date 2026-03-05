@@ -16,15 +16,19 @@ import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
+import { BlobsPG } from './domains/blobs';
 import { DatasetsPG } from './domains/datasets';
 import { ExperimentsPG } from './domains/experiments';
 import { MCPClientsPG } from './domains/mcp-clients';
+import { MCPServersPG } from './domains/mcp-servers';
 import { MemoryPG } from './domains/memory';
 import { ObservabilityPG } from './domains/observability';
 import { PromptBlocksPG } from './domains/prompt-blocks';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
+import { SkillsPG } from './domains/skills';
 import { WorkflowsPG } from './domains/workflows';
+import { WorkspacesPG } from './domains/workspaces';
 
 /** Default maximum number of connections in the pool */
 const DEFAULT_MAX_CONNECTIONS = 20;
@@ -70,15 +74,19 @@ export function exportSchemas(schemaName?: string): string {
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsPG,
+  BlobsPG,
   DatasetsPG,
   ExperimentsPG,
   MCPClientsPG,
+  MCPServersPG,
   MemoryPG,
   ObservabilityPG,
   PromptBlocksPG,
   ScorerDefinitionsPG,
   ScoresPG,
+  SkillsPG,
   WorkflowsPG,
+  WorkspacesPG,
 };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
@@ -149,6 +157,10 @@ export class PostgresStore extends MastraCompositeStore {
         promptBlocks: new PromptBlocksPG(domainConfig),
         scorerDefinitions: new ScorerDefinitionsPG(domainConfig),
         mcpClients: new MCPClientsPG(domainConfig),
+        mcpServers: new MCPServersPG(domainConfig),
+        workspaces: new WorkspacesPG(domainConfig),
+        skills: new SkillsPG(domainConfig),
+        blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),
       };

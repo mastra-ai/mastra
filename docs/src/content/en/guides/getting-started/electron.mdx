@@ -72,9 +72,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
--	`index.ts` - Mastra config, including memory
+- `index.ts` - Mastra config, including memory
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
--	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your chat UI in the next steps.
 
@@ -91,25 +91,25 @@ npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 Open `src/mastra/index.ts` and add a [`chatRoute()`](/reference/ai-sdk/chat-route) to your config. This creates an API route your Electron frontend can call for AI SDK-compatible chat responses, which you'll use with `useChat()` next.
 
 ```ts title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra';
+import { Mastra } from '@mastra/core/mastra'
 // Existing imports...
-import { chatRoute } from "@mastra/ai-sdk"
+import { chatRoute } from '@mastra/ai-sdk'
 
 export const mastra = new Mastra({
   // Existing config...
   server: {
     cors: {
-      origin: "*", // Restrict this to your app's origin in production
-      allowMethods: ["*"],
-      allowHeaders: ["*"],
+      origin: '*', // Restrict this to your app's origin in production
+      allowMethods: ['*'],
+      allowHeaders: ['*'],
     },
     apiRoutes: [
       chatRoute({
-        path: '/chat/:agentId'
-      })
-    ]
-  }
-});
+        path: '/chat/:agentId',
+      }),
+    ],
+  },
+})
 ```
 
 :::info
@@ -133,7 +133,7 @@ const STATE_TO_LABEL_MAP: Record<string, string> = {
   'approval-requested': 'Approval requested',
   'approval-responded': 'Approval responded',
   'output-available': 'Complete',
-  'output-error': 'Error'
+  'output-error': 'Error',
 }
 
 export default function App(): React.JSX.Element {
@@ -141,8 +141,8 @@ export default function App(): React.JSX.Element {
 
   const { messages, sendMessage } = useChat({
     transport: new DefaultChatTransport({
-      api: `http://localhost:4111/chat/weather-agent`
-    })
+      api: `http://localhost:4111/chat/weather-agent`,
+    }),
   })
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
@@ -160,7 +160,7 @@ export default function App(): React.JSX.Element {
         marginRight: 'auto',
         padding: '1.5rem',
         width: '100%',
-        height: '100vh'
+        height: '100vh',
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -185,7 +185,7 @@ export default function App(): React.JSX.Element {
                           gap: '0.5rem',
                           ...(message.role === 'user'
                             ? { marginLeft: 'auto', justifyContent: 'flex-end' }
-                            : {})
+                            : {}),
                         }}
                       >
                         <div
@@ -207,9 +207,9 @@ export default function App(): React.JSX.Element {
                                   paddingLeft: '1rem',
                                   paddingRight: '1rem',
                                   paddingTop: '0.75rem',
-                                  paddingBottom: '0.75rem'
+                                  paddingBottom: '0.75rem',
                                 }
-                              : {})
+                              : {}),
                           }}
                         >
                           <div
@@ -233,7 +233,7 @@ export default function App(): React.JSX.Element {
                           width: '100%',
                           borderRadius: '0.5rem',
                           border: '1px solid #d1d5db',
-                          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)'
+                          boxShadow: '0 1px 3px 0 rgba(0,0,0,0.1)',
                         }}
                       >
                         <details
@@ -250,7 +250,7 @@ export default function App(): React.JSX.Element {
                               style={{
                                 overflow: 'hidden',
                                 paddingTop: '1rem',
-                                paddingBottom: '1rem'
+                                paddingBottom: '1rem',
                               }}
                             >
                               <div
@@ -259,7 +259,7 @@ export default function App(): React.JSX.Element {
                                   color: '#6b7280',
                                   fontSize: '0.75rem',
                                   textTransform: 'uppercase',
-                                  letterSpacing: '0.05em'
+                                  letterSpacing: '0.05em',
                                 }}
                               >
                                 Parameters
@@ -272,7 +272,7 @@ export default function App(): React.JSX.Element {
                                   border: '1px solid #d1d5db',
                                   backgroundColor: '#f9fafb',
                                   padding: '0.75rem',
-                                  fontSize: '0.875rem'
+                                  fontSize: '0.875rem',
                                 }}
                               >
                                 <code>{JSON.stringify(toolPart.input, null, 2)}</code>
@@ -283,7 +283,7 @@ export default function App(): React.JSX.Element {
                               style={{
                                 overflow: 'hidden',
                                 paddingTop: '1rem',
-                                paddingBottom: '1rem'
+                                paddingBottom: '1rem',
                               }}
                             >
                               <div
@@ -292,7 +292,7 @@ export default function App(): React.JSX.Element {
                                   color: '#6b7280',
                                   fontSize: '0.75rem',
                                   textTransform: 'uppercase',
-                                  letterSpacing: '0.05em'
+                                  letterSpacing: '0.05em',
                                 }}
                               >
                                 {toolPart.errorText ? 'Error' : 'Result'}
@@ -305,7 +305,7 @@ export default function App(): React.JSX.Element {
                                   border: '1px solid #d1d5db',
                                   backgroundColor: '#f9fafb',
                                   padding: '0.75rem',
-                                  fontSize: '0.875rem'
+                                  fontSize: '0.875rem',
                                 }}
                               >
                                 <code>{JSON.stringify(toolPart.output, null, 2)}</code>
@@ -334,7 +334,7 @@ export default function App(): React.JSX.Element {
             gridTemplateColumns: '1fr auto',
             gap: '1.5rem',
             flexShrink: 0,
-            paddingTop: '1rem'
+            paddingTop: '1rem',
           }}
           onSubmit={handleSubmit}
           data-name="prompt-input"
@@ -346,11 +346,11 @@ export default function App(): React.JSX.Element {
               border: '1px solid #d1d5db',
               boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)',
               height: '2.5rem',
-              padding: '0 0.75rem'
+              padding: '0 0.75rem',
             }}
             placeholder="City name"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={e => setInput(e.target.value)}
           />
           <button
             style={{
@@ -366,7 +366,7 @@ export default function App(): React.JSX.Element {
               fontWeight: 500,
               transition: 'all',
               flexShrink: 0,
-              outline: 'none'
+              outline: 'none',
             }}
             type="submit"
           >
@@ -387,14 +387,14 @@ In order to test your agent with the chat interface, you need to run both the Ma
 
 1. Start the mastra development server:
 
-    ```bash npm2yarn
-    npx mastra dev
-    ```
+   ```bash npm2yarn
+   npx mastra dev
+   ```
 1. In a separate terminal, start the Electron app:
 
-    ```bash npm2yarn
-    npm run dev
-    ```
+   ```bash npm2yarn
+   npm run dev
+   ```
 1. An Electron window opens with the chat interface
 1. Try asking about the weather. If your API key is set  up correctly, you'll get a response
 

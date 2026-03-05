@@ -312,7 +312,11 @@ ${skillInstructions}`;
         'Read a reference file from an activated skill. Optionally specify line range to read a portion of the file.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        referencePath: z.string().describe('Path to the reference file (relative to references/ directory)'),
+        referencePath: z
+          .string()
+          .describe(
+            'Path to the reference file (relative to the skill root directory, e.g. "references/colors.md" or "docs/schema.md")',
+          ),
         startLine: z
           .number()
           .optional()
@@ -375,7 +379,9 @@ ${skillInstructions}`;
         'Read a script file from an activated skill. Scripts contain executable code. Optionally specify line range.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        scriptPath: z.string().describe('Path to the script file (relative to scripts/ directory)'),
+        scriptPath: z
+          .string()
+          .describe('Path to the script file (relative to the skill root directory, e.g. "scripts/run.sh")'),
         startLine: z
           .number()
           .optional()
@@ -438,7 +444,9 @@ ${skillInstructions}`;
         'Read an asset file from an activated skill. Assets include templates, data files, and other static resources. Binary files are returned as base64.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        assetPath: z.string().describe('Path to the asset file (relative to assets/ directory)'),
+        assetPath: z
+          .string()
+          .describe('Path to the asset file (relative to the skill root directory, e.g. "assets/logo.png")'),
       }),
       execute: async ({ skillName, assetPath }) => {
         if (!skills) {
@@ -539,6 +547,19 @@ ${skillInstructions}`;
   }
 
   // ===========================================================================
+  // Helpers
+  // ===========================================================================
+
+  /**
+   * Mark a tool as never requiring approval.
+   * Skill tools are internal plumbing and should bypass requireToolApproval.
+   */
+  private withNoApproval<T extends object>(tool: T): T & { needsApprovalFn: () => false } {
+    (tool as any).needsApprovalFn = () => false as const;
+    return tool as T & { needsApprovalFn: () => false };
+  }
+
+  // ===========================================================================
   // Processor Interface
   // ===========================================================================
 
@@ -589,14 +610,14 @@ ${skillInstructions}`;
     const skillTools: Record<string, unknown> = {};
 
     if (hasSkills) {
-      skillTools['skill-activate'] = this.createSkillActivateTool();
-      skillTools['skill-search'] = this.createSkillSearchTool();
+      skillTools['skill-activate'] = this.withNoApproval(this.createSkillActivateTool());
+      skillTools['skill-search'] = this.withNoApproval(this.createSkillSearchTool());
     }
 
     if (this._activatedSkills.size > 0) {
-      skillTools['skill-read-reference'] = this.createSkillReadReferenceTool();
-      skillTools['skill-read-script'] = this.createSkillReadScriptTool();
-      skillTools['skill-read-asset'] = this.createSkillReadAssetTool();
+      skillTools['skill-read-reference'] = this.withNoApproval(this.createSkillReadReferenceTool());
+      skillTools['skill-read-script'] = this.withNoApproval(this.createSkillReadScriptTool());
+      skillTools['skill-read-asset'] = this.withNoApproval(this.createSkillReadAssetTool());
     }
 
     return {

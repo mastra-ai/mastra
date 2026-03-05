@@ -1,8 +1,10 @@
 import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
 import { Icon } from '@/ds/icons/Icon';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
@@ -20,9 +22,10 @@ export interface ToolTableProps {
   tools: Record<string, GetToolResponse>;
   agents: Record<string, GetAgentResponse>;
   isLoading: boolean;
+  error?: Error | null;
 }
 
-export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
+export function ToolTable({ tools, agents, isLoading, error }: ToolTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const toolData = useMemo(() => prepareToolsTable(tools, agents), [tools, agents]);
@@ -51,6 +54,15 @@ export function ToolTable({ tools, agents, isLoading }: ToolTableProps) {
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
+
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="tools" />
+      </div>
+    );
+  }
 
   if (toolData.length === 0 && !isLoading) {
     return <EmptyToolsTable />;

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -13,10 +12,13 @@ import {
   useWorkspaceSkill,
   useWorkspaceSkillReference,
   useWorkspaceFile,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Bot, Folder, Wand2 } from 'lucide-react';
+import { useState } from 'react';
 
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Bot, Folder, Wand2 } from 'lucide-react';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
@@ -105,6 +107,18 @@ export default function WorkspaceSkillDetailPage() {
     );
   }
 
+  // 403 check - permission denied for workspaces
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <Header>{renderBreadcrumb('Permission Denied')}</Header>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="workspaces" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (error || !skill) {
     return (
       <MainContentLayout>
@@ -112,7 +126,7 @@ export default function WorkspaceSkillDetailPage() {
         <div className="grid place-items-center h-full">
           <div className="text-center">
             <p className="text-red-400 mb-2">Failed to load skill</p>
-            <p className="text-sm text-icon3">{error?.message ?? 'Skill not found'}</p>
+            <p className="text-sm text-neutral3">{error?.message ?? 'Skill not found'}</p>
           </div>
         </div>
       </MainContentLayout>

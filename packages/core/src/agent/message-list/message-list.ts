@@ -4,6 +4,7 @@ import type * as AIV4Type from '@internal/ai-sdk-v4';
 import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import type { IMastraLogger } from '../../logger';
 import type { IdGeneratorContext } from '../../types';
 import { AIV4Adapter, AIV5Adapter } from './adapters';
 import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
@@ -77,6 +78,7 @@ export class MessageList {
 
   private generateMessageId?: (context?: IdGeneratorContext) => string;
   private _agentNetworkAppend = false;
+  private logger?: IMastraLogger;
 
   // Event recording for observability
   private isRecording = false;
@@ -94,13 +96,20 @@ export class MessageList {
     threadId,
     resourceId,
     generateMessageId,
+    logger,
     // @ts-expect-error Flag for agent network messages
     _agentNetworkAppend,
-  }: { threadId?: string; resourceId?: string; generateMessageId?: (context?: IdGeneratorContext) => string } = {}) {
+  }: {
+    threadId?: string;
+    resourceId?: string;
+    generateMessageId?: (context?: IdGeneratorContext) => string;
+    logger?: IMastraLogger;
+  } = {}) {
     if (threadId) {
       this.memoryInfo = { threadId, resourceId };
     }
     this.generateMessageId = generateMessageId;
+    this.logger = logger;
     this._agentNetworkAppend = _agentNetworkAppend || false;
   }
 
@@ -356,7 +365,7 @@ export class MessageList {
 
         const messages = [...systemMessages, ...modelMessages];
 
-        return ensureGeminiCompatibleMessages(messages);
+        return ensureGeminiCompatibleMessages(messages, this.logger);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -371,6 +380,7 @@ export class MessageList {
         },
       ): Promise<LanguageModelV2Prompt> => {
         // Filter incomplete tool calls when sending messages TO the LLM
+        // Stored toModelOutput results from providerMetadata are applied automatically
         const modelMessages = convertAIV5UIToModelMessages(this.all.aiV5.ui(), this.messages, true);
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
@@ -427,9 +437,13 @@ export class MessageList {
           });
         }
 
-        messages = ensureGeminiCompatibleMessages(messages);
+        messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
-        return messages.map(aiV5ModelMessageToV2PromptMessage);
+        return messages
+          .map(aiV5ModelMessageToV2PromptMessage)
+          .filter(
+            message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
+          );
       },
     },
 
@@ -448,7 +462,7 @@ export class MessageList {
         const coreMessages = this.all.aiV4.core();
         const messages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat(), ...coreMessages];
 
-        return ensureGeminiCompatibleMessages(messages);
+        return ensureGeminiCompatibleMessages(messages, this.logger);
       },
 
       // Used for creating LLM prompt messages without AI SDK streamText/generateText
@@ -458,7 +472,7 @@ export class MessageList {
         const systemMessages = [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()];
         let messages = [...systemMessages, ...coreMessages];
 
-        messages = ensureGeminiCompatibleMessages(messages);
+        messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
         return messages.map(aiV4CoreMessageToV1PromptMessage);
       },
@@ -893,6 +907,21 @@ export class MessageList {
           }
           // If no new parts, don't add anything (the sealed message already has all the content)
         } else {
+          const isExistingFromMemory = this.memoryMessages.has(existingMessage);
+          const shouldMergeIntoExisting = MessageMerger.shouldMerge(
+            existingMessage,
+            messageV2,
+            messageSource,
+            isExistingFromMemory,
+            this._agentNetworkAppend,
+          );
+          if (shouldMergeIntoExisting) {
+            MessageMerger.merge(existingMessage, messageV2);
+            this.pushMessageToSource(existingMessage, messageSource);
+            // Sort messages and return early — existingMessage stays in messages[] and its Sets
+            this.messages.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+            return this;
+          }
           this.messages[existingIndex] = messageV2;
         }
       } else if (!exists) {

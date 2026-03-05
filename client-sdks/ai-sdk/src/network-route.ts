@@ -1,4 +1,4 @@
-import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { AgentExecutionOptions, NetworkOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -15,7 +15,7 @@ export type NetworkStreamHandlerOptions<OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
   params: NetworkStreamHandlerParams<OUTPUT>;
-  defaultOptions?: AgentExecutionOptions<OUTPUT>;
+  defaultOptions?: NetworkOptions<OUTPUT>;
 };
 
 /**
@@ -69,8 +69,8 @@ export async function handleNetworkStream<UI_MESSAGE extends UIMessage, OUTPUT =
 }
 
 export type NetworkRouteOptions<OUTPUT = undefined> =
-  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: AgentExecutionOptions<OUTPUT> }
-  | { path: string; agent: string; defaultOptions?: AgentExecutionOptions<OUTPUT> };
+  | { path: `${string}:agentId${string}`; agent?: never; defaultOptions?: NetworkOptions<OUTPUT> }
+  | { path: string; agent: string; defaultOptions?: NetworkOptions<OUTPUT> };
 
 /**
  * Creates a network route handler for streaming agent network execution using the AI SDK-compatible format.

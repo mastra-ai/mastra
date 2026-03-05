@@ -41,7 +41,7 @@ describe('BaseResource', () => {
     });
   });
 
-  const runRetryTest = async (config: RetryTestConfig) => {
+  const runRetryTest = async (config: RetryTestConfig & { expectedRequestCount: number }) => {
     // Arrange: Configure server response
     server.on('request', (_req, res) => {
       requestCount++;
@@ -55,22 +55,33 @@ describe('BaseResource', () => {
 
     // Assert: Check error and retry count
     await expect(requestPromise).rejects.toBeInstanceOf(Error);
-    expect(requestCount).toBe(3); // Initial request + 2 retries
+    expect(requestCount).toBe(config.expectedRequestCount);
   };
 
-  it('should retry and eventually reject when receiving non-ok response with JSON error', async () => {
+  it('should NOT retry 4xx client errors (they will not resolve with retries)', async () => {
     await runRetryTest({
       statusCode: 400,
       contentType: 'application/json',
       responseBody: { error: 'Bad Request' },
+      expectedRequestCount: 1, // No retries for 4xx
     });
   });
 
-  it('should retry and eventually reject when receiving non-ok response with plain text error', async () => {
+  it('should NOT retry 403 Forbidden errors', async () => {
+    await runRetryTest({
+      statusCode: 403,
+      contentType: 'application/json',
+      responseBody: { error: 'Forbidden' },
+      expectedRequestCount: 1, // No retries for 4xx
+    });
+  });
+
+  it('should retry 5xx server errors and eventually reject', async () => {
     await runRetryTest({
       statusCode: 500,
       contentType: 'text/plain',
       responseBody: 'Internal Server Error',
+      expectedRequestCount: 3, // Initial request + 2 retries
     });
   });
 

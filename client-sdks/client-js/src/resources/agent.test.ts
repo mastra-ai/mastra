@@ -630,8 +630,10 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
+    // Pass threadId via memory to indicate server-side memory is active
     await agent.generate(initialMessage, {
       clientTools: { clientTool },
+      memory: { thread: 'test-thread-123' }, // Server has memory - avoids duplicate messages
     });
 
     // Check that the second request was called with the correct messages
@@ -644,7 +646,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
     // This prevents duplicate user messages from being stored
     const userMessages = messagesInSecondCall.filter(msg => msg.role === 'user');
 
-    // Should be no user messages in the second call
+    // Should be no user messages in the second call (server has memory via threadId)
     expect(userMessages).toHaveLength(0);
 
     // Should have assistant message with tool call and tool result
@@ -712,21 +714,23 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
+    // Pass threadId via memory to indicate server-side memory is active
     await agent.generate(initialMessage, {
       clientTools: { clientTool },
+      memory: { thread: 'test-thread-123' }, // Server has memory - avoids duplicate messages
     });
 
     // The agent should have made 5 requests total (1 initial + 4 tool calls)
     expect(mockRequest).toHaveBeenCalledTimes(5);
 
-    // Check each recursive call to ensure no user messages are being re-sent
+    // Check each recursive call to ensure no user messages are being re-sent (server has memory via threadId)
     for (let i = 1; i < 5; i++) {
       const callArgs = mockRequest.mock.calls[i][1];
       const messagesInCall = callArgs.body.messages;
 
       const userMessages = messagesInCall.filter(msg => msg.role === 'user');
 
-      // No user messages should be in any of the recursive calls
+      // No user messages should be in any of the recursive calls (server has memory)
       expect(userMessages).toHaveLength(0);
 
       // Each recursive call should only contain the latest assistant response and tool result
