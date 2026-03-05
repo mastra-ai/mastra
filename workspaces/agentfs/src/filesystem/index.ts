@@ -210,6 +210,11 @@ export class AgentFSFilesystem extends MastraFilesystem {
     this.description = options.description;
   }
 
+  /** The underlying AgentFS instance, or null if not yet initialized. */
+  get agent(): AgentFS | null {
+    return this._agent;
+  }
+
   // ---------------------------------------------------------------------------
   // Info
   // ---------------------------------------------------------------------------

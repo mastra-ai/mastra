@@ -122,7 +122,7 @@ describe('AgentFSFilesystem', () => {
       const owner = new AgentFSFilesystem({ agentId: `pre-opened-${Date.now()}` });
       await owner._init();
 
-      const borrower = new AgentFSFilesystem({ agent: (owner as any)._agent });
+      const borrower = new AgentFSFilesystem({ agent: owner.agent! });
       await borrower._init();
       expect(borrower.status).toBe('ready');
 
