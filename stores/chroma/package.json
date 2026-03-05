@@ -22,7 +22,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "pretest": "docker compose up -d",
+    "pretest": "docker compose up -d --wait",
     "posttest": "docker compose down -v",
     "test": "vitest run",
     "lint": "eslint ."
