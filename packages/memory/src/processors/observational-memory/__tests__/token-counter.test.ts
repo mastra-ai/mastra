@@ -11,6 +11,37 @@ function createMessage(content: any) {
   } as any;
 }
 
+async function createToolResultPartFromExecutedTool({
+  toolName,
+  args,
+  execute,
+  toModelOutput,
+}: {
+  toolName: string;
+  args: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+  toModelOutput: (output: unknown) => unknown | Promise<unknown>;
+}) {
+  const result = await execute(args);
+  const modelOutput = await toModelOutput(result);
+
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: 'tool-1',
+      toolName,
+      args,
+      result,
+    },
+    providerMetadata: {
+      mastra: {
+        modelOutput,
+      },
+    },
+  } as const;
+}
+
 describe('TokenCounter', () => {
   describe('shared default encoder', () => {
     it('two default TokenCounter instances share the same encoder reference', () => {
@@ -258,12 +289,22 @@ describe('TokenCounter', () => {
       expect(withToolResultAgain).toBe(withToolResult);
     });
 
-    it('prefers stored mastra.modelOutput over raw tool results for token counting', () => {
+    it('prefers stored mastra.modelOutput over raw tool results for token counting', async () => {
       const counter = new TokenCounter();
+      const args = { q: 'weather in sf' };
       const rawResult = {
         longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
       };
 
+      const weatherTool = {
+        execute: async (_args: Record<string, unknown>) => rawResult,
+        toModelOutput: async (output: unknown) => {
+          const entryCount = (output as { longPayload: string[] }).longPayload.length;
+          return { type: 'text', value: `sunny, 72°F (${entryCount} entries summarized)` };
+        },
+      };
+
+      const executedResult = await weatherTool.execute(args);
       const withoutModelOutput = createMessage({
         format: 2,
         parts: [
@@ -273,7 +314,8 @@ describe('TokenCounter', () => {
               state: 'result',
               toolCallId: 'tool-1',
               toolName: 'lookup',
-              result: rawResult,
+              args,
+              result: executedResult,
             },
           },
         ],
@@ -282,20 +324,12 @@ describe('TokenCounter', () => {
       const withModelOutput = createMessage({
         format: 2,
         parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-1',
-              toolName: 'lookup',
-              result: rawResult,
-            },
-            providerMetadata: {
-              mastra: {
-                modelOutput: { type: 'text', value: 'sunny, 72°F' },
-              },
-            },
-          },
+          await createToolResultPartFromExecutedTool({
+            toolName: 'lookup',
+            args,
+            execute: weatherTool.execute,
+            toModelOutput: weatherTool.toModelOutput,
+          }),
         ],
       });
 
@@ -305,27 +339,25 @@ describe('TokenCounter', () => {
       expect(modelOutputTokens).toBeLessThan(rawResultTokens);
     });
 
-    it('recomputes tool-result estimates when stored modelOutput changes', () => {
+    it('recomputes tool-result estimates when stored modelOutput changes', async () => {
       const counter = new TokenCounter();
+      const args = { q: 'weather in sf' };
+      const weatherTool = {
+        execute: async (_args: Record<string, unknown>) => ({
+          longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
+        }),
+        toModelOutput: async () => ({ type: 'text', value: 'brief output' }),
+      };
+
       const message = createMessage({
         format: 2,
         parts: [
-          {
-            type: 'tool-invocation',
-            toolInvocation: {
-              state: 'result',
-              toolCallId: 'tool-1',
-              toolName: 'lookup',
-              result: {
-                longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
-              },
-            },
-            providerMetadata: {
-              mastra: {
-                modelOutput: { type: 'text', value: 'brief output' },
-              },
-            },
-          },
+          await createToolResultPartFromExecutedTool({
+            toolName: 'lookup',
+            args,
+            execute: weatherTool.execute,
+            toModelOutput: weatherTool.toModelOutput,
+          }),
         ],
       });
 
