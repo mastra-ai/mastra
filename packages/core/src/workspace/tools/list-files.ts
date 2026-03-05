@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
-import { applyTokenLimit } from './output-helpers';
+import { applyTokenLimit, DEFAULT_MAX_OUTPUT_TOKENS } from './output-helpers';
 import { formatAsTree } from './tree-formatter';
 
 export const listFilesTool = createTool({
@@ -69,7 +69,7 @@ Examples:
 
     return await applyTokenLimit(
       `${result.tree}\n\n${result.summary}`,
-      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? 1_000,
+      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       'end',
     );
   },

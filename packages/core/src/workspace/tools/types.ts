@@ -47,7 +47,7 @@ export interface WorkspaceToolConfig {
   requireReadBeforeWrite?: boolean;
 
   /**
-   * Maximum tokens for tool output (default: 3000).
+   * Maximum tokens for tool output (default: 2000).
    * Output exceeding this limit is truncated. Uses tiktoken for accurate counting.
    */
   maxOutputTokens?: number;
