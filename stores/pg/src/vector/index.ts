@@ -246,12 +246,13 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     return major > 0 || (major === 0 && minor >= 7);
   }
 
-  /**
-   * Checks if the installed pgvector version supports bit and sparsevec types.
-   * bit and sparsevec were introduced in pgvector 0.7.0.
-   */
-  private supportsBitAndSparsevec(): boolean {
-    // Same version requirement as halfvec
+  /** Checks if pgvector >= 0.7.0 (required for bit type). */
+  private supportsBit(): boolean {
+    return this.supportsHalfvec();
+  }
+
+  /** Checks if pgvector >= 0.7.0 (required for sparsevec type). */
+  private supportsSparsevec(): boolean {
     return this.supportsHalfvec();
   }
 
@@ -284,9 +285,37 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
+   * Returns the operator class, distance operator, and score expression for a
+   * standard (non-bit) vector type prefix and metric.
+   */
+  private getMetricOps(
+    prefix: string,
+    metric: PgMetric,
+  ): Pick<VectorOps, 'operatorClass' | 'distanceOperator' | 'scoreExpr'> {
+    switch (metric) {
+      case 'euclidean':
+        return {
+          operatorClass: `${prefix}_l2_ops`,
+          distanceOperator: '<->',
+          scoreExpr: d => `1.0 / (1.0 + (${d}))`,
+        };
+      case 'dotproduct':
+        return {
+          operatorClass: `${prefix}_ip_ops`,
+          distanceOperator: '<#>',
+          scoreExpr: d => `(${d}) * -1`,
+        };
+      default:
+        return {
+          operatorClass: `${prefix}_cosine_ops`,
+          distanceOperator: '<=>',
+          scoreExpr: d => `1 - (${d})`,
+        };
+    }
+  }
+
+  /**
    * Returns all vector-type-specific operations for the given vectorType and metric.
-   * Consolidates operator class, distance operator, score normalization, formatting, and parsing
-   * so each vectorType's behavior is co-located in one place.
    */
   private getVectorOps(vectorType: VectorType, metric: PgMetric): VectorOps {
     switch (vectorType) {
@@ -299,18 +328,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           parseEmbedding: e => e.split('').map(c => (c === '1' ? 1 : 0)),
         };
 
-      case 'sparsevec': {
-        const opPrefix = 'sparsevec';
+      case 'sparsevec':
         return {
-          operatorClass:
-            metric === 'euclidean'
-              ? `${opPrefix}_l2_ops`
-              : metric === 'dotproduct'
-                ? `${opPrefix}_ip_ops`
-                : `${opPrefix}_cosine_ops`,
-          distanceOperator: metric === 'euclidean' ? '<->' : metric === 'dotproduct' ? '<#>' : '<=>',
-          scoreExpr: d =>
-            metric === 'euclidean' ? `1.0 / (1.0 + (${d}))` : metric === 'dotproduct' ? `(${d}) * -1` : `1 - (${d})`,
+          ...this.getMetricOps('sparsevec', metric),
           formatVector: (v, dimension) => {
             const dim = dimension ?? v.length;
             const nonZero = v
@@ -335,26 +355,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             return result;
           },
         };
-      }
 
       case 'halfvec':
       case 'vector':
-      default: {
-        const opPrefix = vectorType === 'halfvec' ? 'halfvec' : 'vector';
+      default:
         return {
-          operatorClass:
-            metric === 'euclidean'
-              ? `${opPrefix}_l2_ops`
-              : metric === 'dotproduct'
-                ? `${opPrefix}_ip_ops`
-                : `${opPrefix}_cosine_ops`,
-          distanceOperator: metric === 'euclidean' ? '<->' : metric === 'dotproduct' ? '<#>' : '<=>',
-          scoreExpr: d =>
-            metric === 'euclidean' ? `1.0 / (1.0 + (${d}))` : metric === 'dotproduct' ? `(${d}) * -1` : `1 - (${d})`,
+          ...this.getMetricOps(vectorType === 'halfvec' ? 'halfvec' : 'vector', metric),
           formatVector: v => `[${v.join(',')}]`,
           parseEmbedding: e => JSON.parse(e),
         };
-      }
     }
   }
 
@@ -781,7 +790,23 @@ export class PgVector extends MastraVector<PGVectorFilter> {
           }
 
           // Check if bit/sparsevec is supported when requested
-          if ((vectorType === 'bit' || vectorType === 'sparsevec') && !this.supportsBitAndSparsevec()) {
+          if (vectorType === 'bit' && !this.supportsBit()) {
+            throw new MastraError({
+              id: createVectorErrorId('PG', 'CREATE_INDEX', 'VECTOR_TYPE_NOT_SUPPORTED'),
+              text:
+                `${vectorType} type requires pgvector >= 0.7.0, but version ${this.vectorExtensionVersion || 'unknown'} is installed. ` +
+                `Either upgrade pgvector or use vectorType: 'vector'.`,
+              domain: ErrorDomain.MASTRA_VECTOR,
+              category: ErrorCategory.USER,
+              details: {
+                indexName,
+                vectorType,
+                installedVersion: this.vectorExtensionVersion,
+              },
+            });
+          }
+
+          if (vectorType === 'sparsevec' && !this.supportsSparsevec()) {
             throw new MastraError({
               id: createVectorErrorId('PG', 'CREATE_INDEX', 'VECTOR_TYPE_NOT_SUPPORTED'),
               text:
