@@ -73,6 +73,7 @@ isOptional: true,
 description: "Optional configuration for the generation process.",
 properties: [
 {
+type: "AgentExecutionOptions<Output, Format>",
 parameters: [
 {
 name: "maxSteps",
@@ -94,6 +95,7 @@ description:
 "Callback function called after each iteration completes. Use this to monitor progress, provide feedback to guide the agent, or stop execution early. The callback receives context about the iteration including the current text, tool calls, and finish reason.",
 properties: [
 {
+type: "IterationCompleteContext",
 parameters: [
 {
 name: "context.iteration",
@@ -186,6 +188,7 @@ description:
 "Task completion scoring configuration that validates whether the task is complete. Uses Mastra's evaluation scorers to automatically check if the agent's response satisfies the completion criteria.",
 properties: [
 {
+type: "IsTaskCompleteConfig",
 parameters: [
 {
 name: "scorers",
@@ -247,6 +250,7 @@ description:
 "Configuration for subagent delegation. Use this to control and monitor when the agent delegates tasks to other agents, including the ability to modify, reject delegations, and provide feedback to guide the supervisor.",
 properties: [
 {
+type: "DelegationConfig",
 parameters: [
 {
 name: "onDelegationStart",
@@ -285,6 +289,7 @@ isOptional: true,
 description: "Evaluation scorers to run on the execution results.",
 properties: [
 {
+type: "MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>",
 parameters: [
 {
 name: "scorer",
@@ -303,6 +308,7 @@ isOptional: true,
 description: "Sampling configuration for the scorer.",
 properties: [
 {
+type: "ScoringSamplingConfig",
 parameters: [
 {
 name: "type",
@@ -407,6 +413,7 @@ isOptional: true,
 description: "Options to fine tune your structured output generation.",
 properties: [
 {
+type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
 parameters: [
 {
 name: "schema",
@@ -545,6 +552,7 @@ description:
 "Memory configuration for conversation persistence and retrieval.",
 properties: [
 {
+type: "object",
 parameters: [
 {
 name: "thread",
@@ -601,6 +609,7 @@ description:
 "Settings for OTLP telemetry collection during generation (not Tracing).",
 properties: [
 {
+type: "TelemetrySettings",
 parameters: [
 {
 name: "isEnabled",
@@ -650,6 +659,7 @@ isOptional: true,
 description: "Controls how tools are selected during generation.",
 properties: [
 {
+type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
 parameters: [
 {
 name: "'auto'",
@@ -717,6 +727,7 @@ isOptional: true,
 description: "Provider-specific options passed to the language model.",
 properties: [
 {
+type: "Record<string, Record<string, JSONValue>>",
 parameters: [
 {
 name: "openai",
@@ -780,6 +791,7 @@ description:
 "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
 properties: [
 {
+type: "TracingContext",
 parameters: [
 {
 name: "currentSpan",
@@ -799,6 +811,7 @@ isOptional: true,
 description: "Options for Tracing configuration.",
 properties: [
 {
+type: "TracingOptions",
 parameters: [
 {
 name: "metadata",
@@ -929,6 +942,7 @@ description:
 "Response metadata from the model provider. Useful for accessing rate limit headers and request IDs.",
 properties: [
 {
+type: "object",
 parameters: [
 {
 name: "id",
@@ -998,6 +1012,7 @@ description:
 "The request that was sent to the model.",
 properties: [
 {
+type: "object",
 parameters: [
 {
 name: "body",
@@ -1059,6 +1074,7 @@ description:
 "Present when `finishReason` is 'suspended'. Contains tool call details needed to approve or decline the pending tool call.",
 properties: [
 {
+type: "object",
 parameters: [
 {
 name: "toolCallId",
