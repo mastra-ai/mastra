@@ -310,7 +310,7 @@ await agent.generate('Complex task', {
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts"
-import type { Processor, MastraDBMessage } from '@mastra/core'
+import type { Processor, MastraDBMessage, ChunkType } from '@mastra/core'
 
 export class CustomOutputProcessor implements Processor {
   id = 'custom-output'
@@ -318,6 +318,11 @@ export class CustomOutputProcessor implements Processor {
   async processOutputResult({ messages }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
     return messages.filter(msg => msg.role !== 'system')
+  }
+
+  async processOutputStream({ part }): Promise<ChunkType | null> {
+    // Transform or filter streaming chunks
+    return part
   }
 }
 ```
