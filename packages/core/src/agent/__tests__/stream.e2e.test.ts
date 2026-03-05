@@ -749,3 +749,169 @@ describe('OpenAI WebSocket transport (router)', () => {
 runStreamE2ETest('v1');
 runStreamE2ETest('v2');
 runStreamE2ETest('v3');
+
+// --- Tool-result JSON leak: model provider survey (#13268) ---
+// Tests multiple model providers to discover which ones echo tool-result JSON
+// as text in subsequent steps during multi-step agent execution.
+
+const classifyDefectTool = createTool({
+  id: 'classifyDefect',
+  description: 'Classifies a software defect and returns its priority level and a recommendation for how to fix it',
+  inputSchema: z.object({
+    description: z.string().describe('A description of the software defect to classify'),
+  }),
+  execute: async ({ description }) => {
+    return {
+      priority: 'critical',
+      recommendation: 'upgrade immediately to the latest patch version',
+      affectedVersions: ['1.0.0', '1.1.0', '1.2.0'],
+      defectId: 'DEF-' + Math.random().toString(36).substring(7),
+      description,
+    };
+  },
+});
+
+// Unique strings from the tool result that shouldn't appear in user-visible text
+const LEAK_MARKERS = [
+  '"priority":"critical"',
+  '"recommendation":"upgrade immediately',
+  '"affectedVersions"',
+  'DEF-', // the defectId prefix
+];
+
+const LEAK_SURVEY_PROMPT = `Classify this defect: "The application crashes on startup when the database connection string contains special characters." Use the classifyDefect tool, then give me a brief summary of your findings in plain English.`;
+
+interface ModelConfig {
+  id: string;
+  model: string;
+  envVar: string;
+}
+
+const SURVEY_MODELS: ModelConfig[] = [
+  { id: 'openai-gpt4o-mini', model: 'openai/gpt-4o-mini', envVar: 'OPENAI_API_KEY' },
+  { id: 'openai-gpt4o', model: 'openai/gpt-4o', envVar: 'OPENAI_API_KEY' },
+  { id: 'anthropic-sonnet', model: 'anthropic/claude-sonnet-4-20250514', envVar: 'ANTHROPIC_API_KEY' },
+  { id: 'google-gemini-flash', model: 'google/gemini-2.0-flash', envVar: 'GOOGLE_GENERATIVE_AI_API_KEY' },
+  { id: 'openrouter-gpt-oss', model: 'openrouter/gpt-oss-120b', envVar: 'OPENROUTER_API_KEY' },
+];
+
+function hasApiKey(envVar: string): boolean {
+  return !!process.env[envVar];
+}
+
+function detectLeaks(text: string): string[] {
+  return LEAK_MARKERS.filter(marker => text.includes(marker));
+}
+
+describe('tool-result JSON leak - model provider survey (#13268)', () => {
+  for (const { id, model, envVar } of SURVEY_MODELS) {
+    const skip = !hasApiKey(envVar);
+
+    describe.skipIf(skip)(`${id} (${model})`, () => {
+      it('stream() - check textStream for leaked tool-result JSON', async () => {
+        const agent = new Agent({
+          id: `leak-survey-${id}`,
+          name: `Leak Survey Agent (${id})`,
+          instructions:
+            'You are a helpful assistant. When asked to classify a defect, use the classifyDefect tool, then summarize the result in plain English. Do NOT include raw JSON in your response.',
+          model,
+          tools: { classifyDefect: classifyDefectTool },
+        });
+
+        const result = await agent.stream(LEAK_SURVEY_PROMPT);
+
+        let fullText = '';
+        const textChunks: string[] = [];
+        for await (const chunk of result.textStream) {
+          textChunks.push(chunk);
+          fullText += chunk;
+        }
+
+        const leaks = detectLeaks(fullText);
+
+        if (leaks.length > 0) {
+          console.log(`\n[${id}] LEAKED tool-result JSON detected in textStream!`);
+          console.log(`[${id}] Leaked markers: ${leaks.join(', ')}`);
+          console.log(`[${id}] Full text (first 500 chars): ${fullText.substring(0, 500)}`);
+        } else {
+          console.log(`\n[${id}] No leaked JSON detected in textStream`);
+          console.log(`[${id}] Full text (first 200 chars): ${fullText.substring(0, 200)}`);
+        }
+
+        expect(leaks, `Leaked tool-result JSON found in textStream: ${leaks.join(', ')}`).toHaveLength(0);
+      }, 60_000);
+
+      it('stream() - check fullStream text-delta chunks for leaked JSON', async () => {
+        const agent = new Agent({
+          id: `leak-survey-fullstream-${id}`,
+          name: `Leak Survey Agent (${id})`,
+          instructions:
+            'You are a helpful assistant. When asked to classify a defect, use the classifyDefect tool, then summarize the result in plain English. Do NOT include raw JSON in your response.',
+          model,
+          tools: { classifyDefect: classifyDefectTool },
+        });
+
+        const result = await agent.stream(LEAK_SURVEY_PROMPT);
+
+        const stepTexts: string[][] = [[]];
+        const stepToolCalls: string[][] = [[]];
+        let stepIdx = 0;
+
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'text-delta') {
+            stepTexts[stepIdx]!.push(chunk.payload.text);
+          } else if (chunk.type === 'tool-call') {
+            stepToolCalls[stepIdx]!.push(chunk.payload.toolName);
+          } else if (chunk.type === 'step-finish') {
+            stepIdx++;
+            stepTexts.push([]);
+            stepToolCalls.push([]);
+          }
+        }
+
+        // Log step-by-step breakdown
+        for (let i = 0; i <= stepIdx; i++) {
+          const text = stepTexts[i]!.join('');
+          const tools = stepToolCalls[i]!;
+          const leaks = detectLeaks(text);
+          console.log(
+            `\n[${id}] Step ${i + 1}: text="${text.substring(0, 100)}${text.length > 100 ? '...' : ''}", tools=[${tools.join(',')}], leaks=[${leaks.join(',')}]`,
+          );
+        }
+
+        // Check all steps for leaked JSON
+        for (let i = 0; i <= stepIdx; i++) {
+          const text = stepTexts[i]!.join('');
+          const leaks = detectLeaks(text);
+          expect(leaks, `Step ${i + 1}: leaked tool-result JSON in text-delta: ${leaks.join(', ')}`).toHaveLength(0);
+        }
+      }, 60_000);
+
+      it('generate() - check result text for leaked tool-result JSON', async () => {
+        const agent = new Agent({
+          id: `leak-survey-generate-${id}`,
+          name: `Leak Survey Agent (${id})`,
+          instructions:
+            'You are a helpful assistant. When asked to classify a defect, use the classifyDefect tool, then summarize the result in plain English. Do NOT include raw JSON in your response.',
+          model,
+          tools: { classifyDefect: classifyDefectTool },
+        });
+
+        const result = await agent.generate(LEAK_SURVEY_PROMPT);
+
+        const leaks = detectLeaks(result.text);
+
+        if (leaks.length > 0) {
+          console.log(`\n[${id}] LEAKED tool-result JSON detected in generate() text!`);
+          console.log(`[${id}] Leaked markers: ${leaks.join(', ')}`);
+          console.log(`[${id}] Result text (first 500 chars): ${result.text.substring(0, 500)}`);
+        } else {
+          console.log(`\n[${id}] No leaked JSON detected in generate() text`);
+          console.log(`[${id}] Result text (first 200 chars): ${result.text.substring(0, 200)}`);
+        }
+
+        expect(leaks, `Leaked tool-result JSON found in generate() text: ${leaks.join(', ')}`).toHaveLength(0);
+      }, 60_000);
+    });
+  }
+});
