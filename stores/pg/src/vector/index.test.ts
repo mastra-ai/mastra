@@ -1315,7 +1315,7 @@ describe('PgVector', () => {
           await bitVectorDB.createIndex({
             indexName: testIndexName,
             dimension: 128,
-            metric: 'cosine', // Will need hamming metric support
+            metric: 'hamming',
             indexConfig: {
               type: 'hnsw',
               hnsw: { m: 16, efConstruction: 64 },
