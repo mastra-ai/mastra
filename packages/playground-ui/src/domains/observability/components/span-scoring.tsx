@@ -55,7 +55,7 @@ export const SpanScoring = ({
     if (selectedScorer) {
       setNotificationIsVisible(false);
       triggerScorer({
-        scorerName: selectedScorer,
+        scorerId: selectedScorer,
         traceId: traceId || '',
         spanId,
       });

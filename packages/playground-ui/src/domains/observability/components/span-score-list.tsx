@@ -1,18 +1,44 @@
 import { EntryList, EntryListSkeleton, getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList';
-import { getShortId } from '@/ds/components/Text';
 import { ScoreDialog } from '@/domains/scores';
 import { useLinkComponent } from '@/lib/framework';
-import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
+import type { ScoreRowData } from '@mastra/core/evals';
+import type { ListScoresResponse, ScoreRecord } from '@mastra/core/storage';
 import { isToday, format } from 'date-fns';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 export const traceScoresListColumns = [
-  { name: 'shortId', label: 'ID', size: '1fr' },
   { name: 'date', label: 'Date', size: '1fr' },
   { name: 'time', label: 'Time', size: '1fr' },
   { name: 'score', label: 'Score', size: '1fr' },
   { name: 'scorer', label: 'Scorer', size: '1fr' },
 ];
+
+/** Generate a stable synthetic ID for a ScoreRecord (which has no id field). */
+function syntheticScoreId(score: ScoreRecord): string {
+  return `${score.scorerId}-${score.timestamp.getTime()}`;
+}
+
+/** Map a lean observability ScoreRecord to the shape ScoreDialog expects. */
+function toScoreRowData(score: ScoreRecord): ScoreRowData {
+  return {
+    id: syntheticScoreId(score),
+    scorerId: score.scorerId,
+    entityId: '',
+    runId: '',
+    input: undefined,
+    output: undefined,
+    score: score.score,
+    reason: score.reason ?? undefined,
+    scorer: { name: score.scorerId, id: score.scorerId },
+    metadata: score.metadata as Record<string, unknown> | undefined,
+    source: 'LIVE',
+    entity: {},
+    traceId: score.traceId,
+    spanId: score.spanId ?? undefined,
+    createdAt: score.timestamp,
+    updatedAt: null,
+  } as unknown as ScoreRowData;
+}
 
 type SpanScoreListProps = {
   scoresData?: ListScoresResponse | null;
@@ -23,8 +49,6 @@ type SpanScoreListProps = {
   onPageChange?: (page: number) => void;
   computeTraceLink: (traceId: string, spanId?: string) => string;
 };
-
-type SelectedScore = ScoreRowData | undefined;
 
 export function SpanScoreList({
   scoresData,
@@ -37,7 +61,9 @@ export function SpanScoreList({
 }: SpanScoreListProps) {
   const { navigate } = useLinkComponent();
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
-  const [selectedScore, setSelectedScore] = useState<SelectedScore | undefined>();
+  const [selectedScore, setSelectedScore] = useState<ScoreRowData | undefined>();
+
+  const mappedScores = useMemo(() => (scoresData?.scores ?? []).map(toScoreRowData), [scoresData?.scores]);
 
   useEffect(() => {
     if (initialScoreId) {
@@ -46,7 +72,7 @@ export function SpanScoreList({
   }, [initialScoreId]);
 
   const handleOnScore = (scoreId: string) => {
-    const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
+    const score = mappedScores.find(s => s.id === scoreId);
     setSelectedScore(score);
     setDialogIsOpen(true);
   };
@@ -56,18 +82,18 @@ export function SpanScoreList({
   }
 
   const updateSelectedScore = (scoreId: string) => {
-    const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
+    const score = mappedScores.find(s => s.id === scoreId);
     setSelectedScore(score);
   };
 
   const toNextScore = getToNextEntryFn({
-    entries: scoresData?.scores || [],
+    entries: mappedScores,
     id: selectedScore?.id,
     update: updateSelectedScore,
   });
 
   const toPreviousScore = getToPreviousEntryFn({
-    entries: scoresData?.scores || [],
+    entries: mappedScores,
     id: selectedScore?.id,
     update: updateSelectedScore,
   });
@@ -77,19 +103,18 @@ export function SpanScoreList({
       <EntryList>
         <EntryList.Trim>
           <EntryList.Header columns={traceScoresListColumns} />
-          {scoresData?.scores && scoresData.scores.length > 0 ? (
+          {mappedScores.length > 0 ? (
             <EntryList.Entries>
-              {scoresData?.scores?.map((score: ScoreRowData) => {
+              {mappedScores.map(score => {
                 const createdAtDate = new Date(score.createdAt);
                 const isTodayDate = isToday(createdAtDate);
 
                 const entry = {
-                  id: score?.id,
-                  shortId: getShortId(score?.id) || 'n/a',
+                  id: score.id,
                   date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   time: format(createdAtDate, 'h:mm:ss aaa'),
-                  score: score?.score,
-                  scorer: score?.scorer?.name || score?.scorer?.id,
+                  score: score.score,
+                  scorer: (score.scorer?.name as string) || (score.scorer?.id as string),
                 };
 
                 return (
@@ -124,7 +149,7 @@ export function SpanScoreList({
       </EntryList>
       <ScoreDialog
         scorerName={(selectedScore?.scorer?.name as string) || (selectedScore?.scorer?.id as string) || ''}
-        score={selectedScore as ScoreRowData}
+        score={selectedScore}
         isOpen={dialogIsOpen}
         onClose={() => {
           if (traceId) {

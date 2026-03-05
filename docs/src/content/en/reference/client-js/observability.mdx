@@ -52,7 +52,7 @@ Score specific traces using registered scorers for evaluation:
 
 ```typescript
 const result = await mastraClient.score({
-  scorerName: 'answer-relevancy',
+  scorerId: 'answer-relevancy',
   targets: [
     { traceId: 'trace-1', spanId: 'span-1' }, // Score specific span
     { traceId: 'trace-2' }, // Score specific span which defaults to the parent span
@@ -60,16 +60,14 @@ const result = await mastraClient.score({
 })
 ```
 
-## Getting scores by span
+## Listing scores
 
-Retrieve scores for a specific span within a trace:
+Retrieve scores with optional filtering and pagination:
 
 ```typescript
-const scores = await mastraClient.listScoresBySpan({
-  traceId: 'trace-123',
-  spanId: 'span-456',
-  page: 1,
-  perPage: 20,
+const scores = await mastraClient.listScores({
+  filters: { traceId: 'trace-123', spanId: 'span-456' },
+  pagination: { page: 1, perPage: 20 },
 })
 ```
 

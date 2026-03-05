@@ -1,11 +1,10 @@
-import { createSampleScore } from '@internal/storage-test-utils';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import type { MastraStorage, TraceRecord, SpanRecord } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import * as errorHandler from './error';
-import { LIST_TRACES_ROUTE, GET_TRACE_ROUTE, SCORE_TRACES_ROUTE, LIST_SCORES_BY_SPAN_ROUTE } from './observability';
+import { LIST_TRACES_ROUTE, GET_TRACE_ROUTE, SCORE_TRACES_ROUTE } from './observability';
 import { createTestServerContext } from './test-utils';
 
 // Mock scoreTraces
@@ -26,19 +25,12 @@ const createMockObservabilityStore = () => ({
   listTraces: vi.fn(),
 });
 
-// Mock scores store
-const createMockScoresStore = () => ({
-  listScoresBySpan: vi.fn(),
-});
-
 // Mock storage with getStore method
 const createMockStorage = (
   observabilityStore: ReturnType<typeof createMockObservabilityStore>,
-  scoresStore: ReturnType<typeof createMockScoresStore>,
 ): Partial<MastraStorage> => ({
   getStore: vi.fn((domain: string) => {
     if (domain === 'observability') return Promise.resolve(observabilityStore);
-    if (domain === 'scores') return Promise.resolve(scoresStore);
     return Promise.resolve(undefined);
   }) as MastraStorage['getStore'],
 });
@@ -79,7 +71,6 @@ const createSampleSpan = (overrides: Partial<SpanRecord> = {}): SpanRecord => ({
   input: null,
   output: null,
   error: null,
-  requestContext: null,
   isEvent: false,
   startedAt: new Date('2024-01-01T00:00:00Z'),
   endedAt: new Date('2024-01-01T00:01:00Z'),
@@ -90,15 +81,13 @@ const createSampleSpan = (overrides: Partial<SpanRecord> = {}): SpanRecord => ({
 
 describe('Observability Handlers', () => {
   let mockObservabilityStore: ReturnType<typeof createMockObservabilityStore>;
-  let mockScoresStore: ReturnType<typeof createMockScoresStore>;
   let mockMastra: Mastra;
   let handleErrorSpy: ReturnType<typeof vi.mocked<typeof errorHandler.handleError>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockObservabilityStore = createMockObservabilityStore();
-    mockScoresStore = createMockScoresStore();
-    const mockStorage = createMockStorage(mockObservabilityStore, mockScoresStore);
+    const mockStorage = createMockStorage(mockObservabilityStore);
     mockMastra = createMockMastra(mockStorage);
     handleErrorSpy = vi.mocked(errorHandler.handleError);
     handleErrorSpy.mockImplementation(error => {
@@ -295,7 +284,7 @@ describe('Observability Handlers', () => {
 
       const result = await SCORE_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: [{ traceId: 'trace-123' }, { traceId: 'trace-456' }],
       });
 
@@ -321,7 +310,7 @@ describe('Observability Handlers', () => {
 
       const result = await SCORE_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: [{ traceId: 'trace-123' }],
       });
 
@@ -338,7 +327,7 @@ describe('Observability Handlers', () => {
       await expect(
         SCORE_TRACES_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
-          scorerName: 'non-existent-scorer',
+          scorerId: 'non-existent-scorer',
           targets: [{ traceId: 'trace-123' }],
         }),
       ).rejects.toThrow(HTTPException);
@@ -346,7 +335,7 @@ describe('Observability Handlers', () => {
       try {
         await SCORE_TRACES_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
-          scorerName: 'non-existent-scorer',
+          scorerId: 'non-existent-scorer',
           targets: [{ traceId: 'trace-123' }],
         });
       } catch (error) {
@@ -362,7 +351,7 @@ describe('Observability Handlers', () => {
       await expect(
         SCORE_TRACES_ROUTE.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
-          scorerName: 'test-scorer',
+          scorerId: 'test-scorer',
           targets: [{ traceId: 'trace-123' }],
         }),
       ).rejects.toThrow(HTTPException);
@@ -370,7 +359,7 @@ describe('Observability Handlers', () => {
       try {
         await SCORE_TRACES_ROUTE.handler({
           ...createTestServerContext({ mastra: mastraWithoutStorage }),
-          scorerName: 'test-scorer',
+          scorerId: 'test-scorer',
           targets: [{ traceId: 'trace-123' }],
         });
       } catch (error) {
@@ -391,7 +380,7 @@ describe('Observability Handlers', () => {
       // Should still return success response since processing is fire-and-forget
       const result = await SCORE_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: [{ traceId: 'trace-123' }],
       });
 
@@ -413,7 +402,7 @@ describe('Observability Handlers', () => {
 
       await SCORE_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: [{ traceId: 'trace-123' }],
       });
 
@@ -434,7 +423,7 @@ describe('Observability Handlers', () => {
 
       await SCORE_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        scorerName: 'test-scorer',
+        scorerId: 'test-scorer',
         targets: [{ traceId: 'trace-123' }],
       });
 
@@ -443,92 +432,6 @@ describe('Observability Handlers', () => {
           scorerId: 'scorer-display-name',
         }),
       );
-    });
-  });
-
-  describe('LIST_SCORES_BY_SPAN_ROUTE', () => {
-    it('should get scores by span successfully', async () => {
-      const mockScores = [
-        createSampleScore({ traceId: 'test-trace-1', spanId: 'test-span-1', scorerId: 'test-scorer' }),
-      ];
-      const mockResult = {
-        scores: mockScores,
-        pagination: {
-          total: 1,
-          page: 0,
-          perPage: 10,
-          hasMore: false,
-        },
-      };
-
-      (mockScoresStore.listScoresBySpan as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
-
-      const result = await LIST_SCORES_BY_SPAN_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        traceId: 'test-trace-1',
-        spanId: 'test-span-1',
-        page: 0,
-        perPage: 10,
-      });
-
-      expect(mockScoresStore.listScoresBySpan).toHaveBeenCalledWith({
-        traceId: 'test-trace-1',
-        spanId: 'test-span-1',
-        pagination: { page: 0, perPage: 10 },
-      });
-
-      expect(result.scores).toHaveLength(1);
-      expect(result.pagination).toEqual({
-        total: 1,
-        page: 0,
-        perPage: 10,
-        hasMore: false,
-      });
-    });
-
-    it('should throw 500 when storage is not available', async () => {
-      const mastraWithoutStorage = createMockMastra(undefined);
-
-      await expect(
-        LIST_SCORES_BY_SPAN_ROUTE.handler({
-          ...createTestServerContext({ mastra: mastraWithoutStorage }),
-          traceId: 'test-trace-1',
-          spanId: 'test-span-1',
-          page: 0,
-          perPage: 10,
-        }),
-      ).rejects.toThrow(HTTPException);
-
-      try {
-        await LIST_SCORES_BY_SPAN_ROUTE.handler({
-          ...createTestServerContext({ mastra: mastraWithoutStorage }),
-          traceId: 'test-trace-1',
-          spanId: 'test-span-1',
-          page: 0,
-          perPage: 10,
-        });
-      } catch (error) {
-        expect(error).toBeInstanceOf(HTTPException);
-        expect((error as HTTPException).status).toBe(500);
-        expect((error as HTTPException).message).toBe('Storage is not available');
-      }
-    });
-
-    it('should call handleError when storage throws', async () => {
-      const storageError = new Error('Database query failed');
-      (mockScoresStore.listScoresBySpan as ReturnType<typeof vi.fn>).mockRejectedValue(storageError);
-
-      await expect(
-        LIST_SCORES_BY_SPAN_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          traceId: 'test-trace-1',
-          spanId: 'test-span-1',
-          page: 0,
-          perPage: 10,
-        }),
-      ).rejects.toThrow();
-
-      expect(handleErrorSpy).toHaveBeenCalledWith(storageError, 'Error getting scores by span');
     });
   });
 });
