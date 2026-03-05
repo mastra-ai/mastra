@@ -315,10 +315,23 @@ export abstract class SchemaCompatLayer {
   public processToJSONSchema(zodSchema: ZodType, io: 'input' | 'output' = 'input'): JSONSchema7 {
     const standardSchema = toStandardSchema(zodSchema);
 
-    return standardSchemaToJSONSchema(standardSchema, {
+    const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
       target: 'draft-07',
       io, // Use input mode so fields with defaults are optional
     });
+
+    traverse(jsonSchema, {
+      cb: {
+        pre: schema => {
+          this.preProcessJSONNode(schema);
+        },
+        post: schema => {
+          this.postProcessJSONNode(schema);
+        },
+      },
+    });
+
+    return jsonSchema;
   }
 
   // ==========================================

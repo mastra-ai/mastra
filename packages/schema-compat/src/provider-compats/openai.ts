@@ -189,6 +189,15 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       // force all keys to be required
       const keys = Object.keys(schema.properties || {});
       if (keys.length) {
+        for (const key of keys) {
+          // @ts-expect-error - type is a valid property for JSON Schema
+          if (!schema.required?.includes(key) && schema.properties?.[key]?.type) {
+            // @ts-expect-error - nullable is a valid property for JSON Schema-
+            schema.properties[key]!.anyOf = [{ type: schema.properties[key]!.type }, { type: 'null' }];
+            // @ts-expect-error - nullable is a valid property for JSON Schema-
+            delete schema.properties[key]!.type;
+          }
+        }
         schema.required = keys;
       }
 

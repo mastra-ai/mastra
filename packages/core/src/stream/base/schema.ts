@@ -65,7 +65,7 @@ export function asJsonSchema(schema: StandardSchemaWithJSON | undefined): JSONSc
     return jsonSchema;
   }
 
-  return undefined;
+  return schema;
 }
 
 export function getTransformedSchema<OUTPUT = undefined>(schema?: StandardSchemaWithJSON<OUTPUT>) {
