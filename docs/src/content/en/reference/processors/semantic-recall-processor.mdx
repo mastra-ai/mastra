@@ -35,14 +35,10 @@ name: "options",
 type: "SemanticRecallOptions",
 description: "Configuration options for the semantic recall processor",
 isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "SemanticRecallOptions",
+parameters: [
 {
 name: "storage",
 type: "MemoryStorage",
@@ -99,6 +95,10 @@ name: "logger",
 type: "IMastraLogger",
 description: "Optional logger instance for structured logging",
 isOptional: true,
+},
+],
+},
+],
 },
 ]}
 />

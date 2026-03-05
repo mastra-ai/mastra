@@ -29,14 +29,10 @@ name: "options",
 type: "Options",
 description: "Configuration options for Unicode text normalization",
 isOptional: true,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "Options",
+parameters: [
 {
 name: "stripControlChars",
 type: "boolean",
@@ -64,6 +60,10 @@ type: "boolean",
 description: "Whether to trim leading and trailing whitespace",
 isOptional: true,
 default: "true",
+},
+],
+},
+],
 },
 ]}
 />

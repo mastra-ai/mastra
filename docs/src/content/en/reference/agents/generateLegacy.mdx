@@ -36,14 +36,10 @@ name: "options",
 type: "AgentGenerateOptions",
 isOptional: true,
 description: "Optional configuration for the generation process.",
-},
-]}
-/>
-
-### Options parameters
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "AgentGenerateOptions",
+parameters: [
 {
 name: "abortSignal",
 type: "AbortSignal",
@@ -65,6 +61,7 @@ description:
 "Enables structured output generation with better developer experience. Automatically creates and uses a StructuredOutputProcessor internally.",
 properties: [
 {
+type: "StructuredOutputOptions<S extends ZodTypeAny = ZodTypeAny>",
 parameters: [
 {
 name: "schema",
@@ -160,6 +157,7 @@ description:
 "Configuration for memory. This is the preferred way to manage memory.",
 properties: [
 {
+type: "object",
 parameters: [
 {
 name: "thread",
@@ -229,6 +227,7 @@ isOptional: true,
 description: "Settings for telemetry collection during generation.",
 properties: [
 {
+type: "TelemetrySettings",
 parameters: [
 {
 name: "isEnabled",
@@ -289,6 +288,7 @@ defaultValue: "'auto'",
 description: "Controls how the agent uses tools during generation.",
 properties: [
 {
+type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
 parameters: [
 {
 name: "'auto'",
@@ -356,6 +356,7 @@ description:
 "Additional provider-specific options that are passed through to the underlying LLM provider. The structure is `{ providerName: { optionKey: value } }`. Since Mastra extends AI SDK, see the [AI SDK documentation](https://sdk.vercel.ai/docs/providers/ai-sdk-providers) for complete provider options.",
 properties: [
 {
+type: "Record<string, Record<string, JSONValue>>",
 parameters: [
 {
 name: "openai",
@@ -463,6 +464,10 @@ isOptional: true,
 description:
 "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
 },
+],
+},
+],
+},
 ]}
 />
 
@@ -492,6 +497,7 @@ description:
 "The tool calls made during the generation process. Present in both text and object modes.",
 properties: [
 {
+type: "Array<ToolCall>",
 parameters: [
 {
 name: "toolName",

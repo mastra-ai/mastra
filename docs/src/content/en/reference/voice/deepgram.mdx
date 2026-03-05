@@ -47,28 +47,10 @@ type: "DeepgramVoiceConfig",
 description: "Configuration for text-to-speech functionality.",
 isOptional: true,
 defaultValue: "{ name: 'aura' }",
-},
+properties: [
 {
-name: "listeningModel",
 type: "DeepgramVoiceConfig",
-description: "Configuration for speech-to-text functionality.",
-isOptional: true,
-defaultValue: "{ name: 'nova' }",
-},
-{
-name: "speaker",
-type: "DeepgramVoiceId",
-description: "Default voice to use for text-to-speech",
-isOptional: true,
-defaultValue: "'asteria-en'",
-},
-]}
-/>
-
-### DeepgramVoiceConfig
-
-<PropertiesTable
-  content={[
+parameters: [
 {
 name: "name",
 type: "DeepgramModel",
@@ -78,8 +60,7 @@ isOptional: true,
 {
 name: "apiKey",
 type: "string",
-description:
-"Deepgram API key. Falls back to DEEPGRAM_API_KEY environment variable",
+description: "Deepgram API key. Falls back to DEEPGRAM_API_KEY environment variable",
 isOptional: true,
 },
 {
@@ -93,6 +74,55 @@ name: "language",
 type: "string",
 description: "Language code for the model",
 isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "listeningModel",
+type: "DeepgramVoiceConfig",
+description: "Configuration for speech-to-text functionality.",
+isOptional: true,
+defaultValue: "{ name: 'nova' }",
+properties: [
+{
+type: "DeepgramVoiceConfig",
+parameters: [
+{
+name: "name",
+type: "DeepgramModel",
+description: "The Deepgram model to use",
+isOptional: true,
+},
+{
+name: "apiKey",
+type: "string",
+description: "Deepgram API key. Falls back to DEEPGRAM_API_KEY environment variable",
+isOptional: true,
+},
+{
+name: "properties",
+type: "Record<string, any>",
+description: "Additional properties to pass to the Deepgram API",
+isOptional: true,
+},
+{
+name: "language",
+type: "string",
+description: "Language code for the model",
+isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "DeepgramVoiceId",
+description: "Default voice to use for text-to-speech",
+isOptional: true,
+defaultValue: "'asteria-en'",
 },
 ]}
 />

@@ -31,14 +31,10 @@ name: "options",
 type: "Options",
 description: "Configuration options for system prompt detection and handling",
 isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "Options",
+parameters: [
 {
 name: "model",
 type: "MastraModelConfig",
@@ -86,6 +82,10 @@ type: "string",
 description: "Custom placeholder text for redaction when redactionMethod is 'placeholder'",
 isOptional: true,
 default: "'[SYSTEM_PROMPT]'",
+},
+],
+},
+],
 },
 ]}
 />

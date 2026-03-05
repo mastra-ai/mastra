@@ -114,6 +114,34 @@ name: "tools",
 type: "WorkspaceToolsConfig",
 description: "Per-tool configuration for enabling tools and setting safety options",
 isOptional: true,
+properties: [
+{
+type: "WorkspaceToolsConfig",
+parameters: [
+{
+name: "enabled",
+type: "boolean",
+description: "Whether the tool is available to agents",
+isOptional: true,
+defaultValue: "true",
+},
+{
+name: "requireApproval",
+type: "boolean",
+description: "Whether the tool requires user approval before execution",
+isOptional: true,
+defaultValue: "false",
+},
+{
+name: "requireReadBeforeWrite",
+type: "boolean",
+description: "For write tools: require reading the file first to prevent overwrites",
+isOptional: true,
+defaultValue: "false",
+},
+],
+},
+],
 },
 {
 name: "operationTimeout",
@@ -149,36 +177,6 @@ The config object has two parts:
 - **Per-tool overrides** - Use `WORKSPACE_TOOLS` constants as keys to configure individual tools
 
 See [workspace overview](/docs/workspace/overview#tool-configuration) for more examples.
-
-### Per-tool options
-
-Each tool can be configured with these options:
-
-<PropertiesTable
-  content={[
-{
-name: "enabled",
-type: "boolean",
-description: "Whether the tool is available to agents",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "requireApproval",
-type: "boolean",
-description: "Whether the tool requires user approval before execution",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "requireReadBeforeWrite",
-type: "boolean",
-description: "For write tools: require reading the file first to prevent overwrites",
-isOptional: true,
-defaultValue: "false",
-},
-]}
-/>
 
 ## Properties
 

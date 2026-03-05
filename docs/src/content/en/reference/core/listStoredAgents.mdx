@@ -48,14 +48,10 @@ type: "object",
 description:
 "Optional configuration object for pagination and output format.",
 isOptional: true,
-},
-]}
-/>
-
-### Args Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "object",
+parameters: [
 {
 name: "page",
 type: "number",
@@ -78,6 +74,10 @@ description:
 "When `true`, returns raw `StorageAgentType` objects instead of `Agent` instances.",
 isOptional: true,
 defaultValue: "false",
+},
+],
+},
+],
 },
 ]}
 />

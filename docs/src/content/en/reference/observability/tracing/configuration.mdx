@@ -20,7 +20,7 @@ interface ObservabilityRegistryConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
 {
 name: "default",
 type: "{ enabled?: boolean }",
@@ -58,7 +58,7 @@ interface ObservabilityInstanceConfig {
 ```
 
 <PropertiesTable
-  props={[
+  content={[
 {
 name: "name",
 type: "string",
@@ -106,48 +106,37 @@ name: "serializationOptions",
 type: "SerializationOptions",
 description: "Options for controlling serialization of span data (input/output/attributes)",
 required: false,
-},
-]}
-/>
-
-## SerializationOptions
-
-Options for controlling how span data is serialized before export. Use these to customize truncation limits for large payloads.
-
-```typescript
-interface SerializationOptions {
-  maxStringLength?: number
-  maxDepth?: number
-  maxArrayLength?: number
-  maxObjectKeys?: number
-}
-```
-
-<PropertiesTable
-  props={[
+properties: [
+{
+type: "SerializationOptions",
+parameters: [
 {
 name: "maxStringLength",
 type: "number",
 description: "Maximum length for string values (default: 1024)",
-required: false,
+isOptional: true,
 },
 {
 name: "maxDepth",
 type: "number",
 description: "Maximum depth for nested objects (default: 6)",
-required: false,
+isOptional: true,
 },
 {
 name: "maxArrayLength",
 type: "number",
 description: "Maximum number of items in arrays (default: 50)",
-required: false,
+isOptional: true,
 },
 {
 name: "maxObjectKeys",
 type: "number",
 description: "Maximum number of keys in objects (default: 50)",
-required: false,
+isOptional: true,
+},
+],
+},
+],
 },
 ]}
 />

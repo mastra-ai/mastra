@@ -69,24 +69,11 @@ name: "judge",
 type: "object",
 isOptional: true,
 description:
-"Optional judge configuration for LLM-based steps. See Judge Object section below.",
-},
+"Optional judge configuration for LLM-based steps.",
+properties: [
 {
-name: "type",
-type: "string",
-isOptional: true,
-description:
-"Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
-},
-]}
-/>
-
-This function returns a scorer builder that you can chain step methods onto. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
-
-## Judge Object
-
-<PropertiesTable
-  content={[
+type: "object",
+parameters: [
 {
 name: "model",
 type: "LanguageModel",
@@ -99,8 +86,21 @@ type: "string",
 isOptional: false,
 description: "System prompt/instructions for the LLM.",
 },
+],
+},
+],
+},
+{
+name: "type",
+type: "string",
+isOptional: true,
+description:
+"Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
+},
 ]}
 />
+
+This function returns a scorer builder that you can chain step methods onto. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
 The judge only runs for steps defined as **prompt objects** (`preprocess`, `analyze`, `generateScore`, `generateReason` in prompt mode). If you use function steps only, the judge is never called and there is no LLM output to inspect. In that case, any score/reason must be produced by your functions.
 

@@ -62,22 +62,10 @@ name: "options",
 type: "RerankerFunctionOptions",
 description: "Options for the reranking model",
 isOptional: true,
-},
-]}
-/>
-
-The rerank function accepts any LanguageModel from the Vercel AI SDK. When using the Cohere model `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
-
-:::note
-
-For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
-
-:::
-
-### RerankerFunctionOptions
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "RerankerFunctionOptions",
+parameters: [
 {
 name: "weights",
 type: "WeightConfig",
@@ -133,8 +121,20 @@ description: "Number of top results to return",
 isOptional: true,
 defaultValue: "3",
 },
+],
+},
+],
+},
 ]}
 />
+
+The rerank function accepts any LanguageModel from the Vercel AI SDK. When using the Cohere model `rerank-v3.5`, it will automatically use Cohere's reranking capabilities.
+
+:::note
+
+For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+
+:::
 
 ## Returns
 

@@ -90,83 +90,10 @@ isOptional: true,
 name: "modes",
 type: "HarnessMode[]",
 description: "Available agent modes. At least one mode is required. Each mode defines an agent and optional defaults.",
-},
+properties: [
 {
-name: "tools",
-type: "ToolsInput | ((ctx) => ToolsInput)",
-description: "Tools available to all agents across all modes. It can be a static tools object or a dynamic function that receives the request context.",
-isOptional: true,
-},
-{
-name: "workspace",
-type: "Workspace | WorkspaceConfig | ((ctx) => Workspace)",
-description: "Workspace configuration. Accepts a pre-constructed Workspace, a WorkspaceConfig for the harness to construct internally, or a dynamic factory function.",
-isOptional: true,
-},
-{
-name: "subagents",
-type: "HarnessSubagent[]",
-description: "Subagent definitions. When provided, the harness creates a built-in `subagent` tool that parent agents can call to spawn focused subagents.",
-isOptional: true,
-},
-{
-name: "resolveModel",
-type: "(modelId: string) => MastraLanguageModel",
-description: "Converts a model ID string (e.g., `\"anthropic/claude-sonnet-4\"`) to a language model instance. Used by subagents and observational memory model resolution.",
-isOptional: true,
-},
-{
-name: "omConfig",
-type: "HarnessOMConfig",
-description: "Default configuration for observational memory (observer/reflector model IDs and thresholds).",
-isOptional: true,
-},
-{
-name: "heartbeatHandlers",
-type: "HeartbeatHandler[]",
-description: "Periodic background tasks started during `init()`. Use for gateway sync, cache refresh, and similar tasks.",
-isOptional: true,
-},
-{
-name: "idGenerator",
-type: "() => string",
-description: "Custom ID generator for threads, messages, and other entities.",
-isOptional: true,
-defaultValue: "timestamp + random string",
-},
-{
-name: "modelAuthChecker",
-type: "ModelAuthChecker",
-description: "Custom auth checker for model providers. Return `true`/`false` to override the default environment variable check, or `undefined` to fall back to defaults.",
-isOptional: true,
-},
-{
-name: "modelUseCountProvider",
-type: "ModelUseCountProvider",
-description: "Provides per-model use counts for sorting and display in `listAvailableModels()`.",
-isOptional: true,
-},
-{
-name: "toolCategoryResolver",
-type: "(toolName: string) => ToolCategory | null",
-description: "Maps tool names to permission categories (`'read'`, `'edit'`, `'execute'`, `'mcp'`, `'other'`). Used by the permission system to resolve category-level policies.",
-isOptional: true,
-},
-{
-name: "threadLock",
-type: "{ acquire, release }",
-description: "Thread locking callbacks to prevent concurrent access from multiple processes. `acquire` should throw if the lock is held.",
-isOptional: true,
-},
-]}
-/>
-
-### HarnessMode
-
-Each entry in the `modes` array configures a single agent mode.
-
-<PropertiesTable
-  content={[
+type: "HarnessMode",
+parameters: [
 {
 name: "id",
 type: "string",
@@ -202,15 +129,31 @@ name: "agent",
 type: "Agent | ((state) => Agent)",
 description: "The agent for this mode. It can be a static Agent instance or a function that receives harness state and returns an Agent.",
 },
-]}
-/>
-
-### HarnessSubagent
-
-Each entry in the `subagents` array defines a subagent the harness can spawn.
-
-<PropertiesTable
-  content={[
+],
+},
+],
+},
+{
+name: "tools",
+type: "ToolsInput | ((ctx) => ToolsInput)",
+description: "Tools available to all agents across all modes. It can be a static tools object or a dynamic function that receives the request context.",
+isOptional: true,
+},
+{
+name: "workspace",
+type: "Workspace | WorkspaceConfig | ((ctx) => Workspace)",
+description: "Workspace configuration. Accepts a pre-constructed Workspace, a WorkspaceConfig for the harness to construct internally, or a dynamic factory function.",
+isOptional: true,
+},
+{
+name: "subagents",
+type: "HarnessSubagent[]",
+description: "Subagent definitions. When provided, the harness creates a built-in `subagent` tool that parent agents can call to spawn focused subagents.",
+isOptional: true,
+properties: [
+{
+type: "HarnessSubagent",
+parameters: [
 {
 name: "id",
 type: "string",
@@ -259,6 +202,59 @@ isOptional: true,
 name: "stopWhen",
 type: "LoopOptions['stopWhen']",
 description: "Optional stop condition for the spawned subagent.",
+isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "resolveModel",
+type: "(modelId: string) => MastraLanguageModel",
+description: "Converts a model ID string (e.g., `\"anthropic/claude-sonnet-4\"`) to a language model instance. Used by subagents and observational memory model resolution.",
+isOptional: true,
+},
+{
+name: "omConfig",
+type: "HarnessOMConfig",
+description: "Default configuration for observational memory (observer/reflector model IDs and thresholds).",
+isOptional: true,
+},
+{
+name: "heartbeatHandlers",
+type: "HeartbeatHandler[]",
+description: "Periodic background tasks started during `init()`. Use for gateway sync, cache refresh, and similar tasks.",
+isOptional: true,
+},
+{
+name: "idGenerator",
+type: "() => string",
+description: "Custom ID generator for threads, messages, and other entities.",
+isOptional: true,
+defaultValue: "timestamp + random string",
+},
+{
+name: "modelAuthChecker",
+type: "ModelAuthChecker",
+description: "Custom auth checker for model providers. Return `true`/`false` to override the default environment variable check, or `undefined` to fall back to defaults.",
+isOptional: true,
+},
+{
+name: "modelUseCountProvider",
+type: "ModelUseCountProvider",
+description: "Provides per-model use counts for sorting and display in `listAvailableModels()`.",
+isOptional: true,
+},
+{
+name: "toolCategoryResolver",
+type: "(toolName: string) => ToolCategory | null",
+description: "Maps tool names to permission categories (`'read'`, `'edit'`, `'execute'`, `'mcp'`, `'other'`). Used by the permission system to resolve category-level policies.",
+isOptional: true,
+},
+{
+name: "threadLock",
+type: "{ acquire, release }",
+description: "Thread locking callbacks to prevent concurrent access from multiple processes. `acquire` should throw if the lock is held.",
 isOptional: true,
 },
 ]}

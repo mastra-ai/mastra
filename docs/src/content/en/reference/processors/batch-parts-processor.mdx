@@ -30,14 +30,10 @@ name: "options",
 type: "Options",
 description: "Configuration options for batching stream parts",
 isOptional: true,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "Options",
+parameters: [
 {
 name: "batchSize",
 type: "number",
@@ -58,6 +54,10 @@ type: "boolean",
 description: "Whether to emit immediately when a non-text part is encountered",
 isOptional: true,
 default: "true",
+},
+],
+},
+],
 },
 ]}
 />

@@ -36,14 +36,10 @@ name: "options",
 type: "AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT>",
 isOptional: true,
 description: "Optional configuration for the streaming process.",
-},
-]}
-/>
-
-### Options parameters
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "AgentStreamOptions",
+parameters: [
 {
 name: "abortSignal",
 type: "AbortSignal",
@@ -461,6 +457,10 @@ type: "Record<string, string | undefined>",
 isOptional: true,
 description:
 "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
+},
+],
+},
+],
 },
 ]}
 />

@@ -41,18 +41,10 @@ name: "options.getContext",
 type: "(params: GetContextParams) => string[] | Promise<string[]>",
 required: false,
 description: "A hook to dynamically resolve context at runtime. Takes priority over static context. Useful for live scoring where context (like tool results) is only available when the scorer runs.",
-},
-]}
-/>
-
-This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
-
-### GetContextParams
-
-The `getContext` hook receives the following parameters:
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "GetContextParams",
+parameters: [
 {
 name: "run",
 type: "GetContextRun",
@@ -74,8 +66,14 @@ name: "step",
 type: "'analyze' | 'generateReason'",
 description: "Which step is calling the hook. Useful for caching context between calls.",
 },
+],
+},
+],
+},
 ]}
 />
+
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
 
 ## .run() Returns
 

@@ -54,28 +54,10 @@ type: "OpenAIConfig",
 description: "Configuration for text-to-speech synthesis.",
 isOptional: true,
 defaultValue: "{ name: 'tts-1' }",
-},
+properties: [
 {
-name: "listeningModel",
 type: "OpenAIConfig",
-description: "Configuration for speech-to-text recognition.",
-isOptional: true,
-defaultValue: "{ name: 'whisper-1' }",
-},
-{
-name: "speaker",
-type: "OpenAIVoiceId",
-description: "Default voice ID for speech synthesis.",
-isOptional: true,
-defaultValue: "'alloy'",
-},
-]}
-/>
-
-### OpenAIConfig
-
-<PropertiesTable
-  content={[
+parameters: [
 {
 name: "name",
 type: "'tts-1' | 'tts-1-hd' | 'whisper-1'",
@@ -85,9 +67,45 @@ isOptional: true,
 {
 name: "apiKey",
 type: "string",
-description:
-"OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
+description: "OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
 isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "listeningModel",
+type: "OpenAIConfig",
+description: "Configuration for speech-to-text recognition.",
+isOptional: true,
+defaultValue: "{ name: 'whisper-1' }",
+properties: [
+{
+type: "OpenAIConfig",
+parameters: [
+{
+name: "name",
+type: "'tts-1' | 'tts-1-hd' | 'whisper-1'",
+description: "Model name. Use 'tts-1-hd' for higher quality audio.",
+isOptional: true,
+},
+{
+name: "apiKey",
+type: "string",
+description: "OpenAI API key. Falls back to OPENAI_API_KEY environment variable.",
+isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "OpenAIVoiceId",
+description: "Default voice ID for speech synthesis.",
+isOptional: true,
+defaultValue: "'alloy'",
 },
 ]}
 />
