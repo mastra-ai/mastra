@@ -36,7 +36,6 @@ Each step directory contains:
 - `output.json` — process output details:
   - `details.thresholdReached`
   - `details.thresholdCleanup` (`observedIds`, `minRemaining`, etc.)
-  - `details.backpressure` (ratio/wait)
   - `messageDiff` (`removedMessageIds`, `addedMessageIds`, `idRemap`)
 - `post-state.json` — same shape as pre-state after processing
 
@@ -77,19 +76,13 @@ The analyzer prints:
 - top token drops
 - activation details (`observed`, `removed`, `added`, `idRemap`, `waitMs`, `ratio`)
 
-## 5) Turn capture into a deterministic regression test
+## 5) Optional local validation
 
-Add a fixture-driven test in:
+For recording/tooling changes, a focused check is usually enough:
 
-- `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` (runtime replay invariants)
-- `packages/memory/src/processors/observational-memory/__tests__/observational-memory.repro-integrity.test.ts` (static capture assertions)
-
-Pattern:
-
-1. Iterate fixture step dirs.
-2. Read `output.json` + `post-state.json`.
-3. For threshold cleanup steps, assert invariants (example: `post.contextTokenCount >= minRemaining`).
-4. Keep assertion strict so failures stay red/green and easy to diagnose.
+1. Sanitize the copied fixture.
+2. Run the analyzer against it.
+3. Spot-check the sanitized JSON for removed paths/tool output before commit.
 
 ## 6) Suggested validation command
 
@@ -100,4 +93,4 @@ pnpm vitest run src/processors/observational-memory/__tests__/observational-memo
 
 ---
 
-If you add a new fixture, include a short note in the related test name and assertion message so future contributors can map failures back to the captured incident quickly.
+If you add a new fixture, include a short note in the fixture directory name or README update so future contributors can map it back to the captured incident quickly.
