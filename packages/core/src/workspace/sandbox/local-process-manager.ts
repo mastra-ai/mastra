@@ -7,7 +7,6 @@
 
 import { execSync } from 'node:child_process';
 
-import { execa } from 'execa';
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
 import { getExeca } from './execa';
