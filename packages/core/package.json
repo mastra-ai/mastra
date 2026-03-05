@@ -211,6 +211,7 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "~0.2.4",
+    "@internal/core": "workspace:*",
     "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.20",
     "@ai-sdk/provider-utils-v6": "npm:@ai-sdk/provider-utils@4.0.0",
     "@ai-sdk/provider-v5": "npm:@ai-sdk/provider@2.0.0",
