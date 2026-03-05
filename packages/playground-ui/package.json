@@ -161,7 +161,7 @@
     "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^5.1.4",
     "@vitest/ui": "catalog:",
-    "autoprefixer": "^10.4.24",
+    "autoprefixer": "^10.4.27",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "postcss": "^8.5.6",
