@@ -78,6 +78,13 @@ import {
   validateCompression,
 } from './reflector-agent';
 import {
+  combineObservationsForBuffering,
+  getMaxMessageTimestamp,
+  replaceOrAppendThreadSection,
+  sortThreadsByOldestMessage,
+  stripThreadTags,
+} from './thread-utils';
+import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
   getMaxThreshold,
@@ -2928,135 +2935,14 @@ ${formattedMessages}
   }
 
   /**
-   * Strip any thread tags that the Observer might have added.
-   * Thread attribution is handled externally by the system, not by the Observer.
-   * This is a defense-in-depth measure.
-   */
-  private stripThreadTags(observations: string): string {
-    // Remove any <thread...> or </thread> tags the Observer might add
-    return observations.replace(/<thread[^>]*>|<\/thread>/gi, '').trim();
-  }
-
-  /**
-   * Get the maximum createdAt timestamp from a list of messages.
-   * Used to set lastObservedAt to the most recent message timestamp instead of current time.
-   * This ensures historical data (like LongMemEval fixtures) works correctly.
-   */
-  private getMaxMessageTimestamp(messages: MastraDBMessage[]): Date {
-    let maxTime = 0;
-    for (const msg of messages) {
-      if (msg.createdAt) {
-        const msgTime = new Date(msg.createdAt).getTime();
-        if (msgTime > maxTime) {
-          maxTime = msgTime;
-        }
-      }
-    }
-    // If no valid timestamps found, fall back to current time
-    return maxTime > 0 ? new Date(maxTime) : new Date();
-  }
-
-  /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
   private async wrapWithThreadTag(threadId: string, observations: string): Promise<string> {
     // First strip any thread tags the Observer might have added
-    const cleanObservations = this.stripThreadTags(observations);
+    const cleanObservations = stripThreadTags(observations);
     const obscuredId = await this.representThreadIDInContext(threadId);
     return `<thread id="${obscuredId}">\n${cleanObservations}\n</thread>`;
-  }
-
-  /**
-   * Append or merge new thread sections.
-   * If the new section has the same thread ID and date as an existing section,
-   * merge the observations into that section to reduce token usage.
-   * Otherwise, append as a new section.
-   */
-  private replaceOrAppendThreadSection(
-    existingObservations: string,
-    _threadId: string,
-    newThreadSection: string,
-  ): string {
-    if (!existingObservations) {
-      return newThreadSection;
-    }
-
-    // Extract thread ID and date from new section
-    const threadIdMatch = newThreadSection.match(/<thread id="([^"]+)">/);
-    const dateMatch = newThreadSection.match(/Date:\s*([A-Za-z]+\s+\d+,\s+\d+)/);
-
-    if (!threadIdMatch || !dateMatch) {
-      // Can't parse, just append
-      return `${existingObservations}\n\n${newThreadSection}`;
-    }
-
-    const newThreadId = threadIdMatch[1]!;
-    const newDate = dateMatch[1]!;
-
-    // Look for existing section with same thread ID and date.
-    // Use string search instead of regex to avoid polynomial backtracking (CodeQL).
-    const threadOpen = `<thread id="${newThreadId}">`;
-    const threadClose = '</thread>';
-    const startIdx = existingObservations.indexOf(threadOpen);
-    let existingSection: string | null = null;
-    let existingSectionStart = -1;
-    let existingSectionEnd = -1;
-
-    if (startIdx !== -1) {
-      const closeIdx = existingObservations.indexOf(threadClose, startIdx);
-      if (closeIdx !== -1) {
-        existingSectionEnd = closeIdx + threadClose.length;
-        existingSectionStart = startIdx;
-        const section = existingObservations.slice(startIdx, existingSectionEnd);
-        // Verify this section contains the matching date
-        if (section.includes(`Date: ${newDate}`) || section.includes(`Date:${newDate}`)) {
-          existingSection = section;
-        }
-      }
-    }
-
-    if (existingSection) {
-      // Found existing section with same thread ID and date - merge observations
-      // Extract observations from new section: everything after the Date: line, before </thread>
-      const dateLineEnd = newThreadSection.indexOf('\n', newThreadSection.indexOf('Date:'));
-      const newCloseIdx = newThreadSection.lastIndexOf(threadClose);
-      if (dateLineEnd !== -1 && newCloseIdx !== -1) {
-        const newObsContent = newThreadSection.slice(dateLineEnd + 1, newCloseIdx).trim();
-        if (newObsContent) {
-          // Insert new observations at the end of the existing section (before </thread>)
-          const withoutClose = existingSection.slice(0, existingSection.length - threadClose.length).trimEnd();
-          const merged = `${withoutClose}\n${newObsContent}\n${threadClose}`;
-          return (
-            existingObservations.slice(0, existingSectionStart) +
-            merged +
-            existingObservations.slice(existingSectionEnd)
-          );
-        }
-      }
-    }
-
-    // No existing section with same thread ID and date - append
-    return `${existingObservations}\n\n${newThreadSection}`;
-  }
-
-  /**
-   * Sort threads by their oldest unobserved message.
-   * Returns thread IDs in order from oldest to most recent.
-   * This ensures no thread's messages get "stuck" unobserved.
-   */
-  private sortThreadsByOldestMessage(messagesByThread: Map<string, MastraDBMessage[]>): string[] {
-    const threadOrder = Array.from(messagesByThread.entries())
-      .map(([threadId, messages]) => {
-        // Find oldest message timestamp
-        const oldestTimestamp = Math.min(
-          ...messages.map(m => (m.createdAt ? new Date(m.createdAt).getTime() : Date.now())),
-        );
-        return { threadId, oldestTimestamp };
-      })
-      .sort((a, b) => a.oldestTimestamp - b.oldestTimestamp);
-
-    return threadOrder.map(t => t.threadId);
   }
 
   /**
@@ -3163,7 +3049,7 @@ ${formattedMessages}
       if (this.scope === 'resource') {
         // In resource scope: wrap with thread tag and replace/append
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        newObservations = this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
+        newObservations = replaceOrAppendThreadSection(existingObservations, threadId, threadSection);
       } else {
         // In thread scope: simple append
         newObservations = existingObservations
@@ -3177,7 +3063,7 @@ ${formattedMessages}
       const cycleObservationTokens = this.tokenCounter.countObservations(result.observations);
 
       // Use the max message timestamp as cursor — only for the messages we actually observed
-      const lastObservedAt = this.getMaxMessageTimestamp(messagesToObserve);
+      const lastObservedAt = getMaxMessageTimestamp(messagesToObserve);
 
       // Collect message IDs being observed for the safeguard
       // Only mark the messages we actually observed, not the ones we kept
@@ -3492,7 +3378,7 @@ ${formattedMessages}
 
       // Update the buffer cursor so the next buffer only sees messages newer than this one.
       // Uses the same timestamp logic as the chunk's lastObservedAt (max message timestamp + 1ms).
-      const maxTs = this.getMaxMessageTimestamp(messagesToBuffer);
+      const maxTs = getMaxMessageTimestamp(messagesToBuffer);
       const cursor = new Date(maxTs.getTime() + 1);
       ObservationalMemory.lastBufferedAtTime.set(bufferKey, cursor);
     } catch (error) {
@@ -3533,7 +3419,7 @@ ${formattedMessages}
     // Build combined context for the observer: active + buffered chunk observations
     const bufferedChunks = getBufferedChunks(record);
     const bufferedChunksText = bufferedChunks.map(c => c.observations).join('\n\n');
-    const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
+    const combinedObservations = combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
     // Call observer with combined context
     // Skip continuation hints during async buffering — they reflect the observer's
@@ -3568,7 +3454,7 @@ ${formattedMessages}
 
     // lastObservedAt should be the timestamp of the latest message being buffered (+1ms for exclusive)
     // This ensures new messages created after buffering are still considered unobserved
-    const maxMessageTimestamp = this.getMaxMessageTimestamp(messagesToBuffer);
+    const maxMessageTimestamp = getMaxMessageTimestamp(messagesToBuffer);
     const lastObservedAt = new Date(maxMessageTimestamp.getTime() + 1);
 
     // Store as a new buffered chunk (storage adapter appends to existing chunks)
@@ -3608,27 +3494,6 @@ ${formattedMessages}
       // Persist so the badge state survives page reload even if the stream is already closed
       await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
     }
-  }
-
-  /**
-   * Combine active and buffered observations for the buffering observer context.
-   * The buffering observer needs to see both so it doesn't duplicate content.
-   */
-  private combineObservationsForBuffering(
-    activeObservations: string | undefined,
-    bufferedObservations: string | undefined,
-  ): string | undefined {
-    if (!activeObservations && !bufferedObservations) {
-      return undefined;
-    }
-    if (!activeObservations) {
-      return bufferedObservations;
-    }
-    if (!bufferedObservations) {
-      return activeObservations;
-    }
-    // Both exist - combine them with a clear separator
-    return `${activeObservations}\n\n--- BUFFERED (pending activation) ---\n\n${bufferedObservations}`;
   }
 
   /**
@@ -4239,7 +4104,7 @@ ${formattedMessages}
     }
 
     // Now sort the selected threads by oldest message for consistent observation order
-    const threadOrder = this.sortThreadsByOldestMessage(
+    const threadOrder = sortThreadsByOldestMessage(
       new Map(threadsToObserve.map(tid => [tid, messagesByThread.get(tid) ?? []])),
     );
 
@@ -4450,12 +4315,12 @@ ${formattedMessages}
 
         // Wrap with thread tag and append (in thread order for consistency)
         const threadSection = await this.wrapWithThreadTag(threadId, result.observations);
-        currentObservations = this.replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
+        currentObservations = replaceOrAppendThreadSection(currentObservations, threadId, threadSection);
 
         // Update thread-specific metadata:
         // - lastObservedAt: ALWAYS update to track per-thread observation progress
         // - currentTask, suggestedResponse: explicitly clear when omitted to avoid stale hints
-        const threadLastObservedAt = this.getMaxMessageTimestamp(threadMessages);
+        const threadLastObservedAt = getMaxMessageTimestamp(threadMessages);
         const thread = await this.storage.getThreadById({ threadId });
         if (thread) {
           const newMetadata = setThreadOMMetadata(thread.metadata, {
@@ -4500,7 +4365,7 @@ ${formattedMessages}
       const observedMessages = observationResults
         .filter((r): r is NonNullable<typeof r> => r !== null)
         .flatMap(r => r.threadMessages);
-      const lastObservedAt = this.getMaxMessageTimestamp(observedMessages);
+      const lastObservedAt = getMaxMessageTimestamp(observedMessages);
 
       // Collect message IDs being observed for the safeguard
       const newMessageIds = observedMessages.map(m => m.id);

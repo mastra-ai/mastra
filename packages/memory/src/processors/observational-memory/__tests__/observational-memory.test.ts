@@ -22,6 +22,11 @@ import {
   validateCompression,
   buildReflectorSystemPrompt,
 } from '../reflector-agent';
+import {
+  combineObservationsForBuffering,
+  replaceOrAppendThreadSection,
+  sortThreadsByOldestMessage,
+} from '../thread-utils';
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 
@@ -2590,7 +2595,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = replaceOrAppendThreadSection(existing, threadId, newSection);
 
       expect(result).toBe(newSection);
     });
@@ -2600,7 +2605,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = replaceOrAppendThreadSection(existing, threadId, newSection);
 
       expect(result).toContain(existing);
       expect(result).toContain(newSection);
@@ -2618,7 +2623,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 Updated observation\n- 🟡 New detail\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = replaceOrAppendThreadSection(existing, threadId, newSection);
 
       // Should append, not replace - preserves temporal ordering
       expect(result).toContain(newSection);
@@ -2651,7 +2656,7 @@ describe('Thread Attribution Helpers', () => {
         ['thread-middle', [{ ...createTestMessage('msg5'), createdAt: new Date(now - 5000) }]],
       ]);
 
-      const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
+      const result = sortThreadsByOldestMessage(messagesByThread);
 
       expect(result).toEqual(['thread-oldest', 'thread-middle', 'thread-recent']);
     });
@@ -2663,7 +2668,7 @@ describe('Thread Attribution Helpers', () => {
         ['thread-no-date', [{ ...createTestMessage('msg2'), createdAt: undefined as any }]],
       ]);
 
-      const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
+      const result = sortThreadsByOldestMessage(messagesByThread);
 
       // Thread with no date should be treated as "now" (most recent)
       expect(result[0]).toBe('thread-with-date');
@@ -4703,52 +4708,20 @@ describe('Async Buffering Processor Logic', () => {
 
   describe('combineObservationsForBuffering', () => {
     it('should return undefined when both are empty', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).combineObservationsForBuffering(undefined, undefined)).toBeUndefined();
-      expect((om as any).combineObservationsForBuffering('', '')).toBeUndefined();
+      expect(combineObservationsForBuffering(undefined, undefined)).toBeUndefined();
+      expect(combineObservationsForBuffering('', '')).toBeUndefined();
     });
 
     it('should return active observations when no buffered', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).combineObservationsForBuffering('- Active obs', undefined)).toBe('- Active obs');
+      expect(combineObservationsForBuffering('- Active obs', undefined)).toBe('- Active obs');
     });
 
     it('should return buffered observations when no active', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).combineObservationsForBuffering(undefined, '- Buffered obs')).toBe('- Buffered obs');
+      expect(combineObservationsForBuffering(undefined, '- Buffered obs')).toBe('- Buffered obs');
     });
 
     it('should combine both with separator when both present', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      const result = (om as any).combineObservationsForBuffering('- Active', '- Buffered');
+      const result = combineObservationsForBuffering('- Active', '- Buffered');
       expect(result).toContain('- Active');
       expect(result).toContain('- Buffered');
       expect(result).toContain('BUFFERED (pending activation)');
