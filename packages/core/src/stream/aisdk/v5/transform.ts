@@ -135,7 +135,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
       if (value.input) {
         try {
-          toolCallInput = JSON.parse(value.input);
+          toolCallInput = JSON.parse(stripTrailingLLMTokens(value.input));
         } catch (error) {
           console.error('Error converting tool call input to JSON', {
             error,
@@ -567,4 +567,19 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Strips trailing LLM-internal special tokens from a string before JSON parsing.
+ *
+ * Some models (e.g. OpenAI gpt-4o-mini/gpt-4o) occasionally append internal tokens
+ * like `<|call|>` or `<|endoftext|>` to tool-call input JSON, which breaks JSON.parse.
+ *
+ * Only strips tokens that appear after the JSON content ends (trailing), so that
+ * legitimate `<|...|>` patterns inside JSON string values are preserved.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/13185
+ */
+export function stripTrailingLLMTokens(input: string): string {
+  return input.replace(/(\s*<\|[^|]*\|>)+\s*$/, '').trim();
 }

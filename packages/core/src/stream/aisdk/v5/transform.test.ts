@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ChunkFrom } from '../../types';
-import { convertFullStreamChunkToMastra } from './transform';
+import { convertFullStreamChunkToMastra, stripTrailingLLMTokens } from './transform';
 import type { StreamPart } from './transform';
 
 describe('convertFullStreamChunkToMastra', () => {
@@ -182,6 +182,93 @@ describe('convertFullStreamChunkToMastra', () => {
     });
   });
 
+  describe('trailing LLM token stripping (issue #13185)', () => {
+    it('should parse JSON with trailing <|call|> token', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'get_weather',
+        input: '{}<|call|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({});
+      }
+    });
+
+    it('should parse JSON with tab + trailing <|call|> token', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'get_weather',
+        input: '{\n"checkpointNumber": 1,\n"vehicleType": "leopard"\n}\t<|call|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ checkpointNumber: 1, vehicleType: 'leopard' });
+      }
+    });
+
+    it('should parse JSON with trailing <|endoftext|> token', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'get_weather',
+        input: '{"location": "NYC"}<|endoftext|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ location: 'NYC' });
+      }
+    });
+
+    it('should parse JSON with multiple trailing tokens', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'get_weather',
+        input: '{"a": 1}<|call|><|endoftext|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ a: 1 });
+      }
+    });
+
+    it('should not modify valid JSON without trailing tokens', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'get_weather',
+        input: '{"location": "New York"}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ location: 'New York' });
+      }
+    });
+  });
+
   describe('other chunk types', () => {
     it('should handle text-delta chunks correctly', () => {
       const chunk: StreamPart = {
@@ -228,5 +315,43 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.stepResult.reason).toBe('stop');
       }
     });
+  });
+});
+
+describe('stripTrailingLLMTokens', () => {
+  it('should strip <|call|> token', () => {
+    expect(stripTrailingLLMTokens('{}<|call|>')).toBe('{}');
+  });
+
+  it('should strip <|call|> with preceding tab', () => {
+    expect(stripTrailingLLMTokens('{}\t<|call|>')).toBe('{}');
+  });
+
+  it('should strip <|endoftext|> token', () => {
+    expect(stripTrailingLLMTokens('{"a":1}<|endoftext|>')).toBe('{"a":1}');
+  });
+
+  it('should strip multiple tokens', () => {
+    expect(stripTrailingLLMTokens('{"a":1}<|call|> <|endoftext|>')).toBe('{"a":1}');
+  });
+
+  it('should return input unchanged when no tokens present', () => {
+    expect(stripTrailingLLMTokens('{"a":1}')).toBe('{"a":1}');
+  });
+
+  it('should handle empty string', () => {
+    expect(stripTrailingLLMTokens('')).toBe('');
+  });
+
+  it('should strip tokens with surrounding whitespace', () => {
+    expect(stripTrailingLLMTokens('{"a":1}  <|call|>  ')).toBe('{"a":1}');
+  });
+
+  it('should not strip tokens inside JSON string values', () => {
+    expect(stripTrailingLLMTokens('{"prompt": "Use <|system|> token"}')).toBe('{"prompt": "Use <|system|> token"}');
+  });
+
+  it('should not strip leading tokens', () => {
+    expect(stripTrailingLLMTokens('<|im_start|>{"a":1}')).toBe('<|im_start|>{"a":1}');
   });
 });
