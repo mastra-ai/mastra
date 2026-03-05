@@ -60,7 +60,7 @@ See [`LocalSandbox` reference](/reference/workspace/local-sandbox) for configura
 
 When you configure a sandbox on a workspace, agents receive the `execute_command` tool for running shell commands.
 
-If your sandbox provider includes a process manager, the `execute_command` tool also supports `background: true` for starting long-running processes, and two additional tools are registered:
+If your sandbox provider supports running processes in the background, the `execute_command` tool also accepts `background: true` for starting long-running processes, and two additional tools are registered:
 
 | Tool | Description |
 | - | - |
