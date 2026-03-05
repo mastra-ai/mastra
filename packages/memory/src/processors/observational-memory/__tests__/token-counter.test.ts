@@ -1,6 +1,17 @@
+import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import { describe, it, expect } from 'vitest';
 
 import { TokenCounter } from '../token-counter';
+
+let sharedCustomCounter: TokenCounter | undefined;
+
+function getSharedCustomCounter() {
+  if (!sharedCustomCounter) {
+    sharedCustomCounter = new TokenCounter(o200k_base);
+  }
+
+  return sharedCustomCounter;
+}
 
 function createMessage(content: any) {
   return {
@@ -73,8 +84,7 @@ describe('TokenCounter', () => {
   describe('custom encoding', () => {
     it('constructor with explicit encoding creates a separate encoder instance', () => {
       const defaultCounter = new TokenCounter();
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const customCounter = new TokenCounter(o200k_base);
+      const customCounter = getSharedCustomCounter();
 
       const encoderDefault = (defaultCounter as any).encoder;
       const encoderCustom = (customCounter as any).encoder;
@@ -83,8 +93,7 @@ describe('TokenCounter', () => {
     });
 
     it('custom encoding still produces valid token counts', () => {
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const counter = new TokenCounter(o200k_base);
+      const counter = getSharedCustomCounter();
 
       const tokens = counter.countString('hello world');
       expect(tokens).toBeGreaterThan(0);
@@ -206,8 +215,7 @@ describe('TokenCounter', () => {
       defaultCounter.countMessage(message);
       const defaultEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const customCounter = new TokenCounter(o200k_base);
+      const customCounter = getSharedCustomCounter();
       customCounter.countMessage(message);
 
       const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
