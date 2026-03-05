@@ -130,7 +130,13 @@ async function runScorerSafe(
     // conditional generics that don't resolve cleanly with MastraScorer<any,…>.
     if (typeof scoreResult !== 'object' || scoreResult === null) {
       return {
-        result: { scorerId: scorer.id, scorerName: scorer.name, score: null, reason: null, error: null },
+        result: {
+          scorerId: scorer.id,
+          scorerName: scorer.name,
+          score: null,
+          reason: null,
+          error: `Scorer ${scorer.name} (${scorer.id}) returned invalid result: expected object, got ${scoreResult === null ? 'null' : typeof scoreResult} (${String(scoreResult)})`,
+        },
         promptMetadata: {},
       };
     }

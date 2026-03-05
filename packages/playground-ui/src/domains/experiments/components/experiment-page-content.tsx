@@ -15,10 +15,11 @@ import { ExperimentResultTracePanel } from './experiment-result-trace-panel';
 import { ExperimentScorePanel } from './experiment-score-panel';
 import { ExperimentResultsList } from './experiment-results-list';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
+import type { ExperimentStatus } from '@mastra/core/storage';
 
 export type ExperimentPageContentProps = {
   experimentId: string;
-  experimentStatus?: string;
+  experimentStatus?: ExperimentStatus;
   results: DatasetExperimentResult[];
   isLoading: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;

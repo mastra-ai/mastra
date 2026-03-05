@@ -3,6 +3,7 @@ import { useMastraClient } from '@mastra/react';
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useInView } from '@/hooks/use-in-view';
+import type { ExperimentStatus } from '@mastra/core/storage';
 
 export interface DatasetExperimentsFilters {
   status?: string;
@@ -62,7 +63,7 @@ const RESULTS_PER_PAGE = 100;
 interface UseDatasetExperimentResultsParams {
   datasetId: string;
   experimentId: string;
-  experimentStatus?: string;
+  experimentStatus?: ExperimentStatus;
 }
 
 /**
@@ -117,7 +118,7 @@ export const useDatasetExperimentResults = ({
  * Hook to fetch all scores for an experiment, transformed to Record<entityId, ClientScoreRowData[]>
  * Paginates through all pages to ensure no scores are silently dropped.
  */
-export const useScoresByExperimentId = (experimentId: string, experimentStatus?: string) => {
+export const useScoresByExperimentId = (experimentId: string, experimentStatus?: ExperimentStatus) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset-experiment-scores', experimentId, experimentStatus],
