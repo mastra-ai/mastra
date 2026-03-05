@@ -1,7 +1,8 @@
+import type { NetworkChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import { describe, it, expect, beforeEach } from 'vitest';
+import type { MastraUIMessage, MastraUIMessageMetadata } from '../types';
 import { AISdkNetworkTransformer } from './AISdkNetworkTransformer';
-import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { NetworkChunkType, ChunkFrom } from '@mastra/core/stream';
 
 describe('AISdkNetworkTransformer', () => {
   let transformer: AISdkNetworkTransformer;

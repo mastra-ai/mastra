@@ -1,5 +1,5 @@
 ---
-title: 'Modes | Mastra Code'
+title: 'Modes'
 description: "Learn how Mastra Code's three operating modes — Build, Plan, and Fast — shape the agent's behavior, tool access, and response style."
 packages:
   - 'mastracode'
@@ -34,6 +34,24 @@ For each change, the agent follows this cycle:
 ### Approved plans
 
 When a plan is approved in Plan mode, Mastra Code automatically switches to Build mode and injects the plan into the agent's instructions. The agent then implements the plan step by step.
+
+Approved plans are also persisted to disk as markdown files so you can archive and reference them later. Each file is saved to the platform-specific app data directory under a `plans/<resourceId>/` subdirectory:
+
+| Platform | Default path |
+| - | - |
+| macOS | `~/Library/Application Support/mastracode/plans/<resourceId>/` |
+| Linux | `~/.local/share/mastracode/plans/<resourceId>/` |
+| Windows | `%APPDATA%\mastracode\plans\<resourceId>\` |
+
+Files are named `<ISO-timestamp>-<slugified-title>.md` and contain the plan title, approval timestamp, and full plan body.
+
+To store plans in a project-local directory instead, set the `MASTRA_PLANS_DIR` environment variable:
+
+```sh
+export MASTRA_PLANS_DIR=.mastracode/plans
+```
+
+Plan persistence is best-effort — a write failure does not block or affect the approval flow.
 
 ## Plan mode
 

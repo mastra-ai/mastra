@@ -78,7 +78,7 @@ const inlineInstructionBlockSchema = z.object({
 const refInstructionBlockSchema = z.object({
   id: z.string(),
   type: z.literal('prompt_block_ref'),
-  promptBlockId: z.string(),
+  promptBlockId: z.string().min(1),
 });
 
 const instructionBlockSchema = z.discriminatedUnion('type', [inlineInstructionBlockSchema, refInstructionBlockSchema]);

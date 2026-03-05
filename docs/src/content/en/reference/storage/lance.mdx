@@ -45,26 +45,24 @@ const storage = await LanceStorage.create('my-storage', 's3://bucket/db', {
 
 <PropertiesTable
   content={[
-{
-name: "name",
-type: "string",
-description: "Name identifier for the storage instance",
-isOptional: false,
-},
-{
-name: "uri",
-type: "string",
-description:
-"URI to connect to the LanceDB database. Can be a local path, cloud DB URL, or S3 bucket URL",
-isOptional: false,
-},
-{
-name: "options",
-type: "ConnectionOptions",
-description:
-"Connection options for LanceDB, such as timeout settings, authentication, etc.",
-isOptional: true,
-},
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name identifier for the storage instance',
+    isOptional: false,
+  },
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'URI to connect to the LanceDB database. Can be a local path, cloud DB URL, or S3 bucket URL',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'ConnectionOptions',
+    description: 'Connection options for LanceDB, such as timeout settings, authentication, etc.',
+    isOptional: true,
+  },
 ]}
 />
 

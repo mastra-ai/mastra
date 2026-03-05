@@ -33,9 +33,10 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
+import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
+import type { FilesystemMountConfig } from './mount';
 
 /**
  * Local filesystem provider configuration.
@@ -99,6 +100,24 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
 }
 
 /**
+ * Mount configuration for local filesystems.
+ *
+ * When a `LocalFilesystem` is used as a mount in a Workspace with `LocalSandbox`,
+ * the sandbox creates a symlink from `<workingDir>/<mountPath>` → `basePath`.
+ * No FUSE tools are needed for local mounts.
+ *
+ * **`contained: false` caveat:** `CompositeFilesystem` strips mount prefixes and
+ * produces absolute virtual paths (e.g. `/file.txt`). A non-contained
+ * `LocalFilesystem` interprets these as real host paths instead of paths relative
+ * to `basePath`, causing incorrect path resolution. Workspace warns at construction
+ * time if this combination is detected.
+ */
+export interface LocalMountConfig extends FilesystemMountConfig {
+  type: 'local';
+  basePath: string;
+}
+
+/**
  * Local filesystem implementation.
  *
  * Stores files in a folder on the user's machine.
@@ -138,6 +157,22 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   /**
+   * Whether file operations are restricted to stay within basePath.
+   *
+   * When `true` (default), absolute paths that don't fall within basePath are
+   * treated as virtual paths (resolved relative to basePath). When `false`,
+   * absolute paths are treated as real filesystem paths.
+   *
+   * **Important:** `contained: false` is incompatible with CompositeFilesystem
+   * mounts because CompositeFilesystem strips mount prefixes and produces
+   * absolute paths (e.g. `/file.txt`), which a non-contained filesystem
+   * interprets as the real host path instead of `basePath/file.txt`.
+   */
+  get contained(): boolean {
+    return this._contained;
+  }
+
+  /**
    * Current set of additional allowed paths (absolute, resolved).
    * These paths are permitted beyond basePath when containment is enabled.
    */
@@ -160,17 +195,25 @@ export class LocalFilesystem extends MastraFilesystem {
    */
   setAllowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
     const newPaths = typeof pathsOrUpdater === 'function' ? pathsOrUpdater(this._allowedPaths) : pathsOrUpdater;
-    this._allowedPaths = newPaths.map(p => nodePath.resolve(p));
+    this._allowedPaths = newPaths.map(p => nodePath.resolve(expandTilde(p)));
   }
 
   constructor(options: LocalFilesystemOptions) {
     super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
-    this._basePath = nodePath.resolve(options.basePath);
+    this._basePath = nodePath.resolve(expandTilde(options.basePath));
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
-    this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(p));
+    this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(expandTilde(p)));
     this._instructionsOverride = options.instructions;
+  }
+
+  /**
+   * Return mount config for sandbox integration.
+   * LocalSandbox uses this to create a symlink from the mount path to basePath.
+   */
+  getMountConfig(): LocalMountConfig {
+    return { type: 'local', basePath: this._basePath };
   }
 
   private generateId(): string {
@@ -196,6 +239,8 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private resolvePath(inputPath: string): string {
     let absolutePath: string;
+    const wasTilde = inputPath.startsWith('~');
+    inputPath = expandTilde(inputPath);
 
     if (!this._contained && nodePath.isAbsolute(inputPath)) {
       // Containment disabled — absolute paths are real filesystem paths
@@ -206,6 +251,12 @@ export class LocalFilesystem extends MastraFilesystem {
       // convention (e.g. "/file.txt" meaning "basePath/file.txt")
       const normalized = nodePath.normalize(inputPath);
       if (this._isWithinAnyRoot(normalized)) {
+        absolutePath = normalized;
+      } else if (wasTilde) {
+        // Path started with ~ so the user meant a real filesystem path,
+        // not a virtual-root path. Treat as a real absolute path — the
+        // containment check below will throw PermissionError if it's not
+        // within basePath or allowedPaths.
         absolutePath = normalized;
       } else {
         absolutePath = resolveWorkspacePath(this._basePath, inputPath);
@@ -711,7 +762,7 @@ export class LocalFilesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    // LocalFilesystem doesn't clean up files on destroy by default
+    // LocalFilesystem doesn't delete files on destroy
   }
 
   getInfo(): FilesystemInfo<{ basePath: string; contained: boolean; allowedPaths?: string[] }> {
@@ -730,7 +781,7 @@ export class LocalFilesystem extends MastraFilesystem {
     };
   }
 
-  getInstructions(opts?: { requestContext?: RequestContext }): string {
+  getInstructions(opts?: { requestContext?: RequestContext<any> }): string {
     return resolveInstructions(this._instructionsOverride, () => this._getDefaultInstructions(), opts?.requestContext);
   }
 

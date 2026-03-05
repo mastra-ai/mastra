@@ -1,6 +1,3 @@
-import { useMemo } from 'react';
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
-import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -18,6 +15,9 @@ import {
   DatasetCompareVersionToolbar,
   DatasetCompareVersionsList,
 } from '@mastra/playground-ui';
+import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
+import { useMemo } from 'react';
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -78,13 +78,13 @@ function DatasetCompareVersionsPage() {
   }
 
   const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
-    navigate(
+    void navigate(
       `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
     );
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
+    void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };

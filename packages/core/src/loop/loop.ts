@@ -68,6 +68,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     resourceId: _internal?.resourceId,
     memory: _internal?.memory,
     threadExists: _internal?.threadExists,
+    transportRef: _internal?.transportRef ?? {},
   };
 
   let startTimestamp = internalToUse.now?.();
@@ -151,6 +152,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       ...observabilityContext,
       requestContext: rest.requestContext,
       processorStates,
+      transportRef: internalToUse.transportRef,
     },
     initialState: initialStreamState,
   });

@@ -42,81 +42,86 @@ const { text } = await generateText({
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "LanguageModelV2",
-description: "Any AI SDK language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`).",
-isOptional: false,
-},
-{
-name: "options",
-type: "WithMastraOptions",
-description: "Configuration object for processors and memory.",
-isOptional: true,
-},
-{
-name: "options.inputProcessors",
-type: "InputProcessor[]",
-description: "Input processors to run before the LLM call.",
-isOptional: true,
-},
-{
-name: "options.outputProcessors",
-type: "OutputProcessor[]",
-description: "Output processors to run on the LLM response.",
-isOptional: true,
-},
-{
-name: "options.memory",
-type: "WithMastraMemoryOptions",
-description: "Memory configuration - enables automatic message history persistence.",
-isOptional: true,
-},
-{
-name: "options.memory.storage",
-type: "MemoryStorage",
-description: "Memory storage domain for message persistence. Get it from a composite store using `await storage.getStore('memory')`.",
-isOptional: false,
-},
-{
-name: "options.memory.threadId",
-type: "string",
-description: "Thread ID for conversation persistence.",
-isOptional: false,
-},
-{
-name: "options.memory.resourceId",
-type: "string",
-description: "Resource ID (user/session identifier).",
-isOptional: true,
-},
-{
-name: "options.memory.lastMessages",
-type: "number | false",
-description: "Number of recent messages to retrieve, or false to disable.",
-isOptional: true,
-},
-{
-name: "options.memory.semanticRecall",
-type: "WithMastraSemanticRecallOptions",
-description: "Semantic recall configuration (RAG-based memory retrieval).",
-isOptional: true,
-},
-{
-name: "options.memory.workingMemory",
-type: "MemoryConfig['workingMemory']",
-description: "Working memory configuration (persistent user data).",
-isOptional: true,
-},
-{
-name: "options.memory.readOnly",
-type: "boolean",
-description: "Read-only mode - prevents saving new messages.",
-isOptional: true,
-},
+  {
+    name: 'model',
+    type: 'LanguageModelV2',
+    description: "Any AI SDK language model (e.g., `openai('gpt-4o')`, `anthropic('claude-3-opus')`).",
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'WithMastraOptions',
+    description: 'Configuration object for processors and memory.',
+    isOptional: true,
+  },
+  {
+    name: 'options.inputProcessors',
+    type: 'InputProcessor[]',
+    description: 'Input processors to run before the LLM call.',
+    isOptional: true,
+  },
+  {
+    name: 'options.outputProcessors',
+    type: 'OutputProcessor[]',
+    description: 'Output processors to run on the LLM response.',
+    isOptional: true,
+  },
+  {
+    name: 'options.memory',
+    type: 'WithMastraMemoryOptions',
+    description: 'Memory configuration - enables automatic message history persistence.',
+    isOptional: true,
+  },
+  {
+    name: 'options.memory.storage',
+    type: 'MemoryStorage',
+    description:
+      "Memory storage domain for message persistence. Get it from a composite store using `await storage.getStore('memory')`.",
+    isOptional: false,
+  },
+  {
+    name: 'options.memory.threadId',
+    type: 'string',
+    description: 'Thread ID for conversation persistence.',
+    isOptional: false,
+  },
+  {
+    name: 'options.memory.resourceId',
+    type: 'string',
+    description: 'Resource ID (user/session identifier).',
+    isOptional: true,
+  },
+  {
+    name: 'options.memory.lastMessages',
+    type: 'number | false',
+    description: 'Number of recent messages to retrieve, or false to disable.',
+    isOptional: true,
+  },
+  {
+    name: 'options.memory.semanticRecall',
+    type: 'WithMastraSemanticRecallOptions',
+    description: 'Semantic recall configuration (RAG-based memory retrieval).',
+    isOptional: true,
+  },
+  {
+    name: 'options.memory.workingMemory',
+    type: "MemoryConfig['workingMemory']",
+    description: 'Working memory configuration (persistent user data).',
+    isOptional: true,
+  },
+  {
+    name: 'options.memory.readOnly',
+    type: 'boolean',
+    description: 'Read-only mode - prevents saving new messages.',
+    isOptional: true,
+  },
 ]}
 />
 
 ## Returns
 
 A wrapped model compatible with `generateText`, `streamText`, `generateObject`, and `streamObject`.
+
+## Streaming behavior
+
+Output processors that implement `processOutputResult` run after the stream finishes. Consume the stream to completion to persist message history and semantic recall.

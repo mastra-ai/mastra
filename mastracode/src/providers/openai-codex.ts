@@ -33,8 +33,8 @@ export function getAuthStorage(): AuthStorage {
 /**
  * Set a custom AuthStorage instance (useful for TUI integration)
  */
-export function setAuthStorage(storage: AuthStorage): void {
-  authStorageInstance = storage;
+export function setAuthStorage(storage: AuthStorage | undefined): void {
+  authStorageInstance = storage ?? null;
 }
 
 // Default instructions for Codex API (required)
@@ -44,6 +44,17 @@ IMPORTANT: You should be concise, direct, and helpful. Focus on solving the user
 
 /** Valid thinking level values. */
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
+const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
+
+export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
+  // GPT-5.* models on Codex require at least low reasoning.
+  if (GPT5_MODEL_RE.test(modelId) && level === 'off') {
+    return 'low';
+  }
+
+  return level;
+}
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
 // undefined means omit the parameter (no reasoning).
@@ -101,14 +112,16 @@ export function openaiCodexProvider(
 ): MastraModelConfig {
   // Map thinkingLevel to OpenAI reasoningEffort, defaulting to 'medium'.
   // When level is 'off', reasoningEffort is undefined and the parameter is omitted.
-  const level: ThinkingLevel = options?.thinkingLevel ?? 'medium';
-  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[level];
+  // GPT-5.* models are floored to at least "low" on Codex.
+  const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
+  const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
+  const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
   const middleware = createCodexMiddleware(reasoningEffort);
 
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const openai = createOpenAI({
-      apiKey: process.env.OPENAI_API_KEY || 'test-api-key',
+      apiKey: 'test-api-key',
     });
     return wrapLanguageModel({
       model: openai.responses(modelId),

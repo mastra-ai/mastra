@@ -2,15 +2,14 @@
 /**
  * Main entry point for Mastra Code TUI.
  */
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-
+import { isStreamDestroyedError } from './error-classification.js';
 import { loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode } from './tui/theme.js';
-import { getAppDataDir } from './utils/project.js';
+import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
+import { getCurrentVersion } from './utils/update-check.js';
 import { createMastraCode } from './index.js';
 
 let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
@@ -20,9 +19,13 @@ let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
 process.on('uncaughtException', error => {
+  // ERR_STREAM_DESTROYED is non-fatal — happens routinely when streams close
+  // during shutdown, cancelled LLM requests, or LSP/subprocess exits (#13548, #13549)
+  if (isStreamDestroyedError(error)) return;
   handleFatalError(error);
 });
 process.on('unhandledRejection', reason => {
+  if (isStreamDestroyedError(reason)) return;
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
@@ -47,25 +50,13 @@ async function main() {
     for (const s of failed) {
       console.info(`MCP: Failed to connect to "${s.name}": ${s.error}`);
     }
+    const skipped = mcpManager.getSkippedServers();
+    for (const s of skipped) {
+      console.info(`MCP: Skipped "${s.name}": ${s.reason}`);
+    }
   }
 
-  const logFile = path.join(getAppDataDir(), 'debug.log');
-  const logStream = fs.createWriteStream(logFile, { flags: 'a' });
-  const fmt = (a: unknown): string => {
-    if (typeof a === 'string') return a;
-    if (a instanceof Error) return `${a.name}: ${a.message}`;
-    try {
-      return JSON.stringify(a);
-    } catch {
-      return String(a);
-    }
-  };
-  console.error = (...args: unknown[]) => {
-    logStream.write(`[ERROR] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
-  };
-  console.warn = (...args: unknown[]) => {
-    logStream.write(`[WARN] ${new Date().toISOString()} ${args.map(fmt).join(' ')}\n`);
-  };
+  setupDebugLogging();
 
   // Detect and apply terminal theme
   // MASTRA_THEME env var is the highest-priority override
@@ -86,7 +77,7 @@ async function main() {
     authStorage,
     mcpManager,
     appName: 'Mastra Code',
-    version: '0.1.0',
+    version: getCurrentVersion(),
     inlineQuestions: true,
   });
 

@@ -71,10 +71,11 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         const hasAllOf = 'allOf' in propSchema;
 
         if (!hasType && !hasRef && !hasAnyOf && !hasOneOf && !hasAllOf) {
-          return [
-            key,
-            { ...propSchema, type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'], items: {} },
-          ];
+          // Exclude 'array' from the fallback: an array without a meaningful items schema
+          // is unusable by the LLM, and including it with items: {} causes Gemini to reject
+          // the schema (items is only valid when type is exclusively ARRAY).
+          const { items: _items, ...rest } = propSchema;
+          return [key, { ...rest, type: ['string', 'number', 'integer', 'boolean', 'object', 'null'] }];
         }
         // Recurse into nested object schemas
         return [key, fixTypelessProperties(propSchema)];

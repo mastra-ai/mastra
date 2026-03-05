@@ -224,6 +224,7 @@ export class MastraLLMVNext extends MastraBase {
         toolCallId,
         messageList,
         models: this.#models,
+        logger: this.logger,
         tools: tools as Tools,
         stopWhen: stopWhenToUse,
         toolChoice,

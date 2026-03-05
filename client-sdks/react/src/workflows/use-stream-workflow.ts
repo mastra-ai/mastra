@@ -1,11 +1,10 @@
-import { StreamVNextChunkType, TimeTravelParams } from '@mastra/client-js';
+import type { ReadableStreamDefaultReader } from 'node:stream/web';
+import type { StreamVNextChunkType } from '@mastra/client-js';
 import { RequestContext } from '@mastra/core/request-context';
-import { WorkflowStreamResult as CoreWorkflowStreamResult } from '@mastra/core/workflows';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { ReadableStreamDefaultReader } from 'stream/web';
-import { useMastraClient } from '../mastra-client-context';
-import { useMutation } from '../lib/use-mutation';
 import { mapWorkflowStreamChunkToWatchResult } from '../lib/ai-sdk/utils/toUIMessage';
+import { useMutation } from '../lib/use-mutation';
+import { useMastraClient } from '../mastra-client-context';
 import type {
   UseStreamWorkflowParams,
   WorkflowStreamResult,
@@ -61,7 +60,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
       if (readerRef.current) {
         try {
           readerRef.current.releaseLock();
-        } catch (error) {
+        } catch {
           // Reader might already be released, ignore the error
         }
         readerRef.current = null;
@@ -69,7 +68,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
       if (observerRef.current) {
         try {
           observerRef.current.releaseLock();
-        } catch (error) {
+        } catch {
           // Reader might already be released, ignore the error
         }
         observerRef.current = null;
@@ -77,7 +76,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
       if (resumeStreamRef.current) {
         try {
           resumeStreamRef.current.releaseLock();
-        } catch (error) {
+        } catch {
           // Reader might already be released, ignore the error
         }
         resumeStreamRef.current = null;
@@ -85,7 +84,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
       if (timeTravelStreamRef.current) {
         try {
           timeTravelStreamRef.current.releaseLock();
-        } catch (error) {
+        } catch {
           // Reader might already be released, ignore the error
         }
         timeTravelStreamRef.current = null;
@@ -417,7 +416,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
     if (readerRef.current) {
       try {
         readerRef.current.releaseLock();
-      } catch (error) {
+      } catch {
         // Reader might already be released, ignore the error
       }
       readerRef.current = null;
@@ -425,7 +424,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
     if (observerRef.current) {
       try {
         observerRef.current.releaseLock();
-      } catch (error) {
+      } catch {
         // Reader might already be released, ignore the error
       }
       observerRef.current = null;
@@ -433,7 +432,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
     if (resumeStreamRef.current) {
       try {
         resumeStreamRef.current.releaseLock();
-      } catch (error) {
+      } catch {
         // Reader might already be released, ignore the error
       }
       resumeStreamRef.current = null;
@@ -441,7 +440,7 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
     if (timeTravelStreamRef.current) {
       try {
         timeTravelStreamRef.current.releaseLock();
-      } catch (error) {
+      } catch {
         // Reader might already be released, ignore the error
       }
       timeTravelStreamRef.current = null;

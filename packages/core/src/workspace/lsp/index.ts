@@ -8,6 +8,7 @@ export { LANGUAGE_EXTENSIONS, getLanguageId } from './language';
 export { isLSPAvailable, loadLSPDeps, LSPClient } from './client';
 export {
   BUILTIN_SERVERS,
+  buildServerDefs,
   findProjectRoot,
   findProjectRootAsync,
   getServersForFile,
