@@ -324,6 +324,32 @@ export const testAgent = new Agent({
 })
 ```
 
+You can also return a full fallback array from `model` when using `RequestContext`.
+
+```typescript title="src/mastra/agents/test-agent.ts"
+export const testAgent = new Agent({
+  id: "test-agent",
+  name: "Test Agent",
+  maxRetries: 2,
+  model: ({ requestContext }) => {
+    const userTier = requestContext.get("user-tier");
+
+    if (userTier === "enterprise") {
+      return [
+        { model: "openai/gpt-5", maxRetries: 3 },
+        { model: "anthropic/claude-3-5-sonnet-20241022", maxRetries: 1 },
+      ];
+    }
+
+    // Models without explicit maxRetries inherit agent-level maxRetries (2).
+    return [
+      { model: "openai/gpt-4.1-nano" },
+      { model: "openai/gpt-4.1-mini", maxRetries: 1 },
+    ];
+  },
+});
+```
+
 :::info
 
 See [Request Context](/docs/server/request-context) for more information.
