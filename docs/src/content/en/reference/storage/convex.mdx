@@ -90,28 +90,25 @@ const storage = new ConvexStore({
 
 <PropertiesTable
   content={[
-{
-name: "deploymentUrl",
-type: "string",
-description:
-"Convex deployment URL (e.g., https://your-project.convex.cloud)",
-isOptional: false,
-},
-{
-name: "adminAuthToken",
-type: "string",
-description:
-"Convex admin authentication token for backend access",
-isOptional: false,
-},
-{
-name: "storageFunction",
-type: "string",
-description:
-"Path to the storage mutation function (default: 'mastra/storage:handle')",
-isOptional: true,
-defaultValue: "mastra/storage:handle",
-},
+  {
+    name: 'deploymentUrl',
+    type: 'string',
+    description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
+    isOptional: false,
+  },
+  {
+    name: 'adminAuthToken',
+    type: 'string',
+    description: 'Convex admin authentication token for backend access',
+    isOptional: false,
+  },
+  {
+    name: 'storageFunction',
+    type: 'string',
+    description: "Path to the storage mutation function (default: 'mastra/storage:handle')",
+    isOptional: true,
+    defaultValue: 'mastra/storage:handle',
+  },
 ]}
 />
 

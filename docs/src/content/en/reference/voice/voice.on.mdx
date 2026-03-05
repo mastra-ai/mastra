@@ -61,20 +61,20 @@ voice.on('error', ({ message, code, details }) => {
 
 <PropertiesTable
   content={[
-{
-name: "event",
-type: "string",
-description:
-"Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.",
-isOptional: false,
-},
-{
-name: "callback",
-type: "function",
-description:
-"Callback function that will be called when the event occurs. The callback signature depends on the specific event.",
-isOptional: false,
-},
+  {
+    name: 'event',
+    type: 'string',
+    description:
+      'Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.',
+    isOptional: false,
+  },
+  {
+    name: 'callback',
+    type: 'function',
+    description:
+      'Callback function that will be called when the event occurs. The callback signature depends on the specific event.',
+    isOptional: false,
+  },
 ]}
 />
 

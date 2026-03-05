@@ -46,13 +46,12 @@ await voice.speak('Hello with my new voice!')
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "Record<string, unknown>",
-description:
-"Configuration options to update. The specific properties depend on the voice provider.",
-isOptional: false,
-},
+  {
+    name: 'options',
+    type: 'Record<string, unknown>',
+    description: 'Configuration options to update. The specific properties depend on the voice provider.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -70,20 +69,18 @@ Different voice providers support different configuration options:
 
 <PropertiesTable
   content={[
-{
-name: "voice",
-type: "string",
-description:
-"Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
-isOptional: true,
-},
-{
-name: "turn_detection",
-type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
-description:
-"Configuration for detecting when a user has finished speaking",
-isOptional: true,
-},
+  {
+    name: 'voice',
+    type: 'string',
+    description: "Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
+    isOptional: true,
+  },
+  {
+    name: 'turn_detection',
+    type: '{ type: string, threshold?: number, silence_duration_ms?: number }',
+    description: 'Configuration for detecting when a user has finished speaking',
+    isOptional: true,
+  },
 ]}
 />
 

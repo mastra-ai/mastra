@@ -15,34 +15,33 @@ The `createPromptAlignmentScorerLLM()` function creates a scorer that evaluates 
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraModelConfig",
-description:
-"The language model to use for evaluating prompt-response alignment",
-required: true,
-},
-{
-name: "options",
-type: "PromptAlignmentOptions",
-description: "Configuration options for the scorer",
-required: false,
-children: [
-{
-name: "scale",
-type: "number",
-description: "Scale factor to multiply the final score (default: 1)",
-required: false,
-},
-{
-name: "evaluationMode",
-type: "'user' | 'system' | 'both'",
-description:
-"Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
-required: false,
-},
-],
-},
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for evaluating prompt-response alignment',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'PromptAlignmentOptions',
+    description: 'Configuration options for the scorer',
+    required: false,
+    children: [
+      {
+        name: 'scale',
+        type: 'number',
+        description: 'Scale factor to multiply the final score (default: 1)',
+        required: false,
+      },
+      {
+        name: 'evaluationMode',
+        type: "'user' | 'system' | 'both'",
+        description:
+          "Evaluation mode - 'user' evaluates user prompt alignment only, 'system' evaluates system compliance only, 'both' evaluates both with weighted scoring (default: 'both')",
+        required: false,
+      },
+    ],
+  },
 ]}
 />
 
@@ -50,18 +49,16 @@ required: false,
 
 <PropertiesTable
   content={[
-{
-name: "score",
-type: "number",
-description:
-"Multi-dimensional alignment score between 0 and scale (default 0-1)",
-},
-{
-name: "reason",
-type: "string",
-description:
-"Human-readable explanation of the prompt alignment evaluation with detailed breakdown",
-},
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Multi-dimensional alignment score between 0 and scale (default 0-1)',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Human-readable explanation of the prompt alignment evaluation with detailed breakdown',
+  },
 ]}
 />
 
