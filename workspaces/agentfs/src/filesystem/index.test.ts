@@ -84,6 +84,27 @@ describe('AgentFSFilesystem', () => {
     });
   });
 
+  describe('appendFile binary', () => {
+    it('preserves binary data when appending', async () => {
+      const fs = new AgentFSFilesystem({ agentId: `binary-append-${Date.now()}` });
+      await fs._init();
+
+      try {
+        const first = Buffer.from([0x00, 0x01, 0x02, 0xff]);
+        const second = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
+
+        await fs.writeFile('/binary.bin', first);
+        await fs.appendFile('/binary.bin', second);
+
+        const result = await fs.readFile('/binary.bin');
+        const buf = Buffer.isBuffer(result) ? result : Buffer.from(result);
+        expect(buf).toEqual(Buffer.concat([first, second]));
+      } finally {
+        await fs._destroy();
+      }
+    });
+  });
+
   describe('Lifecycle', () => {
     it('init sets status to ready, destroy sets destroyed', async () => {
       const fs = new AgentFSFilesystem({ agentId: `lifecycle-${Date.now()}` });

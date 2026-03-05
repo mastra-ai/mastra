@@ -325,9 +325,10 @@ export class AgentFSFilesystem extends MastraFilesystem {
   async appendFile(path: string, content: FileContent): Promise<void> {
     this.assertWritable('appendFile');
     // AgentFS doesn't have native append — read + write (same pattern as S3Filesystem)
-    let existing = '';
+    let existing = Buffer.alloc(0);
     try {
-      existing = (await this.readFile(path, { encoding: 'utf-8' })) as string;
+      const current = await this.readFile(path);
+      existing = Buffer.isBuffer(current) ? current : Buffer.from(current);
     } catch (error) {
       if (error instanceof FileNotFoundError) {
         // File doesn't exist — start fresh
@@ -336,8 +337,8 @@ export class AgentFSFilesystem extends MastraFilesystem {
       }
     }
 
-    const appendContent = typeof content === 'string' ? content : Buffer.from(content).toString('utf-8');
-    await this.writeFile(path, existing + appendContent);
+    const appendBuffer = typeof content === 'string' ? Buffer.from(content, 'utf-8') : Buffer.from(content);
+    await this.writeFile(path, Buffer.concat([existing, appendBuffer]));
   }
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
