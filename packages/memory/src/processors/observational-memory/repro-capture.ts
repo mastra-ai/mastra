@@ -8,6 +8,14 @@ import type { BufferedObservationChunk, ObservationalMemoryRecord } from '@mastr
 
 const OM_REPRO_CAPTURE_DIR = process.env.OM_REPRO_CAPTURE_DIR ?? '.mastra-om-repro';
 
+function sanitizeCapturePathSegment(value: string): string {
+  const sanitized = value
+    .replace(/[\\/]+/g, '_')
+    .replace(/\.{2,}/g, '_')
+    .trim();
+  return sanitized.length > 0 ? sanitized : 'unknown-thread';
+}
+
 export function isOmReproCaptureEnabled(): boolean {
   return process.env.OM_REPRO_CAPTURE === '1';
 }
@@ -103,8 +111,9 @@ export function writeProcessInputStepReproCapture(params: {
   }
 
   try {
+    const sanitizedThreadId = sanitizeCapturePathSegment(params.threadId);
     const runId = `${Date.now()}-step-${params.stepNumber}-${randomUUID()}`;
-    const captureDir = join(process.cwd(), OM_REPRO_CAPTURE_DIR, params.threadId, runId);
+    const captureDir = join(process.cwd(), OM_REPRO_CAPTURE_DIR, sanitizedThreadId, runId);
     mkdirSync(captureDir, { recursive: true });
 
     const contextMessages = params.messageList.get.all.db();
