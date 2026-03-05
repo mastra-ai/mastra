@@ -1036,14 +1036,10 @@ describe('Memory', () => {
       });
 
       it('should retrieve working memory from a different thread with the same resourceId', async () => {
-        // This test verifies the core issue from #12253:
-        // Working memory scoped to 'resource' should persist across threads
-
         const memoryConfig: MemoryConfig = {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Create first thread
         const thread1 = await memory.saveThread({
           thread: {
             id: 'thread-1-resource-scope',
@@ -1053,7 +1049,6 @@ describe('Memory', () => {
           },
         });
 
-        // Save working memory in thread 1 (e.g., "remember I like dogs")
         await memory.updateWorkingMemory({
           threadId: thread1.id,
           resourceId,
@@ -1061,7 +1056,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Verify it was saved
         const savedMemory = await memory.getWorkingMemory({
           threadId: thread1.id,
           resourceId,
@@ -1069,25 +1063,21 @@ describe('Memory', () => {
         });
         expect(savedMemory).toContain('I like dogs');
 
-        // Create a DIFFERENT thread with the SAME resourceId
         const thread2 = await memory.saveThread({
           thread: {
             id: 'thread-2-resource-scope',
-            resourceId, // Same resourceId!
+            resourceId,
             createdAt: new Date(),
             updatedAt: new Date(),
           },
         });
 
-        // Retrieve working memory from thread 2 (e.g., "what do I like?")
-        // This should return the same data, NOT wipe it
         const retrievedMemory = await memory.getWorkingMemory({
           threadId: thread2.id,
           resourceId,
           memoryConfig,
         });
 
-        // The memory should still contain the data saved in thread 1
         expect(retrievedMemory).not.toBeNull();
         expect(retrievedMemory).toContain('I like dogs');
         expect(retrievedMemory).toContain('Alice');
@@ -1098,7 +1088,6 @@ describe('Memory', () => {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Create and save working memory in thread 1
         const thread1 = await memory.saveThread({
           thread: {
             id: 'thread-1-no-corrupt',
@@ -1116,7 +1105,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Create thread 2 and READ (not write) working memory multiple times
         const thread2 = await memory.saveThread({
           thread: {
             id: 'thread-2-no-corrupt',
@@ -1126,7 +1114,6 @@ describe('Memory', () => {
           },
         });
 
-        // Read from thread 2 multiple times
         const read1 = await memory.getWorkingMemory({
           threadId: thread2.id,
           resourceId,
@@ -1138,30 +1125,24 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Go back to thread 1 and verify data is still intact
         const finalRead = await memory.getWorkingMemory({
           threadId: thread1.id,
           resourceId,
           memoryConfig,
         });
 
-        // All reads should return the same data
         expect(read1).toContain('Loves pizza');
         expect(read2).toContain('Loves pizza');
         expect(finalRead).toContain('Loves pizza');
 
-        // Data should match original (not be wiped to empty template)
         expect(finalRead).toBe(originalData);
       });
 
       it('should NOT wipe working memory if updateWorkingMemoryTool is called with empty template from different thread', async () => {
-        // This simulates the actual bug: agent calls updateWorkingMemory tool with template
-        // during a "what do I like?" conversation in a different thread
         const memoryConfig: MemoryConfig = {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Thread 1: Save meaningful data
         const thread1 = await memory.saveThread({
           thread: {
             id: 'thread-1-wipe-test',
@@ -1179,7 +1160,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Thread 2: Different thread, same resource
         const thread2 = await memory.saveThread({
           thread: {
             id: 'thread-2-wipe-test',
@@ -1189,7 +1169,6 @@ describe('Memory', () => {
           },
         });
 
-        // Verify data is accessible from thread 2
         const beforeWipeAttempt = await memory.getWorkingMemory({
           threadId: thread2.id,
           resourceId,
@@ -1197,11 +1176,8 @@ describe('Memory', () => {
         });
         expect(beforeWipeAttempt).toContain('I like dogs');
 
-        // Create the tool with the memory config (template-based, no schema)
         const tool = updateWorkingMemoryTool(memoryConfig);
 
-        // Simulate the LLM/agent calling the tool with just the empty template
-        // This is the actual scenario that causes data loss
         const toolContext = {
           agent: {
             threadId: thread2.id,
@@ -1210,24 +1186,20 @@ describe('Memory', () => {
           memory,
         };
 
-        // Call the tool with the empty template (this is what the LLM might do)
         const toolResult = (await tool.execute!({ memory: template }, toolContext as any)) as {
           success: boolean;
           message?: string;
         };
 
-        // The tool should reject this update to prevent data loss
         expect(toolResult.success).toBe(false);
         expect(toolResult.message).toContain('empty template');
 
-        // Verify the data is still intact after the rejected update
         const afterWipeAttempt = await memory.getWorkingMemory({
           threadId: thread1.id,
           resourceId,
           memoryConfig,
         });
 
-        // The data should NOT have been wiped - the tool protection should have prevented it
         expect(afterWipeAttempt).toContain('I like dogs');
         expect(afterWipeAttempt).toContain('Alice');
       });
@@ -1250,7 +1222,6 @@ describe('Memory', () => {
       });
 
       it('should handle concurrent updates without data loss', async () => {
-        // Create thread and resource
         const thread = await memory.saveThread({
           thread: {
             id: 'concurrent-test-thread',
@@ -1260,7 +1231,6 @@ describe('Memory', () => {
           },
         });
 
-        // Set initial working memory
         await memory.updateWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1270,7 +1240,6 @@ describe('Memory', () => {
           },
         });
 
-        // Simulate concurrent updates - with mutex, these should be serialized
         const update1 = memory.updateWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1289,10 +1258,8 @@ describe('Memory', () => {
           },
         });
 
-        // Both should complete without error
         await Promise.all([update1, update2]);
 
-        // Get final working memory - should be one of the values (serialized execution)
         const finalMemory = await memory.getWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1338,7 +1305,6 @@ describe('Memory', () => {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Set initial working memory with actual data
         await memory.updateWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1346,7 +1312,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Try to insert empty template (this is what causes duplication)
         const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
           threadId: thread.id,
           resourceId,
@@ -1354,13 +1319,11 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Should be rejected
         expect(result.success).toBe(false);
         expect(result.reason).toContain('duplicate');
       });
 
       it('should reject appending empty template to existing data', async () => {
-        // Create thread
         const thread = await memory.saveThread({
           thread: {
             id: 'vnext-append-test',
@@ -1374,7 +1337,6 @@ describe('Memory', () => {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Set initial working memory with actual data
         await memory.updateWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1382,8 +1344,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Try to append with non-matching searchString (triggers append path)
-        // and provide just the template (normalized comparison should catch this)
         const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
           threadId: thread.id,
           resourceId,
@@ -1392,13 +1352,10 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Should be rejected due to duplicate/template detection
         expect(result.success).toBe(false);
       });
 
       it('should reject template with whitespace variations (requires normalized comparison)', async () => {
-        // This test specifically validates the normalized comparison fix
-        // The original code uses .trim() which doesn't catch internal whitespace differences
         const thread = await memory.saveThread({
           thread: {
             id: 'vnext-whitespace-test',
@@ -1412,7 +1369,6 @@ describe('Memory', () => {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Set initial working memory with actual data
         await memory.updateWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1420,8 +1376,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Try to insert template with different internal whitespace
-        // This would NOT be caught by .trim() alone - needs normalized comparison
         const templateWithExtraWhitespace = `# User Information
 -  **First Name**:
 -  **Last Name**:
@@ -1434,13 +1388,10 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Without normalized comparison, this would succeed and cause duplication
-        // With normalized comparison, it should be rejected as duplicate/near-template
         expect(result.success).toBe(false);
       });
 
       it('should allow valid data updates', async () => {
-        // Create thread
         const thread = await memory.saveThread({
           thread: {
             id: 'vnext-valid-test',
@@ -1454,7 +1405,6 @@ describe('Memory', () => {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Set initial working memory
         await memory.updateWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1462,7 +1412,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Update with valid new data (not just the template)
         const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
           threadId: thread.id,
           resourceId,
@@ -1470,10 +1419,8 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Should succeed
         expect(result.success).toBe(true);
 
-        // Verify data was appended
         const finalMemory = await memory.getWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1485,7 +1432,6 @@ describe('Memory', () => {
       });
 
       it('should handle searchString replacement correctly', async () => {
-        // Create thread
         const thread = await memory.saveThread({
           thread: {
             id: 'vnext-replace-test',
@@ -1499,7 +1445,6 @@ describe('Memory', () => {
           workingMemory: { enabled: true, scope: 'resource', template },
         };
 
-        // Set initial working memory
         await memory.updateWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1507,7 +1452,6 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Replace specific content using searchString
         const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
           threadId: thread.id,
           resourceId,
@@ -1516,11 +1460,9 @@ describe('Memory', () => {
           memoryConfig,
         });
 
-        // Should succeed
         expect(result.success).toBe(true);
         expect(result.reason).toContain('replaced');
 
-        // Verify replacement
         const finalMemory = await memory.getWorkingMemory({
           threadId: thread.id,
           resourceId,
@@ -1533,6 +1475,7 @@ describe('Memory', () => {
       });
     });
   });
+
   describe('semantic recall index naming', () => {
     it('should use the same vector index for processor writes and recall reads with non-default embedding dimensions', async () => {
       // 384-dim embeddings (like fastembed) — NOT the default 1536
