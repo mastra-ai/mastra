@@ -1,8 +1,6 @@
 ---
 '@mastra/core': minor
 '@mastra/playground-ui': patch
-'@mastra/gcs': patch
-'@mastra/s3': patch
 ---
 
 **Absolute paths now resolve to real filesystem locations instead of being treated as workspace-relative.**
@@ -26,4 +24,3 @@ await filesystem.readFile('/src/index.ts');
 await filesystem.readFile('src/index.ts');
 ```
 
-GCS and S3 filesystem providers now also accept `.` as a root path, ensuring compatibility when used as mounts in `CompositeFilesystem`.
