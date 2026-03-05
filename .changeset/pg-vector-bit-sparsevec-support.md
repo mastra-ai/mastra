@@ -4,14 +4,29 @@
 
 Add support for pgvector's `bit` and `sparsevec` vector storage types
 
-This release adds comprehensive support for pgvector's `bit` and `sparsevec` vector types, including:
-- New vector types: `bit` (for binary/hamming embeddings) and `sparsevec` (for sparse vectors like BM25/TF-IDF)
-- Hamming distance operator (`<~>`) and Jaccard distance operator (`<%>`) for bit vectors
-- New operator classes: `bit_hamming_ops`, `bit_jaccard_ops`, `sparsevec_cosine_ops`, `sparsevec_l2_ops`, `sparsevec_ip_ops`
-- Extended `PgMetric` type with `'hamming'` and `'jaccard'` metrics for bit vectors
-- Type-specific vector formatting and parsing for round-trip support with `includeVector`
-- Metric-aware score normalization for hamming, jaccard, cosine, euclidean, and dotproduct distances
-- Smart index defaults: IVFFlat restricted for sparsevec (HNSW only) and for bit+jaccard (HNSW only)
-- Dimension limit validation: bit vectors up to 64,000 dimensions, sparsevec up to 1,000 non-zero elements
-- Version guard requiring pgvector >= 0.7.0 for bit and sparsevec types
-- Proper PostgreSQL type handling for `bit` with dimension casting (`bit(N)`)
+You can now store binary and sparse vectors in `@mastra/pg`:
+
+```ts
+// Binary vectors for fast similarity search
+await db.createIndex({
+  indexName: 'my_binary_index',
+  dimension: 128,
+  metric: 'hamming', // or 'jaccard'
+  vectorType: 'bit',
+});
+
+// Sparse vectors for BM25/TF-IDF representations
+await db.createIndex({
+  indexName: 'my_sparse_index',
+  dimension: 500,
+  metric: 'cosine',
+  vectorType: 'sparsevec',
+});
+```
+
+What's new:
+- `vectorType: 'bit'` for binary vectors with `'hamming'` and `'jaccard'` distance metrics
+- `vectorType: 'sparsevec'` for sparse vectors (cosine, euclidean, dotproduct)
+- Automatic metric normalization: `bit` defaults to `'hamming'` when no metric is specified
+- `includeVector` round-trips work correctly for all vector types
+- Requires pgvector >= 0.7.0
