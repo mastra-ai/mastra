@@ -1,3 +1,4 @@
+import { generateText, streamText } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type {
   InputProcessor,
@@ -10,7 +11,6 @@ import type {
 import type { MemoryStorage } from '@mastra/core/storage';
 import { LibSQLStore } from '@mastra/libsql';
 import { ObservationalMemory } from '@mastra/memory/processors';
-import { generateText, streamText } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 

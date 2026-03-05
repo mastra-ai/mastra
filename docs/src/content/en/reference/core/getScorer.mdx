@@ -33,13 +33,13 @@ await weatherAgent.generate('What is the weather in Rome', {
 
 <PropertiesTable
   content={[
-{
-name: "key",
-type: "string",
-description:
-"The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.",
-isOptional: false,
-},
+  {
+    name: 'key',
+    type: 'string',
+    description:
+      'The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -47,12 +47,11 @@ isOptional: false,
 
 <PropertiesTable
   content={[
-{
-name: "scorer",
-type: "MastraScorer",
-description:
-"The MastraScorer instance associated with the provided key.",
-},
+  {
+    name: 'scorer',
+    type: 'MastraScorer',
+    description: 'The MastraScorer instance associated with the provided key.',
+  },
 ]}
 />
 

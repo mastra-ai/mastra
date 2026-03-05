@@ -42,41 +42,39 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-{
-name: "auth",
-type: "Auth",
-description:
-"Your Better Auth instance created via betterAuth({ ... }). This is required and must be properly configured with a supported database provider.",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Custom name for the auth provider instance.",
-isOptional: true,
-defaultValue: "'better-auth'",
-},
-{
-name: "authorizeUser",
-type: "(user: BetterAuthUser, request: HonoRequest) => Promise<boolean> | boolean",
-description:
-"Custom authorization function to determine if a user should be granted access. Called after session verification. By default, allows all authenticated users with valid sessions.",
-isOptional: true,
-},
-{
-name: "public",
-type: "Array<string | RegExp | [string, Methods | Methods[]]>",
-description:
-"Public routes that do not require authentication. Supports exact paths, wildcards, and path params.",
-isOptional: true,
-},
-{
-name: "protected",
-type: "Array<string | RegExp | [string, Methods | Methods[]]>",
-description:
-"Protected routes that require authentication. Supports exact paths, wildcards, and path params.",
-isOptional: true,
-},
+  {
+    name: 'auth',
+    type: 'Auth',
+    description:
+      'Your Better Auth instance created via betterAuth({ ... }). This is required and must be properly configured with a supported database provider.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Custom name for the auth provider instance.',
+    isOptional: true,
+    defaultValue: "'better-auth'",
+  },
+  {
+    name: 'authorizeUser',
+    type: '(user: BetterAuthUser, request: HonoRequest) => Promise<boolean> | boolean',
+    description:
+      'Custom authorization function to determine if a user should be granted access. Called after session verification. By default, allows all authenticated users with valid sessions.',
+    isOptional: true,
+  },
+  {
+    name: 'public',
+    type: 'Array<string | RegExp | [string, Methods | Methods[]]>',
+    description: 'Public routes that do not require authentication. Supports exact paths, wildcards, and path params.',
+    isOptional: true,
+  },
+  {
+    name: 'protected',
+    type: 'Array<string | RegExp | [string, Methods | Methods[]]>',
+    description: 'Protected routes that require authentication. Supports exact paths, wildcards, and path params.',
+    isOptional: true,
+  },
 ]}
 />
 

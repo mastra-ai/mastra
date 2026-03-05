@@ -75,48 +75,48 @@ Start a new span of a specific SpanType. Creates the root span of a trace if no 
 
 <PropertiesTable
   props={[
-{
-name: "type",
-type: "SpanType",
-description: "Type of span to create",
-required: true,
-},
-{
-name: "name",
-type: "string",
-description: "Name of the span",
-required: true,
-},
-{
-name: "parent",
-type: "AnySpan",
-description: "Parent span (if not root)",
-required: false,
-},
-{
-name: "attributes",
-type: "SpanTypeMap[TType]",
-description: "Type-specific attributes",
-required: false,
-},
-{
-name: "metadata",
-type: "Record<string, any>",
-description: "User-defined metadata",
-required: false,
-},
-{
-name: "input",
-type: "any",
-description: "Initial input data",
-required: false,
-},
-{
-name: "customSamplerOptions",
-type: "CustomSamplerOptions",
-description: "Options for custom sampler",
-required: false,
-},
+  {
+    name: 'type',
+    type: 'SpanType',
+    description: 'Type of span to create',
+    required: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name of the span',
+    required: true,
+  },
+  {
+    name: 'parent',
+    type: 'AnySpan',
+    description: 'Parent span (if not root)',
+    required: false,
+  },
+  {
+    name: 'attributes',
+    type: 'SpanTypeMap[TType]',
+    description: 'Type-specific attributes',
+    required: false,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>',
+    description: 'User-defined metadata',
+    required: false,
+  },
+  {
+    name: 'input',
+    type: 'any',
+    description: 'Initial input data',
+    required: false,
+  },
+  {
+    name: 'customSamplerOptions',
+    type: 'CustomSamplerOptions',
+    description: 'Options for custom sampler',
+    required: false,
+  },
 ]}
 />
 

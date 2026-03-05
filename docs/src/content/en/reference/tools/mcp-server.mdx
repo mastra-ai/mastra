@@ -61,114 +61,110 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-isOptional: false,
-description:
-"Unique identifier for the server. This ID is preserved when the server is registered with Mastra and can be used to retrieve the server via getMCPServerById().",
-},
-{
-name: "name",
-type: "string",
-isOptional: false,
-description:
-"A descriptive name for your server (e.g., 'My Weather and Agent Server').",
-},
-{
-name: "version",
-type: "string",
-isOptional: false,
-description: "The semantic version of your server (e.g., '1.0.0').",
-},
-{
-name: "tools",
-type: "ToolsInput",
-isOptional: false,
-description:
-"An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.",
-},
-{
-name: "agents",
-type: "Record<string, Agent>",
-isOptional: true,
-description:
-"An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
-},
-{
-name: "workflows",
-type: "Record<string, Workflow>",
-isOptional: true,
-description:
-"An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
-},
-{
-name: "description",
-type: "string",
-isOptional: true,
-description: "Optional description of what the MCP server does.",
-},
-{
-name: "instructions",
-type: "string",
-isOptional: true,
-description:
-"Optional instructions describing how to use the server and its features.",
-},
-{
-name: "repository",
-type: "Repository", // { url: string; source: string; id: string; }
-isOptional: true,
-description:
-"Optional repository information for the server's source code.",
-},
-{
-name: "releaseDate",
-type: "string", // ISO 8601
-isOptional: true,
-description:
-"Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.",
-},
-{
-name: "isLatest",
-type: "boolean",
-isOptional: true,
-description:
-"Optional flag indicating if this is the latest version. Defaults to true if not provided.",
-},
-{
-name: "packageCanonical",
-type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
-isOptional: true,
-description:
-"Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
-},
-{
-name: "packages",
-type: "PackageInfo[]",
-isOptional: true,
-description: "Optional list of installable packages for this server.",
-},
-{
-name: "remotes",
-type: "RemoteInfo[]",
-isOptional: true,
-description: "Optional list of remote access points for this server.",
-},
-{
-name: "resources",
-type: "MCPServerResources",
-isOptional: true,
-description:
-"An object defining how the server should handle MCP resources. See Resource Handling section for details.",
-},
-{
-name: "prompts",
-type: "MCPServerPrompts",
-isOptional: true,
-description:
-"An object defining how the server should handle MCP prompts. See Prompt Handling section for details.",
-},
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: false,
+    description:
+      'Unique identifier for the server. This ID is preserved when the server is registered with Mastra and can be used to retrieve the server via getMCPServerById().',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: false,
+    description: "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
+  },
+  {
+    name: 'version',
+    type: 'string',
+    isOptional: false,
+    description: "The semantic version of your server (e.g., '1.0.0').",
+  },
+  {
+    name: 'tools',
+    type: 'ToolsInput',
+    isOptional: false,
+    description:
+      'An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.',
+  },
+  {
+    name: 'agents',
+    type: 'Record<string, Agent>',
+    isOptional: true,
+    description:
+      "An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
+  },
+  {
+    name: 'workflows',
+    type: 'Record<string, Workflow>',
+    isOptional: true,
+    description:
+      "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional description of what the MCP server does.',
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional instructions describing how to use the server and its features.',
+  },
+  {
+    name: 'repository',
+    type: 'Repository', // { url: string; source: string; id: string; }
+    isOptional: true,
+    description: "Optional repository information for the server's source code.",
+  },
+  {
+    name: 'releaseDate',
+    type: 'string', // ISO 8601
+    isOptional: true,
+    description:
+      'Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.',
+  },
+  {
+    name: 'isLatest',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Optional flag indicating if this is the latest version. Defaults to true if not provided.',
+  },
+  {
+    name: 'packageCanonical',
+    type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
+    isOptional: true,
+    description:
+      "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
+  },
+  {
+    name: 'packages',
+    type: 'PackageInfo[]',
+    isOptional: true,
+    description: 'Optional list of installable packages for this server.',
+  },
+  {
+    name: 'remotes',
+    type: 'RemoteInfo[]',
+    isOptional: true,
+    description: 'Optional list of remote access points for this server.',
+  },
+  {
+    name: 'resources',
+    type: 'MCPServerResources',
+    isOptional: true,
+    description:
+      'An object defining how the server should handle MCP resources. See Resource Handling section for details.',
+  },
+  {
+    name: 'prompts',
+    type: 'MCPServerPrompts',
+    isOptional: true,
+    description:
+      'An object defining how the server should handle MCP prompts. See Prompt Handling section for details.',
+  },
 ]}
 />
 
@@ -318,34 +314,31 @@ Here are the details for the values needed by the `startSSE` method:
 
 <PropertiesTable
   content={[
-{
-name: "url",
-type: "URL",
-description: "The web address the user is requesting.",
-},
-{
-name: "ssePath",
-type: "string",
-description:
-"The specific part of the URL where clients will connect for SSE (e.g., '/sse').",
-},
-{
-name: "messagePath",
-type: "string",
-description:
-"The specific part of the URL where clients will send messages (e.g., '/message').",
-},
-{
-name: "req",
-type: "any",
-description: "The incoming request object from your web server.",
-},
-{
-name: "res",
-type: "any",
-description:
-"The response object from your web server, used to send data back.",
-},
+  {
+    name: 'url',
+    type: 'URL',
+    description: 'The web address the user is requesting.',
+  },
+  {
+    name: 'ssePath',
+    type: 'string',
+    description: "The specific part of the URL where clients will connect for SSE (e.g., '/sse').",
+  },
+  {
+    name: 'messagePath',
+    type: 'string',
+    description: "The specific part of the URL where clients will send messages (e.g., '/message').",
+  },
+  {
+    name: 'req',
+    type: 'any',
+    description: 'The incoming request object from your web server.',
+  },
+  {
+    name: 'res',
+    type: 'any',
+    description: 'The response object from your web server, used to send data back.',
+  },
 ]}
 />
 
@@ -393,34 +386,31 @@ Here are the details for the values needed by the `startHonoSSE` method:
 
 <PropertiesTable
   content={[
-{
-name: "url",
-type: "URL",
-description: "The web address the user is requesting.",
-},
-{
-name: "ssePath",
-type: "string",
-description:
-"The specific part of the URL where clients will connect for SSE (e.g., '/hono-sse').",
-},
-{
-name: "messagePath",
-type: "string",
-description:
-"The specific part of the URL where clients will send messages (e.g., '/message').",
-},
-{
-name: "req",
-type: "any",
-description: "The incoming request object from your web server.",
-},
-{
-name: "res",
-type: "any",
-description:
-"The response object from your web server, used to send data back.",
-},
+  {
+    name: 'url',
+    type: 'URL',
+    description: 'The web address the user is requesting.',
+  },
+  {
+    name: 'ssePath',
+    type: 'string',
+    description: "The specific part of the URL where clients will connect for SSE (e.g., '/hono-sse').",
+  },
+  {
+    name: 'messagePath',
+    type: 'string',
+    description: "The specific part of the URL where clients will send messages (e.g., '/message').",
+  },
+  {
+    name: 'req',
+    type: 'any',
+    description: 'The incoming request object from your web server.',
+  },
+  {
+    name: 'res',
+    type: 'any',
+    description: 'The response object from your web server, used to send data back.',
+  },
 ]}
 />
 
@@ -542,35 +532,32 @@ Here are the details for the values needed by the `startHTTP` method:
 
 <PropertiesTable
   content={[
-{
-name: "url",
-type: "URL",
-description: "The web address the user is requesting.",
-},
-{
-name: "httpPath",
-type: "string",
-description:
-"The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
-},
-{
-name: "req",
-type: "http.IncomingMessage",
-description: "The incoming request object from your web server.",
-},
-{
-name: "res",
-type: "http.ServerResponse",
-description:
-"The response object from your web server, used to send data back.",
-},
-{
-name: "options",
-type: "StreamableHTTPServerTransportOptions",
-description:
-"Optional configuration for the HTTP transport. See the options table below for more details.",
-optional: true,
-},
+  {
+    name: 'url',
+    type: 'URL',
+    description: 'The web address the user is requesting.',
+  },
+  {
+    name: 'httpPath',
+    type: 'string',
+    description: "The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
+  },
+  {
+    name: 'req',
+    type: 'http.IncomingMessage',
+    description: 'The incoming request object from your web server.',
+  },
+  {
+    name: 'res',
+    type: 'http.ServerResponse',
+    description: 'The response object from your web server, used to send data back.',
+  },
+  {
+    name: 'options',
+    type: 'StreamableHTTPServerTransportOptions',
+    description: 'Optional configuration for the HTTP transport. See the options table below for more details.',
+    optional: true,
+  },
 ]}
 />
 
@@ -578,40 +565,40 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 <PropertiesTable
   content={[
-{
-name: "serverless",
-type: "boolean",
-description:
-"If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.",
-optional: true,
-},
-{
-name: "sessionIdGenerator",
-type: "(() => string) | undefined",
-description:
-"A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.",
-},
-{
-name: "onsessioninitialized",
-type: "(sessionId: string) => void",
-description:
-"A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.",
-optional: true,
-},
-{
-name: "enableJsonResponse",
-type: "boolean",
-description:
-"If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.",
-optional: true,
-},
-{
-name: "eventStore",
-type: "EventStore",
-description:
-"An event store for message resumability. Providing this enables clients to reconnect and resume message streams.",
-optional: true,
-},
+  {
+    name: 'serverless',
+    type: 'boolean',
+    description:
+      'If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.',
+    optional: true,
+  },
+  {
+    name: 'sessionIdGenerator',
+    type: '(() => string) | undefined',
+    description:
+      'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
+  },
+  {
+    name: 'onsessioninitialized',
+    type: '(sessionId: string) => void',
+    description:
+      'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
+    optional: true,
+  },
+  {
+    name: 'enableJsonResponse',
+    type: 'boolean',
+    description:
+      'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
+    optional: true,
+  },
+  {
+    name: 'eventStore',
+    type: 'EventStore',
+    description:
+      'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
+    optional: true,
+  },
 ]}
 />
 
@@ -709,23 +696,22 @@ async executeTool(
 
 <PropertiesTable
   content={[
-{
-name: "toolId",
-type: "string",
-description: "The ID/name of the tool to execute.",
-},
-{
-name: "args",
-type: "any",
-description: "The arguments to pass to the tool\'s execute function.",
-},
-{
-name: "executionContext",
-type: "object",
-isOptional: true,
-description:
-"Optional context for the tool execution, like messages or a toolCallId.",
-},
+  {
+    name: 'toolId',
+    type: 'string',
+    description: 'The ID/name of the tool to execute.',
+  },
+  {
+    name: 'args',
+    type: 'any',
+    description: "The arguments to pass to the tool\'s execute function.",
+  },
+  {
+    name: 'executionContext',
+    type: 'object',
+    isOptional: true,
+    description: 'Optional context for the tool execution, like messages or a toolCallId.',
+  },
 ]}
 />
 
@@ -1282,42 +1268,43 @@ const customMiddleware = createOAuthMiddleware({
 
 <PropertiesTable
   content={[
-{
-name: "oauth.resource",
-type: "string",
-description: "The canonical URL of your MCP server. This is returned in Protected Resource Metadata.",
-},
-{
-name: "oauth.authorizationServers",
-type: "string[]",
-description: "URLs of authorization servers that can issue tokens for this resource.",
-},
-{
-name: "oauth.scopesSupported",
-type: "string[]",
-isOptional: true,
-defaultValue: "['mcp:read', 'mcp:write']",
-description: "Scopes supported by this MCP server.",
-},
-{
-name: "oauth.resourceName",
-type: "string",
-isOptional: true,
-description: "Human-readable name for this resource server.",
-},
-{
-name: "oauth.validateToken",
-type: "(token: string, resource: string) => Promise<TokenValidationResult>",
-isOptional: true,
-description: "Function to validate access tokens. If not provided, tokens are accepted without validation (NOT recommended for production).",
-},
-{
-name: "mcpPath",
-type: "string",
-isOptional: true,
-defaultValue: "'/mcp'",
-description: "Path where the MCP endpoint is served. Only requests to this path require authentication.",
-},
+  {
+    name: 'oauth.resource',
+    type: 'string',
+    description: 'The canonical URL of your MCP server. This is returned in Protected Resource Metadata.',
+  },
+  {
+    name: 'oauth.authorizationServers',
+    type: 'string[]',
+    description: 'URLs of authorization servers that can issue tokens for this resource.',
+  },
+  {
+    name: 'oauth.scopesSupported',
+    type: 'string[]',
+    isOptional: true,
+    defaultValue: "['mcp:read', 'mcp:write']",
+    description: 'Scopes supported by this MCP server.',
+  },
+  {
+    name: 'oauth.resourceName',
+    type: 'string',
+    isOptional: true,
+    description: 'Human-readable name for this resource server.',
+  },
+  {
+    name: 'oauth.validateToken',
+    type: '(token: string, resource: string) => Promise<TokenValidationResult>',
+    isOptional: true,
+    description:
+      'Function to validate access tokens. If not provided, tokens are accepted without validation (NOT recommended for production).',
+  },
+  {
+    name: 'mcpPath',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'/mcp'",
+    description: 'Path where the MCP endpoint is served. Only requests to this path require authentication.',
+  },
 ]}
 />
 

@@ -125,37 +125,36 @@ Or in `wrangler.jsonc`:
 
 <PropertiesTable
   content={[
-{
-name: "binding",
-type: "D1Database",
-description: "Cloudflare D1 Workers binding (for Workers runtime)",
-isOptional: true,
-},
-{
-name: "accountId",
-type: "string",
-description: "Cloudflare Account ID (for REST API)",
-isOptional: true,
-},
-{
-name: "databaseId",
-type: "string",
-description: "Cloudflare D1 Database ID (for REST API)",
-isOptional: true,
-},
-{
-name: "apiToken",
-type: "string",
-description: "Cloudflare API Token (for REST API)",
-isOptional: true,
-},
-{
-name: "tablePrefix",
-type: "string",
-description:
-"Optional prefix for all table names (useful for environment isolation)",
-isOptional: true,
-},
+  {
+    name: 'binding',
+    type: 'D1Database',
+    description: 'Cloudflare D1 Workers binding (for Workers runtime)',
+    isOptional: true,
+  },
+  {
+    name: 'accountId',
+    type: 'string',
+    description: 'Cloudflare Account ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'databaseId',
+    type: 'string',
+    description: 'Cloudflare D1 Database ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'apiToken',
+    type: 'string',
+    description: 'Cloudflare API Token (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'tablePrefix',
+    type: 'string',
+    description: 'Optional prefix for all table names (useful for environment isolation)',
+    isOptional: true,
+  },
 ]}
 />
 

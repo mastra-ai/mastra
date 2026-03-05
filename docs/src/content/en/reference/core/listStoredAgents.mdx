@@ -42,43 +42,40 @@ for (const config of result.agents) {
 
 <PropertiesTable
   content={[
-{
-name: "args",
-type: "object",
-description:
-"Optional configuration object for pagination and output format.",
-isOptional: true,
-},
-]}
-/>
-
-### Args Options
-
-<PropertiesTable
-  content={[
-{
-name: "page",
-type: "number",
-description: "Zero-indexed page number for pagination.",
-isOptional: true,
-defaultValue: "0",
-},
-{
-name: "perPage",
-type: "number | false",
-description:
-"Number of items per page. Set to `false` to fetch all records without pagination.",
-isOptional: true,
-defaultValue: "100",
-},
-{
-name: "raw",
-type: "boolean",
-description:
-"When `true`, returns raw `StorageAgentType` objects instead of `Agent` instances.",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'args',
+    type: 'object',
+    description: 'Optional configuration object for pagination and output format.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'page',
+            type: 'number',
+            description: 'Zero-indexed page number for pagination.',
+            isOptional: true,
+            defaultValue: '0',
+          },
+          {
+            name: 'perPage',
+            type: 'number | false',
+            description: 'Number of items per page. Set to `false` to fetch all records without pagination.',
+            isOptional: true,
+            defaultValue: '100',
+          },
+          {
+            name: 'raw',
+            type: 'boolean',
+            description: 'When `true`, returns raw `StorageAgentType` objects instead of `Agent` instances.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -86,32 +83,31 @@ defaultValue: "false",
 
 <PropertiesTable
   content={[
-{
-name: "agents",
-type: "Agent[] | StorageAgentType[]",
-description:
-"Array of `Agent` instances by default, or `StorageAgentType` objects when `raw: true`.",
-},
-{
-name: "total",
-type: "number",
-description: "Total number of stored agents across all pages.",
-},
-{
-name: "page",
-type: "number",
-description: "Current page number (zero-indexed).",
-},
-{
-name: "perPage",
-type: "number | false",
-description: "Number of items per page, or `false` if fetching all.",
-},
-{
-name: "hasMore",
-type: "boolean",
-description: "Whether there are more pages available.",
-},
+  {
+    name: 'agents',
+    type: 'Agent[] | StorageAgentType[]',
+    description: 'Array of `Agent` instances by default, or `StorageAgentType` objects when `raw: true`.',
+  },
+  {
+    name: 'total',
+    type: 'number',
+    description: 'Total number of stored agents across all pages.',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    description: 'Current page number (zero-indexed).',
+  },
+  {
+    name: 'perPage',
+    type: 'number | false',
+    description: 'Number of items per page, or `false` if fetching all.',
+  },
+  {
+    name: 'hasMore',
+    type: 'boolean',
+    description: 'Whether there are more pages available.',
+  },
 ]}
 />
 

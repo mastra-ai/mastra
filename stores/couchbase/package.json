@@ -29,7 +29,7 @@
     "posttest": "docker compose down -v"
   },
   "dependencies": {
-    "couchbase": "^4.6.0"
+    "couchbase": "^4.6.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
