@@ -142,7 +142,7 @@
     },
     {
       "source": "/docs/getting-started/templates",
-      "destination": "/docs/getting-started/start",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -552,7 +552,7 @@
     },
     {
       "source": "/examples/v1",
-      "destination": "/docs/getting-started/start",
+      "destination": "/docs",
       "permanent": true
     },
     {
