@@ -3,13 +3,13 @@ dist/
 test-outputs/
 .vitest-reports/
 .DS_Store
+.mastra-om-repro/
 
 # IDE
 .vscode/
 .idea/
 .history/
 .context/
-.mastra-om-repro/
 
 # Dev artifacts
 .dev/db/*

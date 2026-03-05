@@ -1,5 +1,6 @@
 ---
-'@mastra/memory': minor
+'@mastra/core': patch
+'@mastra/memory': patch
 ---
 
-Update peer dependencies to match core package version bump (1.9.1)
+Fixed observational memory activation replay so already observed work is pruned from the next prompt, including sealed assistant messages that continue with a fresh tail.
