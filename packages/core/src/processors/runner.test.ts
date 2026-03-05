@@ -1937,18 +1937,18 @@ describe('ProcessorRunner', () => {
       expect(stateInOutputResult.finishReason).toBe('stop');
     });
 
-    it('should provide streamParts in processOutputResult', async () => {
-      let receivedStreamParts: ChunkType[] | undefined;
+    it('should provide result in processOutputResult', async () => {
+      let receivedResult: any;
 
       const outputProcessors: Processor[] = [
         {
-          id: 'streamPartsProcessor',
-          name: 'Stream Parts Processor',
+          id: 'resultProcessor',
+          name: 'Result Processor',
           processOutputStream: async ({ part }) => {
             return part;
           },
-          processOutputResult: ({ streamParts, messages }) => {
-            receivedStreamParts = streamParts;
+          processOutputResult: ({ result, messages }) => {
+            receivedResult = result;
             return messages;
           },
         },
@@ -1964,32 +1964,22 @@ describe('ProcessorRunner', () => {
         processorStates,
       });
 
-      // Process stream chunks
-      await runner.processPart(
-        { type: 'text-delta', payload: { text: 'hello' }, runId: '1', from: ChunkFrom.AGENT },
-        processorStates,
-      );
-      await runner.processPart(
-        {
-          type: 'finish',
-          payload: {
-            stepResult: { reason: 'stop' },
-            output: { usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
-          },
-          runId: '1',
-          from: ChunkFrom.AGENT,
-        } as ChunkType,
-        processorStates,
-      );
+      const mockResult = {
+        text: 'hello world',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      };
 
-      // Run processOutputResult - should receive streamParts
+      // Run processOutputResult - should receive result
       messageList.add(createMessage('test response', 'assistant'), 'response');
-      await runner.runOutputProcessors(messageList);
+      await runner.runOutputProcessors(messageList, undefined, undefined, 0, undefined, mockResult);
 
-      expect(receivedStreamParts).toBeDefined();
-      expect(receivedStreamParts).toHaveLength(2);
-      expect(receivedStreamParts![0]!.type).toBe('text-delta');
-      expect(receivedStreamParts![1]!.type).toBe('finish');
+      expect(receivedResult).toBeDefined();
+      expect(receivedResult.text).toBe('hello world');
+      expect(receivedResult.usage).toEqual({ inputTokens: 10, outputTokens: 5, totalTokens: 15 });
+      expect(receivedResult.finishReason).toBe('stop');
+      expect(receivedResult.steps).toEqual([]);
     });
   });
 });

@@ -25,7 +25,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { ProcessorRunner, ProcessorState } from '../processors';
-import type { Processor, ProcessorStreamWriter } from '../processors';
+import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepOutput } from '../processors/step-schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
@@ -664,6 +664,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         part,
         streamParts,
         state,
+        result: outputResult,
         finishReason,
         toolCalls,
         text,
@@ -786,6 +787,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         systemMessages,
         streamParts,
         state,
+        result: outputResult,
         finishReason,
         toolCalls,
         text,
@@ -1044,11 +1046,18 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
+              const defaultResult: OutputResult = {
+                text: '',
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                finishReason: 'unknown',
+                steps: [],
+              };
+
               const result = await processor.processOutputResult({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
-                streamParts: (passThrough.streamParts as ChunkType[]) ?? [],
+                result: (passThrough.result as OutputResult) ?? defaultResult,
               });
 
               if (result instanceof MessageList) {

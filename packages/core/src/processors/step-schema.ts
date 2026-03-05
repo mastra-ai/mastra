@@ -141,6 +141,12 @@ export type ProcessorOutputResultPhaseType = {
   messages: ProcessorMessageType[];
   messageList: MessageList;
   retryCount?: number;
+  result?: {
+    text: string;
+    usage: Record<string, unknown>;
+    finishReason: string;
+    steps: unknown[];
+  };
 };
 
 export type ProcessorOutputStepPhaseType = {
@@ -171,6 +177,12 @@ export type ProcessorStepOutputType = {
   part?: unknown | null;
   streamParts?: unknown[];
   state?: Record<string, unknown>;
+  result?: {
+    text: string;
+    usage: Record<string, unknown>;
+    finishReason: string;
+    steps: unknown[];
+  };
   finishReason?: string;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
@@ -548,6 +560,14 @@ export const ProcessorOutputResultPhaseSchema = z.object({
   messages: messagesSchema,
   messageList: messageListSchema,
   retryCount: retryCountSchema,
+  result: z
+    .object({
+      text: z.string().describe('The accumulated text from all steps'),
+      usage: z.record(z.unknown()).describe('Token usage (cumulative across all steps)'),
+      finishReason: z.string().describe('Why the generation finished'),
+      steps: z.array(z.unknown()).describe('All LLM step results'),
+    })
+    .optional(),
 });
 
 /**
@@ -612,6 +632,16 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   part: z.unknown().nullable().optional(),
   streamParts: z.array(z.unknown()).optional(),
   state: z.record(z.unknown()).optional(),
+
+  // Output result fields
+  result: z
+    .object({
+      text: z.string(),
+      usage: z.record(z.unknown()),
+      finishReason: z.string(),
+      steps: z.array(z.unknown()),
+    })
+    .optional(),
 
   // Output step fields
   finishReason: z.string().optional(),

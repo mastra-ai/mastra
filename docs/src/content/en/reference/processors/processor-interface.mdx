@@ -505,10 +505,10 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     isOptional: false,
   },
   {
-    name: 'streamParts',
-    type: 'ChunkType[]',
+    name: 'result',
+    type: 'OutputResult',
     description:
-      'All chunks accumulated during stream processing (from processOutputStream). Includes the finish chunk which contains usage data at `chunk.payload.output.usage`.',
+      'Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), and `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.).',
     isOptional: false,
   },
   {

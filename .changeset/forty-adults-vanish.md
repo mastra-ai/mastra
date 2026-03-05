@@ -2,17 +2,16 @@
 '@mastra/core': minor
 ---
 
-Added `streamParts` to `processOutputResult` args, giving processors direct access to all accumulated stream chunks (including the finish chunk with usage data) after generation completes. Previously, usage data and other chunk metadata were only available in `processOutputStream`.
+Added `result` to `processOutputResult` args, providing resolved generation data (usage, text, steps, finishReason) directly. This replaces raw stream chunks with an easy-to-use `OutputResult` object containing the same data available in the `onFinish` callback.
 
 ```typescript
 const usageProcessor: Processor = {
   id: 'usage-processor',
-  processOutputResult({ streamParts, messages }) {
-    const finishChunk = streamParts.find(part => part.type === 'finish');
-    if (finishChunk) {
-      const usage = finishChunk.payload.output.usage;
-      console.log(`Tokens: ${usage.inputTokens} in, ${usage.outputTokens} out`);
-    }
+  processOutputResult({ result, messages }) {
+    console.log(`Text: ${result.text}`);
+    console.log(`Tokens: ${result.usage.inputTokens} in, ${result.usage.outputTokens} out`);
+    console.log(`Finish reason: ${result.finishReason}`);
+    console.log(`Steps: ${result.steps.length}`);
     return messages;
   },
 };

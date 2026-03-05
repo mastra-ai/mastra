@@ -16,6 +16,7 @@ import type { ProcessorStepOutput } from './step-schema';
 import { isMaybeClaude46, TrailingAssistantGuard } from './trailing-assistant-guard';
 import { isProcessorWorkflow } from './index';
 import type {
+  OutputResult,
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
@@ -252,6 +253,7 @@ export class ProcessorRunner {
     requestContext?: RequestContext,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    result?: OutputResult,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
@@ -268,6 +270,7 @@ export class ProcessorRunner {
             messages: processableMessages,
             messageList,
             retryCount,
+            result,
           },
           observabilityContext,
           requestContext,
@@ -311,11 +314,18 @@ export class ProcessorRunner {
       // Get per-processor state that persists across all method calls within this request
       const processorState = this.getProcessorState(processor.id);
 
-      const result = await processMethod({
+      const defaultResult: OutputResult = {
+        text: '',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        finishReason: 'unknown',
+        steps: [],
+      };
+
+      const processResult = await processMethod({
         messages: processableMessages,
         messageList,
         state: processorState.customState,
-        streamParts: processorState.streamParts as ChunkType[],
+        result: result ?? defaultResult,
         abort,
         ...createObservabilityContext({ currentSpan: processorSpan }),
         requestContext,
@@ -327,8 +337,8 @@ export class ProcessorRunner {
       const mutations = messageList.stopRecording();
 
       // Handle the new return type - MessageList or MastraDBMessage[]
-      if (result instanceof MessageList) {
-        if (result !== messageList) {
+      if (processResult instanceof MessageList) {
+        if (processResult !== messageList) {
           throw new MastraError({
             category: 'USER',
             domain: 'AGENT',
@@ -337,18 +347,18 @@ export class ProcessorRunner {
           });
         }
         if (mutations.length > 0) {
-          processableMessages = result.get.response.db();
+          processableMessages = processResult.get.response.db();
         }
       } else {
-        if (result) {
+        if (processResult) {
           const deletedIds = idsBeforeProcessing.filter(
-            (i: string) => !result.some((m: MastraDBMessage) => m.id === i),
+            (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
           );
           if (deletedIds.length) {
             messageList.removeByIds(deletedIds);
           }
-          processableMessages = result || [];
-          for (const message of result) {
+          processableMessages = processResult || [];
+          for (const message of processResult) {
             messageList.removeByIds([message.id]);
             messageList.add(message, check.getSource(message) || 'response');
           }
