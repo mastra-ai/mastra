@@ -1,5 +1,56 @@
 # @mastra/playground-ui
 
+## 15.2.0
+
+### Minor Changes
+
+- Added support for editing code-defined agents in the Playground CMS. When a code agent is opened in the editor, only **Instructions**, **Tools**, and **Variables** sections are shown — model, memory, workspace, and other code-defined fields are hidden since they cannot be safely serialized. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  On first save, a stored override record is created with the same agent ID. Subsequent saves update the override. The server now applies stored overrides (instructions, tools) to code-defined agents before serializing them in `GET /agents` and `GET /agents/:id` responses.
+
+### Patch Changes
+
+- dependencies updates: ([#13236](https://github.com/mastra-ai/mastra/pull/13236))
+  - Updated dependency [`papaparse@^5.5.3` ↗︎](https://www.npmjs.com/package/papaparse/v/5.5.3) (from `^5.4.1`, in `dependencies`)
+
+- dependencies updates: ([#13271](https://github.com/mastra-ai/mastra/pull/13271))
+  - Updated dependency [`@codemirror/merge@^6.12.0` ↗︎](https://www.npmjs.com/package/@codemirror/merge/v/6.12.0) (from `^6.10.2`, in `dependencies`)
+  - Updated dependency [`@codemirror/view@^6.39.15` ↗︎](https://www.npmjs.com/package/@codemirror/view/v/6.39.15) (from `^6.39.14`, in `dependencies`)
+
+- dependencies updates: ([#13283](https://github.com/mastra-ai/mastra/pull/13283))
+  - Updated dependency [`semver@^7.7.4` ↗︎](https://www.npmjs.com/package/semver/v/7.7.4) (from `^7.7.2`, in `dependencies`)
+
+- dependencies updates: ([#13771](https://github.com/mastra-ai/mastra/pull/13771))
+  - Updated dependency [`@uiw/codemirror-theme-dracula@^4.25.5` ↗︎](https://www.npmjs.com/package/@uiw/codemirror-theme-dracula/v/4.25.5) (from `^4.25.4`, in `dependencies`)
+
+- dependencies updates: ([#13847](https://github.com/mastra-ai/mastra/pull/13847))
+  - Updated dependency [`@codemirror/autocomplete@^6.20.1` ↗︎](https://www.npmjs.com/package/@codemirror/autocomplete/v/6.20.1) (from `^6.20.0`, in `dependencies`)
+  - Updated dependency [`@codemirror/lang-javascript@^6.2.5` ↗︎](https://www.npmjs.com/package/@codemirror/lang-javascript/v/6.2.5) (from `^6.2.4`, in `dependencies`)
+  - Updated dependency [`@codemirror/view@^6.39.16` ↗︎](https://www.npmjs.com/package/@codemirror/view/v/6.39.16) (from `^6.39.15`, in `dependencies`)
+
+- Fixed experiment results page showing only 10 items, empty summary tab with no scorers, and scores not updating during experiment runs. ([#13831](https://github.com/mastra-ai/mastra/pull/13831))
+
+- Updated skill activation indicators to match new skill tool names. ([#13744](https://github.com/mastra-ai/mastra/pull/13744))
+
+- Fix saving traces and scores as dataset items in the Studio. ([#13800](https://github.com/mastra-ai/mastra/pull/13800))
+  - Traces with structured message content (e.g. multi-part content arrays) can now be saved as dataset items without validation errors
+  - Score dialog now has a "Save as Dataset Item" button for scorer calibration workflows, pre-filling scorer input/output and expected score
+  - Dataset output schema updated to match the full experiment output shape (text, object, toolCalls, files, usage, etc.)
+
+- Fixed Playground UI agent settings so temperature is no longer reset to `1` on refresh. Temperature now stays unset unless saved settings or code defaults provide a value. ([#13778](https://github.com/mastra-ai/mastra/pull/13778))
+
+- Fixed documentation link in empty datasets page pointing to the correct datasets docs instead of evals ([#13872](https://github.com/mastra-ai/mastra/pull/13872))
+
+- Fix wrong threads showing for agents on studio ([#13789](https://github.com/mastra-ai/mastra/pull/13789))
+
+- Fixed dev playground auth bypass not working in capabilities endpoint. The client now passes MastraClient headers (including x-mastra-dev-playground) to the auth capabilities endpoint, and the server returns disabled state when this header is present. This prevents the login gate from appearing in dev playground mode. ([#13801](https://github.com/mastra-ai/mastra/pull/13801))
+
+- Updated dependencies [[`41e48c1`](https://github.com/mastra-ai/mastra/commit/41e48c198eee846478e60c02ec432c19d322a517), [`82469d3`](https://github.com/mastra-ai/mastra/commit/82469d3135d5a49dd8dc8feec0ff398b4e0225a0), [`33e2fd5`](https://github.com/mastra-ai/mastra/commit/33e2fd5088f83666df17401e2da68c943dbc0448), [`7ef6e2c`](https://github.com/mastra-ai/mastra/commit/7ef6e2c61be5a42e26f55d15b5902866fc76634f), [`88061a8`](https://github.com/mastra-ai/mastra/commit/88061a8e45b75d9bdd42e2a5d20aa69a48f02753), [`b12d2a5`](https://github.com/mastra-ai/mastra/commit/b12d2a59a48be0477cabae66eb6cf0fc94a7d40d), [`fa37d39`](https://github.com/mastra-ai/mastra/commit/fa37d39910421feaf8847716292e3d65dd4f30c2), [`b12d2a5`](https://github.com/mastra-ai/mastra/commit/b12d2a59a48be0477cabae66eb6cf0fc94a7d40d), [`71c38bf`](https://github.com/mastra-ai/mastra/commit/71c38bf905905148ecd0e75c07c1f9825d299b76), [`f993c38`](https://github.com/mastra-ai/mastra/commit/f993c3848c97479b813231be872443bedeced6ab), [`f51849a`](https://github.com/mastra-ai/mastra/commit/f51849a568935122b5100b7ee69704e6d680cf7b), [`9bf3a0d`](https://github.com/mastra-ai/mastra/commit/9bf3a0dac602787925f1762f1f0387d7b4a59620), [`cafa045`](https://github.com/mastra-ai/mastra/commit/cafa0453c9de141ad50c09a13894622dffdd9978), [`1fd9ddb`](https://github.com/mastra-ai/mastra/commit/1fd9ddbb3fe83b281b12bd2e27e426ae86288266), [`d1e26f0`](https://github.com/mastra-ai/mastra/commit/d1e26f0091ea8685ee7219ea510124f4ed816fea), [`6135ef4`](https://github.com/mastra-ai/mastra/commit/6135ef4f5288652bf45f616ec590607e4c95f443), [`d9d228c`](https://github.com/mastra-ai/mastra/commit/d9d228c0c6ae82ae6ce3b540a3a56b2b1c2b8d98), [`5576507`](https://github.com/mastra-ai/mastra/commit/55765071e360fb97e443aa0a91ccf7e1cd8d92aa), [`79d69c9`](https://github.com/mastra-ai/mastra/commit/79d69c9d5f842ff1c31352fb6026f04c1f6190f3), [`94f44b8`](https://github.com/mastra-ai/mastra/commit/94f44b827ce57b179e50f4916a84c0fa6e7f3b8c), [`13187db`](https://github.com/mastra-ai/mastra/commit/13187dbac880174232dedc5a501ff6c5d0fe59bc), [`2ae5311`](https://github.com/mastra-ai/mastra/commit/2ae531185fff66a80fa165c0999e3d801900e89d), [`6135ef4`](https://github.com/mastra-ai/mastra/commit/6135ef4f5288652bf45f616ec590607e4c95f443)]:
+  - @mastra/core@1.10.0
+  - @mastra/ai-sdk@1.1.2
+  - @mastra/client-js@1.7.3
+  - @mastra/react@0.2.9
+
 ## 15.2.0-alpha.1
 
 ### Patch Changes
