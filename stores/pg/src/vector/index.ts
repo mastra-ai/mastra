@@ -23,7 +23,8 @@ import type { PgVectorConfig } from '../shared/config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
-import type { IndexConfig, IndexType, VectorType } from './types';
+import type { IndexConfig, IndexType, PgMetric, VectorOps, VectorType } from './types';
+export type { PgMetric, VectorOps, VectorType, IndexConfig, IndexType } from './types';
 
 export interface PGIndexStats extends IndexStats {
   type: IndexType;
@@ -57,7 +58,16 @@ interface PgQueryVectorParams extends QueryVectorParams<PGVectorFilter> {
   probes?: number;
 }
 
-interface PgCreateIndexParams extends CreateIndexParams {
+interface PgCreateIndexParams extends Omit<CreateIndexParams, 'metric'> {
+  /**
+   * Distance metric for the index.
+   * Standard: 'cosine', 'euclidean', 'dotproduct' (work with all vector types)
+   * Bit-specific: 'hamming' (count differing bits), 'jaccard' (1 - intersection/union)
+   *
+   * For 'bit' vectorType, defaults to 'hamming' if not specified.
+   * 'jaccard' requires HNSW index (IVFFlat does not support Jaccard distance).
+   */
+  metric?: PgMetric;
   indexConfig?: IndexConfig;
   buildIndex?: boolean;
   /**
@@ -76,7 +86,7 @@ interface PgCreateIndexParams extends CreateIndexParams {
 
 interface PgDefineIndexParams {
   indexName: string;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
+  metric: PgMetric;
   indexConfig: IndexConfig;
   vectorType?: VectorType;
 }
@@ -274,138 +284,78 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   }
 
   /**
-   * Gets the operator class for index creation based on metric and vector type.
-   * pgvector uses different operator classes for each vector type.
-   *
-   * - vector/halfvec: vector_cosine_ops, vector_l2_ops, vector_ip_ops / halfvec_*
-   * - bit: bit_hamming_ops (hamming distance, regardless of metric param)
-   * - sparsevec: sparsevec_cosine_ops, sparsevec_l2_ops, sparsevec_ip_ops
+   * Returns all vector-type-specific operations for the given vectorType and metric.
+   * Consolidates operator class, distance operator, score normalization, formatting, and parsing
+   * so each vectorType's behavior is co-located in one place.
    */
-  private getMetricOperatorClass(metric: 'cosine' | 'euclidean' | 'dotproduct', vectorType: VectorType): string {
-    // bit type only supports hamming distance
-    if (vectorType === 'bit') {
-      return 'bit_hamming_ops';
-    }
+  private getVectorOps(vectorType: VectorType, metric: PgMetric): VectorOps {
+    switch (vectorType) {
+      case 'bit':
+        return {
+          operatorClass: metric === 'jaccard' ? 'bit_jaccard_ops' : 'bit_hamming_ops',
+          distanceOperator: metric === 'jaccard' ? '<%>' : '<~>',
+          scoreExpr: d => (metric === 'jaccard' ? `1 - (${d})` : `1 - ((${d})::float / bit_length(embedding))`),
+          formatVector: v => v.map(x => (x ? '1' : '0')).join(''),
+          parseEmbedding: e => e.split('').map(c => (c === '1' ? 1 : 0)),
+        };
 
-    const prefix = vectorType === 'halfvec' ? 'halfvec' : vectorType === 'sparsevec' ? 'sparsevec' : 'vector';
-    switch (metric) {
-      case 'cosine':
-        return `${prefix}_cosine_ops`;
-      case 'euclidean':
-        return `${prefix}_l2_ops`;
-      case 'dotproduct':
-        return `${prefix}_ip_ops`;
-      default:
-        return `${prefix}_cosine_ops`;
-    }
-  }
-
-  /**
-   * Gets the distance operator for a given metric and vector type.
-   * - vector/halfvec/sparsevec: <=> (cosine), <-> (L2), <#> (inner product)
-   * - bit: <~> (hamming distance)
-   */
-  private getDistanceOperator(metric: 'cosine' | 'euclidean' | 'dotproduct', vectorType: VectorType): string {
-    if (vectorType === 'bit') {
-      return '<~>';
-    }
-    switch (metric) {
-      case 'cosine':
-        return '<=>';
-      case 'euclidean':
-        return '<->';
-      case 'dotproduct':
-        return '<#>';
-      default:
-        return '<=>';
-    }
-  }
-
-  /**
-   * Builds the score expression for a query based on the metric and vector type.
-   * Different distance operators produce different ranges, so we normalize to 0-1 similarity.
-   */
-  private getScoreExpression(
-    metric: 'cosine' | 'euclidean' | 'dotproduct',
-    vectorType: VectorType,
-    distanceExpr: string,
-  ): string {
-    if (vectorType === 'bit') {
-      // Hamming distance returns number of differing bits. Lower = more similar.
-      // Normalize: score = 1 - (hamming_distance / total_bits)
-      // We use the embedding dimension for total_bits
-      return `1 - ((${distanceExpr})::float / bit_length(embedding))`;
-    }
-    switch (metric) {
-      case 'cosine':
-        // <=> returns cosine distance (0 = identical, 2 = opposite). score = 1 - distance
-        return `1 - (${distanceExpr})`;
-      case 'euclidean':
-        // <-> returns L2 distance. Convert to similarity: 1 / (1 + distance)
-        return `1.0 / (1.0 + (${distanceExpr}))`;
-      case 'dotproduct':
-        // <#> returns negative inner product. score = -1 * distance
-        return `(${distanceExpr}) * -1`;
-      default:
-        return `1 - (${distanceExpr})`;
-    }
-  }
-
-  /**
-   * Formats a vector array into the appropriate string representation for a given vector type.
-   * - vector/halfvec: '[1.0, 2.0, 3.0]'
-   * - bit: binary string of 0s and 1s
-   * - sparsevec: '{idx:val, ...}/dim' sparse format
-   */
-  private formatVectorString(vector: number[], vectorType: VectorType, dimension?: number): string {
-    if (vectorType === 'bit') {
-      // bit expects a binary string of 0s and 1s
-      return vector.map(v => (v ? '1' : '0')).join('');
-    }
-    if (vectorType === 'sparsevec') {
-      // sparsevec expects '{idx:val, idx:val, ...}/dim' format (1-indexed)
-      const dim = dimension ?? vector.length;
-      const nonZero = vector
-        .map((v, i) => (v !== 0 ? `${i + 1}:${v}` : null))
-        .filter(Boolean)
-        .join(',');
-      return `{${nonZero}}/${dim}`;
-    }
-    // vector/halfvec use standard array format
-    return `[${vector.join(',')}]`;
-  }
-
-  /**
-   * Parses an embedding value returned from PostgreSQL into a number array.
-   * - vector/halfvec: JSON array string '[1.0, 2.0, 3.0]'
-   * - bit: binary string '10110101'
-   * - sparsevec: sparse format '{1:0.5, 3:0.2}/100'
-   */
-  private parseEmbedding(embedding: string, vectorType: VectorType): number[] {
-    if (vectorType === 'bit') {
-      // bit comes back as a binary string like '10110101'
-      return embedding.split('').map(c => (c === '1' ? 1 : 0));
-    }
-    if (vectorType === 'sparsevec') {
-      // sparsevec comes back as '{1:0.5, 3:0.2}/100'
-      const match = embedding.match(/^\{([^}]*)\}\/(\d+)$/);
-      if (!match) {
-        return [];
+      case 'sparsevec': {
+        const opPrefix = 'sparsevec';
+        return {
+          operatorClass:
+            metric === 'euclidean'
+              ? `${opPrefix}_l2_ops`
+              : metric === 'dotproduct'
+                ? `${opPrefix}_ip_ops`
+                : `${opPrefix}_cosine_ops`,
+          distanceOperator: metric === 'euclidean' ? '<->' : metric === 'dotproduct' ? '<#>' : '<=>',
+          scoreExpr: d =>
+            metric === 'euclidean' ? `1.0 / (1.0 + (${d}))` : metric === 'dotproduct' ? `(${d}) * -1` : `1 - (${d})`,
+          formatVector: (v, dimension) => {
+            const dim = dimension ?? v.length;
+            const nonZero = v
+              .map((val, i) => (val !== 0 ? `${i + 1}:${val}` : null))
+              .filter(Boolean)
+              .join(',');
+            return `{${nonZero}}/${dim}`;
+          },
+          parseEmbedding: e => {
+            const match = e.match(/^\{([^}]*)\}\/(\d+)$/);
+            if (!match) return [];
+            const dim = parseInt(match[2]!, 10);
+            const result = new Array(dim).fill(0) as number[];
+            const entries = match[1]!;
+            if (entries.trim()) {
+              for (const entry of entries.split(',')) {
+                const [idxStr, valStr] = entry.split(':');
+                const idx = parseInt(idxStr!.trim(), 10) - 1;
+                result[idx] = parseFloat(valStr!.trim());
+              }
+            }
+            return result;
+          },
+        };
       }
-      const dim = parseInt(match[2]!, 10);
-      const result = new Array(dim).fill(0);
-      const entries = match[1]!;
-      if (entries.trim()) {
-        for (const entry of entries.split(',')) {
-          const [idxStr, valStr] = entry.split(':');
-          const idx = parseInt(idxStr!.trim(), 10) - 1; // 1-indexed to 0-indexed
-          result[idx] = parseFloat(valStr!.trim());
-        }
+
+      case 'halfvec':
+      case 'vector':
+      default: {
+        const opPrefix = vectorType === 'halfvec' ? 'halfvec' : 'vector';
+        return {
+          operatorClass:
+            metric === 'euclidean'
+              ? `${opPrefix}_l2_ops`
+              : metric === 'dotproduct'
+                ? `${opPrefix}_ip_ops`
+                : `${opPrefix}_cosine_ops`,
+          distanceOperator: metric === 'euclidean' ? '<->' : metric === 'dotproduct' ? '<#>' : '<=>',
+          scoreExpr: d =>
+            metric === 'euclidean' ? `1.0 / (1.0 + (${d}))` : metric === 'dotproduct' ? `(${d}) * -1` : `1 - (${d})`,
+          formatVector: v => `[${v.join(',')}]`,
+          parseEmbedding: e => JSON.parse(e),
+        };
       }
-      return result;
     }
-    // vector/halfvec: standard JSON array
-    return JSON.parse(embedding);
   }
 
   private getTableName(indexName: string) {
@@ -476,8 +426,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Get index type and configuration
       const indexInfo = await this.getIndexInfo({ indexName });
 
+      const metric = indexInfo.metric ?? 'cosine';
+      const ops = this.getVectorOps(indexInfo.vectorType, metric);
+
       // Format vector string based on vector type
-      const vectorStr = this.formatVectorString(queryVector, indexInfo.vectorType, indexInfo.dimension);
+      const vectorStr = ops.formatVector(queryVector, indexInfo.dimension);
 
       // Set HNSW search parameter if applicable
       if (indexInfo.type === 'hnsw') {
@@ -497,10 +450,8 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
 
       // Build distance expression and score based on metric and vector type
-      const metric = indexInfo.metric ?? 'cosine';
-      const distanceOp = this.getDistanceOperator(metric, indexInfo.vectorType);
-      const distanceExpr = `embedding ${distanceOp} '${vectorStr}'::${qualifiedVectorType}`;
-      const scoreExpr = this.getScoreExpression(metric, indexInfo.vectorType, distanceExpr);
+      const distanceExpr = `embedding ${ops.distanceOperator} '${vectorStr}'::${qualifiedVectorType}`;
+      const scoreExpr = ops.scoreExpr(distanceExpr);
 
       const query = `
         WITH vector_scores AS (
@@ -524,7 +475,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         id,
         score,
         metadata,
-        ...(includeVector && embedding && { vector: this.parseEmbedding(embedding, indexInfo.vectorType) }),
+        ...(includeVector && embedding && { vector: ops.parseEmbedding(embedding) }),
       }));
     } catch (error) {
       await client.query('ROLLBACK');
@@ -588,9 +539,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Get the properly qualified vector type for this index
       const indexInfo = await this.getIndexInfo({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
+      const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
       for (let i = 0; i < vectors.length; i++) {
-        const vectorStr = this.formatVectorString(vectors[i]!, indexInfo.vectorType, indexInfo.dimension);
+        const vectorStr = ops.formatVector(vectors[i]!, indexInfo.dimension);
         const query = `
           INSERT INTO ${tableName} (vector_id, embedding, metadata)
           VALUES ($1, $2::${qualifiedVectorType}, $3::jsonb)
@@ -665,7 +617,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     metric,
     type,
     vectorType = 'vector',
-  }: CreateIndexParams & { type: IndexType | undefined; vectorType?: VectorType }) {
+  }: Omit<CreateIndexParams, 'metric'> & { metric?: PgMetric; type: IndexType | undefined; vectorType?: VectorType }) {
     const input = indexName + dimension + metric + (type || 'ivfflat') + vectorType; // ivfflat is default
     return (await this.hasher).h32(input);
   }
@@ -744,6 +696,21 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       }
       if (vectorType !== 'vector' && vectorType !== 'halfvec' && vectorType !== 'bit' && vectorType !== 'sparsevec') {
         throw new Error('vectorType must be "vector", "halfvec", "bit", or "sparsevec"');
+      }
+      // Dimension limits for indexed vectors (pgvector restrictions)
+      if (vectorType === 'bit' && dimension > 64000) {
+        throw new Error('bit vectors support up to 64,000 dimensions for indexes');
+      }
+      if (vectorType === 'sparsevec' && dimension > 1000) {
+        throw new Error('sparsevec indexes support up to 1,000 non-zero elements');
+      }
+      // hamming and jaccard metrics are only valid with bit vectors
+      if ((metric === 'hamming' || metric === 'jaccard') && vectorType !== 'bit') {
+        throw new Error(`${metric} metric is only valid with vectorType 'bit'`);
+      }
+      // IVFFlat does not support Jaccard distance for bit vectors
+      if (indexConfig?.type === 'ivfflat' && vectorType === 'bit' && metric === 'jaccard') {
+        throw new Error('IVFFlat indexes do not support Jaccard distance for bit vectors. Use HNSW instead.');
       }
     } catch (error) {
       const mastraError = new MastraError(
@@ -930,6 +897,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         });
       }
 
+      // Validate index type restrictions for bit + jaccard
+      // IVFFlat supports bit vectors with Hamming distance only, not Jaccard
+      if (indexType === 'ivfflat' && vectorType === 'bit' && metric === 'jaccard') {
+        throw new MastraError({
+          id: createVectorErrorId('PG', 'BUILD_INDEX', 'UNSUPPORTED_INDEX_TYPE'),
+          text: `IVFFlat indexes do not support Jaccard distance for bit vectors. Use HNSW instead.`,
+          domain: ErrorDomain.MASTRA_VECTOR,
+          category: ErrorCategory.USER,
+          details: { indexName, vectorType, indexType, metric },
+        });
+      }
+
       const { tableName, vectorIndexName } = this.getTableName(indexName);
 
       // Try to get existing index info to check if configuration has changed
@@ -1006,7 +985,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // pgvector uses different operator classes for vector vs halfvec
       // Use the detected vectorType from existing table if available, otherwise use the parameter
       const effectiveVectorType = existingIndexInfo?.vectorType ?? vectorType;
-      const metricOp = this.getMetricOperatorClass(metric, effectiveVectorType);
+      const metricOp = this.getVectorOps(effectiveVectorType, metric).operatorClass;
 
       let indexSQL: string;
       if (indexType === 'hnsw') {
@@ -1256,12 +1235,16 @@ export class PgVector extends MastraVector<PGVectorFilter> {
         operator_class: 'cosine',
       };
 
-      // Convert pg_vector index method to our metric type
-      const metric = operator_class.includes('l2')
-        ? 'euclidean'
-        : operator_class.includes('ip')
-          ? 'dotproduct'
-          : 'cosine';
+      // Convert pg_vector operator class to our metric type
+      const metric: PgMetric = operator_class.includes('hamming')
+        ? 'hamming'
+        : operator_class.includes('jaccard')
+          ? 'jaccard'
+          : operator_class.includes('l2')
+            ? 'euclidean'
+            : operator_class.includes('ip')
+              ? 'dotproduct'
+              : 'cosine';
 
       // Parse index configuration
       const config: { m?: number; efConstruction?: number; lists?: number } = {};
@@ -1279,7 +1262,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       return {
         dimension: dimResult.rows[0].dimension,
         count: parseInt(countResult.rows[0].count),
-        metric,
+        metric: metric as PGIndexStats['metric'],
         type: index_method as 'flat' | 'hnsw' | 'ivfflat',
         vectorType,
         config,
@@ -1416,6 +1399,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Get the properly qualified vector type for this index
       const indexInfo = await this.getIndexInfo({ indexName });
       const qualifiedVectorType = this.getVectorTypeName(indexInfo.vectorType, indexInfo.dimension);
+      const ops = this.getVectorOps(indexInfo.vectorType, indexInfo.metric ?? 'cosine');
 
       let updateParts = [];
       let values: any[] = [];
@@ -1424,7 +1408,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       // Build SET clause
       if (update.vector) {
         updateParts.push(`embedding = $${valueIndex}::${qualifiedVectorType}`);
-        values.push(this.formatVectorString(update.vector, indexInfo.vectorType, indexInfo.dimension));
+        values.push(ops.formatVector(update.vector, indexInfo.dimension));
         valueIndex++;
       }
 

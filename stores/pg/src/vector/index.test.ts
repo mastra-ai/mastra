@@ -1690,172 +1690,232 @@ describe('PgVector', () => {
     });
 
     // Tests for operator class generation for new types (Issue #11035)
-    describe('Operator class for bit and sparsevec types', () => {
+    describe('getVectorOps for bit and sparsevec types', () => {
       const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-      let opClassDB: PgVector;
+      let db: PgVector;
 
       beforeAll(async () => {
-        opClassDB = new PgVector({
+        db = new PgVector({
           connectionString,
-          id: 'pg-vector-opclass-test',
+          id: 'pg-vector-ops-test',
         });
       });
 
       afterAll(async () => {
-        await opClassDB.disconnect();
+        await db.disconnect();
       });
 
-      it('should generate correct operator class for bit type with cosine metric', () => {
-        // Access private method to test operator class generation
-        const opClass = opClassDB['getMetricOperatorClass']('cosine', 'bit');
-        expect(opClass).toBe('bit_hamming_ops');
+      // --- operatorClass ---
+      it('should return bit_hamming_ops for bit type with cosine metric', () => {
+        expect(db['getVectorOps']('bit', 'cosine').operatorClass).toBe('bit_hamming_ops');
       });
 
-      it('should generate correct operator class for sparsevec type with cosine metric', () => {
-        const opClass = opClassDB['getMetricOperatorClass']('cosine', 'sparsevec');
-        expect(opClass).toBe('sparsevec_cosine_ops');
+      it('should return bit_jaccard_ops for bit type with jaccard metric', () => {
+        expect(db['getVectorOps']('bit', 'jaccard').operatorClass).toBe('bit_jaccard_ops');
       });
 
-      it('should generate correct operator class for sparsevec type with euclidean metric', () => {
-        const opClass = opClassDB['getMetricOperatorClass']('euclidean', 'sparsevec');
-        expect(opClass).toBe('sparsevec_l2_ops');
+      it('should return bit_hamming_ops for bit type with hamming metric', () => {
+        expect(db['getVectorOps']('bit', 'hamming').operatorClass).toBe('bit_hamming_ops');
       });
 
-      it('should generate correct operator class for sparsevec type with dotproduct metric', () => {
-        const opClass = opClassDB['getMetricOperatorClass']('dotproduct', 'sparsevec');
-        expect(opClass).toBe('sparsevec_ip_ops');
+      it('should return correct operator class for sparsevec types', () => {
+        expect(db['getVectorOps']('sparsevec', 'cosine').operatorClass).toBe('sparsevec_cosine_ops');
+        expect(db['getVectorOps']('sparsevec', 'euclidean').operatorClass).toBe('sparsevec_l2_ops');
+        expect(db['getVectorOps']('sparsevec', 'dotproduct').operatorClass).toBe('sparsevec_ip_ops');
       });
 
-      it('should still generate correct operator class for vector type', () => {
-        expect(opClassDB['getMetricOperatorClass']('cosine', 'vector')).toBe('vector_cosine_ops');
-        expect(opClassDB['getMetricOperatorClass']('euclidean', 'vector')).toBe('vector_l2_ops');
-        expect(opClassDB['getMetricOperatorClass']('dotproduct', 'vector')).toBe('vector_ip_ops');
+      it('should return correct operator class for vector type', () => {
+        expect(db['getVectorOps']('vector', 'cosine').operatorClass).toBe('vector_cosine_ops');
+        expect(db['getVectorOps']('vector', 'euclidean').operatorClass).toBe('vector_l2_ops');
+        expect(db['getVectorOps']('vector', 'dotproduct').operatorClass).toBe('vector_ip_ops');
       });
 
-      it('should still generate correct operator class for halfvec type', () => {
-        expect(opClassDB['getMetricOperatorClass']('cosine', 'halfvec')).toBe('halfvec_cosine_ops');
-        expect(opClassDB['getMetricOperatorClass']('euclidean', 'halfvec')).toBe('halfvec_l2_ops');
-        expect(opClassDB['getMetricOperatorClass']('dotproduct', 'halfvec')).toBe('halfvec_ip_ops');
-      });
-    });
-
-    // Tests for distance operator selection (Issue #11035)
-    describe('Distance operator for bit and sparsevec types', () => {
-      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-      let helperDB: PgVector;
-
-      beforeAll(async () => {
-        helperDB = new PgVector({
-          connectionString,
-          id: 'pg-vector-distance-op-test',
-        });
+      it('should return correct operator class for halfvec type', () => {
+        expect(db['getVectorOps']('halfvec', 'cosine').operatorClass).toBe('halfvec_cosine_ops');
+        expect(db['getVectorOps']('halfvec', 'euclidean').operatorClass).toBe('halfvec_l2_ops');
+        expect(db['getVectorOps']('halfvec', 'dotproduct').operatorClass).toBe('halfvec_ip_ops');
       });
 
-      afterAll(async () => {
-        await helperDB.disconnect();
+      // --- distanceOperator ---
+      it('should return hamming operator for bit type with standard metrics', () => {
+        expect(db['getVectorOps']('bit', 'cosine').distanceOperator).toBe('<~>');
+        expect(db['getVectorOps']('bit', 'euclidean').distanceOperator).toBe('<~>');
+        expect(db['getVectorOps']('bit', 'dotproduct').distanceOperator).toBe('<~>');
       });
 
-      it('should return hamming operator for bit type', () => {
-        expect(helperDB['getDistanceOperator']('cosine', 'bit')).toBe('<~>');
-        expect(helperDB['getDistanceOperator']('euclidean', 'bit')).toBe('<~>');
-        expect(helperDB['getDistanceOperator']('dotproduct', 'bit')).toBe('<~>');
+      it('should return jaccard operator for bit type with jaccard metric', () => {
+        expect(db['getVectorOps']('bit', 'jaccard').distanceOperator).toBe('<%>');
       });
 
-      it('should return cosine operator for sparsevec with cosine metric', () => {
-        expect(helperDB['getDistanceOperator']('cosine', 'sparsevec')).toBe('<=>');
+      it('should return hamming operator for bit type with hamming metric', () => {
+        expect(db['getVectorOps']('bit', 'hamming').distanceOperator).toBe('<~>');
       });
 
-      it('should return L2 operator for sparsevec with euclidean metric', () => {
-        expect(helperDB['getDistanceOperator']('euclidean', 'sparsevec')).toBe('<->');
-      });
-
-      it('should return inner product operator for sparsevec with dotproduct metric', () => {
-        expect(helperDB['getDistanceOperator']('dotproduct', 'sparsevec')).toBe('<#>');
+      it('should return correct distance operators for sparsevec', () => {
+        expect(db['getVectorOps']('sparsevec', 'cosine').distanceOperator).toBe('<=>');
+        expect(db['getVectorOps']('sparsevec', 'euclidean').distanceOperator).toBe('<->');
+        expect(db['getVectorOps']('sparsevec', 'dotproduct').distanceOperator).toBe('<#>');
       });
 
       it('should return standard operators for vector/halfvec types', () => {
-        expect(helperDB['getDistanceOperator']('cosine', 'vector')).toBe('<=>');
-        expect(helperDB['getDistanceOperator']('euclidean', 'vector')).toBe('<->');
-        expect(helperDB['getDistanceOperator']('dotproduct', 'vector')).toBe('<#>');
-        expect(helperDB['getDistanceOperator']('cosine', 'halfvec')).toBe('<=>');
-      });
-    });
-
-    // Tests for vector string formatting (Issue #11035)
-    describe('Vector string formatting for bit and sparsevec types', () => {
-      const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-      let fmtDB: PgVector;
-
-      beforeAll(async () => {
-        fmtDB = new PgVector({
-          connectionString,
-          id: 'pg-vector-format-test',
-        });
+        expect(db['getVectorOps']('vector', 'cosine').distanceOperator).toBe('<=>');
+        expect(db['getVectorOps']('vector', 'euclidean').distanceOperator).toBe('<->');
+        expect(db['getVectorOps']('vector', 'dotproduct').distanceOperator).toBe('<#>');
+        expect(db['getVectorOps']('halfvec', 'cosine').distanceOperator).toBe('<=>');
       });
 
-      afterAll(async () => {
-        await fmtDB.disconnect();
-      });
-
+      // --- formatVector ---
       it('should format bit vectors as binary string', () => {
-        expect(fmtDB['formatVectorString']([1, 0, 1, 1, 0], 'bit')).toBe('10110');
-        expect(fmtDB['formatVectorString']([0, 0, 0, 0], 'bit')).toBe('0000');
-        expect(fmtDB['formatVectorString']([1, 1, 1, 1], 'bit')).toBe('1111');
+        expect(db['getVectorOps']('bit', 'cosine').formatVector([1, 0, 1, 1, 0])).toBe('10110');
+        expect(db['getVectorOps']('bit', 'cosine').formatVector([0, 0, 0, 0])).toBe('0000');
+        expect(db['getVectorOps']('bit', 'cosine').formatVector([1, 1, 1, 1])).toBe('1111');
       });
 
       it('should format sparsevec as sparse representation', () => {
-        // [0.5, 0, 0.2, 0, 0] -> '{1:0.5,3:0.2}/5'
-        expect(fmtDB['formatVectorString']([0.5, 0, 0.2, 0, 0], 'sparsevec')).toBe('{1:0.5,3:0.2}/5');
+        expect(db['getVectorOps']('sparsevec', 'cosine').formatVector([0.5, 0, 0.2, 0, 0])).toBe('{1:0.5,3:0.2}/5');
       });
 
       it('should handle all-zero sparsevec', () => {
-        expect(fmtDB['formatVectorString']([0, 0, 0], 'sparsevec')).toBe('{}/3');
+        expect(db['getVectorOps']('sparsevec', 'cosine').formatVector([0, 0, 0])).toBe('{}/3');
       });
 
       it('should use provided dimension for sparsevec', () => {
-        expect(fmtDB['formatVectorString']([0.5, 0, 0.2], 'sparsevec', 100)).toBe('{1:0.5,3:0.2}/100');
+        expect(db['getVectorOps']('sparsevec', 'cosine').formatVector([0.5, 0, 0.2], 100)).toBe('{1:0.5,3:0.2}/100');
       });
 
       it('should format vector/halfvec as JSON array', () => {
-        expect(fmtDB['formatVectorString']([1, 2, 3], 'vector')).toBe('[1,2,3]');
-        expect(fmtDB['formatVectorString']([1.5, 2.5], 'halfvec')).toBe('[1.5,2.5]');
+        expect(db['getVectorOps']('vector', 'cosine').formatVector([1, 2, 3])).toBe('[1,2,3]');
+        expect(db['getVectorOps']('halfvec', 'cosine').formatVector([1.5, 2.5])).toBe('[1.5,2.5]');
+      });
+
+      // --- parseEmbedding ---
+      it('should parse bit embedding from binary string', () => {
+        expect(db['getVectorOps']('bit', 'cosine').parseEmbedding('10110')).toEqual([1, 0, 1, 1, 0]);
+        expect(db['getVectorOps']('bit', 'cosine').parseEmbedding('0000')).toEqual([0, 0, 0, 0]);
+      });
+
+      it('should parse sparsevec embedding', () => {
+        expect(db['getVectorOps']('sparsevec', 'cosine').parseEmbedding('{1:0.5,3:0.2}/5')).toEqual([
+          0.5, 0, 0.2, 0, 0,
+        ]);
+      });
+
+      it('should parse empty sparsevec', () => {
+        expect(db['getVectorOps']('sparsevec', 'cosine').parseEmbedding('{}/3')).toEqual([0, 0, 0]);
+      });
+
+      it('should parse vector/halfvec as JSON', () => {
+        expect(db['getVectorOps']('vector', 'cosine').parseEmbedding('[1,2,3]')).toEqual([1, 2, 3]);
+        expect(db['getVectorOps']('halfvec', 'cosine').parseEmbedding('[1.5,2.5]')).toEqual([1.5, 2.5]);
+      });
+
+      // --- scoreExpr ---
+      it('should generate jaccard score expression for bit type', () => {
+        expect(db['getVectorOps']('bit', 'jaccard').scoreExpr('distance')).toBe('1 - (distance)');
+      });
+
+      it('should generate hamming score expression for bit type', () => {
+        expect(db['getVectorOps']('bit', 'hamming').scoreExpr('distance')).toBe(
+          '1 - ((distance)::float / bit_length(embedding))',
+        );
+      });
+
+      it('should generate hamming score expression for bit type with cosine metric fallback', () => {
+        // cosine on bit still uses hamming score normalization
+        expect(db['getVectorOps']('bit', 'cosine').scoreExpr('distance')).toBe(
+          '1 - ((distance)::float / bit_length(embedding))',
+        );
       });
     });
 
-    // Tests for embedding parsing (Issue #11035)
-    describe('Embedding parsing for bit and sparsevec types', () => {
+    // Tests for validation logic (Issue #11035)
+    describe('Validation for bit and sparsevec constraints', () => {
       const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
-      let parseDB: PgVector;
+      let validationDB: PgVector;
 
       beforeAll(async () => {
-        parseDB = new PgVector({
+        validationDB = new PgVector({
           connectionString,
-          id: 'pg-vector-parse-test',
+          id: 'pg-vector-validation-test',
         });
       });
 
       afterAll(async () => {
-        await parseDB.disconnect();
+        await validationDB.disconnect();
       });
 
-      it('should parse bit embedding from binary string', () => {
-        expect(parseDB['parseEmbedding']('10110', 'bit')).toEqual([1, 0, 1, 1, 0]);
-        expect(parseDB['parseEmbedding']('0000', 'bit')).toEqual([0, 0, 0, 0]);
+      it('should reject bit vectors exceeding 64,000 dimensions', async () => {
+        await expect(
+          validationDB.createIndex({
+            indexName: 'test_bit_dim_limit',
+            dimension: 65000,
+            metric: 'cosine',
+            vectorType: 'bit',
+          }),
+        ).rejects.toThrow('bit vectors support up to 64,000 dimensions for indexes');
       });
 
-      it('should parse sparsevec embedding', () => {
-        const result = parseDB['parseEmbedding']('{1:0.5,3:0.2}/5', 'sparsevec');
-        expect(result).toEqual([0.5, 0, 0.2, 0, 0]);
+      it('should reject sparsevec exceeding 1,000 dimensions', async () => {
+        await expect(
+          validationDB.createIndex({
+            indexName: 'test_sparse_dim_limit',
+            dimension: 1001,
+            metric: 'cosine',
+            vectorType: 'sparsevec',
+          }),
+        ).rejects.toThrow('sparsevec indexes support up to 1,000 non-zero elements');
       });
 
-      it('should parse empty sparsevec', () => {
-        const result = parseDB['parseEmbedding']('{}/3', 'sparsevec');
-        expect(result).toEqual([0, 0, 0]);
+      it('should reject hamming metric with non-bit vectorType', async () => {
+        await expect(
+          validationDB.createIndex({
+            indexName: 'test_hamming_vector',
+            dimension: 3,
+            metric: 'hamming',
+            vectorType: 'vector',
+          }),
+        ).rejects.toThrow("hamming metric is only valid with vectorType 'bit'");
       });
 
-      it('should parse vector/halfvec as JSON', () => {
-        expect(parseDB['parseEmbedding']('[1,2,3]', 'vector')).toEqual([1, 2, 3]);
-        expect(parseDB['parseEmbedding']('[1.5,2.5]', 'halfvec')).toEqual([1.5, 2.5]);
+      it('should reject jaccard metric with non-bit vectorType', async () => {
+        await expect(
+          validationDB.createIndex({
+            indexName: 'test_jaccard_vector',
+            dimension: 3,
+            metric: 'jaccard',
+            vectorType: 'vector',
+          }),
+        ).rejects.toThrow("jaccard metric is only valid with vectorType 'bit'");
+      });
+
+      it('should reject IVFFlat with bit + jaccard', async () => {
+        await expect(
+          validationDB.createIndex({
+            indexName: 'test_bit_jaccard_ivfflat',
+            dimension: 64,
+            metric: 'jaccard',
+            vectorType: 'bit',
+            indexConfig: { type: 'ivfflat' },
+          }),
+        ).rejects.toThrow('IVFFlat indexes do not support Jaccard distance for bit vectors');
+      });
+
+      it('should allow bit vectors within dimension limit', async () => {
+        // This should not throw a dimension validation error
+        // (may throw a pgvector version error if < 0.7.0, which is fine)
+        try {
+          await validationDB.createIndex({
+            indexName: 'test_bit_valid_dim',
+            dimension: 64,
+            metric: 'hamming',
+            vectorType: 'bit',
+          });
+          // Clean up if it succeeded
+          await validationDB.deleteIndex({ indexName: 'test_bit_valid_dim' });
+        } catch (error: any) {
+          // Should not be a dimension error
+          expect(error.message).not.toContain('64,000 dimensions');
+        }
       });
     });
 
