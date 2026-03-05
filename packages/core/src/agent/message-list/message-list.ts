@@ -899,12 +899,6 @@ export class MessageList {
             messageV2.id = this.generateMessageId?.({ idType: 'message', source: 'memory' }) ?? randomUUID();
             // Replace the parts with only the new ones
             messageV2.content.parts = newParts;
-            // Preserve how many leading parts belong to the observed sealed prefix.
-            // If later snapshots with the same original ID get merged into this reminted
-            // message, merge logic can skip that observed prefix deterministically.
-            const metadata = (messageV2.content.metadata ??= {} as any);
-            const mastraMetadata = ((metadata as any).mastra ??= {});
-            mastraMetadata.remintObservedPrefixPartCount = sealedPartCount;
             // Ensure the new message has a timestamp after the sealed message
             if (messageV2.createdAt <= existingMessage.createdAt) {
               messageV2.createdAt = new Date(existingMessage.createdAt.getTime() + 1);

@@ -83,15 +83,7 @@ export class MessageMerger {
     // Update timestamp
     latestMessage.createdAt = incomingMessage.createdAt || latestMessage.createdAt;
 
-    const remintObservedPrefixPartCount =
-      (latestMessage.content.metadata as { mastra?: { remintObservedPrefixPartCount?: number } } | undefined)?.mastra
-        ?.remintObservedPrefixPartCount ?? 0;
-    const incomingParts =
-      remintObservedPrefixPartCount > 0
-        ? incomingMessage.content.parts.slice(
-            Math.min(remintObservedPrefixPartCount, incomingMessage.content.parts.length),
-          )
-        : incomingMessage.content.parts;
+    const incomingParts = incomingMessage.content.parts;
 
     // Used for mapping indexes for incomingMessage parts to corresponding indexes in latestMessage
     const toolResultAnchorMap = new Map<number, number>();
