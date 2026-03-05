@@ -998,9 +998,8 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       // Not JSON — fall through to raw text (Tavily format)
     }
 
-    // Tavily format is already readable markdown text.
-    // As a safety net, strip any encryptedContent fields that might appear in raw output.
-    return raw.replace(/"encryptedContent"\s*:\s*"[^"]*"/g, '"encryptedContent":"[redacted]"');
+    // Not JSON (e.g. Tavily format) — already readable text, return as-is
+    return raw;
   }
 
   private renderGenericToolEnhanced(): void {
