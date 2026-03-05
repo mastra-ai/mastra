@@ -2,8 +2,7 @@
 '@mastra/playground-ui': patch
 ---
 
-**Updated skill tool detection in playground UI.**
+**Updated skill activation indicators to match new skill tool names.**
 
-- Detect `skill` tool completion instead of `skill-activate` in tool fallback
-- Stabilized `useActivatedSkills` fallback to prevent unnecessary re-renders
-- Keyed `ActivatedSkillsProvider` by `agentId-threadId` so state resets across navigations
+- Skill badges now correctly reflect activation status
+- Skill state resets when switching between agents or threads
