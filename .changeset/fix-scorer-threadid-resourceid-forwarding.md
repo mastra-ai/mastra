@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix `threadId` and `resourceId` not being forwarded to `#runScorers` from `#executeOnFinish`, causing `onScorerRun` hook payloads to receive `undefined` for both fields
+Fix onScorerRun hook payloads missing threadId and resourceId so hooks now receive correct identifiers
