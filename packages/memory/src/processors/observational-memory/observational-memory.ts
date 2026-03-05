@@ -1,4 +1,5 @@
-import { appendFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
@@ -17,6 +18,76 @@ import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk
 import xxhash from 'xxhash-wasm';
 
 const OM_DEBUG_LOG = process.env.OM_DEBUG ? join(process.cwd(), 'om-debug.log') : null;
+const OM_REPRO_CAPTURE_ENABLED = process.env.OM_REPRO_CAPTURE === '1';
+const OM_REPRO_CAPTURE_DIR = process.env.OM_REPRO_CAPTURE_DIR ?? '.mastra-om-repro';
+
+function safeCaptureJson(value: unknown): unknown {
+  return JSON.parse(
+    JSON.stringify(value, (_key, current) => {
+      if (typeof current === 'bigint') return current.toString();
+      if (typeof current === 'function') return '[function]';
+      if (current instanceof Error) return { name: current.name, message: current.message, stack: current.stack };
+      return current;
+    }),
+  );
+}
+
+function buildReproMessageFingerprint(message: MastraDBMessage): string {
+  const createdAt =
+    message.createdAt instanceof Date
+      ? message.createdAt.toISOString()
+      : message.createdAt
+        ? new Date(message.createdAt).toISOString()
+        : '';
+
+  return JSON.stringify({
+    role: message.role,
+    createdAt,
+    content: message.content,
+  });
+}
+
+function inferReproIdRemap(
+  preMessages: MastraDBMessage[],
+  postMessages: MastraDBMessage[],
+): Array<{ fromId: string; toId: string; fingerprint: string }> {
+  const preByFingerprint = new Map<string, string[]>();
+  const postByFingerprint = new Map<string, string[]>();
+
+  for (const message of preMessages) {
+    if (!message.id) continue;
+    const fingerprint = buildReproMessageFingerprint(message);
+    const list = preByFingerprint.get(fingerprint) ?? [];
+    list.push(message.id);
+    preByFingerprint.set(fingerprint, list);
+  }
+
+  for (const message of postMessages) {
+    if (!message.id) continue;
+    const fingerprint = buildReproMessageFingerprint(message);
+    const list = postByFingerprint.get(fingerprint) ?? [];
+    list.push(message.id);
+    postByFingerprint.set(fingerprint, list);
+  }
+
+  const remap: Array<{ fromId: string; toId: string; fingerprint: string }> = [];
+
+  for (const [fingerprint, preIds] of preByFingerprint.entries()) {
+    const postIds = postByFingerprint.get(fingerprint);
+    if (!postIds || preIds.length !== 1 || postIds.length !== 1) continue;
+
+    const fromId = preIds[0];
+    const toId = postIds[0];
+    if (!fromId || !toId || fromId === toId) {
+      continue;
+    }
+
+    remap.push({ fromId, toId, fingerprint });
+  }
+
+  return remap;
+}
+
 function omDebug(msg: string) {
   if (!OM_DEBUG_LOG) return;
   try {
@@ -593,10 +664,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const memBoundary = ObservationalMemory.lastBufferedBoundary.get(bufferKey) ?? 0;
     const lastBoundary = Math.max(dbBoundary, memBoundary);
 
-    // Halve the buffer interval when within ~1 bufferTokens of the activation threshold.
-    // This produces finer-grained chunks right before activation, improving boundary selection.
-    const rampPoint = messageTokensThreshold ? messageTokensThreshold - bufferTokens * 1.1 : Infinity;
-    const effectiveBufferTokens = currentTokens >= rampPoint ? bufferTokens / 2 : bufferTokens;
+    // Use smaller interval buckets as we approach/overflow threshold so buffered chunks
+    // are created more frequently and activation has tighter swap boundaries.
+    let effectiveBufferTokens = bufferTokens;
+    let rampBand = 'base';
+
+    if (messageTokensThreshold && messageTokensThreshold > 0) {
+      const ratio = currentTokens / messageTokensThreshold;
+      if (ratio >= 1.2) {
+        effectiveBufferTokens = Math.max(100, Math.floor(bufferTokens / 4));
+        rampBand = 'critical';
+      } else if (ratio >= 1.0) {
+        effectiveBufferTokens = Math.max(100, Math.floor(bufferTokens / 3));
+        rampBand = 'high';
+      } else if (ratio >= 0.8) {
+        effectiveBufferTokens = Math.max(100, Math.floor(bufferTokens / 2));
+        rampBand = 'warm';
+      }
+    }
 
     // Calculate which interval we're in
     const currentInterval = Math.floor(currentTokens / effectiveBufferTokens);
@@ -605,11 +690,63 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const shouldTrigger = currentInterval > lastInterval;
 
     omDebug(
-      `[OM:shouldTriggerAsyncObs] tokens=${currentTokens}, bufferTokens=${bufferTokens}, effectiveBufferTokens=${effectiveBufferTokens}, rampPoint=${rampPoint}, currentInterval=${currentInterval}, lastInterval=${lastInterval}, lastBoundary=${lastBoundary} (db=${dbBoundary}, mem=${memBoundary}), shouldTrigger=${shouldTrigger}`,
+      `[OM:shouldTriggerAsyncObs] tokens=${currentTokens}, bufferTokens=${bufferTokens}, effectiveBufferTokens=${effectiveBufferTokens}, rampBand=${rampBand}, currentInterval=${currentInterval}, lastInterval=${lastInterval}, lastBoundary=${lastBoundary} (db=${dbBoundary}, mem=${memBoundary}), shouldTrigger=${shouldTrigger}`,
     );
 
     // Trigger if we've crossed into a new interval
     return shouldTrigger;
+  }
+
+  private resolveObservationBackpressureWaitMs(currentTokens: number, threshold: number): number {
+    if (threshold <= 0) return 0;
+
+    const ratio = currentTokens / threshold;
+    if (ratio >= 1.3) return 3000;
+    if (ratio >= 1.2) return 2000;
+    if (ratio >= 1.0) return 1000;
+    if (ratio >= 0.8) return 1000;
+    return 0;
+  }
+
+  private async maybeApplyObservationBackpressure(params: {
+    currentTokens: number;
+    threshold: number;
+    lockKey: string;
+    record: ObservationalMemoryRecord;
+    threadId: string;
+    resourceId?: string;
+  }): Promise<{ waitMs: number; ratio: number; recordAfterWait?: ObservationalMemoryRecord }> {
+    if (!this.isAsyncObservationEnabled()) {
+      return { waitMs: 0, ratio: 0 };
+    }
+
+    const ratio = params.threshold > 0 ? params.currentTokens / params.threshold : 0;
+    const waitMs = this.resolveObservationBackpressureWaitMs(params.currentTokens, params.threshold);
+    if (waitMs <= 0) {
+      return { waitMs: 0, ratio };
+    }
+
+    const bufferKey = this.getObservationBufferKey(params.lockKey);
+    const hasBufferingSignal =
+      params.record.isBufferingObservation ||
+      this.isAsyncBufferingInProgress(bufferKey) ||
+      this.getBufferedChunks(params.record).length > 0;
+
+    if (!hasBufferingSignal) {
+      return { waitMs: 0, ratio };
+    }
+
+    omDebug(
+      `[OM:backpressure] applying waitMs=${waitMs}, ratio=${ratio.toFixed(3)}, current=${params.currentTokens}, threshold=${params.threshold}, isBufferingObs=${params.record.isBufferingObservation}`,
+    );
+
+    await Promise.race([
+      new Promise(resolve => setTimeout(resolve, waitMs)),
+      ObservationalMemory.awaitBuffering(params.threadId, params.resourceId, this.scope, waitMs),
+    ]);
+
+    const recordAfterWait = await this.getOrCreateRecord(params.threadId, params.resourceId);
+    return { waitMs, ratio, recordAfterWait };
   }
 
   /**
@@ -1387,6 +1524,59 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
   }
 
+  private isMessageSealedForBuffering(message: MastraDBMessage): boolean {
+    const metadata = message.content?.metadata as { mastra?: { sealed?: boolean } } | undefined;
+    return metadata?.mastra?.sealed === true;
+  }
+
+  private async maybePreSealNearThreshold(params: {
+    messageList: MessageList;
+    record: ObservationalMemoryRecord;
+    threadId: string;
+    resourceId?: string;
+    totalPendingTokens: number;
+    threshold: number;
+    sealedIds: Set<string>;
+  }): Promise<number> {
+    if (!this.isAsyncObservationEnabled()) return 0;
+    if (typeof this.observationConfig.bufferActivation !== 'number') return 0;
+    if (params.totalPendingTokens >= params.threshold) return 0;
+
+    const minRemaining = resolveRetentionFloor(this.observationConfig.bufferActivation, params.threshold);
+    const preSealStart = Math.max(0, params.threshold - minRemaining);
+    if (params.totalPendingTokens < preSealStart) return 0;
+
+    const allMessages = params.messageList.get.all.db();
+    const unobserved = this.getUnobservedMessages(allMessages, params.record);
+    const candidates = unobserved.filter(
+      m =>
+        m.id !== 'om-continuation' &&
+        !params.sealedIds.has(m.id) &&
+        !this.isMessageSealedForBuffering(m) &&
+        this.hasUnobservedParts(m),
+    );
+
+    if (candidates.length === 0) return 0;
+
+    this.sealMessagesForBuffering(candidates);
+    await this.messageHistory.persistMessages({
+      messages: candidates,
+      threadId: params.threadId,
+      resourceId: params.resourceId,
+    });
+
+    for (const message of candidates) {
+      params.sealedIds.add(message.id);
+    }
+    ObservationalMemory.sealedMessageIds.set(params.threadId, new Set(params.sealedIds));
+
+    omDebug(
+      `[OM:pre-seal] nearThreshold pre-sealed ${candidates.length} messages at pending=${params.totalPendingTokens}/${params.threshold} (start=${preSealStart}, floor=${minRemaining})`,
+    );
+
+    return candidates.length;
+  }
+
   /**
    * Insert an observation marker into a message.
    * The marker is appended directly to the message's parts array (mutating in place).
@@ -1967,6 +2157,87 @@ ${suggestedResponse}
     return content;
   }
 
+  private writeProcessInputStepReproCapture(params: {
+    threadId: string;
+    resourceId?: string;
+    stepNumber: number;
+    args: ProcessInputStepArgs;
+    preRecord: ObservationalMemoryRecord;
+    postRecord: ObservationalMemoryRecord;
+    preMessages: MastraDBMessage[];
+    preSerializedMessageList: ReturnType<MessageList['serialize']>;
+    messageList: MessageList;
+    details: Record<string, unknown>;
+  }) {
+    if (!OM_REPRO_CAPTURE_ENABLED) {
+      return;
+    }
+
+    try {
+      const runId = `${Date.now()}-step-${params.stepNumber}-${randomUUID()}`;
+      const captureDir = join(process.cwd(), OM_REPRO_CAPTURE_DIR, params.threadId, runId);
+      mkdirSync(captureDir, { recursive: true });
+
+      const contextMessages = params.messageList.get.all.db();
+      const memoryContext = parseMemoryRequestContext(params.args.requestContext);
+      const preMessageIds = new Set(params.preMessages.map(message => message.id));
+      const postMessageIds = new Set(contextMessages.map(message => message.id));
+      const removedMessageIds = params.preMessages
+        .map(message => message.id)
+        .filter((id): id is string => Boolean(id) && !postMessageIds.has(id));
+      const addedMessageIds = contextMessages
+        .map(message => message.id)
+        .filter((id): id is string => Boolean(id) && !preMessageIds.has(id));
+      const idRemap = inferReproIdRemap(params.preMessages, contextMessages);
+
+      const inputPayload = safeCaptureJson({
+        stepNumber: params.stepNumber,
+        threadId: params.threadId,
+        resourceId: params.resourceId,
+        readOnly: memoryContext?.memoryConfig?.readOnly,
+        messageCount: contextMessages.length,
+        messageIds: contextMessages.map(message => message.id),
+        stateKeys: Object.keys((params.args.state as Record<string, unknown>) ?? {}),
+      });
+
+      const preStatePayload = safeCaptureJson({
+        record: params.preRecord,
+        bufferedChunks: this.getBufferedChunks(params.preRecord),
+        contextTokenCount: this.tokenCounter.countMessages(params.preMessages),
+        messages: params.preMessages,
+        messageList: params.preSerializedMessageList,
+      });
+
+      const outputPayload = safeCaptureJson({
+        details: params.details,
+        messageDiff: {
+          removedMessageIds,
+          addedMessageIds,
+          idRemap,
+        },
+      });
+
+      const postStatePayload = safeCaptureJson({
+        record: params.postRecord,
+        bufferedChunks: this.getBufferedChunks(params.postRecord),
+        contextTokenCount: this.tokenCounter.countMessages(contextMessages),
+        messageCount: contextMessages.length,
+        messageIds: contextMessages.map(message => message.id),
+        messages: contextMessages,
+        messageList: params.messageList.serialize(),
+      });
+
+      writeFileSync(join(captureDir, 'input.json'), `${JSON.stringify(inputPayload, null, 2)}\n`);
+      writeFileSync(join(captureDir, 'pre-state.json'), `${JSON.stringify(preStatePayload, null, 2)}\n`);
+      writeFileSync(join(captureDir, 'output.json'), `${JSON.stringify(outputPayload, null, 2)}\n`);
+      writeFileSync(join(captureDir, 'post-state.json'), `${JSON.stringify(postStatePayload, null, 2)}\n`);
+
+      omDebug(`[OM:repro-capture] wrote processInputStep capture to ${captureDir}`);
+    } catch (error) {
+      omDebug(`[OM:repro-capture] failed to write processInputStep capture: ${String(error)}`);
+    }
+  }
+
   /**
    * Get threadId and resourceId from either RequestContext or MessageList
    */
@@ -2448,6 +2719,7 @@ ${suggestedResponse}
       // floors are enforced during buffered activation.
       const observedSet = new Set(observedMessageIds);
       const idsToRemove = new Set<string>();
+      const retentionCounter = new TokenCounter();
       let skipped = 0;
       let backoffTriggered = false;
 
@@ -2460,7 +2732,7 @@ ${suggestedResponse}
           const nextRemainingMessages = allMsgs.filter(
             m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
           );
-          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
+          const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
           if (remainingIfRemoved < minRemaining) {
             skipped += 1;
             backoffTriggered = true;
@@ -2739,6 +3011,15 @@ ${suggestedResponse}
 
     // Fetch fresh record
     let record = await this.getOrCreateRecord(threadId, resourceId);
+    const preRecordSnapshot = safeCaptureJson(record) as ObservationalMemoryRecord;
+    const preMessagesSnapshot = safeCaptureJson(messageList.get.all.db()) as MastraDBMessage[];
+    const preSerializedMessageList = safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>;
+    const reproCaptureDetails: Record<string, unknown> = {
+      step0Activation: null,
+      thresholdCleanup: null,
+      thresholdReached: false,
+      backpressure: null,
+    };
     omDebug(
       `[OM:step] processInputStep step=${stepNumber}: recordId=${record.id}, genCount=${record.generationCount}, obsTokens=${record.observationTokenCount}, bufferedReflection=${record.bufferedReflection ? 'present (' + record.bufferedReflection.length + ' chars)' : 'empty'}, activeObsLen=${record.activeObservations?.length}`,
     );
@@ -2822,6 +3103,14 @@ ${suggestedResponse}
             writer,
             messageList,
           );
+
+          reproCaptureDetails.step0Activation = {
+            attempted: true,
+            success: activationResult.success,
+            messageTokensActivated: activationResult.messageTokensActivated ?? 0,
+            activatedMessageIds: activationResult.activatedMessageIds ?? [],
+            hadUpdatedRecord: !!activationResult.updatedRecord,
+          };
 
           if (activationResult.success && activationResult.updatedRecord) {
             record = activationResult.updatedRecord;
@@ -2925,12 +3214,12 @@ ${suggestedResponse}
     // STEP 2: CHECK THRESHOLD AND OBSERVE IF NEEDED
     // ════════════════════════════════════════════════════════════════════════
     if (!readOnly) {
-      const allMessages = messageList.get.all.db();
-      const unobservedMessages = this.getUnobservedMessages(allMessages, record);
+      let allMessages = messageList.get.all.db();
+      let unobservedMessages = this.getUnobservedMessages(allMessages, record);
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
-      const currentObservationTokens = record.observationTokenCount ?? 0;
+      let currentObservationTokens = record.observationTokenCount ?? 0;
 
-      const thresholds = this.calculateObservationThresholds(
+      let thresholds = this.calculateObservationThresholds(
         allMessages,
         unobservedMessages,
         0, // pendingTokens not needed — allMessages covers context
@@ -2938,15 +3227,15 @@ ${suggestedResponse}
         currentObservationTokens,
         record,
       );
-      const { totalPendingTokens, threshold } = thresholds;
+      let { totalPendingTokens, threshold } = thresholds;
 
       // Subtract already-buffered message tokens from the pending count for buffering decisions.
       // Buffered messages are "unobserved" (not yet in activeObservations) but have already been
       // sent to the observer — counting them would cause redundant buffering ops, especially
       // after activation resets lastBufferedBoundary to 0.
       // IMPORTANT: Use messageTokens (message tokens being removed), NOT tokenCount (observation tokens).
-      const bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-      const unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
+      let bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      let unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
 
       // Merge per-state sealedIds with static sealedMessageIds (survives across OM instances)
       const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
@@ -2954,6 +3243,23 @@ ${suggestedResponse}
       const sealedIds = new Set<string>([...stateSealedIds, ...staticSealedIds]);
       state.sealedIds = sealedIds;
       const lockKey = this.getLockKey(threadId, resourceId);
+
+      const preSealedCount = await this.maybePreSealNearThreshold({
+        messageList,
+        record,
+        threadId,
+        resourceId,
+        totalPendingTokens,
+        threshold,
+        sealedIds,
+      });
+      if (preSealedCount > 0) {
+        reproCaptureDetails.preSeal = {
+          count: preSealedCount,
+          pendingTokens: totalPendingTokens,
+          threshold,
+        };
+      }
 
       // ════════════════════════════════════════════════════════════════════════
       // ASYNC BUFFERING: Trigger background observation at bufferTokens intervals
@@ -2996,6 +3302,40 @@ ${suggestedResponse}
         }
       }
 
+      const backpressure = await this.maybeApplyObservationBackpressure({
+        currentTokens: totalPendingTokens,
+        threshold,
+        lockKey,
+        record,
+        threadId,
+        resourceId,
+      });
+      if (backpressure.waitMs > 0) {
+        record = backpressure.recordAfterWait ?? (await this.getOrCreateRecord(threadId, resourceId));
+        allMessages = messageList.get.all.db();
+        unobservedMessages = this.getUnobservedMessages(allMessages, record);
+        currentObservationTokens = record.observationTokenCount ?? 0;
+        thresholds = this.calculateObservationThresholds(
+          allMessages,
+          unobservedMessages,
+          0,
+          otherThreadTokens,
+          currentObservationTokens,
+          record,
+        );
+        ({ totalPendingTokens, threshold } = thresholds);
+        bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+        unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
+        reproCaptureDetails.backpressure = {
+          ratio: backpressure.ratio,
+          waitMsApplied: backpressure.waitMs,
+          tokensAfterWait: totalPendingTokens,
+          thresholdAfterWait: threshold,
+          isBufferingObservationAfterWait: record.isBufferingObservation,
+          bufferedChunksAfterWait: this.getBufferedChunks(record).length,
+        };
+      }
+
       // ════════════════════════════════════════════════════════════════════════
       // PER-STEP SAVE: Always persist messages incrementally (step > 0)
       // Must run BEFORE threshold handling so that:
@@ -3010,6 +3350,7 @@ ${suggestedResponse}
       // THRESHOLD REACHED: Observe and clean up
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber > 0 && totalPendingTokens >= threshold) {
+        reproCaptureDetails.thresholdReached = true;
         const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
           messageList,
           record,
@@ -3038,6 +3379,13 @@ ${suggestedResponse}
             typeof this.observationConfig.bufferActivation === 'number'
               ? resolveRetentionFloor(this.observationConfig.bufferActivation, threshold)
               : undefined;
+          reproCaptureDetails.thresholdCleanup = {
+            observationSucceeded,
+            observedIdsCount: observedIds?.length ?? 0,
+            observedIds,
+            minRemaining,
+            updatedRecordObservedIds: updatedRecord.observedMessageIds,
+          };
           omDebug(
             `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}, minRemaining=${minRemaining ?? 'n/a'}`,
           );
@@ -3136,6 +3484,27 @@ ${suggestedResponse}
 
       // Persist the computed token count so the UI can display it on page load
       this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
+
+      this.writeProcessInputStepReproCapture({
+        threadId,
+        resourceId,
+        stepNumber,
+        args,
+        preRecord: preRecordSnapshot,
+        postRecord: freshRecord,
+        preMessages: preMessagesSnapshot,
+        preSerializedMessageList,
+        messageList,
+        details: {
+          ...reproCaptureDetails,
+          totalPendingTokens,
+          threshold,
+          effectiveObservationTokensThreshold,
+          currentObservationTokens,
+          otherThreadTokens,
+          contextMessageCount: contextMessages.length,
+        },
+      });
     }
 
     return messageList;

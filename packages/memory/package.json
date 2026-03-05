@@ -40,7 +40,8 @@
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
     "test": "pnpm test:integration && pnpm test:unit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "analyze:om-repro": "node ./scripts/analyze-om-repro.mjs"
   },
   "keywords": [],
   "author": "",
