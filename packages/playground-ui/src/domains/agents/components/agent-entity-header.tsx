@@ -1,6 +1,6 @@
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Badge } from '@/ds/components/Badge';
-import { CopyIcon, Pencil, CopyPlus } from 'lucide-react';
+import { CopyIcon, Pencil, CopyPlus, Link2, Check } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -18,6 +18,11 @@ export interface AgentEntityHeaderProps {
 export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { handleCopy } = useCopyToClipboard({ text: agentId });
+  const sessionUrl = `${window.location.origin}/agents/${agentId}/session`;
+  const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
+    text: sessionUrl,
+    copyMessage: 'Session URL copied to clipboard!',
+  });
   const { isCmsAvailable } = useIsCmsAvailable();
   const { navigate } = useLinkComponent();
   const { cloneAgent, isCloning } = useCloneAgent();
@@ -80,6 +85,16 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
             <TooltipContent>Clone agent to a new stored agent</TooltipContent>
           </Tooltip>
         )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button onClick={handleShareLink} className="h-badge-default shrink-0 ml-2">
+              <Badge icon={isShareCopied ? <Check /> : <Link2 />} variant="default">
+                Share
+              </Badge>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy session URL to share with your team</TooltipContent>
+        </Tooltip>
       </EntityHeader>
     </TooltipProvider>
   );
