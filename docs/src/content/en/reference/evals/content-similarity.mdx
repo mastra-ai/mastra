@@ -16,20 +16,20 @@ The `createContentSimilarityScorer()` function accepts a single options object w
 
 <PropertiesTable
   content={[
-{
-name: "ignoreCase",
-type: "boolean",
-required: false,
-defaultValue: "true",
-description: "Whether to ignore case differences when comparing strings.",
-},
-{
-name: "ignoreWhitespace",
-type: "boolean",
-required: false,
-defaultValue: "true",
-description: "Whether to normalize whitespace when comparing strings.",
-},
+  {
+    name: 'ignoreCase',
+    type: 'boolean',
+    required: false,
+    defaultValue: 'true',
+    description: 'Whether to ignore case differences when comparing strings.',
+  },
+  {
+    name: 'ignoreWhitespace',
+    type: 'boolean',
+    required: false,
+    defaultValue: 'true',
+    description: 'Whether to normalize whitespace when comparing strings.',
+  },
 ]}
 />
 
@@ -39,28 +39,26 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "preprocessStepResult",
-type: "object",
-description:
-"Object with processed input and output: { processedInput: string, processedOutput: string }",
-},
-{
-name: "analyzeStepResult",
-type: "object",
-description: "Object with similarity: { similarity: number }",
-},
-{
-name: "score",
-type: "number",
-description:
-"Similarity score (0-1) where 1 indicates perfect similarity.",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description: 'Object with processed input and output: { processedInput: string, processedOutput: string }',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description: 'Object with similarity: { similarity: number }',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Similarity score (0-1) where 1 indicates perfect similarity.',
+  },
 ]}
 />
 

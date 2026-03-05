@@ -1725,6 +1725,201 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
     expect(iterations).toEqual([1, 2]);
   });
 
+  it('should deliver feedback and allow one more LLM turn when continue:false with feedback', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const simpleTool = createTool({
+      id: 'lookup-tool',
+      description: 'Looks up data',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async ({ query }) => ({ result: `Found: ${query}` }),
+    });
+
+    const agent = new Agent({
+      id: 'feedback-stop-agent',
+      name: 'Feedback Stop Agent',
+      instructions: 'You look up data and summarize findings.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          callCount++;
+          if (callCount <= 2) {
+            // First two calls: make tool calls (isContinued = true)
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call-start',
+                  id: `call-${callCount}`,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'lookup-tool',
+                },
+                {
+                  type: 'tool-call-args-delta',
+                  id: `call-${callCount}`,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'lookup-tool',
+                  argsDelta: `{"query":"item-${callCount}"}`,
+                },
+                {
+                  type: 'tool-call-end',
+                  id: `call-${callCount}`,
+                  toolCallId: `call-${callCount}`,
+                  toolName: 'lookup-tool',
+                  args: { query: `item-${callCount}` },
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+          // Third call (after feedback): produce final text
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-final', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Summary of findings' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      tools: { simpleTool },
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: { 'feedback-stop-agent': agent },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('feedback-stop-agent');
+
+    const result = await testAgent.stream('Find items', {
+      maxSteps: 10,
+      onIterationComplete: ctx => {
+        iterations.push(ctx.iteration);
+        if (ctx.iteration >= 2) {
+          return { continue: false, feedback: 'Stop and summarize your findings.' };
+        }
+        return { continue: true };
+      },
+    });
+
+    const reader = result.fullStream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    const text = await result.text;
+
+    // Iteration 2 returns continue:false + feedback → model gets one more turn (iteration 3)
+    expect(iterations.length).toBeGreaterThanOrEqual(3);
+    // The final LLM turn should produce text (not empty)
+    expect(text).toBe('Summary of findings');
+    // The model should have been called 3 times: 2 tool-call iterations + 1 final text
+    expect(callCount).toBe(3);
+  });
+
+  it('should force-stop after the feedback turn even if model keeps making tool calls', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const simpleTool = createTool({
+      id: 'fetch-tool',
+      description: 'Fetches data',
+      inputSchema: z.object({ id: z.string() }),
+      execute: async ({ id }) => ({ data: `result-${id}` }),
+    });
+
+    const agent = new Agent({
+      id: 'stubborn-agent',
+      name: 'Stubborn Agent',
+      instructions: 'You keep fetching data.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          callCount++;
+          // Always return tool calls — model never voluntarily stops
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${callCount}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call-start',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'fetch-tool',
+              },
+              {
+                type: 'tool-call-args-delta',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'fetch-tool',
+                argsDelta: `{"id":"${callCount}"}`,
+              },
+              {
+                type: 'tool-call-end',
+                id: `call-${callCount}`,
+                toolCallId: `call-${callCount}`,
+                toolName: 'fetch-tool',
+                args: { id: `${callCount}` },
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      tools: { simpleTool },
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: { 'stubborn-agent': agent },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('stubborn-agent');
+
+    const result = await testAgent.stream('Fetch everything', {
+      maxSteps: 20,
+      onIterationComplete: ctx => {
+        iterations.push(ctx.iteration);
+        if (ctx.iteration === 1) {
+          return { continue: false, feedback: 'Wrap up now.' };
+        }
+      },
+    });
+
+    const reader = result.fullStream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    // Iteration 1: tool call, hook returns continue:false + feedback
+    // Iteration 2: model gets one more turn (feedback delivered), then pendingFeedbackStop fires
+    // Iteration 3 should NOT happen — loop is force-stopped
+    expect(iterations).toEqual([1, 2]);
+    expect(callCount).toBe(2);
+  });
+
   it('should add feedback to conversation when provided', async () => {
     const feedbackMessages: string[] = [];
     let callCount = 0;

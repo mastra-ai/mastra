@@ -67,7 +67,21 @@ export class CloudflareDeployer extends Deployer {
   }
 
   async writeFiles(outputDirectory: string): Promise<void> {
-    const { vars: userVars, alias: userAlias, ...userConfig } = this.userConfig;
+    const {
+      vars: userVars,
+      alias: userAlias,
+      // Remove deprecated fields so they don't leak into wrangler.json
+      projectName: _projectName,
+      workerNamespace: _workerNamespace,
+      d1Databases: _d1Databases,
+      kvNamespaces: _kvNamespaces,
+      ...userConfig
+    } = this.userConfig as typeof this.userConfig & {
+      projectName?: string;
+      workerNamespace?: string;
+      d1Databases?: unknown;
+      kvNamespaces?: unknown;
+    };
     const loadedEnvVars = await this.loadEnvVars();
 
     // Merge env vars from .env files with user-provided vars
@@ -99,6 +113,19 @@ export const sys = {
 
     await writeFile(join(outputDirectory, this.outputDir, typescriptStubPath), typescriptStub);
 
+    // Write execa stub — execa is used by @mastra/core's local sandbox process manager
+    // but is not available/needed in Cloudflare Workers
+    const execaStubPath = 'execa-stub.mjs';
+    const execaStub = `// Stub for execa - not available at runtime in Cloudflare Workers
+export const execa = () => { throw new Error('execa is not available in Cloudflare Workers'); };
+export const execaNode = execa;
+export const execaSync = execa;
+export const execaCommand = execa;
+export const execaCommandSync = execa;
+export const $ = execa;
+`;
+    await writeFile(join(outputDirectory, this.outputDir, execaStubPath), execaStub);
+
     const wranglerConfig: Unstable_RawConfig = {
       name: 'mastra',
       compatibility_date: '2025-04-01',
@@ -111,9 +138,10 @@ export const sys = {
       ...userConfig,
       main: './index.mjs',
       vars: envsAsObject,
-      // Alias TypeScript to stub to prevent wrangler from bundling the full library
+      // Alias stubs to prevent wrangler from bundling unavailable libraries
       alias: {
         typescript: `./${typescriptStubPath}`,
+        execa: `./${execaStubPath}`,
         ...userAlias,
       },
     };

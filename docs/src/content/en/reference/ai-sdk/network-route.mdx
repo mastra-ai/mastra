@@ -55,25 +55,28 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "The route path (e.g., `/network` or `/network/:agentId`). Include `:agentId` for dynamic agent routing.",
-isOptional: false,
-defaultValue: "'/network/:agentId'",
-},
-{
-name: "agent",
-type: "string",
-description: "The ID of the routing agent to use for this network route. Required if the path doesn't include `:agentId`.",
-isOptional: true,
-},
-{
-name: "defaultOptions",
-type: "AgentExecutionOptions",
-description: "Default options passed to agent execution. These can include instructions, memory configuration, maxSteps, and other execution settings.",
-isOptional: true,
-},
+  {
+    name: 'path',
+    type: 'string',
+    description:
+      'The route path (e.g., `/network` or `/network/:agentId`). Include `:agentId` for dynamic agent routing.',
+    isOptional: false,
+    defaultValue: "'/network/:agentId'",
+  },
+  {
+    name: 'agent',
+    type: 'string',
+    description:
+      "The ID of the routing agent to use for this network route. Required if the path doesn't include `:agentId`.",
+    isOptional: true,
+  },
+  {
+    name: 'defaultOptions',
+    type: 'AgentExecutionOptions',
+    description:
+      'Default options passed to agent execution. These can include instructions, memory configuration, maxSteps, and other execution settings.',
+    isOptional: true,
+  },
 ]}
 />
 
