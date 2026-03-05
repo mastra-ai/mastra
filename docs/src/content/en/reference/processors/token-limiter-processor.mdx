@@ -34,14 +34,10 @@ name: "options",
 type: "number | Options",
 description: "Either a simple number for token limit, or configuration options object",
 isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "number | Options",
+parameters: [
 {
 name: "limit",
 type: "number",
@@ -68,6 +64,10 @@ type: "'cumulative' | 'part'",
 description: "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
 isOptional: true,
 default: "'cumulative'",
+},
+],
+},
+],
 },
 ]}
 />

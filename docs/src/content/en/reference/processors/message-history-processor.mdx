@@ -30,14 +30,10 @@ name: "options",
 type: "MessageHistoryOptions",
 description: "Configuration options for the message history processor",
 isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "MessageHistoryOptions",
+parameters: [
 {
 name: "storage",
 type: "MemoryStorage",
@@ -49,6 +45,10 @@ name: "lastMessages",
 type: "number",
 description: "Maximum number of historical messages to retrieve. If not specified, retrieves all messages",
 isOptional: true,
+},
+],
+},
+],
 },
 ]}
 />

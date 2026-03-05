@@ -38,14 +38,10 @@ name: "options",
 type: "Options",
 description: "Configuration options for the working memory processor",
 isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "Options",
+parameters: [
 {
 name: "storage",
 type: "MemoryStorage",
@@ -57,6 +53,25 @@ name: "template",
 type: "WorkingMemoryTemplate",
 description: "Template defining the format and structure of working memory",
 isOptional: true,
+properties: [
+{
+type: "WorkingMemoryTemplate",
+parameters: [
+{
+name: "format",
+type: "'markdown' | 'json'",
+description: "Format of the working memory content",
+isOptional: false,
+},
+{
+name: "content",
+type: "string",
+description: "Template content defining the structure of working memory data",
+isOptional: false,
+},
+],
+},
+],
 },
 {
 name: "scope",
@@ -90,24 +105,9 @@ type: "IMastraLogger",
 description: "Optional logger instance for structured logging",
 isOptional: true,
 },
-]}
-/>
-
-### WorkingMemoryTemplate
-
-<PropertiesTable
-  content={[
-{
-name: "format",
-type: "'markdown' | 'json'",
-description: "Format of the working memory content",
-isOptional: false,
+],
 },
-{
-name: "content",
-type: "string",
-description: "Template content defining the structure of working memory data",
-isOptional: false,
+],
 },
 ]}
 />

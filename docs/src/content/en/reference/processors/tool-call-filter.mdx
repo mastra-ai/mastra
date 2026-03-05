@@ -32,19 +32,19 @@ name: "options",
 type: "Options",
 description: "Configuration options for the tool call filter",
 isOptional: true,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "Options",
+parameters: [
 {
 name: "exclude",
 type: "string[]",
 description: "List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded",
 isOptional: true,
+},
+],
+},
+],
 },
 ]}
 />
