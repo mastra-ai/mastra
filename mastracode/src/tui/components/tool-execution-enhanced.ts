@@ -936,35 +936,62 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const status = this.getStatusIndicator();
 
     const queryDisplay = query ? ` ${theme.fg('accent', `"${query}"`)}` : '';
-    const header = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
+    const footerText = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
 
+    // Don't show border until we have a result
     if (!this.result || this.isPartial) {
-      this.contentBox.addChild(new Text(header, 0, 0));
+      this.contentBox.addChild(new Text(footerText, 0, 0));
       return;
     }
 
     if (this.result.isError) {
-      this.renderErrorResult(header);
+      this.renderErrorResult(footerText);
       return;
     }
+
+    const border = (char: string) => theme.bold(theme.fg('accent', char));
 
     // Parse search results and format as a clean list of titles + URLs
     const output = this.formatWebSearchResults();
     if (output) {
-      this.collapsible = new CollapsibleComponent(
-        {
-          header,
-          expanded: this.expanded,
-          collapsedLines: 10,
-          expandedLines: 200,
-          showLineCount: true,
-        },
-        this.ui,
-      );
-      this.collapsible.setContent(output);
-      this.contentBox.addChild(this.collapsible);
+      const termWidth = process.stdout.columns || 80;
+      const maxLineWidth = termWidth - 6;
+
+      // Empty line padding above
+      this.contentBox.addChild(new Text('', 0, 0));
+
+      // Top border
+      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+
+      let lines = output.split('\n');
+
+      // Limit lines when collapsed
+      const collapsedLines = 10;
+      const totalLines = lines.length;
+      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
+
+      if (hasMore) {
+        lines = lines.slice(0, collapsedLines);
+      }
+
+      const borderedLines = lines.map(line => {
+        const truncated = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + truncated;
+      });
+      this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
+
+      // Show truncation indicator
+      if (hasMore) {
+        const remaining = totalLines - collapsedLines;
+        this.contentBox.addChild(
+          new Text(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`), 0, 0),
+        );
+      }
+
+      // Bottom border with tool info
+      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
     } else {
-      this.contentBox.addChild(new Text(header, 0, 0));
+      this.contentBox.addChild(new Text(footerText, 0, 0));
     }
   }
 
@@ -1001,10 +1028,6 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
           return rest;
         });
         return JSON.stringify(stripped, null, 2);
-      } else if (typeof parsed === 'object' && parsed !== null) {
-        // JSON object (not array) — strip encryptedContent if present
-        const { encryptedContent, ...rest } = parsed as Record<string, unknown>;
-        return JSON.stringify(rest, null, 2);
       }
     } catch {
       // Not JSON — fall through to raw text (Tavily format)
