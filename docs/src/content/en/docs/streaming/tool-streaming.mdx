@@ -98,6 +98,20 @@ export const testTool = createTool({
 });
 ```
 
+### Transient data chunks
+
+By default, `data-*` chunks emitted with `writer.custom()` are persisted to storage as part of the message history. For chunks that are only needed during live streaming — such as progress updates or verbose log output — set `transient: true` to skip storage persistence. Transient chunks are still streamed to the client in real time but are not saved to the database.
+
+```typescript {5} prettier:false
+await context?.writer?.custom({
+  type: "data-build-log",
+  data: { line: "Compiling module 3 of 12..." },
+  transient: true,
+});
+```
+
+Use transient chunks when the data is large or high-frequency and only relevant during the live session. After a page refresh, transient chunks are no longer available — only the tool's return value and any non-transient chunks are loaded from storage.
+
 ### Inspecting stream payloads
 
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or tool-specific data.
