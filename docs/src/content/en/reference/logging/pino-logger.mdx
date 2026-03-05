@@ -30,34 +30,33 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-{
-name: "name",
-type: "string",
-description: "A label used to group and identify logs from this logger.",
-},
-{
-name: "level",
-type: `"debug" | "info" | "warn" | "error"`,
-description:
-"Sets the minimum log level. Messages below this level are ignored.",
-},
-{
-name: "transports",
-type: "Record<string, LoggerTransport>",
-description: "A map of transport instances used to persist logs.",
-},
-{
-name: "overrideDefaultTransports",
-type: "boolean",
-isOptional: true,
-description: "If true, disables the default console transport.",
-},
-{
-name: "formatters",
-type: "pino.LoggerOptions['formatters']",
-isOptional: true,
-description: "Custom Pino formatters for log serialization.",
-},
+  {
+    name: 'name',
+    type: 'string',
+    description: 'A label used to group and identify logs from this logger.',
+  },
+  {
+    name: 'level',
+    type: `"debug" | "info" | "warn" | "error"`,
+    description: 'Sets the minimum log level. Messages below this level are ignored.',
+  },
+  {
+    name: 'transports',
+    type: 'Record<string, LoggerTransport>',
+    description: 'A map of transport instances used to persist logs.',
+  },
+  {
+    name: 'overrideDefaultTransports',
+    type: 'boolean',
+    isOptional: true,
+    description: 'If true, disables the default console transport.',
+  },
+  {
+    name: 'formatters',
+    type: "pino.LoggerOptions['formatters']",
+    isOptional: true,
+    description: 'Custom Pino formatters for log serialization.',
+  },
 ]}
 />
 

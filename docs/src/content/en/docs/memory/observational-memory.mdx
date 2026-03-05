@@ -189,6 +189,15 @@ const memory = new Memory({
 })
 ```
 
+### Token counting cache
+
+OM caches tiktoken part estimates in message metadata to reduce repeat counting work during threshold checks and buffering decisions.
+
+- Per-part estimates are stored on `part.providerMetadata.mastra` and reused on subsequent passes when the cache version/tokenizer source matches.
+- For string-only message content (without parts), OM uses a message-level metadata fallback cache.
+- Message and conversation overhead are still recalculated on every pass. The cache only stores payload estimates, so counting semantics stay the same.
+- `data-*` and `reasoning` parts are still skipped and are not cached.
+
 ## Async Buffering
 
 Without async buffering, the Observer runs synchronously when the message threshold is reached — the agent pauses mid-conversation while the Observer LLM call completes. With async buffering (enabled by default), observations are pre-computed in the background as the conversation grows. When the threshold is hit, buffered observations activate instantly with no pause.

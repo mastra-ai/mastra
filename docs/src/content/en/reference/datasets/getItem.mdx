@@ -33,17 +33,17 @@ const versionedItem = await dataset.getItem({ itemId: 'item-id', version: 2 })
 
 <PropertiesTable
   content={[
-{
-name: "itemId",
-type: "string",
-description: "The unique identifier of the item.",
-},
-{
-name: "version",
-type: "number",
-isOptional: true,
-description: "Dataset version to retrieve the item at. Defaults to the latest version.",
-},
+  {
+    name: 'itemId',
+    type: 'string',
+    description: 'The unique identifier of the item.',
+  },
+  {
+    name: 'version',
+    type: 'number',
+    isOptional: true,
+    description: 'Dataset version to retrieve the item at. Defaults to the latest version.',
+  },
 ]}
 />
 
@@ -51,10 +51,10 @@ description: "Dataset version to retrieve the item at. Defaults to the latest ve
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<DatasetItem | null>",
-description: "The dataset item, or null if not found. See dataset.addItem() for the item shape.",
-},
+  {
+    name: 'result',
+    type: 'Promise<DatasetItem | null>',
+    description: 'The dataset item, or null if not found. See dataset.addItem() for the item shape.',
+  },
 ]}
 />

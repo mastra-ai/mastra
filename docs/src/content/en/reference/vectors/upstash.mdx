@@ -16,16 +16,16 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 
 <PropertiesTable
   content={[
-{
-name: "url",
-type: "string",
-description: "Upstash Vector database URL",
-},
-{
-name: "token",
-type: "string",
-description: "Upstash Vector API token",
-},
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Upstash Vector database URL',
+  },
+  {
+    name: 'token',
+    type: 'string',
+    description: 'Upstash Vector API token',
+  },
 ]}
 />
 
@@ -37,23 +37,23 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to create",
-},
-{
-name: "dimension",
-type: "number",
-description: "Vector dimension (must match your embedding model)",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description: "Distance metric for similarity search",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search',
+  },
 ]}
 />
 
@@ -61,35 +61,35 @@ description: "Distance metric for similarity search",
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to upsert into",
-},
-{
-name: "vectors",
-type: "number[][]",
-description: "Array of embedding vectors",
-},
-{
-name: "sparseVectors",
-type: "{ indices: number[], values: number[] }[]",
-isOptional: true,
-description:
-"Array of sparse vectors for hybrid search. Each sparse vector must have matching indices and values arrays.",
-},
-{
-name: "metadata",
-type: "Record<string, any>[]",
-isOptional: true,
-description: "Metadata for each vector",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Optional vector IDs (auto-generated if not provided)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'sparseVectors',
+    type: '{ indices: number[], values: number[] }[]',
+    isOptional: true,
+    description:
+      'Array of sparse vectors for hybrid search. Each sparse vector must have matching indices and values arrays.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
 ]}
 />
 
@@ -97,57 +97,55 @@ description: "Optional vector IDs (auto-generated if not provided)",
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to query",
-},
-{
-name: "queryVector",
-type: "number[]",
-description: "Query vector to find similar vectors",
-},
-{
-name: "sparseVector",
-type: "{ indices: number[], values: number[] }",
-isOptional: true,
-description:
-"Optional sparse vector for hybrid search. Must have matching indices and values arrays.",
-},
-{
-name: "topK",
-type: "number",
-isOptional: true,
-defaultValue: "10",
-description: "Number of results to return",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filters for the query",
-},
-{
-name: "includeVector",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include vectors in the results",
-},
-{
-name: "fusionAlgorithm",
-type: "FusionAlgorithm",
-isOptional: true,
-description:
-"Algorithm used to combine dense and sparse search results in hybrid search (e.g., RRF - Reciprocal Rank Fusion)",
-},
-{
-name: "queryMode",
-type: "QueryMode",
-isOptional: true,
-description:
-"Search mode: 'DENSE' for dense-only, 'SPARSE' for sparse-only, or 'HYBRID' for combined search",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to query',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors',
+  },
+  {
+    name: 'sparseVector',
+    type: '{ indices: number[], values: number[] }',
+    isOptional: true,
+    description: 'Optional sparse vector for hybrid search. Must have matching indices and values arrays.',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters for the query',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include vectors in the results',
+  },
+  {
+    name: 'fusionAlgorithm',
+    type: 'FusionAlgorithm',
+    isOptional: true,
+    description:
+      'Algorithm used to combine dense and sparse search results in hybrid search (e.g., RRF - Reciprocal Rank Fusion)',
+  },
+  {
+    name: 'queryMode',
+    type: 'QueryMode',
+    isOptional: true,
+    description: "Search mode: 'DENSE' for dense-only, 'SPARSE' for sparse-only, or 'HYBRID' for combined search",
+  },
 ]}
 />
 
@@ -159,11 +157,11 @@ Returns an array of index names (namespaces) as strings.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to describe",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
 ]}
 />
 
@@ -181,11 +179,11 @@ interface IndexStats {
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index (namespace) to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index (namespace) to delete',
+  },
 ]}
 />
 
@@ -193,22 +191,21 @@ description: "Name of the index (namespace) to delete",
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to update",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the item to update",
-},
-{
-name: "update",
-type: "object",
-description:
-"Update object containing vector, sparse vector, and/or metadata",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to update',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the item to update',
+  },
+  {
+    name: 'update',
+    type: 'object',
+    description: 'Update object containing vector, sparse vector, and/or metadata',
+  },
 ]}
 />
 
@@ -222,16 +219,16 @@ The `update` object can have the following properties:
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index from which to delete the item",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the item to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index from which to delete the item',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the item to delete',
+  },
 ]}
 />
 

@@ -34,13 +34,14 @@ export const mastra = new Mastra({
 
 ## Constructor options
 
-The deployer accepts overrides that are written to the Vercel Output API function config (`.vc-config.json`):
+The deployer accepts the following options:
 
+- `studio?: boolean` — Deploy [Studio](/docs/getting-started/studio) alongside your API as static assets served from Vercel's Edge CDN. Defaults to `false`.
 - `maxDuration?: number` — Function execution timeout (in seconds)
 - `memory?: number` — Function memory (in MB)
 - `regions?: string[]` — Regions to deploy the function (e.g. `['sfo1','iad1']`)
 
-These options are merged into `.vercel/output/functions/index.func/.vc-config.json` while preserving default fields (`handler`, `launcherType`, `runtime`, `shouldAddHelpers`).
+The `maxDuration`, `memory`, and `regions` options are merged into `.vercel/output/functions/index.func/.vc-config.json` while preserving default fields (`handler`, `launcherType`, `runtime`, `shouldAddHelpers`).
 
 ### Example with overrides
 
@@ -50,6 +51,7 @@ import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
   deployer: new VercelDeployer({
+    studio: true,
     maxDuration: 600,
     memory: 1536,
     regions: ['sfo1', 'iad1'],
@@ -63,8 +65,11 @@ After running `mastra build`, the deployer generates a `.vercel/output` director
 
 The output contains:
 
-- **config.json** — Routing configuration that directs all requests to your function
+- **config.json** — Routing configuration that directs requests to the appropriate handler
 - **functions/** — Your Mastra server bundled as a serverless function
+- **static/** — Studio SPA assets (only when `studio: true`)
+
+Without studio:
 
 ```bash
 .vercel/
@@ -76,5 +81,25 @@ The output contains:
             ├── index.mjs
             └── node_modules/
 ```
+
+With `studio: true`:
+
+```bash
+.vercel/
+└── output/
+    ├── config.json
+    ├── static/
+    │   ├── index.html
+    │   └── assets/
+    │       ├── *.js
+    │       └── *.css
+    └── functions/
+        └── index.func/
+            ├── .vc-config.json
+            ├── index.mjs
+            └── node_modules/
+```
+
+When studio is enabled, the routing is configured so that `/api/*` requests are handled by the serverless function, static assets (JS, CSS) are served from Vercel's Edge CDN with no function invocations, and all other paths fall back to `index.html` for client-side routing.
 
 This folder is generated during build and should not be committed to version control.

@@ -19,13 +19,12 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`)
 
 <PropertiesTable
   content={[
-{
-name: "mappingFunction",
-type: "(params: { inputData: any }) => any",
-description:
-"Function that transforms input data and returns the mapped result",
-isOptional: false,
-},
+  {
+    name: 'mappingFunction',
+    type: '(params: { inputData: any }) => any',
+    description: 'Function that transforms input data and returns the mapped result',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -33,11 +32,11 @@ isOptional: false,
 
 <PropertiesTable
   content={[
-{
-name: "workflow",
-type: "Workflow",
-description: "The workflow instance for method chaining",
-},
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: 'The workflow instance for method chaining',
+  },
 ]}
 />
 

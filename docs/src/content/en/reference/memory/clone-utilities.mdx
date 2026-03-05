@@ -23,12 +23,12 @@ const isClonedThread = memory.isClone(thread)
 
 <PropertiesTable
   content={[
-{
-name: "thread",
-type: "StorageThreadType",
-description: "The thread object to check.",
-isOptional: false,
-},
+  {
+    name: 'thread',
+    type: 'StorageThreadType',
+    description: 'The thread object to check.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -58,12 +58,12 @@ const metadata = memory.getCloneMetadata(thread)
 
 <PropertiesTable
   content={[
-{
-name: "thread",
-type: "StorageThreadType",
-description: "The thread object to extract clone metadata from.",
-isOptional: false,
-},
+  {
+    name: 'thread',
+    type: 'StorageThreadType',
+    description: 'The thread object to extract clone metadata from.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -93,12 +93,12 @@ const sourceThread = await memory.getSourceThread(threadId)
 
 <PropertiesTable
   content={[
-{
-name: "threadId",
-type: "string",
-description: "The ID of the cloned thread.",
-isOptional: false,
-},
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the cloned thread.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -127,12 +127,12 @@ const clones = await memory.listClones(sourceThreadId)
 
 <PropertiesTable
   content={[
-{
-name: "sourceThreadId",
-type: "string",
-description: "The ID of the source thread to find clones for.",
-isOptional: false,
-},
+  {
+    name: 'sourceThreadId',
+    type: 'string',
+    description: 'The ID of the source thread to find clones for.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -161,12 +161,12 @@ const history = await memory.getCloneHistory(threadId)
 
 <PropertiesTable
   content={[
-{
-name: "threadId",
-type: "string",
-description: "The ID of the thread to get clone history for.",
-isOptional: false,
-},
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The ID of the thread to get clone history for.',
+    isOptional: false,
+  },
 ]}
 />
 

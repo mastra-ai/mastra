@@ -45,6 +45,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
+    { key: '/update', description: 'Check for and install updates' },
   ];
 
   if (modes > 1) {
@@ -66,7 +67,8 @@ function getShortcuts(modes: number): HelpEntry[] {
     { key: 'Ctrl+T', description: 'Toggle thinking blocks' },
     { key: 'Ctrl+E', description: 'Expand/collapse tool outputs' },
     { key: 'Ctrl+Y', description: 'Toggle YOLO mode' },
-    { key: 'Ctrl+Z', description: 'Undo last clear' },
+    { key: 'Ctrl+Z', description: 'Suspend process (fg to resume)' },
+    { key: 'Alt+Z', description: 'Undo last clear' },
   ];
 
   if (modes > 1) {

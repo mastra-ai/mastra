@@ -74,7 +74,7 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
   return paths;
 }
 
-const skillPaths = collectSkillPaths([
+export const skillPaths = collectSkillPaths([
   mastraCodeLocalSkillsPath,
   claudeLocalSkillsPath,
   mastraCodeGlobalSkillsPath,

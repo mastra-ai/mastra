@@ -44,26 +44,28 @@ Takes the same `StartExperimentConfig` as [`dataset.startExperiment()`](/referen
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<object>",
-description: "Immediate response with experiment ID.",
-properties: [{
-type: "object",
-parameters: [
-{
-name: "experimentId",
-type: "string",
-description: "Unique ID of the created experiment.",
-},
-{
-name: "status",
-type: "'pending'",
-description: "Always `'pending'` since the experiment hasn't started executing yet.",
-},
-],
-}],
-},
+  {
+    name: 'result',
+    type: 'Promise<object>',
+    description: 'Immediate response with experiment ID.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'experimentId',
+            type: 'string',
+            description: 'Unique ID of the created experiment.',
+          },
+          {
+            name: 'status',
+            type: "'pending'",
+            description: "Always `'pending'` since the experiment hasn't started executing yet.",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
