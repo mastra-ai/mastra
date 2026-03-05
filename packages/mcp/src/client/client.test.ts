@@ -40,6 +40,20 @@ async function setupTestServer(withSessionManagement: boolean) {
     },
   );
 
+  mcpServer.tool(
+    'slow_tool',
+    'A slow tool for testing abort behavior',
+    {
+      input: z.string().describe('Input to simulate work').default('test'),
+    },
+    async (): Promise<CallToolResult> => {
+      await new Promise(resolve => setTimeout(resolve, 60000));
+      return {
+        content: [{ type: 'text', text: 'Done' }],
+      };
+    },
+  );
+
   mcpServer.resource('test-resource', 'resource://test', () => {
     return {
       contents: [
@@ -1536,6 +1550,78 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     } finally {
       forceReconnectSpy.mockRestore();
       callToolSpy.mockRestore();
+      await client.disconnect().catch(() => {});
+      await testServer.mcpServer.close().catch(() => {});
+      await testServer.serverTransport.close().catch(() => {});
+      testServer.httpServer.close();
+    }
+  });
+});
+
+describe('MastraMCPClient - AbortSignal forwarding', () => {
+  it('should forward abortSignal to callTool options', async () => {
+    const testServer = await setupTestServer(true);
+    const client = new InternalMastraMCPClient({
+      name: 'abort-signal-forwarding-test-client',
+      server: { url: testServer.baseUrl },
+    });
+
+    await client.connect();
+
+    const tools = await client.tools();
+    const greetTool = tools['greet'];
+    expect(greetTool).toBeDefined();
+
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool');
+
+    const abortController = new AbortController();
+
+    try {
+      await greetTool.execute?.({ name: 'AbortTest' }, { abortSignal: abortController.signal });
+
+      expect(callToolSpy).toHaveBeenCalled();
+      const [, , options] = callToolSpy.mock.calls[0]!;
+      expect(options).toMatchObject({ signal: abortController.signal });
+    } finally {
+      callToolSpy.mockRestore();
+      await client.disconnect().catch(() => {});
+      await testServer.mcpServer.close().catch(() => {});
+      await testServer.serverTransport.close().catch(() => {});
+      testServer.httpServer.close();
+    }
+  });
+
+  it('should abort a slow tool call when abortSignal is triggered', async () => {
+    const testServer = await setupTestServer(true);
+    const client = new InternalMastraMCPClient({
+      name: 'abort-slow-tool-test-client',
+      server: { url: testServer.baseUrl },
+    });
+
+    await client.connect();
+
+    try {
+      const tools = await client.tools();
+      const slowTool = tools['slow_tool'];
+      expect(slowTool).toBeDefined();
+
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 100);
+
+      const start = Date.now();
+      try {
+        await expect(
+          slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal }),
+        ).rejects.toThrow();
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      const elapsed = Date.now() - start;
+
+      // The abort signal should cancel the request well before the full 60s sleep
+      expect(elapsed).toBeLessThan(5000);
+    } finally {
       await client.disconnect().catch(() => {});
       await testServer.mcpServer.close().catch(() => {});
       await testServer.serverTransport.close().catch(() => {});
