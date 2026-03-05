@@ -276,7 +276,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.4.0
-        version: 13.5.0
+        version: 13.5.0(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1281,16 +1281,16 @@ importers:
     dependencies:
       '@ai-sdk/anthropic':
         specifier: latest
-        version: 3.0.54(zod@4.3.6)
+        version: 3.0.57(zod@4.3.6)
       '@ai-sdk/openai':
         specifier: latest
-        version: 3.0.39(zod@4.3.6)
+        version: 3.0.40(zod@4.3.6)
       '@ast-grep/napi':
         specifier: latest
         version: 0.41.0
       '@mariozechner/pi-tui':
         specifier: latest
-        version: 0.55.4
+        version: 0.56.0
       '@mastra/core':
         specifier: workspace:*
         version: link:../packages/core
@@ -1311,7 +1311,7 @@ importers:
         version: 0.7.2
       ai:
         specifier: latest
-        version: 6.0.111(zod@4.3.6)
+        version: 6.0.115(zod@4.3.6)
       chalk:
         specifier: latest
         version: 5.6.2
@@ -2333,13 +2333,13 @@ importers:
     devDependencies:
       '@ai-sdk/gateway':
         specifier: ^3.0.0
-        version: 3.0.63(zod@3.25.76)
+        version: 3.0.65(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^3.0.0
         version: 3.0.8
       '@ai-sdk/provider-utils':
         specifier: ^4.0.0
-        version: 4.0.17(zod@3.25.76)
+        version: 4.0.18(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -2363,7 +2363,7 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^6.0.1
-        version: 6.0.111(zod@3.25.76)
+        version: 6.0.115(zod@3.25.76)
       eslint:
         specifier: ^9.36.0
         version: 9.39.2(jiti@2.6.1)
@@ -2851,7 +2851,7 @@ importers:
         version: 0.4.6(zod@3.25.76)
       '@openrouter/ai-sdk-provider-v5':
         specifier: npm:@openrouter/ai-sdk-provider@1.2.3
-        version: '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.111(zod@3.25.76))(zod@3.25.76)'
+        version: '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.115(zod@3.25.76))(zod@3.25.76)'
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5
@@ -5421,8 +5421,8 @@ importers:
   stores/upstash:
     dependencies:
       '@upstash/redis':
-        specifier: ^1.36.2
-        version: 1.36.2
+        specifier: ^1.36.3
+        version: 1.36.3
       '@upstash/vector':
         specifier: ^1.2.2
         version: 1.2.2
@@ -5750,7 +5750,7 @@ importers:
     dependencies:
       '@google/genai':
         specifier: latest
-        version: 1.43.0
+        version: 1.44.0
       google-auth-library:
         specifier: ^10.5.0
         version: 10.5.0
@@ -6454,8 +6454,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/anthropic@3.0.54':
-    resolution: {integrity: sha512-UhSPZ63FsTNO7PQCfxsqJIgkij1sivU3qfXydlSd4ugshpkNhd2v9s78G/40/G5C3pKSRfp/CfaSvivrneQfCg==}
+  '@ai-sdk/anthropic@3.0.57':
+    resolution: {integrity: sha512-/kWEVrK/T12w7fTXLoZyMYctPq5N7tqwxlWZm9Ngvu7tPctelyMVOVH/PsxLkQpIvmqZL60bqJy825TcTINhUw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -6514,8 +6514,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@3.0.63':
-    resolution: {integrity: sha512-0jwdkN3elC4Q9aT2ALxjXtGGVoye15zYgof6GfvuH1a9QKx9Rj4Wi2vy6SyyLvtSA/lB786dTZgC+cGwe6vzmA==}
+  '@ai-sdk/gateway@3.0.65':
+    resolution: {integrity: sha512-oGqhn+zjJZy2wHkh3YzGOVId0xPzV0oe69AbrzB4cjIqOuE5jQJMpq2P8iJlf42ixQz0K1bFmXLrLj0NUIzNWQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -6586,8 +6586,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai@3.0.39':
-    resolution: {integrity: sha512-EZrs4L6kMkPQhpodagpEvqLSryOIK99WgblN0IsVHr1xhajWizQOZ0XMa7c5JpSYgIjV6u8GCpGV6hS3Mk2Bug==}
+  '@ai-sdk/openai@3.0.40':
+    resolution: {integrity: sha512-6DNpE2rGx624PlzdLZou2e9ru5Fty0D59wrfx/r5Oc/lJG4bfKys3ubdsX7+wWWM2pNLc+a7Jooku9nFjv1roA==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -6643,8 +6643,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@4.0.17':
-    resolution: {integrity: sha512-oyCeFINTYK0B8ZGUBiQc05G5vytPlKSmTTtm19xfJuUgoi8zkvvRcoPQci4mSnyfpPn2XSFFDfsALG8uGcapfg==}
+  '@ai-sdk/provider-utils@4.0.18':
+    resolution: {integrity: sha512-dJ55zAzimyDTr1tHgalxg0VqNKGyJV04svu26xv5G1NDFTgFeG/Yr5CS9l62N923cQTv94OOtNWZ7XxwKIYhqw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9923,8 +9923,8 @@ packages:
     resolution: {integrity: sha512-gAcNqVL6E6V+d7yZbv5pQAPh5ZTE66UB0n2AZB3QaVaQDo9H8yalja3u2v3NE4QTVt03DkpoIuyvzs4i3w/b7A==}
     engines: {node: '>=18'}
 
-  '@google/genai@1.43.0':
-    resolution: {integrity: sha512-hklCsJNdMlDM1IwcCVcGQFBg2izY0+t5BIGbRsxi2UnKi6AGKL7pqJqmBDNRbw0bYCs4y3NA7TB+fkKfP/Nrdw==}
+  '@google/genai@1.44.0':
+    resolution: {integrity: sha512-kRt9ZtuXmz+tLlcNntN/VV4LRdpl6ZOu5B1KbfNgfR65db15O6sUQcwnwLka8sT/V6qysD93fWrgJHF2L7dA9A==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -10582,8 +10582,8 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
-  '@mariozechner/pi-tui@0.55.4':
-    resolution: {integrity: sha512-LXoa0CV58lEfzbjXyuUMa4KwoPTzTegPZJEEzuc9p7LnlIn4/eBebhTXQmQ7Hxo+/zb3zpy2qoynKpKcEas9GQ==}
+  '@mariozechner/pi-tui@0.56.0':
+    resolution: {integrity: sha512-FZnvYvyvKJenFQqIs3iW0MGzrbOrTcAV6jFN9SFFqrjS7RDn8PkZ0iS3wZcey+2sT+YAf8AKu4f4BOXUJNB+IQ==}
     engines: {node: '>=20.0.0'}
 
   '@mastra/schema-compat@1.1.0':
@@ -14746,8 +14746,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@upstash/redis@1.36.2':
-    resolution: {integrity: sha512-C0Yt8hc12vLaQYRG1fMci8iPrLtnTdbJG0HR5T8vKnvEP/1RdMMblsOJs5/jp0JXZJ1oSzMnQz4J9EVezNpI6A==}
+  '@upstash/redis@1.36.3':
+    resolution: {integrity: sha512-wxo1ei4OHDHm4UGMgrNVz9QUEela9N/Iwi4p1JlHNSowQiPi+eljlGnfbZVkV0V4PIrjGtGFJt5GjWM5k28enA==}
 
   '@upstash/vector@1.2.2':
     resolution: {integrity: sha512-ptQ9xnxtKqmpNK52PCcHCszlPOLxIBfjsv7ty8RoF95pkjctS9rSjTQ3Pl9bx5VFbpDj+0dMXw88WLt6swDkgQ==}
@@ -15188,8 +15188,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  ai@6.0.111:
-    resolution: {integrity: sha512-K5aikNm4JGfJkzwIr3yA/qhOYIOIvOqjCxSQjQQ7bWWqm0uuPO2/qgdXL23gYJdTLPPYfvi2TTS+bg2Yp+r2Lw==}
+  ai@6.0.115:
+    resolution: {integrity: sha512-UVHtXuvxu0v1z5Lhq4PN33PBXV1J4H7haX6+RY9ZB7OfpOlC6ousazInKgutW0IqBtM8KpQ6bid9nQfk1zhX5g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -24233,10 +24233,10 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/anthropic@3.0.54(zod@4.3.6)':
+  '@ai-sdk/anthropic@3.0.57(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.17(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.18(zod@4.3.6)
       zod: 4.3.6
 
   '@ai-sdk/azure@2.0.74(zod@3.25.76)':
@@ -24300,17 +24300,17 @@ snapshots:
       '@vercel/oidc': 3.1.0
       zod: 3.25.76
 
-  '@ai-sdk/gateway@3.0.63(zod@3.25.76)':
+  '@ai-sdk/gateway@3.0.65(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.17(zod@3.25.76)
+      '@ai-sdk/provider-utils': 4.0.18(zod@3.25.76)
       '@vercel/oidc': 3.1.0
       zod: 3.25.76
 
-  '@ai-sdk/gateway@3.0.63(zod@4.3.6)':
+  '@ai-sdk/gateway@3.0.65(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.17(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.18(zod@4.3.6)
       '@vercel/oidc': 3.1.0
       zod: 4.3.6
 
@@ -24380,10 +24380,10 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.1(zod@3.25.76)
       zod: 3.25.76
 
-  '@ai-sdk/openai@3.0.39(zod@4.3.6)':
+  '@ai-sdk/openai@3.0.40(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.17(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.18(zod@4.3.6)
       zod: 4.3.6
 
   '@ai-sdk/perplexity@2.0.23(zod@3.25.76)':
@@ -24443,14 +24443,14 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@4.0.17(zod@3.25.76)':
+  '@ai-sdk/provider-utils@4.0.18(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@4.0.17(zod@4.3.6)':
+  '@ai-sdk/provider-utils@4.0.18(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
       '@standard-schema/spec': 1.1.0
@@ -29275,7 +29275,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/firestore@7.11.6':
+  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       fast-deep-equal: 3.1.3
@@ -29367,7 +29367,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google/genai@1.43.0':
+  '@google/genai@1.44.0':
     dependencies:
       google-auth-library: 10.5.0
       p-retry: 4.6.2
@@ -30054,14 +30054,15 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
-  '@mariozechner/pi-tui@0.55.4':
+  '@mariozechner/pi-tui@0.56.0':
     dependencies:
       '@types/mime-types': 2.1.4
       chalk: 5.6.2
       get-east-asian-width: 1.4.0
-      koffi: 2.15.1
       marked: 15.0.12
       mime-types: 3.0.1
+    optionalDependencies:
+      koffi: 2.15.1
 
   '@mastra/schema-compat@1.1.0(zod@3.25.76)':
     dependencies:
@@ -30517,10 +30518,10 @@ snapshots:
       '@ai-sdk/provider-utils': 2.1.10(zod@3.25.76)
       zod: 3.25.76
 
-  '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.111(zod@3.25.76))(zod@3.25.76)':
+  '@openrouter/ai-sdk-provider@1.2.3(ai@6.0.115(zod@3.25.76))(zod@3.25.76)':
     dependencies:
       '@openrouter/sdk': 0.1.27
-      ai: 6.0.111(zod@3.25.76)
+      ai: 6.0.115(zod@3.25.76)
       zod: 3.25.76
 
   '@openrouter/sdk@0.1.27':
@@ -35207,7 +35208,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@upstash/redis@1.36.2':
+  '@upstash/redis@1.36.3':
     dependencies:
       uncrypto: 0.1.3
 
@@ -35807,19 +35808,19 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
 
-  ai@6.0.111(zod@3.25.76):
+  ai@6.0.115(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 3.0.63(zod@3.25.76)
+      '@ai-sdk/gateway': 3.0.65(zod@3.25.76)
       '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.17(zod@3.25.76)
+      '@ai-sdk/provider-utils': 4.0.18(zod@3.25.76)
       '@opentelemetry/api': 1.9.0
       zod: 3.25.76
 
-  ai@6.0.111(zod@4.3.6):
+  ai@6.0.115(zod@4.3.6):
     dependencies:
-      '@ai-sdk/gateway': 3.0.63(zod@4.3.6)
+      '@ai-sdk/gateway': 3.0.65(zod@4.3.6)
       '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.17(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.18(zod@4.3.6)
       '@opentelemetry/api': 1.9.0
       zod: 4.3.6
 
@@ -38616,7 +38617,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.8.1
 
-  firebase-admin@13.5.0:
+  firebase-admin@13.5.0(encoding@0.1.13):
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -38630,7 +38631,7 @@ snapshots:
       node-forge: 1.3.3
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
@@ -40307,7 +40308,8 @@ snapshots:
       type-is: 2.0.1
       vary: 1.1.2
 
-  koffi@2.15.1: {}
+  koffi@2.15.1:
+    optional: true
 
   kolorist@1.8.0: {}
 
