@@ -15,18 +15,31 @@ import { ExperimentResultTracePanel } from './experiment-result-trace-panel';
 import { ExperimentScorePanel } from './experiment-score-panel';
 import { ExperimentResultsList } from './experiment-results-list';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
+import type { ExperimentStatus } from '@mastra/core/storage';
 
 export type ExperimentPageContentProps = {
   experimentId: string;
+  experimentStatus?: ExperimentStatus;
   results: DatasetExperimentResult[];
   isLoading: boolean;
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
 };
 
 /**
  * Master-detail layout for experiment results.
  * Shows results list on left, result detail panel on right when a result is selected.
  */
-export function ExperimentPageContent({ experimentId, results, isLoading }: ExperimentPageContentProps) {
+export function ExperimentPageContent({
+  experimentId,
+  experimentStatus,
+  results,
+  isLoading,
+  setEndOfListElement,
+  isFetchingNextPage,
+  hasNextPage,
+}: ExperimentPageContentProps) {
   const [featuredResultId, setSelectedResultId] = useState<string | null>(null);
   const [featuredTraceId, setFeaturedTraceId] = useState<string | null>(null);
   const [featuredSpanId, setFeaturedSpanId] = useState<string | undefined>(undefined);
@@ -34,7 +47,7 @@ export function ExperimentPageContent({ experimentId, results, isLoading }: Expe
 
   const featuredResult = results.find(r => r.id === featuredResultId) ?? null;
 
-  const { data: scoresByExperimentId } = useScoresByExperimentId(experimentId);
+  const { data: scoresByExperimentId } = useScoresByExperimentId(experimentId, experimentStatus);
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];
@@ -148,7 +161,7 @@ export function ExperimentPageContent({ experimentId, results, isLoading }: Expe
       </TabList>
 
       <TabContent value="summary" className="overflow-y-auto mt-5">
-        <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} />
+        <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
       </TabContent>
 
       <TabContent value="results" className="grid overflow-hidden mt-5">
@@ -163,6 +176,9 @@ export function ExperimentPageContent({ experimentId, results, isLoading }: Expe
               columns={resultsListColumns}
               scoresByItemId={scoresByExperimentId}
               scorerIds={!featuredResultId ? scorerIds : undefined}
+              setEndOfListElement={setEndOfListElement}
+              isFetchingNextPage={isFetchingNextPage}
+              hasNextPage={hasNextPage}
             />
           </Column>
 

@@ -70,6 +70,15 @@ import {
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import {
+  calculateDynamicThreshold,
+  calculateProjectedMessageRemoval,
+  getMaxThreshold,
+  resolveActivationRatio,
+  resolveBlockAfter,
+  resolveBufferTokens,
+  resolveRetentionFloor,
+} from './thresholds';
 import { TokenCounter } from './token-counter';
 import type {
   ObservationConfig,
@@ -549,102 +558,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Resolve bufferActivation config into an absolute retention floor (tokens to keep).
-   * - Value in (0, 1]: ratio → retentionFloor = threshold * (1 - value)
-   * - Value >= 1000: absolute token count → retentionFloor = value
-   */
-  private resolveRetentionFloor(bufferActivation: number, messageTokensThreshold: number): number {
-    if (bufferActivation >= 1000) return bufferActivation;
-    return messageTokensThreshold * (1 - bufferActivation);
-  }
-
-  /**
-   * Convert bufferActivation to the equivalent ratio (0-1) for the storage layer.
-   * When bufferActivation >= 1000, it's an absolute retention target, so we compute
-   * the equivalent ratio: 1 - (bufferActivation / threshold).
-   */
-  private resolveActivationRatio(bufferActivation: number, messageTokensThreshold: number): number {
-    if (bufferActivation >= 1000) {
-      return Math.max(0, Math.min(1, 1 - bufferActivation / messageTokensThreshold));
-    }
-    return bufferActivation;
-  }
-
-  /**
-   * Calculate the projected message tokens that would be removed if activation happened now.
-   * This replicates the chunk boundary logic in swapBufferedToActive without actually activating.
-   */
-  private calculateProjectedMessageRemoval(
-    chunks: BufferedObservationChunk[],
-    bufferActivation: number,
-    messageTokensThreshold: number,
-    currentPendingTokens: number,
-  ): number {
-    if (chunks.length === 0) return 0;
-
-    const retentionFloor = this.resolveRetentionFloor(bufferActivation, messageTokensThreshold);
-    const targetMessageTokens = Math.max(0, currentPendingTokens - retentionFloor);
-
-    // Find the closest chunk boundary to the target, biased over (prefer removing
-    // slightly more than the target so remaining context lands at or below retentionFloor).
-    // Track both best-over and best-under boundaries so we can fall back to under
-    // if the over boundary would overshoot by too much.
-    let cumulativeMessageTokens = 0;
-    let bestOverBoundary = 0;
-    let bestOverTokens = 0;
-    let bestUnderBoundary = 0;
-    let bestUnderTokens = 0;
-
-    for (let i = 0; i < chunks.length; i++) {
-      cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
-      const boundary = i + 1;
-
-      if (cumulativeMessageTokens >= targetMessageTokens) {
-        // Over or equal — track the closest (lowest) over boundary
-        if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
-          bestOverBoundary = boundary;
-          bestOverTokens = cumulativeMessageTokens;
-        }
-      } else {
-        // Under — track the closest (highest) under boundary
-        if (cumulativeMessageTokens > bestUnderTokens) {
-          bestUnderBoundary = boundary;
-          bestUnderTokens = cumulativeMessageTokens;
-        }
-      }
-    }
-
-    // Safeguard: if the over boundary would eat into more than 95% of the
-    // retention floor, fall back to the best under boundary instead.
-    // This prevents edge cases where a large chunk overshoots dramatically.
-    // Additionally, never bias over if it would leave fewer than the smaller of
-    // 1000 tokens or the retention floor — at that level the agent may lose
-    // all meaningful context.
-    const maxOvershoot = retentionFloor * 0.95;
-    const overshoot = bestOverTokens - targetMessageTokens;
-    const remainingAfterOver = currentPendingTokens - bestOverTokens;
-    const remainingAfterUnder = currentPendingTokens - bestUnderTokens;
-    // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
-    const minRemaining = Math.min(1000, retentionFloor);
-
-    let bestBoundaryMessageTokens: number;
-
-    if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
-      bestBoundaryMessageTokens = bestOverTokens;
-    } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
-      bestBoundaryMessageTokens = bestUnderTokens;
-    } else if (bestOverBoundary > 0) {
-      // All boundaries are over and exceed the safeguard — still activate
-      // the closest over boundary (better than nothing)
-      bestBoundaryMessageTokens = bestOverTokens;
-    } else {
-      return chunks[0]?.messageTokens ?? 0;
-    }
-
-    return bestBoundaryMessageTokens;
-  }
-
-  /**
    * Check if we've crossed a new bufferTokens interval boundary.
    * Returns true if async buffering should be triggered.
    *
@@ -728,7 +641,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     if (record.bufferedReflection) return false;
 
     // Check if we've crossed the activation threshold
-    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
     const activationPoint = reflectThreshold * this.reflectionConfig.bufferActivation!;
 
     const shouldTrigger = currentObservationTokens >= activationPoint;
@@ -903,7 +816,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         config.observation?.maxTokensPerBatch ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch,
       bufferTokens: asyncBufferingDisabled
         ? undefined
-        : this.resolveBufferTokens(
+        : resolveBufferTokens(
             config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens,
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
@@ -912,7 +825,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
       blockAfter: asyncBufferingDisabled
         ? undefined
-        : this.resolveBlockAfter(
+        : resolveBlockAfter(
             config.observation?.blockAfter ??
               ((config.observation?.bufferTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferTokens)
                 ? 1.2
@@ -941,7 +854,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
       blockAfter: asyncBufferingDisabled
         ? undefined
-        : this.resolveBlockAfter(
+        : resolveBlockAfter(
             config.reflection?.blockAfter ??
               ((config.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation)
                 ? 1.2
@@ -1091,7 +1004,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     // Validate observation bufferTokens
-    const observationThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+    const observationThreshold = getMaxThreshold(this.observationConfig.messageTokens);
     if (this.observationConfig.bufferTokens !== undefined) {
       if (this.observationConfig.bufferTokens <= 0) {
         throw new Error(`observation.bufferTokens must be > 0, got ${this.observationConfig.bufferTokens}`);
@@ -1148,7 +1061,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Validate reflection blockAfter
     if (this.reflectionConfig.blockAfter !== undefined) {
-      const reflectionThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+      const reflectionThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
       if (this.reflectionConfig.blockAfter < reflectionThreshold) {
         throw new Error(
           `reflection.blockAfter (${this.reflectionConfig.blockAfter}) must be >= reflection.observationTokens (${reflectionThreshold})`,
@@ -1163,87 +1076,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
-   * Resolve bufferTokens: if it's a fraction (0 < value < 1), multiply by messageTokens threshold.
-   * Otherwise return the absolute token count.
-   */
-  private resolveBufferTokens(
-    bufferTokens: number | false | undefined,
-    messageTokens: number | ThresholdRange,
-  ): number | undefined {
-    if (bufferTokens === false) return undefined;
-    if (bufferTokens === undefined) return undefined;
-    if (bufferTokens > 0 && bufferTokens < 1) {
-      const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;
-      return Math.round(threshold * bufferTokens);
-    }
-    return bufferTokens;
-  }
-
-  /**
-   * Resolve blockAfter config value.
-   * Values in [1, 100) are treated as multipliers of the threshold.
-   * e.g. blockAfter: 1.5 with messageTokens: 20_000 → 30_000
-   * Values >= 100 are treated as absolute token counts.
-   * Defaults to 1.2 (120% of threshold) when async buffering is enabled but blockAfter is omitted.
-   */
-  private resolveBlockAfter(
-    blockAfter: number | undefined,
-    messageTokens: number | ThresholdRange,
-  ): number | undefined {
-    if (blockAfter === undefined) return undefined;
-    // Values between 1 (inclusive) and 2 (exclusive) are treated as multipliers of the threshold.
-    // e.g. blockAfter: 1.5 means 1.5x the threshold. blockAfter: 1 means exactly at threshold.
-    // Values >= 100 are treated as absolute token counts.
-    if (blockAfter >= 1 && blockAfter < 100) {
-      const threshold = typeof messageTokens === 'number' ? messageTokens : messageTokens.max;
-      return Math.round(threshold * blockAfter);
-    }
-    return blockAfter;
-  }
-
-  /**
-   * Get the maximum value from a threshold (simple number or range)
-   */
-  private getMaxThreshold(threshold: number | ThresholdRange): number {
-    if (typeof threshold === 'number') {
-      return threshold;
-    }
-    return threshold.max;
-  }
-
-  /**
-   * Calculate dynamic threshold based on observation space.
-   * When shareTokenBudget is enabled, the message threshold can expand
-   * into unused observation space, up to the total context budget.
-   *
-   * Total budget = messageTokens + observationTokens
-   * Effective threshold = totalBudget - currentObservationTokens
-   *
-   * Example with 30k:40k thresholds (70k total):
-   * - 0 observations → messages can use ~70k
-   * - 10k observations → messages can use ~60k
-   * - 40k observations → messages back to ~30k
-   */
-  private calculateDynamicThreshold(threshold: number | ThresholdRange, currentObservationTokens: number): number {
-    // If not using adaptive threshold (simple number), return as-is
-    if (typeof threshold === 'number') {
-      return threshold;
-    }
-
-    // Adaptive threshold: use remaining space in total budget
-    // Total budget is stored as threshold.max (base + reflection threshold)
-    // Base threshold is stored as threshold.min
-    const totalBudget = threshold.max;
-    const baseThreshold = threshold.min;
-
-    // Effective threshold = total budget minus current observations
-    // But never go below the base threshold
-    const effectiveThreshold = Math.max(totalBudget - currentObservationTokens, baseThreshold);
-
-    return Math.round(effectiveThreshold);
-  }
-
-  /**
    * Check whether the unobserved message tokens meet the observation threshold.
    */
   private meetsObservationThreshold(opts: {
@@ -1254,7 +1086,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const { record, unobservedTokens, extraTokens = 0 } = opts;
     const pendingTokens = (record.pendingMessageTokens ?? 0) + unobservedTokens + extraTokens;
     const currentObservationTokens = record.observationTokenCount ?? 0;
-    const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
     return pendingTokens >= threshold;
   }
 
@@ -1346,7 +1178,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    * Check if we need to trigger reflection.
    */
   private shouldReflect(observationTokens: number): boolean {
-    const threshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const threshold = getMaxThreshold(this.reflectionConfig.observationTokens);
     return observationTokens > threshold;
   }
 
@@ -1369,8 +1201,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
   private getObservationMarkerConfig(): ObservationMarkerConfig {
     return {
-      messageTokens: this.getMaxThreshold(this.observationConfig.messageTokens),
-      observationTokens: this.getMaxThreshold(this.reflectionConfig.observationTokens),
+      messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
+      observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
     };
   }
@@ -1931,7 +1763,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const originalTokens = this.tokenCounter.countObservations(observations);
 
     // Get the target threshold - use provided value or fall back to config
-    const targetThreshold = observationTokensThreshold ?? this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     // Track total usage across attempts
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -2254,11 +2086,11 @@ ${suggestedResponse}
     // Total pending = unobserved in-context tokens + other threads
     const totalPendingTokens = Math.max(0, contextWindowTokens + otherThreadTokens);
 
-    const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+    const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
 
     // Calculate effective reflection threshold for UI display
     // When adaptive threshold is enabled, both thresholds share a budget
-    const baseReflectionThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const baseReflectionThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
     const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
     const totalBudget = isSharedBudget ? (this.observationConfig.messageTokens as { min: number; max: number }).max : 0;
     const effectiveObservationTokensThreshold = isSharedBudget
@@ -2317,10 +2149,10 @@ ${suggestedResponse}
 
       // Calculate projected message removal based on activation ratio and chunk boundaries
       // This replicates the logic in swapBufferedToActive without actually activating
-      const projectedMessageRemoval = this.calculateProjectedMessageRemoval(
+      const projectedMessageRemoval = calculateProjectedMessageRemoval(
         bufferedChunks,
         this.observationConfig.bufferActivation ?? 1,
-        this.getMaxThreshold(this.observationConfig.messageTokens),
+        getMaxThreshold(this.observationConfig.messageTokens),
         totalPendingTokens,
       );
 
@@ -2610,7 +2442,49 @@ ${suggestedResponse}
       `[OM:cleanupBranch] allMsgs=${allMsgs.length}, markerFound=${markerIdx !== -1}, markerIdx=${markerIdx}, observedMessageIds=${observedMessageIds?.length ?? 'undefined'}, allIds=${allMsgs.map(m => m.id?.slice(0, 8)).join(',')}`,
     );
 
-    if (markerMsg && markerIdx !== -1) {
+    if (observedMessageIds && observedMessageIds.length > 0) {
+      // Activation-based cleanup: remove activated message IDs first.
+      // This path must take precedence over marker cleanup so absolute retention
+      // floors are enforced during buffered activation.
+      const observedSet = new Set(observedMessageIds);
+      const idsToRemove = new Set<string>();
+      let skipped = 0;
+      let backoffTriggered = false;
+
+      for (const msg of allMsgs) {
+        if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
+          continue;
+        }
+
+        if (typeof minRemaining === 'number') {
+          const nextRemainingMessages = allMsgs.filter(
+            m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
+          );
+          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
+          if (remainingIfRemoved < minRemaining) {
+            skipped += 1;
+            backoffTriggered = true;
+            break;
+          }
+        }
+
+        idsToRemove.add(msg.id);
+      }
+
+      omDebug(
+        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.size}, skipped=${skipped}, backoffTriggered=${backoffTriggered}, idsToRemove=${[...idsToRemove].map(id => id.slice(0, 8)).join(',')}`,
+      );
+
+      // Remove activated messages from context. No need to re-save — these were
+      // already persisted by handlePerStepSave or runAsyncBufferedObservation.
+      const idsToRemoveList = [...idsToRemove];
+      if (idsToRemoveList.length > 0) {
+        messageList.removeByIds(idsToRemoveList);
+        omDebug(
+          `[OM:cleanupActivation] removed ${idsToRemoveList.length} messages, remaining=${messageList.get.all.db().length}`,
+        );
+      }
+    } else if (markerMsg && markerIdx !== -1) {
       // Collect all messages before the marker (these are fully observed)
       const idsToRemove: string[] = [];
       const messagesToSave: MastraDBMessage[] = [];
@@ -2647,46 +2521,6 @@ ${suggestedResponse}
       // Save all observed messages (with their markers) to DB
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
-      }
-    } else if (observedMessageIds && observedMessageIds.length > 0) {
-      // Activation-based cleanup: remove observed messages from context.
-      // Each LLM step is a fresh request — processInputStep prepares the context
-      // window before each call. Removing observed messages here ensures the next
-      // step sees a trimmed context with observations instead of raw messages.
-      const observedSet = new Set(observedMessageIds);
-      const messagesToSave: MastraDBMessage[] = [];
-      const idsToRemove: string[] = [];
-      const totalTokens = typeof minRemaining === 'number' ? this.tokenCounter.countMessages(allMsgs) : undefined;
-      let removedTokens = 0;
-      let skipped = 0;
-
-      for (const msg of allMsgs) {
-        if (msg?.id && msg.id !== 'om-continuation' && observedSet.has(msg.id)) {
-          if (typeof minRemaining === 'number') {
-            const msgTokens = this.tokenCounter.countMessage(msg);
-            const remainingIfRemoved = (totalTokens ?? 0) - removedTokens - msgTokens;
-            if (remainingIfRemoved < minRemaining) {
-              skipped += 1;
-              continue;
-            }
-            removedTokens += msgTokens;
-          }
-          messagesToSave.push(msg);
-          idsToRemove.push(msg.id);
-        }
-      }
-
-      omDebug(
-        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.length}, skipped=${skipped}, idsToRemove=${idsToRemove.map(id => id.slice(0, 8)).join(',')}`,
-      );
-
-      // Remove activated messages from context. No need to re-save — these were
-      // already persisted by handlePerStepSave or runAsyncBufferedObservation.
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
-        omDebug(
-          `[OM:cleanupActivation] removed ${idsToRemove.length} messages, remaining=${messageList.get.all.db().length}`,
-        );
       }
     } else {
       // No marker found — fall back to source-based clearing
@@ -3202,7 +3036,7 @@ ${suggestedResponse}
               : undefined;
           const minRemaining =
             typeof this.observationConfig.bufferActivation === 'number'
-              ? Math.min(1000, this.resolveRetentionFloor(this.observationConfig.bufferActivation, threshold))
+              ? resolveRetentionFloor(this.observationConfig.bufferActivation, threshold)
               : undefined;
           omDebug(
             `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}, minRemaining=${minRemaining ?? 'n/a'}`,
@@ -3274,8 +3108,8 @@ ${suggestedResponse}
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
       const currentObservationTokens = freshRecord.observationTokenCount ?? 0;
 
-      const threshold = this.calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
-      const baseReflectionThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+      const threshold = calculateDynamicThreshold(this.observationConfig.messageTokens, currentObservationTokens);
+      const baseReflectionThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
       const isSharedBudget = typeof this.observationConfig.messageTokens !== 'number';
       const totalBudget = isSharedBudget
         ? (this.observationConfig.messageTokens as { min: number; max: number }).max
@@ -4311,7 +4145,7 @@ ${formattedMessages}
     // turn (or an in-flight buffering op that just completed) may have already
     // brought us well below the threshold. Activating unnecessarily invalidates
     // the prompt cache, so we skip if we're already under the threshold.
-    const messageTokensThreshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+    const messageTokensThreshold = getMaxThreshold(this.observationConfig.messageTokens);
     let effectivePendingTokens = currentPendingTokens;
     if (messageList) {
       effectivePendingTokens = this.tokenCounter.countMessages(messageList.get.all.db());
@@ -4325,7 +4159,7 @@ ${formattedMessages}
 
     // Perform partial swap with bufferActivation
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
-    const activationRatio = this.resolveActivationRatio(bufferActivation, messageTokensThreshold);
+    const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
     // When above blockAfter, prefer the over boundary to reduce context, while still
     // respecting the minimum remaining tokens safeguard.
@@ -4334,8 +4168,8 @@ ${formattedMessages}
     );
 
     const bufferTokens = this.observationConfig.bufferTokens ?? 0;
-    const retentionFloor = this.resolveRetentionFloor(bufferActivation, messageTokensThreshold);
-    const projectedMessageRemoval = this.calculateProjectedMessageRemoval(
+    const retentionFloor = resolveRetentionFloor(bufferActivation, messageTokensThreshold);
+    const projectedMessageRemoval = calculateProjectedMessageRemoval(
       freshChunks,
       bufferActivation,
       messageTokensThreshold,
@@ -4494,7 +4328,7 @@ ${formattedMessages}
     const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     const currentRecord = freshRecord ?? record;
     const observationTokens = currentRecord.observationTokenCount ?? 0;
-    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
     const bufferActivation = this.reflectionConfig.bufferActivation ?? 0.5;
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -4822,7 +4656,7 @@ ${formattedMessages}
     // - Accumulate until we hit the threshold
     // - This prevents making many small Observer calls for 1-message threads
     // ════════════════════════════════════════════════════════════
-    const threshold = this.getMaxThreshold(this.observationConfig.messageTokens);
+    const threshold = getMaxThreshold(this.observationConfig.messageTokens);
 
     // Calculate tokens per thread and sort by size (largest first)
     const threadTokenCounts = new Map<string, number>();
@@ -5232,7 +5066,7 @@ ${formattedMessages}
     if (!this.isAsyncReflectionEnabled()) return;
 
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
-    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
 
     omDebug(
       `[OM:reflect] maybeAsyncReflect: observationTokens=${observationTokens}, reflectThreshold=${reflectThreshold}, isReflecting=${record.isReflecting}, bufferedReflection=${record.bufferedReflection ? 'present (' + record.bufferedReflection.length + ' chars)' : 'empty'}, recordId=${record.id}, genCount=${record.generationCount}`,
@@ -5288,7 +5122,7 @@ ${formattedMessages}
   }): Promise<void> {
     const { record, observationTokens, writer, abortSignal, messageList, reflectionHooks, requestContext } = opts;
     const lockKey = this.getLockKey(record.threadId, record.resourceId);
-    const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+    const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio
@@ -5583,7 +5417,7 @@ ${formattedMessages}
     registerOp(record.id, 'reflecting');
 
     try {
-      const reflectThreshold = this.getMaxThreshold(this.reflectionConfig.observationTokens);
+      const reflectThreshold = getMaxThreshold(this.reflectionConfig.observationTokens);
       const reflectResult = await this.callReflector(
         record.activeObservations,
         prompt,
