@@ -1067,62 +1067,68 @@ export class Agent<
    * const customLlm = await agent.getLLM({ model: 'openai/gpt-5' });
    * ```
    */
-  public async getLLM({
+  public getLLM({
     requestContext = new RequestContext(),
     model,
   }: {
     requestContext?: RequestContext;
     model?: DynamicArgument<MastraModelConfig>;
-  } = {}): Promise<MastraLLM> {
+  } = {}): MastraLLM | Promise<MastraLLM> {
     // Resolve model config to ModelFallbacks (always returns array now)
-    const modelFallbacks = model
-      ? await this.resolveModelFallbacks(model, requestContext)
-      : await this.resolveModelFallbacks(this.model, requestContext);
+    const modelFallbacksPromise = model
+      ? this.resolveModelFallbacks(model, requestContext)
+      : this.resolveModelFallbacks(this.model, requestContext);
 
-    // Get first enabled model to check if it's supported
-    const firstEnabledModel = modelFallbacks.find(m => m.enabled);
-    if (!firstEnabledModel) {
-      const mastraError = new MastraError({
-        id: 'AGENT_GET_LLM_NO_ENABLED_MODELS',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: { agentName: this.name },
-        text: `[Agent:${this.name}] - No enabled models found in model list`,
+    return modelFallbacksPromise.then(modelFallbacks => {
+      // Get first enabled model to check if it's supported
+      const firstEnabledModel = modelFallbacks.find(m => m.enabled);
+      if (!firstEnabledModel) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_LLM_NO_ENABLED_MODELS',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: { agentName: this.name },
+          text: `[Agent:${this.name}] - No enabled models found in model list`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
+
+      const resolvedModel = this.resolveModelConfig(firstEnabledModel.model, requestContext);
+
+      return resolveMaybePromise(resolvedModel, modelInfo => {
+        let llm: MastraLLM | Promise<MastraLLM>;
+        if (isSupportedLanguageModel(modelInfo)) {
+          // Prepare all models from the fallbacks
+          llm = this.prepareModels(requestContext, modelFallbacks).then(models => {
+            const enabledModels = models.filter(model => model.enabled);
+            return new MastraLLMVNext({
+              models: enabledModels,
+              mastra: this.#mastra,
+              options: { tracingPolicy: this.#options?.tracingPolicy },
+            });
+          });
+        } else {
+          llm = new MastraLLMV1({
+            model: modelInfo,
+            mastra: this.#mastra,
+            options: { tracingPolicy: this.#options?.tracingPolicy },
+          });
+        }
+
+        return resolveMaybePromise(llm, resolvedLLM => {
+          // Apply stored primitives if available
+          if (this.#primitives) {
+            resolvedLLM.__registerPrimitives(this.#primitives);
+          }
+          if (this.#mastra) {
+            resolvedLLM.__registerMastra(this.#mastra);
+          }
+          return resolvedLLM;
+        }) as MastraLLM;
       });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    const resolvedModel = await this.resolveModelConfig(firstEnabledModel.model, requestContext);
-
-    let llm: MastraLLM;
-    if (isSupportedLanguageModel(resolvedModel)) {
-      // Prepare all models from the fallbacks
-      const models = await this.prepareModels(requestContext, modelFallbacks);
-      const enabledModels = models.filter(model => model.enabled);
-
-      llm = new MastraLLMVNext({
-        models: enabledModels,
-        mastra: this.#mastra,
-        options: { tracingPolicy: this.#options?.tracingPolicy },
-      });
-    } else {
-      llm = new MastraLLMV1({
-        model: resolvedModel,
-        mastra: this.#mastra,
-        options: { tracingPolicy: this.#options?.tracingPolicy },
-      });
-    }
-
-    // Apply stored primitives if available
-    if (this.#primitives) {
-      llm.__registerPrimitives(this.#primitives);
-    }
-    if (this.#mastra) {
-      llm.__registerMastra(this.#mastra);
-    }
-    return llm;
+    });
   }
 
   /**
@@ -1161,12 +1167,12 @@ export class Agent<
    */
   private isModelFallbacks(arr: any[]): arr is ModelFallbacks {
     if (arr.length === 0) return false;
-    const first = arr[0];
-    return (
-      typeof first.id === 'string' &&
-      typeof first.model !== 'undefined' &&
-      typeof first.maxRetries === 'number' &&
-      typeof first.enabled === 'boolean'
+    return arr.every(
+      item =>
+        typeof item.id === 'string' &&
+        typeof item.model !== 'undefined' &&
+        typeof item.maxRetries === 'number' &&
+        typeof item.enabled === 'boolean',
     );
   }
 
@@ -1276,31 +1282,32 @@ export class Agent<
    * });
    * ```
    */
-  public async getModel({
+  public getModel({
     requestContext = new RequestContext(),
     modelConfig = this.model,
-  }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}): Promise<
-    MastraLanguageModel | MastraLegacyLanguageModel
-  > {
+  }: { requestContext?: RequestContext; modelConfig?: Agent['model'] } = {}):
+    | MastraLanguageModel
+    | MastraLegacyLanguageModel
+    | Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
     // Resolve to array (always returns ModelFallbacks now)
-    const resolved = await this.resolveModelFallbacks(modelConfig, requestContext);
+    return this.resolveModelFallbacks(modelConfig, requestContext).then(resolved => {
+      // Find first enabled model
+      const enabledModel = resolved.find(entry => entry.enabled);
+      if (!enabledModel) {
+        const mastraError = new MastraError({
+          id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: { agentName: this.name },
+          text: `[Agent:${this.name}] - No enabled models found in model list`,
+        });
+        this.logger.trackException(mastraError);
+        this.logger.error(mastraError.toString());
+        throw mastraError;
+      }
 
-    // Find first enabled model
-    const enabledModel = resolved.find(entry => entry.enabled);
-    if (!enabledModel) {
-      const mastraError = new MastraError({
-        id: 'AGENT_GET_MODEL_MISSING_MODEL_INSTANCE',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        details: { agentName: this.name },
-        text: `[Agent:${this.name}] - No enabled models found in model list`,
-      });
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
-      throw mastraError;
-    }
-
-    return this.resolveModelConfig(enabledModel.model, requestContext);
+      return this.resolveModelConfig(enabledModel.model, requestContext);
+    });
   }
 
   /**
