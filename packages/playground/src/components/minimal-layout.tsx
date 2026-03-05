@@ -1,5 +1,5 @@
 import { ThemeProvider } from './ui/theme-provider';
-import { Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { AuthRequired, Toaster, TooltipProvider } from '@mastra/playground-ui';
 
 export const MinimalLayout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -7,7 +7,9 @@ export const MinimalLayout = ({ children }: { children: React.ReactNode }) => {
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="dark" attribute="class">
         <TooltipProvider delayDuration={0}>
-          <div className="h-full overflow-y-auto">{children}</div>
+          <div className="h-full overflow-y-auto">
+            <AuthRequired>{children}</AuthRequired>
+          </div>
         </TooltipProvider>
       </ThemeProvider>
     </div>

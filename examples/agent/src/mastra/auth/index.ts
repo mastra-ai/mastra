@@ -6,6 +6,7 @@
  * - better-auth: Credentials-based authentication with SQLite
  * - workos: Enterprise SSO (SAML, OIDC)
  * - cloud: Mastra Cloud OAuth with PKCE
+ * - studio: Mastra Studio auth via shared API proxy
  * - composite: Combines SimpleAuth + MastraCloudAuth via CompositeAuth
  *
  * Set AUTH_PROVIDER environment variable to switch between providers.
@@ -32,6 +33,10 @@ async function initAuth(): Promise<AuthResult> {
     case 'cloud': {
       const { initCloud } = await import('./cloud');
       return initCloud();
+    }
+    case 'studio': {
+      const { initStudio } = await import('./studio');
+      return initStudio();
     }
     case 'composite': {
       const { initComposite } = await import('./composite');
