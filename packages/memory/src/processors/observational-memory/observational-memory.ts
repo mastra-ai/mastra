@@ -2748,25 +2748,27 @@ ${suggestedResponse}
 
         const parts = Array.isArray(msg.content?.parts) ? msg.content.parts : [];
         if (derivedCursor && parts.length > 0) {
-          let observedPrefixPartCount = 0;
-          for (const part of parts as Array<{ metadata?: { mastra?: { sealedAt?: string | number | Date } } }>) {
-            const sealedAt = part?.metadata?.mastra?.sealedAt;
-            if (!sealedAt) break;
-            const sealedAtIso = new Date(sealedAt).toISOString();
-            if (sealedAtIso <= derivedCursor.createdAt) {
-              observedPrefixPartCount += 1;
+          let observedSealBoundaryIndex = -1;
+          for (let i = parts.length - 1; i >= 0; i--) {
+            const sealedAt = (parts[i] as { metadata?: { mastra?: { sealedAt?: string | number | Date } } })?.metadata
+              ?.mastra?.sealedAt;
+            if (!sealedAt) {
               continue;
             }
-            break;
+
+            if (new Date(sealedAt).toISOString() <= derivedCursor.createdAt) {
+              observedSealBoundaryIndex = i;
+              break;
+            }
           }
 
-          if (observedPrefixPartCount >= parts.length) {
+          if (observedSealBoundaryIndex === parts.length - 1) {
             messagesToRemove.push(msg.id);
             continue;
           }
 
-          if (observedPrefixPartCount > 0) {
-            msg.content.parts = parts.slice(observedPrefixPartCount);
+          if (observedSealBoundaryIndex >= 0) {
+            msg.content.parts = parts.slice(observedSealBoundaryIndex + 1);
           }
         }
 

@@ -8317,7 +8317,7 @@ describe('Per-step save deduplication', () => {
   });
 });
 
-describe('Single-thread replay red tests', () => {
+describe('single-thread replay pruning', () => {
   async function createReplayFixture() {
     const { MessageList } = await import('@mastra/core/agent');
 
@@ -8353,7 +8353,7 @@ describe('Single-thread replay red tests', () => {
       .join(' | ');
   }
 
-  it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
+  it('should exclude messages exactly at the lastObservedAt boundary on the next turn', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -8393,7 +8393,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('new-after-boundary');
   });
 
-  it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
+  it('should trim marker-bearing mixed messages down to their post-marker tail', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -8443,7 +8443,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('fresh-post-marker-tail');
   });
 
-  it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
+  it('should avoid replaying the sealed prefix after a sealed remint', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -8501,7 +8501,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('fresh-tail');
   });
 
-  it('T1-B: reminted +1ms boundary should not leak observed prefix on next turn', async () => {
+  it('should not leak an observed prefix across a reminted +1ms boundary', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -8555,7 +8555,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('new-content-after-seal');
   });
 
-  it('T2-A: marker-present and marker-missing fixtures should produce equivalent no-replay result', async () => {
+  it('should prune replay the same way with or without an observation marker', async () => {
     const left = await createReplayFixture();
     const right = await createReplayFixture();
 
@@ -8644,7 +8644,7 @@ describe('Single-thread replay red tests', () => {
     expect(leftText.join(' | ')).not.toContain('old-observed');
   });
 
-  it('T4-B: post-activation step>0 should still prune already observed content before model sees it', async () => {
+  it('should still prune already observed content before step>0 model input after activation', async () => {
     const { RequestContext } = await import('@mastra/core/di');
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
@@ -8725,7 +8725,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).not.toContain('already-observed');
   });
 
-  it('T4-C: post-activation step>0 should not replay sealed-split prefix when ID A is reused', async () => {
+  it('should not replay a sealed-split prefix on step>0 when the same ID is reused', async () => {
     const { RequestContext } = await import('@mastra/core/di');
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
@@ -8818,7 +8818,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).not.toContain('already-observed');
   });
 
-  it('T4-D: repeated loop re-add of id A should not replay observed prefix across reminted tails on step>0', async () => {
+  it('should not replay an observed prefix across reminted tails after repeated step>0 re-adds', async () => {
     const { RequestContext } = await import('@mastra/core/di');
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
@@ -8913,7 +8913,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).not.toContain('already-observed');
   });
 
-  it('T4-E: activation ID cleanup should not drop fresh tail when observed boundary is inside same message', async () => {
+  it('should keep the fresh tail when activation cleanup lands inside the same message', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -8953,7 +8953,7 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).not.toContain('already-observed-partial');
   });
 
-  it('T4-A: activation/save ordering race should not replay previously observed content', async () => {
+  it('should not replay previously observed content during the activation/save ordering race', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -9019,7 +9019,7 @@ describe('Single-thread replay red tests', () => {
     await cleanupPromise;
   });
 
-  it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
+  it('should keep fresh next-turn content during the activation/save ordering race window sample', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
@@ -9074,7 +9074,7 @@ describe('Single-thread replay red tests', () => {
     await cleanupPromise;
   });
 
-  it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {
+  it('should not let parts excluded by getUnobservedMessages survive the step-0 filter', async () => {
     const { om, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
