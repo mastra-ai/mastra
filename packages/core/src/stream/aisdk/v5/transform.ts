@@ -131,19 +131,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       };
 
     case 'tool-call': {
-      let toolCallInput: Record<string, any> | undefined = undefined;
-
-      if (value.input) {
-        try {
-          toolCallInput = JSON.parse(value.input);
-        } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
-        }
-      }
+      const toolCallInput = parseToolCallInput(value.input);
 
       return {
         type: 'tool-call',
@@ -567,4 +555,69 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Attempts to parse tool call input JSON, applying sanitization for common
+ * malformations produced by LLM providers (OpenRouter, OpenAI, etc.).
+ *
+ * Recovery strategies (in order):
+ * 1. Direct JSON.parse
+ * 2. Strip trailing LLM-internal tokens (`<|call|>`, `<|endoftext|>`, etc.)
+ * 3. Replace invalid placeholder values (`?` used instead of numbers/strings)
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/13261
+ * @see https://github.com/mastra-ai/mastra/issues/13185
+ */
+export function parseToolCallInput(input: unknown): Record<string, any> | undefined {
+  if (!input || typeof input !== 'string') {
+    return undefined;
+  }
+
+  // 1. Try direct parse
+  try {
+    return JSON.parse(input);
+  } catch {
+    // continue to sanitization
+  }
+
+  // 2. Strip trailing LLM tokens (e.g. <|call|>, <|endoftext|>) and retry
+  const stripped = stripTrailingLLMTokens(input);
+  if (stripped !== input) {
+    try {
+      return JSON.parse(stripped);
+    } catch {
+      // continue to next strategy
+    }
+  }
+
+  // 3. Replace bare `?` values with null (OpenRouter/Novita malformation)
+  //    e.g. {"checkpointNumber":?} → {"checkpointNumber":null}
+  //    e.g. {"items":[?]} → {"items":[null]}
+  const withNulls = stripped.replace(/([:,\[]\s*)\?(\s*[,}\]])/g, '$1null$2');
+  if (withNulls !== stripped) {
+    try {
+      return JSON.parse(withNulls);
+    } catch {
+      // continue to fallback
+    }
+  }
+
+  console.warn('Failed to parse tool call input as JSON', { input });
+  return undefined;
+}
+
+/**
+ * Strips trailing LLM-internal special tokens from a string before JSON parsing.
+ *
+ * Some models (e.g. OpenAI gpt-4o-mini/gpt-4o) occasionally append internal tokens
+ * like `<|call|>` or `<|endoftext|>` to tool-call input JSON, which breaks JSON.parse.
+ *
+ * Only strips tokens that appear after the JSON content ends (trailing), so that
+ * legitimate `<|...|>` patterns inside JSON string values are preserved.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/13185
+ */
+export function stripTrailingLLMTokens(input: string): string {
+  return input.replace(/(\s*<\|[^|]*\|>)+\s*$/, '').trim();
 }

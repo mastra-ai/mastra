@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ChunkFrom } from '../../types';
-import { convertFullStreamChunkToMastra } from './transform';
+import { convertFullStreamChunkToMastra, parseToolCallInput, stripTrailingLLMTokens } from './transform';
 import type { StreamPart } from './transform';
 
 describe('convertFullStreamChunkToMastra', () => {
@@ -182,6 +182,76 @@ describe('convertFullStreamChunkToMastra', () => {
     });
   });
 
+  describe('malformed tool-call arguments from OpenRouter (issue #13261)', () => {
+    it('should recover JSON with ? placeholder values by replacing with null', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'check_vehicle',
+        input: '{"vehicleType":"leopard","checkpointNumber":?}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ vehicleType: 'leopard', checkpointNumber: null });
+      }
+    });
+
+    it('should recover JSON with ? in the middle of an object', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'test_tool',
+        input: '{"a":?,"b":"hello"}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ a: null, b: 'hello' });
+      }
+    });
+
+    it('should recover JSON with ? in an array', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'test_tool',
+        input: '{"items":[?]}',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ items: [null] });
+      }
+    });
+
+    it('should handle trailing LLM tokens combined with malformed JSON', () => {
+      const chunk: StreamPart = {
+        type: 'tool-call',
+        toolCallId: 'call-1',
+        toolName: 'test_tool',
+        input: '{"a":1}<|call|>',
+        providerExecuted: false,
+      };
+
+      const result = convertFullStreamChunkToMastra(chunk, { runId: 'test-run-123' });
+
+      expect(result?.type).toBe('tool-call');
+      if (result?.type === 'tool-call') {
+        expect(result.payload.args).toEqual({ a: 1 });
+      }
+    });
+  });
+
   describe('other chunk types', () => {
     it('should handle text-delta chunks correctly', () => {
       const chunk: StreamPart = {
@@ -228,5 +298,81 @@ describe('convertFullStreamChunkToMastra', () => {
         expect(result.payload.stepResult.reason).toBe('stop');
       }
     });
+  });
+});
+
+describe('parseToolCallInput', () => {
+  it('should parse valid JSON', () => {
+    expect(parseToolCallInput('{"a":1}')).toEqual({ a: 1 });
+  });
+
+  it('should return undefined for empty string', () => {
+    expect(parseToolCallInput('')).toBeUndefined();
+  });
+
+  it('should return undefined for null', () => {
+    expect(parseToolCallInput(null)).toBeUndefined();
+  });
+
+  it('should return undefined for undefined', () => {
+    expect(parseToolCallInput(undefined)).toBeUndefined();
+  });
+
+  it('should return undefined for non-string input', () => {
+    expect(parseToolCallInput(42)).toBeUndefined();
+    expect(parseToolCallInput({})).toBeUndefined();
+  });
+
+  it('should strip trailing LLM tokens and parse', () => {
+    expect(parseToolCallInput('{"a":1}<|call|>')).toEqual({ a: 1 });
+    expect(parseToolCallInput('{"a":1}  <|endoftext|>  ')).toEqual({ a: 1 });
+    expect(parseToolCallInput('{"a":1}\t<|call|>')).toEqual({ a: 1 });
+  });
+
+  it('should replace ? placeholder values with null', () => {
+    expect(parseToolCallInput('{"checkpointNumber":?}')).toEqual({ checkpointNumber: null });
+    expect(parseToolCallInput('{"a":?,"b":"hello"}')).toEqual({ a: null, b: 'hello' });
+  });
+
+  it('should handle combined trailing tokens and ? placeholders', () => {
+    expect(parseToolCallInput('{"a":?}<|call|>')).toEqual({ a: null });
+  });
+
+  it('should return undefined for completely unparseable input', () => {
+    expect(parseToolCallInput('{totally broken')).toBeUndefined();
+  });
+
+  it('should not modify valid JSON with ? inside string values', () => {
+    expect(parseToolCallInput('{"q":"what?"}')).toEqual({ q: 'what?' });
+  });
+});
+
+describe('stripTrailingLLMTokens', () => {
+  it('should strip a single trailing token', () => {
+    expect(stripTrailingLLMTokens('{"a":1}<|call|>')).toBe('{"a":1}');
+  });
+
+  it('should strip multiple trailing tokens', () => {
+    expect(stripTrailingLLMTokens('{"a":1}<|call|><|endoftext|>')).toBe('{"a":1}');
+  });
+
+  it('should strip tokens with surrounding whitespace', () => {
+    expect(stripTrailingLLMTokens('{"a":1}  <|call|>  ')).toBe('{"a":1}');
+  });
+
+  it('should not strip tokens inside JSON string values', () => {
+    expect(stripTrailingLLMTokens('{"prompt": "Use <|system|> token"}')).toBe('{"prompt": "Use <|system|> token"}');
+  });
+
+  it('should not strip leading tokens', () => {
+    expect(stripTrailingLLMTokens('<|im_start|>{"a":1}')).toBe('<|im_start|>{"a":1}');
+  });
+
+  it('should return input unchanged when no tokens present', () => {
+    expect(stripTrailingLLMTokens('{"a":1}')).toBe('{"a":1}');
+  });
+
+  it('should handle empty string', () => {
+    expect(stripTrailingLLMTokens('')).toBe('');
   });
 });
