@@ -64,7 +64,7 @@ defaultValue: "'thread'",
 name: "shareTokenBudget",
 type: "boolean",
 description:
-"Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. **Note:** `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).",
+"Share the token budget between messages and observations. When enabled, the total budget is `observation.messageTokens + reflection.observationTokens`. Messages can use more space when observations are small, and vice versa. This maximizes context usage through flexible allocation. `shareTokenBudget` is not yet compatible with async buffering. You must set `observation: { bufferTokens: false }` when using this option (this is a temporary limitation).",
 isOptional: true,
 defaultValue: "false",
 },
@@ -74,21 +74,9 @@ type: "ObservationalMemoryObservationConfig",
 description:
 "Configuration for the observation step. Controls when the Observer agent runs and how it behaves.",
 isOptional: true,
-},
+properties: [
 {
-name: "reflection",
-type: "ObservationalMemoryReflectionConfig",
-description:
-"Configuration for the reflection step. Controls when the Reflector agent runs and how it behaves.",
-isOptional: true,
-},
-]}
-/>
-
-### Observation config
-
-<PropertiesTable
-  content={[
+parameters: [
 {
 name: "model",
 type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
@@ -126,6 +114,28 @@ description:
 "Model settings for the Observer agent.",
 isOptional: true,
 defaultValue: "{ temperature: 0.3, maxOutputTokens: 100_000 }",
+properties: [
+{
+parameters: [
+{
+name: "temperature",
+type: "number",
+description:
+"Temperature for generation. Lower values produce more consistent output.",
+isOptional: true,
+defaultValue: "0.3",
+},
+{
+name: "maxOutputTokens",
+type: "number",
+description:
+"Maximum output tokens. Set high to prevent truncation of observations.",
+isOptional: true,
+defaultValue: "100000",
+},
+],
+},
+],
 },
 {
 name: "bufferTokens",
@@ -151,23 +161,19 @@ description:
 isOptional: true,
 defaultValue: "1.2 (when bufferTokens is set)",
 },
-]}
-/>
-
-### Token estimate metadata cache
-
-OM persists token payload estimates so repeated counting can reuse prior tiktoken work.
-
-- Part-level cache: `part.providerMetadata.mastra`.
-- String-content fallback cache: message-level metadata when no parts exist.
-- Cache entries are ignored and recomputed if cache version/tokenizer source does not match.
-- Per-message and per-conversation overhead are always recomputed at runtime and are not cached.
-- `data-*` and `reasoning` parts are skipped and do not receive cache entries.
-
-### Reflection config
-
-<PropertiesTable
-  content={[
+],
+},
+],
+},
+{
+name: "reflection",
+type: "ObservationalMemoryReflectionConfig",
+description:
+"Configuration for the reflection step. Controls when the Reflector agent runs and how it behaves.",
+isOptional: true,
+properties: [
+{
+parameters: [
 {
 name: "model",
 type: "string | LanguageModel | DynamicModel | ModelWithRetries[]",
@@ -197,6 +203,28 @@ description:
 "Model settings for the Reflector agent.",
 isOptional: true,
 defaultValue: "{ temperature: 0, maxOutputTokens: 100_000 }",
+properties: [
+{
+parameters: [
+{
+name: "temperature",
+type: "number",
+description:
+"Temperature for generation. Lower values produce more consistent output.",
+isOptional: true,
+defaultValue: "0",
+},
+{
+name: "maxOutputTokens",
+type: "number",
+description:
+"Maximum output tokens. Set high to prevent truncation of observations.",
+isOptional: true,
+defaultValue: "100000",
+},
+],
+},
+],
 },
 {
 name: "bufferActivation",
@@ -214,31 +242,22 @@ description:
 isOptional: true,
 defaultValue: "1.2 (when bufferActivation is set)",
 },
-]}
-/>
-
-### Model settings
-
-<PropertiesTable
-  content={[
-{
-name: "temperature",
-type: "number",
-description:
-"Temperature for generation. Lower values produce more consistent output.",
-isOptional: true,
-defaultValue: "0.3",
+],
 },
-{
-name: "maxOutputTokens",
-type: "number",
-description:
-"Maximum output tokens. Set high to prevent truncation of observations.",
-isOptional: true,
-defaultValue: "100000",
+],
 },
 ]}
 />
+
+### Token estimate metadata cache
+
+OM persists token payload estimates so repeated counting can reuse prior tiktoken work.
+
+- Part-level cache: `part.providerMetadata.mastra`.
+- String-content fallback cache: message-level metadata when no parts exist.
+- Cache entries are ignored and recomputed if cache version/tokenizer source does not match.
+- Per-message and per-conversation overhead are always recomputed at runtime and are not cached.
+- `data-*` and `reasoning` parts are skipped and do not receive cache entries.
 
 ## Examples
 

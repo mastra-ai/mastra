@@ -58,14 +58,9 @@ name: "options",
 type: "MultiPrimitiveExecutionOptions",
 isOptional: true,
 description: "Optional configuration for the network process.",
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "maxSteps",
 type: "number",
@@ -341,6 +336,10 @@ type: "({ error }: { error: Error | string }) => Promise<void> | void",
 isOptional: true,
 description:
 "Callback fired when an error occurs during sub-agent execution.",
+},
+],
+},
+],
 },
 ]}
 />

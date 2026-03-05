@@ -20,11 +20,25 @@ await agent.getModel()
 <PropertiesTable
   content={[
 {
-name: "{ requestContext = new RequestContext() }",
+name: "options",
 type: "{ requestContext?: RequestContext }",
 isOptional: true,
-defaultValue: "new RequestContext()",
+defaultValue: "{}",
 description: "Optional configuration object containing request context.",
+properties: [
+{
+parameters: [
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "undefined",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+],
+},
+],
 },
 ]}
 />
@@ -49,21 +63,6 @@ await agent.getModel({
   requestContext: new RequestContext(),
 })
 ```
-
-### Options parameters
-
-<PropertiesTable
-  content={[
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "undefined",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-]}
-/>
 
 ## Related
 

@@ -81,15 +81,9 @@ type: "MemoryConfig",
 description:
 "Configuration options for message retrieval and semantic search",
 isOptional: true,
-},
-
-]}
-/>
-
-### threadConfig parameters
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "lastMessages",
 type: "number | false",
@@ -123,6 +117,11 @@ description:
 isOptional: true,
 defaultValue: "{ generateTitle: false }",
 },
+],
+},
+],
+},
+
 ]}
 />
 

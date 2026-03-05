@@ -25,6 +25,20 @@ type: "{ requestContext?: RequestContext }",
 isOptional: true,
 defaultValue: "{}",
 description: "Optional configuration object containing request context.",
+properties: [
+{
+parameters: [
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+],
+},
+],
 },
 ]}
 />
@@ -51,21 +65,6 @@ await agent.listAgents({
   requestContext: new RequestContext(),
 })
 ```
-
-### Options parameters
-
-<PropertiesTable
-  content={[
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "new RequestContext()",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-]}
-/>
 
 ## Related
 

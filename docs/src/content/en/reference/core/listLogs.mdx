@@ -28,16 +28,11 @@ description: "The transport ID to retrieve logs from.",
 name: "options",
 type: "object",
 description:
-"Optional parameters for filtering and pagination. See Options section below for details.",
+"Optional parameters for filtering and pagination.",
 optional: true,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "fromDate",
 type: "Date",
@@ -75,6 +70,10 @@ name: "perPage",
 type: "number",
 description: "Optional number of logs per page for pagination.",
 optional: true,
+},
+],
+},
+],
 },
 ]}
 />

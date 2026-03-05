@@ -26,14 +26,9 @@ name: "options",
 type: "AnswerSimilarityOptions",
 required: false,
 description: "Configuration options for the scorer.",
-},
-]}
-/>
-
-### AnswerSimilarityOptions
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "requireGroundTruth",
 type: "boolean",
@@ -85,6 +80,10 @@ type: "number",
 required: false,
 defaultValue: "1",
 description: "Score scaling factor.",
+},
+],
+},
+],
 },
 ]}
 />

@@ -60,14 +60,9 @@ name: "options",
 type: "CloneOptions",
 description: "Optional filtering options for the clone operation.",
 isOptional: true,
-},
-]}
-/>
-
-### Options Parameters
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "messageLimit",
 type: "number",
@@ -80,14 +75,9 @@ name: "messageFilter",
 type: "MessageFilter",
 description: "Filter criteria for selecting which messages to clone.",
 isOptional: true,
-},
-]}
-/>
-
-### MessageFilter Parameters
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "startDate",
 type: "Date",
@@ -105,6 +95,14 @@ name: "messageIds",
 type: "string[]",
 description: "Only clone messages with these specific IDs.",
 isOptional: true,
+},
+],
+},
+],
+},
+],
+},
+],
 },
 ]}
 />

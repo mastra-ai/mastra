@@ -36,14 +36,9 @@ name: "options",
 type: "AgentGenerateOptions",
 isOptional: true,
 description: "Optional configuration for the generation process.",
-},
-]}
-/>
-
-### Options parameters
-
-<PropertiesTable
-  content={[
+properties: [
+{
+parameters: [
 {
 name: "abortSignal",
 type: "AbortSignal",
@@ -462,6 +457,10 @@ type: "Record<string, string | undefined>",
 isOptional: true,
 description:
 "Additional HTTP headers to be sent with the request. Only applicable for HTTP-based providers.",
+},
+],
+},
+],
 },
 ]}
 />
