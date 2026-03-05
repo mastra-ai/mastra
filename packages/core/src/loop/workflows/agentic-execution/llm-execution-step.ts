@@ -16,6 +16,7 @@ import { createObservabilityContext, executeWithContextSync } from '../../../obs
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
+import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
@@ -29,6 +30,9 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import type { ToolToConvert } from '../../../tools/tool-builder/builder';
+import { isMastraTool } from '../../../tools/toolchecks';
+import { makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -642,6 +646,35 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
+
+            // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
+            // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
+            if (processInputStepResult.tools && currentStep.tools) {
+              const convertedTools: Record<string, unknown> = {};
+              for (const [name, tool] of Object.entries(currentStep.tools)) {
+                if (isMastraTool(tool)) {
+                  convertedTools[name] = makeCoreTool(
+                    tool as ToolToConvert,
+                    {
+                      name,
+                      runId,
+                      threadId: _internal?.threadId,
+                      resourceId: _internal?.resourceId,
+                      logger,
+                      agentName: agentId,
+                      requestContext: requestContext || new RequestContext(),
+                      outputWriter,
+                      workspace: currentStep.workspace,
+                    },
+                    undefined,
+                    autoResumeSuspendedTools,
+                  );
+                } else {
+                  convertedTools[name] = tool;
+                }
+              }
+              currentStep.tools = convertedTools as TOOLS;
+            }
           } catch (error) {
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
