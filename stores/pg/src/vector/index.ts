@@ -679,11 +679,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   async createIndex({
     indexName,
     dimension,
-    metric = 'cosine',
+    metric: rawMetric = 'cosine',
     indexConfig = {},
     buildIndex = true,
     vectorType = 'vector',
   }: PgCreateIndexParams): Promise<void> {
+    // Normalize metric for bit vectors: default to 'hamming' unless explicitly 'hamming' or 'jaccard'
+    const metric: PgMetric =
+      vectorType === 'bit' && rawMetric !== 'hamming' && rawMetric !== 'jaccard' ? 'hamming' : rawMetric;
+
     const { tableName } = this.getTableName(indexName);
 
     // Validate inputs
