@@ -47,6 +47,31 @@ type: "GoogleModelConfig",
 description: "Configuration for text-to-speech functionality",
 isOptional: true,
 defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+properties: [
+{
+type: "GoogleModelConfig",
+parameters: [
+{
+name: "apiKey",
+type: "string",
+description: "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
+isOptional: true,
+},
+{
+name: "keyFilename",
+type: "string",
+description: "Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
+isOptional: true,
+},
+{
+name: "credentials",
+type: "object",
+description: "In-memory service account credentials object with client_email and private_key properties.",
+isOptional: true,
+},
+],
+},
+],
 },
 {
 name: "listeningModel",
@@ -54,6 +79,31 @@ type: "GoogleModelConfig",
 description: "Configuration for speech-to-text functionality",
 isOptional: true,
 defaultValue: "{ apiKey: process.env.GOOGLE_API_KEY }",
+properties: [
+{
+type: "GoogleModelConfig",
+parameters: [
+{
+name: "apiKey",
+type: "string",
+description: "Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
+isOptional: true,
+},
+{
+name: "keyFilename",
+type: "string",
+description: "Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
+isOptional: true,
+},
+{
+name: "credentials",
+type: "object",
+description: "In-memory service account credentials object with client_email and private_key properties.",
+isOptional: true,
+},
+],
+},
+],
 },
 {
 name: "speaker",
@@ -65,53 +115,22 @@ defaultValue: "'en-US-Casual-K'",
 {
 name: "vertexAI",
 type: "boolean",
-description:
-"Enable Vertex AI mode for enterprise deployments. Uses project-based authentication instead of API keys. Requires 'project' to be set.",
+description: "Enable Vertex AI mode for enterprise deployments. Uses project-based authentication instead of API keys. Requires 'project' to be set.",
 isOptional: true,
 defaultValue: "false",
 },
 {
 name: "project",
 type: "string",
-description:
-"Google Cloud project ID (required when vertexAI is true). Falls back to GOOGLE_CLOUD_PROJECT environment variable.",
+description: "Google Cloud project ID (required when vertexAI is true). Falls back to GOOGLE_CLOUD_PROJECT environment variable.",
 isOptional: true,
 },
 {
 name: "location",
 type: "string",
-description:
-"Google Cloud region for Vertex AI. Falls back to GOOGLE_CLOUD_LOCATION environment variable.",
+description: "Google Cloud region for Vertex AI. Falls back to GOOGLE_CLOUD_LOCATION environment variable.",
 isOptional: true,
 defaultValue: "'us-central1'",
-},
-]}
-/>
-
-### GoogleModelConfig
-
-<PropertiesTable
-  content={[
-{
-name: "apiKey",
-type: "string",
-description:
-"Google Cloud API key. Falls back to GOOGLE_API_KEY environment variable. Not used when vertexAI is true.",
-isOptional: true,
-},
-{
-name: "keyFilename",
-type: "string",
-description:
-"Path to service account JSON key file. Falls back to GOOGLE_APPLICATION_CREDENTIALS environment variable.",
-isOptional: true,
-},
-{
-name: "credentials",
-type: "object",
-description:
-"In-memory service account credentials object with client_email and private_key properties.",
-isOptional: true,
 },
 ]}
 />

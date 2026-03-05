@@ -67,22 +67,10 @@ name: "options",
 type: "RerankerFunctionOptions",
 description: "Options for the reranking model",
 isOptional: true,
-},
-]}
-/>
-
-The `rerankWithScorer` function accepts any `RelevanceScoreProvider` from @mastra/rag.
-
-:::note
-
-For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
-
-:::
-
-### RerankerFunctionOptions
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "RerankerFunctionOptions",
+parameters: [
 {
 name: "weights",
 type: "WeightConfig",
@@ -138,8 +126,20 @@ description: "Number of top results to return",
 isOptional: true,
 defaultValue: "3",
 },
+],
+},
+],
+},
 ]}
 />
+
+The `rerankWithScorer` function accepts any `RelevanceScoreProvider` from @mastra/rag.
+
+:::note
+
+For semantic scoring to work properly during re-ranking, each result must include the text content in its `metadata.text` field.
+
+:::
 
 ## Returns
 

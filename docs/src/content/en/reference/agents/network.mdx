@@ -58,14 +58,10 @@ name: "options",
 type: "MultiPrimitiveExecutionOptions",
 isOptional: true,
 description: "Optional configuration for the network process.",
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "MultiPrimitiveExecutionOptions",
+parameters: [
 {
 name: "maxSteps",
 type: "number",
@@ -94,6 +90,7 @@ description:
 "Configuration for memory. This is the preferred way to manage memory.",
 properties: [
 {
+type: "object",
 parameters: [
 {
 name: "thread",
@@ -136,6 +133,7 @@ description:
 "Tracing context for creating child spans and adding metadata. Automatically injected when using Mastra's tracing system.",
 properties: [
 {
+type: "TracingContext",
 parameters: [
 {
 name: "currentSpan",
@@ -155,6 +153,7 @@ isOptional: true,
 description: "Options for Tracing configuration.",
 properties: [
 {
+type: "TracingOptions",
 parameters: [
 {
 name: "metadata",
@@ -219,6 +218,7 @@ description:
 "Settings for OTLP telemetry collection during streaming (not Tracing).",
 properties: [
 {
+type: "TelemetrySettings",
 parameters: [
 {
 name: "isEnabled",
@@ -273,6 +273,7 @@ description:
 "Configuration for generating a typed structured output from the network result.",
 properties: [
 {
+type: "StructuredOutputOptions",
 parameters: [
 {
 name: "schema",
@@ -341,6 +342,10 @@ type: "({ error }: { error: Error | string }) => Promise<void> | void",
 isOptional: true,
 description:
 "Callback fired when an error occurs during sub-agent execution.",
+},
+],
+},
+],
 },
 ]}
 />

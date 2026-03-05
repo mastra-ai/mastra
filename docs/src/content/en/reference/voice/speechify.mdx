@@ -42,21 +42,10 @@ type: "SpeechifyConfig",
 description: "Configuration for text-to-speech functionality",
 isOptional: true,
 defaultValue: "{ name: 'simba-english' }",
-},
+properties: [
 {
-name: "speaker",
-type: "SpeechifyVoiceId",
-description: "Default voice ID to use for speech synthesis",
-isOptional: true,
-defaultValue: "'george'",
-},
-]}
-/>
-
-### SpeechifyConfig
-
-<PropertiesTable
-  content={[
+type: "SpeechifyConfig",
+parameters: [
 {
 name: "name",
 type: "VoiceModelName",
@@ -67,9 +56,19 @@ defaultValue: "'simba-english'",
 {
 name: "apiKey",
 type: "string",
-description:
-"Speechify API key. Falls back to SPEECHIFY_API_KEY environment variable",
+description: "Speechify API key. Falls back to SPEECHIFY_API_KEY environment variable",
 isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "SpeechifyVoiceId",
+description: "Default voice ID to use for speech synthesis",
+isOptional: true,
+defaultValue: "'george'",
 },
 ]}
 />

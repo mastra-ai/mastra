@@ -31,6 +31,21 @@ type: "{ requestContext?: RequestContext }",
 isOptional: true,
 defaultValue: "{}",
 description: "Optional configuration object containing request context.",
+properties: [
+{
+type: "{ requestContext?: RequestContext }",
+parameters: [
+{
+name: "requestContext",
+type: "RequestContext",
+isOptional: true,
+defaultValue: "new RequestContext()",
+description:
+"Request Context for dependency injection and contextual information.",
+},
+],
+},
+],
 },
 ]}
 />
@@ -55,21 +70,6 @@ await agent.getDefaultStreamOptionsLegacy({
   requestContext: new RequestContext(),
 })
 ```
-
-### Options parameters
-
-<PropertiesTable
-  content={[
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "new RequestContext()",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-]}
-/>
 
 ## Related
 

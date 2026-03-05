@@ -31,14 +31,10 @@ name: "options",
 type: "Options",
 description: "Configuration options for content moderation",
 isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "Options",
+parameters: [
 {
 name: "model",
 type: "MastraModelConfig",
@@ -93,6 +89,10 @@ type: "ProviderOptions",
 description: "Provider-specific options passed to the internal moderation agent. Use this to control model behavior like reasoning effort for thinking models (e.g., `{ openai: { reasoningEffort: 'low' } }`)",
 isOptional: true,
 default: "undefined",
+},
+],
+},
+],
 },
 ]}
 />

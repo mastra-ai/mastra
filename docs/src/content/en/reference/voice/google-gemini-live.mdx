@@ -164,24 +164,12 @@ isOptional: true,
 {
 name: "sessionConfig",
 type: "GeminiSessionConfig",
-description:
-"Session configuration including interrupt and context settings.",
+description: "Session configuration including interrupt and context settings.",
 isOptional: true,
-},
+properties: [
 {
-name: "debug",
-type: "boolean",
-description: "Enable debug logging for troubleshooting.",
-isOptional: true,
-defaultValue: "false",
-},
-]}
-/>
-
-### Session Configuration
-
-<PropertiesTable
-  content={[
+type: "GeminiSessionConfig",
+parameters: [
 {
 name: "interrupts",
 type: "object",
@@ -206,6 +194,17 @@ defaultValue: "true",
 name: "contextCompression",
 type: "boolean",
 description: "Enable automatic context compression.",
+isOptional: true,
+defaultValue: "false",
+},
+],
+},
+],
+},
+{
+name: "debug",
+type: "boolean",
+description: "Enable debug logging for troubleshooting.",
 isOptional: true,
 defaultValue: "false",
 },

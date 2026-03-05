@@ -19,38 +19,31 @@ new ConsoleExporter(config?: BaseExporterConfig)
 ```
 
 <PropertiesTable
-  props={[
+  content={[
 {
 name: "config",
 type: "BaseExporterConfig",
 description: "Configuration options",
-required: false,
-},
-]}
-/>
-
-## BaseExporterConfig
-
-```typescript
-interface BaseExporterConfig {
-  logger?: IMastraLogger
-  logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'
-}
-```
-
-<PropertiesTable
-  props={[
+isOptional: true,
+properties: [
+{
+type: "BaseExporterConfig",
+parameters: [
 {
 name: "logger",
 type: "IMastraLogger",
 description: "Logger instance (falls back to ConsoleLogger with INFO level)",
-required: false,
+isOptional: true,
 },
 {
 name: "logLevel",
 type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
 description: "Log level for the exporter (default: INFO)",
-required: false,
+isOptional: true,
+},
+],
+},
+],
 },
 ]}
 />

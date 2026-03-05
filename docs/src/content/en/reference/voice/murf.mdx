@@ -60,21 +60,10 @@ type: "MurfConfig",
 description: "Configuration for text-to-speech functionality",
 isOptional: true,
 defaultValue: "{ name: 'GEN2' }",
-},
+properties: [
 {
-name: "speaker",
-type: "string",
-description: "Default voice ID to use for text-to-speech",
-isOptional: true,
-defaultValue: "'en-UK-hazel'",
-},
-]}
-/>
-
-### MurfConfig
-
-<PropertiesTable
-  content={[
+type: "MurfConfig",
+parameters: [
 {
 name: "name",
 type: "'GEN1' | 'GEN2'",
@@ -85,8 +74,7 @@ defaultValue: "'GEN2'",
 {
 name: "apiKey",
 type: "string",
-description:
-"Murf API key. Falls back to MURF_API_KEY environment variable",
+description: "Murf API key. Falls back to MURF_API_KEY environment variable",
 isOptional: true,
 },
 {
@@ -94,14 +82,10 @@ name: "properties",
 type: "object",
 description: "Default properties for all speech synthesis requests",
 isOptional: true,
-},
-]}
-/>
-
-### Speech Properties
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "object",
+parameters: [
 {
 name: "style",
 type: "string",
@@ -167,6 +151,21 @@ name: "multiNativeLocale",
 type: "string",
 description: "Locale for multilingual support",
 isOptional: true,
+},
+],
+},
+],
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID to use for text-to-speech",
+isOptional: true,
+defaultValue: "'en-UK-hazel'",
 },
 ]}
 />

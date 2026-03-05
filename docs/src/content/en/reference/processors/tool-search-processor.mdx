@@ -37,14 +37,10 @@ name: "options",
 type: "ToolSearchProcessorOptions",
 description: "Configuration options for the tool search processor",
 isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "ToolSearchProcessorOptions",
+parameters: [
 {
 name: "tools",
 type: "Record<string, Tool>",
@@ -77,6 +73,10 @@ type: "number",
 description: "Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.",
 isOptional: true,
 default: "3600000",
+},
+],
+},
+],
 },
 ]}
 />

@@ -44,21 +44,10 @@ type: "PlayAIConfig",
 description: "Configuration for text-to-speech functionality",
 isOptional: true,
 defaultValue: "{ name: 'PlayDialog' }",
-},
+properties: [
 {
-name: "speaker",
-type: "string",
-description: "Default voice ID to use for speech synthesis",
-isOptional: true,
-defaultValue: "First available voice ID",
-},
-]}
-/>
-
-### PlayAIConfig
-
-<PropertiesTable
-  content={[
+type: "PlayAIConfig",
+parameters: [
 {
 name: "name",
 type: "'PlayDialog' | 'Play3.0-mini'",
@@ -69,16 +58,25 @@ defaultValue: "'PlayDialog'",
 {
 name: "apiKey",
 type: "string",
-description:
-"PlayAI API key. Falls back to PLAYAI_API_KEY environment variable",
+description: "PlayAI API key. Falls back to PLAYAI_API_KEY environment variable",
 isOptional: true,
 },
 {
 name: "userId",
 type: "string",
-description:
-"PlayAI user ID. Falls back to PLAYAI_USER_ID environment variable",
+description: "PlayAI user ID. Falls back to PLAYAI_USER_ID environment variable",
 isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID to use for speech synthesis",
+isOptional: true,
+defaultValue: "First available voice ID",
 },
 ]}
 />

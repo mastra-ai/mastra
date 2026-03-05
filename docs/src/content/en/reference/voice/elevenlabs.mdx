@@ -43,21 +43,10 @@ type: "ElevenLabsVoiceConfig",
 description: "Configuration for text-to-speech functionality.",
 isOptional: true,
 defaultValue: "{ name: 'eleven_multilingual_v2' }",
-},
+properties: [
 {
-name: "speaker",
-type: "string",
-description: "ID of the speaker to use for text-to-speech",
-isOptional: true,
-defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
-},
-]}
-/>
-
-### ElevenLabsVoiceConfig
-
-<PropertiesTable
-  content={[
+type: "ElevenLabsVoiceConfig",
+parameters: [
 {
 name: "name",
 type: "ElevenLabsModel",
@@ -68,9 +57,19 @@ defaultValue: "'eleven_multilingual_v2'",
 {
 name: "apiKey",
 type: "string",
-description:
-"ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
+description: "ElevenLabs API key. Falls back to ELEVENLABS_API_KEY environment variable",
 isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "string",
+description: "ID of the speaker to use for text-to-speech",
+isOptional: true,
+defaultValue: "'9BWtsMINqrJLrRacOk9x' (Aria voice)",
 },
 ]}
 />
