@@ -17,30 +17,32 @@ CompositeVoice supports both Mastra voice providers and AI SDK model providers
 
 <PropertiesTable
   content={[
-{
-name: "config",
-type: "object",
-description: "Configuration object for the composite voice service",
-isOptional: false,
-},
-{
-name: "config.input",
-type: "MastraVoice | TranscriptionModel",
-description: "Voice provider or AI SDK transcription model to use for speech-to-text operations. AI SDK models are automatically wrapped.",
-isOptional: true,
-},
-{
-name: "config.output",
-type: "MastraVoice | SpeechModel",
-description: "Voice provider or AI SDK speech model to use for text-to-speech operations. AI SDK models are automatically wrapped.",
-isOptional: true,
-},
-{
-name: "config.realtime",
-type: "MastraVoice",
-description: "Voice provider to use for real-time speech-to-speech operations",
-isOptional: true,
-},
+  {
+    name: 'config',
+    type: 'object',
+    description: 'Configuration object for the composite voice service',
+    isOptional: false,
+  },
+  {
+    name: 'config.input',
+    type: 'MastraVoice | TranscriptionModel',
+    description:
+      'Voice provider or AI SDK transcription model to use for speech-to-text operations. AI SDK models are automatically wrapped.',
+    isOptional: true,
+  },
+  {
+    name: 'config.output',
+    type: 'MastraVoice | SpeechModel',
+    description:
+      'Voice provider or AI SDK speech model to use for text-to-speech operations. AI SDK models are automatically wrapped.',
+    isOptional: true,
+  },
+  {
+    name: 'config.realtime',
+    type: 'MastraVoice',
+    description: 'Voice provider to use for real-time speech-to-speech operations',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -52,18 +54,18 @@ Converts text to speech using the configured speaking provider.
 
 <PropertiesTable
   content={[
-{
-name: "input",
-type: "string | NodeJS.ReadableStream",
-description: "Text to convert to speech",
-isOptional: false,
-},
-{
-name: "options",
-type: "object",
-description: "Provider-specific options passed to the speaking provider",
-isOptional: true,
-},
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description: 'Text to convert to speech',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Provider-specific options passed to the speaking provider',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -79,18 +81,18 @@ Converts speech to text using the configured listening provider.
 
 <PropertiesTable
   content={[
-{
-name: "audioStream",
-type: "NodeJS.ReadableStream",
-description: "Audio stream to convert to text",
-isOptional: false,
-},
-{
-name: "options",
-type: "object",
-description: "Provider-specific options passed to the listening provider",
-isOptional: true,
-},
+  {
+    name: 'audioStream',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to convert to text',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Provider-specific options passed to the listening provider',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -106,19 +108,18 @@ Returns a list of available voices from the speaking provider, where each node c
 
 <PropertiesTable
   content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-isOptional: false,
-},
-{
-name: "key",
-type: "value",
-description:
-"Additional voice properties that vary by provider (e.g., name, language)",
-isOptional: true,
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+    isOptional: false,
+  },
+  {
+    name: 'key',
+    type: 'value',
+    description: 'Additional voice properties that vary by provider (e.g., name, language)',
+    isOptional: true,
+  },
 ]}
 />
 

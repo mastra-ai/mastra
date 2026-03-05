@@ -53,52 +53,54 @@ const response = await agent.generate('Run npm install')
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this sandbox instance",
-isOptional: true,
-defaultValue: "Auto-generated",
-},
-{
-name: "workingDirectory",
-type: "string",
-description: "Directory for command execution. Defaults to .sandbox/ in process.cwd() for isolation from seatbelt profiles.",
-isOptional: true,
-defaultValue: "process.cwd()/.sandbox/",
-},
-{
-name: "env",
-type: "NodeJS.ProcessEnv",
-description: "Environment variables to set. PATH is included by default unless overridden.",
-isOptional: true,
-},
-{
-name: "timeout",
-type: "number",
-description: "Default timeout for operations in milliseconds",
-isOptional: true,
-defaultValue: "30000",
-},
-{
-name: "isolation",
-type: "'none' | 'seatbelt' | 'bwrap'",
-description: "Native OS sandboxing backend. 'seatbelt' for macOS, 'bwrap' for Linux.",
-isOptional: true,
-defaultValue: "'none'",
-},
-{
-name: "instructions",
-type: "string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)",
-description: "Custom instructions that override the default instructions returned by getInstructions(). Pass a string to fully replace them, or a function to extend them with access to the current requestContext for per-request customization.",
-isOptional: true,
-},
-{
-name: "nativeSandbox",
-type: "NativeSandboxConfig",
-description: "Configuration for native sandboxing (see NativeSandboxConfig below).",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description:
+      'Directory for command execution. Defaults to .sandbox/ in process.cwd() for isolation from seatbelt profiles.',
+    isOptional: true,
+    defaultValue: 'process.cwd()/.sandbox/',
+  },
+  {
+    name: 'env',
+    type: 'NodeJS.ProcessEnv',
+    description: 'Environment variables to set. PATH is included by default unless overridden.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Default timeout for operations in milliseconds',
+    isOptional: true,
+    defaultValue: '30000',
+  },
+  {
+    name: 'isolation',
+    type: "'none' | 'seatbelt' | 'bwrap'",
+    description: "Native OS sandboxing backend. 'seatbelt' for macOS, 'bwrap' for Linux.",
+    isOptional: true,
+    defaultValue: "'none'",
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)',
+    description:
+      'Custom instructions that override the default instructions returned by getInstructions(). Pass a string to fully replace them, or a function to extend them with access to the current requestContext for per-request customization.',
+    isOptional: true,
+  },
+  {
+    name: 'nativeSandbox',
+    type: 'NativeSandboxConfig',
+    description: 'Configuration for native sandboxing (see NativeSandboxConfig below).',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -108,44 +110,45 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
 
 <PropertiesTable
   content={[
-{
-name: "allowNetwork",
-type: "boolean",
-description: "Allow network access from sandboxed commands.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "readOnlyPaths",
-type: "string[]",
-description: "Additional paths to allow read-only access (system paths are always readable).",
-isOptional: true,
-},
-{
-name: "readWritePaths",
-type: "string[]",
-description: "Additional paths to allow read-write access beyond the workspace directory.",
-isOptional: true,
-},
-{
-name: "seatbeltProfilePath",
-type: "string",
-description: "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
-isOptional: true,
-},
-{
-name: "bwrapArgs",
-type: "string[]",
-description: "Additional arguments to pass to bwrap (Linux only).",
-isOptional: true,
-},
-{
-name: "allowSystemBinaries",
-type: "boolean",
-description: "Allow read access to standard system binary paths (/bin, /usr/bin, etc.).",
-isOptional: true,
-defaultValue: "true",
-},
+  {
+    name: 'allowNetwork',
+    type: 'boolean',
+    description: 'Allow network access from sandboxed commands.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'readOnlyPaths',
+    type: 'string[]',
+    description: 'Additional paths to allow read-only access (system paths are always readable).',
+    isOptional: true,
+  },
+  {
+    name: 'readWritePaths',
+    type: 'string[]',
+    description: 'Additional paths to allow read-write access beyond the workspace directory.',
+    isOptional: true,
+  },
+  {
+    name: 'seatbeltProfilePath',
+    type: 'string',
+    description:
+      "Path to a custom seatbelt profile file (macOS only). If the file exists, it's used; if not, a default profile is generated and written to this path.",
+    isOptional: true,
+  },
+  {
+    name: 'bwrapArgs',
+    type: 'string[]',
+    description: 'Additional arguments to pass to bwrap (Linux only).',
+    isOptional: true,
+  },
+  {
+    name: 'allowSystemBinaries',
+    type: 'boolean',
+    description: 'Allow read access to standard system binary paths (/bin, /usr/bin, etc.).',
+    isOptional: true,
+    defaultValue: 'true',
+  },
 ]}
 />
 
@@ -153,31 +156,31 @@ defaultValue: "true",
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Sandbox instance identifier",
-},
-{
-name: "name",
-type: "string",
-description: "Provider name ('LocalSandbox')",
-},
-{
-name: "provider",
-type: "string",
-description: "Provider identifier ('local')",
-},
-{
-name: "status",
-type: "ProviderStatus",
-description: "'starting' | 'running' | 'stopped' | 'error'",
-},
-{
-name: "workingDirectory",
-type: "string",
-description: "The configured working directory",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('LocalSandbox')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('local')",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'starting' | 'running' | 'stopped' | 'error'",
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description: 'The configured working directory',
+  },
 ]}
 />
 
@@ -236,47 +239,47 @@ const installResult = await sandbox.executeCommand('npm', ['install', 'lodash'],
 
 <PropertiesTable
   content={[
-{
-name: "command",
-type: "string",
-description: "Command to execute",
-},
-{
-name: "args",
-type: "string[]",
-description: "Command arguments",
-isOptional: true,
-},
-{
-name: "options.timeout",
-type: "number",
-description: "Execution timeout in milliseconds",
-isOptional: true,
-},
-{
-name: "options.cwd",
-type: "string",
-description: "Working directory for the command",
-isOptional: true,
-},
-{
-name: "options.env",
-type: "Record<string, string>",
-description: "Additional environment variables",
-isOptional: true,
-},
-{
-name: "options.onStdout",
-type: "(data: string) => void",
-description: "Callback for stdout streaming",
-isOptional: true,
-},
-{
-name: "options.onStderr",
-type: "(data: string) => void",
-description: "Callback for stderr streaming",
-isOptional: true,
-},
+  {
+    name: 'command',
+    type: 'string',
+    description: 'Command to execute',
+  },
+  {
+    name: 'args',
+    type: 'string[]',
+    description: 'Command arguments',
+    isOptional: true,
+  },
+  {
+    name: 'options.timeout',
+    type: 'number',
+    description: 'Execution timeout in milliseconds',
+    isOptional: true,
+  },
+  {
+    name: 'options.cwd',
+    type: 'string',
+    description: 'Working directory for the command',
+    isOptional: true,
+  },
+  {
+    name: 'options.env',
+    type: 'Record<string, string>',
+    description: 'Additional environment variables',
+    isOptional: true,
+  },
+  {
+    name: 'options.onStdout',
+    type: '(data: string) => void',
+    description: 'Callback for stdout streaming',
+    isOptional: true,
+  },
+  {
+    name: 'options.onStderr',
+    type: '(data: string) => void',
+    description: 'Callback for stderr streaming',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -308,12 +311,12 @@ const instructions = sandbox.getInstructions({ requestContext })
 
 <PropertiesTable
   content={[
-{
-name: "opts.requestContext",
-type: "RequestContext",
-description: "Forwarded to the `instructions` function if one was provided in the constructor.",
-isOptional: true,
-},
+  {
+    name: 'opts.requestContext',
+    type: 'RequestContext',
+    description: 'Forwarded to the `instructions` function if one was provided in the constructor.',
+    isOptional: true,
+  },
 ]}
 />
 
