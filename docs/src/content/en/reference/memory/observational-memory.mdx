@@ -95,7 +95,7 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
             name: 'messageTokens',
             type: 'number',
             description:
-              'Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called.',
+              'Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called. Image parts are included with model-aware estimates when possible, with deterministic fallbacks when image metadata is incomplete.',
             isOptional: true,
             defaultValue: '30000',
           },

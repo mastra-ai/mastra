@@ -113,6 +113,105 @@ describe('TokenCounter', () => {
     });
   });
 
+  describe('image counting', () => {
+    it('counts image url parts with a stable integer estimate', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: new URL('https://example.com/cat.png') }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(Number.isInteger(tokens)).toBe(true);
+      expect(cachedEntry.tokens).toBe(85);
+    });
+
+    it('counts data-uri image parts with deterministic fallback sizing', () => {
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: dataUriImage }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(700);
+      expect(cachedEntry.tokens).toBe(765);
+    });
+
+    it('reuses cached image estimates without re-encoding text payloads', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: new URL('https://example.com/cached.png') }],
+      });
+
+      const encoder = (counter as any).encoder;
+      const originalEncode = encoder.encode.bind(encoder);
+      let encodeCalls = 0;
+
+      try {
+        encoder.encode = (...args: any[]) => {
+          encodeCalls += 1;
+          return originalEncode(...args);
+        };
+
+        const first = counter.countMessage(message);
+        const second = counter.countMessage(message);
+
+        expect(second).toBe(first);
+        expect(encodeCalls).toBe(2);
+      } finally {
+        encoder.encode = originalEncode;
+      }
+    });
+
+    it('changes image estimates when resolved model context changes', () => {
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/high-detail.png'),
+            providerOptions: {
+              openai: {
+                detail: 'high',
+              },
+            },
+            providerMetadata: {
+              mastra: {
+                imageDimensions: {
+                  width: 1024,
+                  height: 1024,
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      const defaultCounter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const miniCounter = new TokenCounter(undefined, { model: 'openai/gpt-4o-mini' });
+
+      const defaultTokens = defaultCounter.countMessage(message);
+      const defaultCachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      const miniTokens = miniCounter.countMessage(message);
+      const miniCachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(defaultTokens).toBeGreaterThan(765);
+      expect(defaultCachedEntry.tokens).toBe(765);
+      expect(miniTokens).toBeGreaterThan(defaultTokens);
+      expect(miniCachedEntry.tokens).toBe(25501);
+      expect(miniCachedEntry.key).not.toBe(defaultCachedEntry.key);
+    });
+  });
+
   describe('token estimate cache', () => {
     it('writes and reuses part-level token estimates on text parts without re-encoding payload on cache hit', () => {
       const counter = new TokenCounter();

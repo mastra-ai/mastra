@@ -75,6 +75,8 @@ OM solves both problems by compressing old context into dense observations.
 
 When message history tokens exceed a threshold (default: 30,000), the Observer creates observations — concise notes about what happened:
 
+Image parts now contribute to this threshold with model-aware estimates too, so multimodal conversations trigger observation more accurately than before. For example, OpenAI image detail settings can materially change when OM decides to observe.
+
 ```
 Date: 2026-01-15
 - 🔴 12:10 User is building a Next.js app with Supabase auth, due in 1 week (meaning January 22nd 2026)

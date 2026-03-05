@@ -1428,6 +1428,70 @@ describe('ObservationalMemory Integration', () => {
       const counter = om.getTokenCounter();
       expect(counter).toBeInstanceOf(TokenCounter);
     });
+
+    it('should resolve observer model context from requestContext before counting images', async () => {
+      const { MessageList } = await import('@mastra/core/agent');
+      const { RequestContext } = await import('@mastra/core/di');
+
+      const omWithDynamicObserverModel = new ObservationalMemory({
+        storage,
+        observation: {
+          messageTokens: 100_000,
+          model: ({ requestContext }) => requestContext?.get('observerModel') ?? 'openai/gpt-4o',
+        },
+        reflection: {
+          observationTokens: 100_000,
+          model: 'test-model',
+        },
+        scope: 'thread',
+      });
+
+      const makeContext = (observerModel: string) => {
+        const requestContext = new RequestContext();
+        requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+        requestContext.set('observerModel', observerModel);
+        return requestContext;
+      };
+
+      const countImageForModel = async (observerModel: string) => {
+        await omWithDynamicObserverModel.processInputStep({
+          messageList: new MessageList({ threadId, resourceId }),
+          messages: [],
+          requestContext: makeContext(observerModel),
+          stepNumber: 0,
+          state: {},
+          steps: [],
+          systemMessages: [],
+          model: 'test-model' as any,
+          retryCount: 0,
+          abort: (() => {
+            throw new Error('aborted');
+          }) as any,
+        });
+
+        return omWithDynamicObserverModel.getTokenCounter().countMessage({
+          role: 'user',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'image',
+                image: 'https://example.com/cat.png',
+                providerOptions: { openai: { detail: 'low' } },
+              },
+            ],
+          },
+          type: 'text',
+          createdAt: new Date(),
+        } as MastraDBMessage);
+      };
+
+      const gpt4oTokens = await countImageForModel('openai/gpt-4o');
+      const gpt4oMiniTokens = await countImageForModel('openai/gpt-4o-mini');
+
+      expect(gpt4oTokens).toBeGreaterThan(0);
+      expect(gpt4oMiniTokens).toBeGreaterThan(gpt4oTokens);
+    });
   });
 
   describe('getStorage', () => {
@@ -1435,6 +1499,74 @@ describe('ObservationalMemory Integration', () => {
       const s = om.getStorage();
       expect(s).toBe(storage);
     });
+  });
+
+  it('should trigger observation when an image-heavy message crosses the threshold', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageMessage = {
+      id: 'image-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: 'https://example.com/reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageTokens = multimodalOm.getTokenCounter().countMessage(imageMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageTokens).toBeGreaterThan(threshold);
   });
 
   describe('cursor-based message loading (lastObservedAt)', () => {

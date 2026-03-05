@@ -80,6 +80,7 @@ import {
   resolveRetentionFloor,
 } from './thresholds';
 import { TokenCounter } from './token-counter';
+import type { TokenCounterModelContext } from './token-counter';
 import type {
   ObservationConfig,
   ReflectionConfig,
@@ -864,7 +865,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       instruction: config.reflection?.instruction,
     };
 
-    this.tokenCounter = new TokenCounter();
+    this.tokenCounter = new TokenCounter(undefined, {
+      model: typeof observationModel === 'string' ? observationModel : undefined,
+    });
     this.onDebugEvent = config.onDebugEvent;
 
     // Create internal MessageHistory for message persistence
@@ -916,6 +919,47 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return ObservationalMemory.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
   }
 
+  private getModelToResolve(model: AgentConfig['model']) {
+    if (Array.isArray(model)) {
+      return model[0]?.model ?? 'unknown';
+    }
+
+    return model;
+  }
+
+  private formatModelName(model: TokenCounterModelContext) {
+    if (!model.modelId) {
+      return '(unknown)';
+    }
+
+    return model.provider ? `${model.provider}/${model.modelId}` : model.modelId;
+  }
+
+  private async resolveModelContext(
+    modelConfig: AgentConfig['model'],
+    requestContext?: RequestContext,
+  ): Promise<TokenCounterModelContext | undefined> {
+    const modelToResolve = this.getModelToResolve(modelConfig);
+    if (!modelToResolve) {
+      return undefined;
+    }
+
+    const resolved = await resolveModelConfig(modelToResolve, requestContext);
+    return {
+      provider: resolved.provider,
+      modelId: resolved.modelId,
+    };
+  }
+
+  private async syncTokenCounterModelContext(requestContext?: RequestContext): Promise<void> {
+    try {
+      this.tokenCounter.setModelContext(await this.resolveModelContext(this.observationConfig.model, requestContext));
+    } catch (error) {
+      omError('[OM] Failed to resolve observer model config for token counting', error);
+      this.tokenCounter.setModelContext(undefined);
+    }
+  }
+
   /**
    * Get the full config including resolved model names.
    * This is async because it needs to resolve the model configs.
@@ -931,29 +975,11 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       model: string;
     };
   }> {
-    // Helper to get the model config to resolve (handles ModelWithRetries[] by taking first)
-    const getModelToResolve = (model: AgentConfig['model']) => {
-      if (Array.isArray(model)) {
-        return model[0]?.model ?? 'unknown';
-      }
-      return model;
-    };
-
-    // Format as provider/modelId (e.g., "google/gemini-2.5-flash")
-    const formatModelName = (model: { provider?: string; modelId: string }) => {
-      return model.provider ? `${model.provider}/${model.modelId}` : model.modelId;
-    };
-
-    // Helper to safely resolve a model config
     const safeResolveModel = async (modelConfig: AgentConfig['model']): Promise<string> => {
-      const modelToResolve = getModelToResolve(modelConfig);
-
       try {
-        // resolveModelConfig handles both static configs and functions
-        const resolved = await resolveModelConfig(modelToResolve, requestContext);
-        return formatModelName(resolved);
+        const resolved = await this.resolveModelContext(modelConfig, requestContext);
+        return resolved?.modelId ? this.formatModelName(resolved) : '(unknown)';
       } catch (error) {
-        // If resolution fails, return a placeholder
         omError('[OM] Failed to resolve model config', error);
         return '(unknown)';
       }
@@ -2737,6 +2763,8 @@ ${suggestedResponse}
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
+    await this.syncTokenCounterModelContext(requestContext);
+
     // Fetch fresh record
     let record = await this.getOrCreateRecord(threadId, resourceId);
     omDebug(
@@ -3159,6 +3187,8 @@ ${suggestedResponse}
     }
 
     const { threadId, resourceId } = context;
+
+    await this.syncTokenCounterModelContext(requestContext);
 
     // Check if readOnly
     const memoryContext = parseMemoryRequestContext(requestContext);
