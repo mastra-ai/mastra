@@ -235,7 +235,7 @@ The agent sees `view`, `search_content`, `find_files`, and `execute_command` ins
 Workspace tools automatically truncate large outputs to avoid exceeding LLM context limits. Two layers of truncation apply:
 
 1. **Line-based tail**: Command output is limited to the last 200 lines by default (configurable per-command via the `tail` parameter)
-1. **Token-based limit**: All tool output is capped at 2,000 tokens by default using tiktoken
+1. **Token-based limit**: Tool output is capped at 2,000 tokens by default using tiktoken
 
 Set `maxOutputTokens` per tool to adjust the token limit:
 
