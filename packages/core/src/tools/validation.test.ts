@@ -1319,17 +1319,12 @@ describe('validateToolInput - Null Stripping for Optional Fields (GitHub #12362)
 
     // First try: { name: 'test', bio: null, status: null }
     //   bio fails (.optional() doesn't accept null), status passes (.nullable() accepts null)
-    // Retry with stripped: { name: 'test' }
-    //   bio passes (absent = undefined for .optional()), status fails (required field missing)
-    // Neither attempt fully succeeds, so this should fail
-    // ...unless the schema allows status to be absent too
-
-    // Actually, status is required (not optional), so stripping null from it makes it missing.
-    // The first attempt fails because bio: null is invalid for .optional().
-    // The retry fails because status is missing (it's required).
-    // This IS the expected behavior - the schema design is contradictory with null input for bio.
-    // The user should use .nullable().optional() for bio or .nullable() for both.
-    expect(result.error).toBeDefined();
+    // Retry with targeted stripping: { name: 'test', status: null }
+    //   bio passes (absent = undefined for .optional()), status passes (.nullable() accepts null)
+    // Targeted null stripping only removes nulls for fields that caused validation errors,
+    // preserving null for .nullable() fields that are valid.
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ name: 'test', status: null });
   });
 
   it('should handle .nullable().optional() fields receiving null', () => {

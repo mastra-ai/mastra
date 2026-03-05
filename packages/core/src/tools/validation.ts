@@ -288,6 +288,41 @@ function stripNullishValues(input: unknown): unknown {
 }
 
 /**
+ * Strip null/undefined values only at specific paths that caused validation errors.
+ * Preserves null for .nullable() fields that are valid.
+ */
+function stripNullishValuesAtPaths(input: unknown, paths: Set<string>, currentPath = ''): unknown {
+  if (input === null || input === undefined) {
+    return paths.has(currentPath) ? undefined : input;
+  }
+
+  if (typeof input !== 'object') {
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    return input.map((item, i) =>
+      stripNullishValuesAtPaths(item, paths, currentPath ? `${currentPath}.${i}` : String(i)),
+    );
+  }
+
+  if (!isPlainObject(input)) {
+    return input;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const fieldPath = currentPath ? `${currentPath}.${key}` : key;
+    if ((value === null || value === undefined) && paths.has(fieldPath)) {
+      // Only omit null/undefined for fields that caused validation errors
+      continue;
+    }
+    result[key] = stripNullishValuesAtPaths(value, paths, fieldPath);
+  }
+  return result;
+}
+
+/**
  * Coerces stringified JSON values in object properties when the schema expects
  * an array or object but the LLM returned a JSON string.
  *
@@ -429,11 +464,18 @@ export function validateToolInput<T = unknown>(
     }
   }
 
-  // Step 5: Retry with null values stripped (GitHub #12362)
+  // Step 5: Retry with null values stripped only for failing fields (GitHub #12362)
   // LLMs like Gemini send null for optional fields, but Zod's .optional() only
-  // accepts undefined, not null. By stripping nullish values and retrying, we
-  // handle this case without breaking .nullable() schemas that passed in step 3.
-  const strippedInput = stripNullishValues(input);
+  // accepts undefined, not null. We only strip nulls for fields that caused
+  // validation errors, preserving null for .nullable() schemas that need it.
+  const failingNullPaths = new Set(
+    validation.issues
+      .filter(issue => issue.message?.includes('null'))
+      .map(issue => issue.path?.map(p => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'))
+      .filter((p): p is string => !!p),
+  );
+  const strippedInput =
+    failingNullPaths.size > 0 ? stripNullishValuesAtPaths(input, failingNullPaths) : stripNullishValues(input);
   const normalizedStripped = normalizeNullishInput(schema, strippedInput);
   const retryValidation = safeValidate(schema, normalizedStripped);
 

@@ -2,7 +2,6 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
-import { standardSchemaToJSONSchema } from '@mastra/schema-compat';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
 import { describe, expect, it, vi } from 'vitest';
@@ -1195,7 +1194,9 @@ describe('CoreToolBuilder Output Schema', () => {
 
       // The critical assertion: every property in the schema must have a 'type' key.
       // OpenAI rejects schemas where properties lack a 'type' key.
-      const properties = standardSchemaToJSONSchema(toolDef.inputSchema).properties;
+      // buildV5() wraps the schema via AI SDK's jsonSchema(), so inputSchema is
+      // an AI SDK Schema object { _type, jsonSchema, validate } — access .jsonSchema directly.
+      const properties = (toolDef.inputSchema as any).jsonSchema.properties;
       expect(properties).toBeDefined();
 
       for (const [propName, propSchema] of Object.entries(properties)) {
