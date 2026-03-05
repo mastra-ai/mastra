@@ -279,6 +279,40 @@ describe('S3Filesystem', () => {
       expect(config1.readOnly).toBeUndefined();
       expect(config2.readOnly).toBeUndefined();
     });
+
+    it('includes prefix if set (without trailing slash)', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: 'workspace/user1/agents/abc',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('workspace/user1/agents/abc');
+    });
+
+    it('strips trailing slash from prefix in mount config', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        prefix: '/foo/bar/',
+      });
+
+      const config = fs.getMountConfig();
+
+      // S3Filesystem normalizes prefix to "foo/bar/" internally,
+      // getMountConfig strips the trailing slash for mount commands
+      expect(config.prefix).toBe('foo/bar');
+    });
+
+    it('excludes prefix if not set', () => {
+      const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
+    });
   });
 
   describe('getInfo()', () => {
