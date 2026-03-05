@@ -196,8 +196,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const isWriteCommand = this.toolName === MC_TOOLS.WRITE_FILE;
     const isProcessCommand = this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT || this.toolName === MC_TOOLS.KILL_PROCESS;
     const isTaskWrite = this.toolName === 'task_write';
+    const isWebSearch = isWebSearchTool(this.toolName);
 
-    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite) {
+    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite || isWebSearch) {
       // No background - let terminal colors show through
       this.contentBox.setBgFn((text: string) => text);
       return;
