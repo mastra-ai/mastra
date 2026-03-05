@@ -42,16 +42,28 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
 
   if (scorerSummaries.length === 0) {
     const isRunning = experimentStatus === 'running' || experimentStatus === 'pending';
+    const hasLoadedScores = scoresByItemId !== undefined;
+
+    let title: string;
+    let description: string;
+
+    if (isRunning) {
+      title = 'Experiment in progress';
+      description = 'Summary metrics will appear here once the experiment completes.';
+    } else if (!hasLoadedScores) {
+      title = 'Loading scores';
+      description = 'Fetching scorer results…';
+    } else {
+      title = 'No scorers configured';
+      description = 'Add scorers when triggering an experiment to evaluate results and see summary metrics here.';
+    }
+
     return (
       <div className="flex h-full items-center justify-center py-12">
         <EmptyState
           iconSlot={<GaugeIcon className="w-8 h-8 text-neutral3" />}
-          titleSlot={isRunning ? 'Experiment in progress' : 'No scorers configured'}
-          descriptionSlot={
-            isRunning
-              ? 'Summary metrics will appear here once the experiment completes.'
-              : 'Add scorers when triggering an experiment to evaluate results and see summary metrics here.'
-          }
+          titleSlot={title}
+          descriptionSlot={description}
         />
       </div>
     );

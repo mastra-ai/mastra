@@ -120,33 +120,47 @@ async function runScorerSafe(
   scorerOutput?: ScorerRunOutputForAgent,
 ): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
-    const scoreResult = await scorer.run({
+    const scoreResult: unknown = await scorer.run({
       input: scorerInput ?? item.input,
       output: scorerOutput ?? output,
       groundTruth: item.groundTruth,
     });
 
-    // Extract score and reason with proper null handling
-    // Scorer run result types are complex generics, so we cast through any
-    const raw = scoreResult as any;
-    const score = raw.score;
-    const reason = raw.reason;
+    // Extract fields with typeof guards — scorer run result types use complex
+    // conditional generics that don't resolve cleanly with MastraScorer<any,…>.
+    if (typeof scoreResult !== 'object' || scoreResult === null) {
+      return {
+        result: { scorerId: scorer.id, scorerName: scorer.name, score: null, reason: null, error: null },
+        promptMetadata: {},
+      };
+    }
+
+    const fields = scoreResult as Record<string, unknown>;
+    const score = typeof fields.score === 'number' ? fields.score : null;
+    const reason = typeof fields.reason === 'string' ? fields.reason : null;
+
+    const str = (key: string): string | undefined =>
+      typeof fields[key] === 'string' ? (fields[key] as string) : undefined;
+    const obj = (key: string): Record<string, unknown> | undefined => {
+      const val = fields[key];
+      return typeof val === 'object' && val !== null ? (val as Record<string, unknown>) : undefined;
+    };
 
     return {
       result: {
         scorerId: scorer.id,
         scorerName: scorer.name,
-        score: typeof score === 'number' ? score : null,
-        reason: typeof reason === 'string' ? reason : null,
+        score,
+        reason,
         error: null,
       },
       promptMetadata: {
-        generateScorePrompt: raw.generateScorePrompt,
-        generateReasonPrompt: raw.generateReasonPrompt,
-        preprocessStepResult: raw.preprocessStepResult,
-        preprocessPrompt: raw.preprocessPrompt,
-        analyzeStepResult: raw.analyzeStepResult,
-        analyzePrompt: raw.analyzePrompt,
+        generateScorePrompt: str('generateScorePrompt'),
+        generateReasonPrompt: str('generateReasonPrompt'),
+        preprocessStepResult: obj('preprocessStepResult'),
+        preprocessPrompt: str('preprocessPrompt'),
+        analyzeStepResult: obj('analyzeStepResult'),
+        analyzePrompt: str('analyzePrompt'),
       },
     };
   } catch (error) {

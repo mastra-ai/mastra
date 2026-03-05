@@ -117,10 +117,7 @@ export const useDatasetExperimentResults = ({
  * Hook to fetch all scores for an experiment, transformed to Record<entityId, ClientScoreRowData[]>
  * Paginates through all pages to ensure no scores are silently dropped.
  */
-export const useScoresByExperimentId = (
-  experimentId: string,
-  experimentStatus?: string,
-) => {
+export const useScoresByExperimentId = (experimentId: string, experimentStatus?: string) => {
   const client = useMastraClient();
   return useQuery({
     queryKey: ['dataset-experiment-scores', experimentId, experimentStatus],

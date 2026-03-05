@@ -4,4 +4,5 @@
 '@mastra/pg': patch
 ---
 
-Fixed negative pending count for async experiments and scorer prompt metadata being lost during experiment score persistence.
+- Fixed experiment pending count showing negative values when experiments are triggered from the Studio
+- Fixed scorer prompt metadata (analysis context, generated prompts) being lost when saving experiment scores
