@@ -24,117 +24,112 @@ Before using the noise sensitivity scorer, prepare your test data:
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraModelConfig",
-description: "The language model to use for evaluating noise sensitivity",
-required: true,
-},
-{
-name: "options",
-type: "NoiseSensitivityOptions",
-description: "Configuration options for the scorer",
-required: true,
-children: [
-{
-name: "baselineResponse",
-type: "string",
-description:
-"The expected clean response to compare against (what the agent should ideally produce without noise)",
-required: true,
-},
-{
-name: "noisyQuery",
-type: "string",
-description:
-"The user query with added noise, distractions, or misleading information",
-required: true,
-},
-{
-name: "noiseType",
-type: "string",
-description:
-"Type of noise added (e.g., 'misinformation', 'distractors', 'adversarial')",
-required: false,
-},
-{
-name: "scoring",
-type: "object",
-description:
-"Advanced scoring configuration for fine-tuning evaluation",
-required: false,
-children: [
-{
-name: "impactWeights",
-type: "object",
-description: "Custom weights for different impact levels",
-required: false,
-children: [
-{
-name: "none",
-type: "number",
-description: "Weight for no impact (default: 1.0)",
-required: false,
-},
-{
-name: "minimal",
-type: "number",
-description: "Weight for minimal impact (default: 0.85)",
-required: false,
-},
-{
-name: "moderate",
-type: "number",
-description: "Weight for moderate impact (default: 0.6)",
-required: false,
-},
-{
-name: "significant",
-type: "number",
-description: "Weight for significant impact (default: 0.3)",
-required: false,
-},
-{
-name: "severe",
-type: "number",
-description: "Weight for severe impact (default: 0.1)",
-required: false,
-},
-],
-},
-{
-name: "penalties",
-type: "object",
-description: "Penalty configuration for major issues",
-required: false,
-children: [
-{
-name: "majorIssuePerItem",
-type: "number",
-description:
-"Penalty per major issue identified (default: 0.1)",
-required: false,
-},
-{
-name: "maxMajorIssuePenalty",
-type: "number",
-description:
-"Maximum total penalty for major issues (default: 0.3)",
-required: false,
-},
-],
-},
-{
-name: "discrepancyThreshold",
-type: "number",
-description:
-"Threshold for using conservative scoring when LLM and calculated scores diverge (default: 0.2)",
-required: false,
-},
-],
-},
-],
-},
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for evaluating noise sensitivity',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'NoiseSensitivityOptions',
+    description: 'Configuration options for the scorer',
+    required: true,
+    children: [
+      {
+        name: 'baselineResponse',
+        type: 'string',
+        description:
+          'The expected clean response to compare against (what the agent should ideally produce without noise)',
+        required: true,
+      },
+      {
+        name: 'noisyQuery',
+        type: 'string',
+        description: 'The user query with added noise, distractions, or misleading information',
+        required: true,
+      },
+      {
+        name: 'noiseType',
+        type: 'string',
+        description: "Type of noise added (e.g., 'misinformation', 'distractors', 'adversarial')",
+        required: false,
+      },
+      {
+        name: 'scoring',
+        type: 'object',
+        description: 'Advanced scoring configuration for fine-tuning evaluation',
+        required: false,
+        children: [
+          {
+            name: 'impactWeights',
+            type: 'object',
+            description: 'Custom weights for different impact levels',
+            required: false,
+            children: [
+              {
+                name: 'none',
+                type: 'number',
+                description: 'Weight for no impact (default: 1.0)',
+                required: false,
+              },
+              {
+                name: 'minimal',
+                type: 'number',
+                description: 'Weight for minimal impact (default: 0.85)',
+                required: false,
+              },
+              {
+                name: 'moderate',
+                type: 'number',
+                description: 'Weight for moderate impact (default: 0.6)',
+                required: false,
+              },
+              {
+                name: 'significant',
+                type: 'number',
+                description: 'Weight for significant impact (default: 0.3)',
+                required: false,
+              },
+              {
+                name: 'severe',
+                type: 'number',
+                description: 'Weight for severe impact (default: 0.1)',
+                required: false,
+              },
+            ],
+          },
+          {
+            name: 'penalties',
+            type: 'object',
+            description: 'Penalty configuration for major issues',
+            required: false,
+            children: [
+              {
+                name: 'majorIssuePerItem',
+                type: 'number',
+                description: 'Penalty per major issue identified (default: 0.1)',
+                required: false,
+              },
+              {
+                name: 'maxMajorIssuePenalty',
+                type: 'number',
+                description: 'Maximum total penalty for major issues (default: 0.3)',
+                required: false,
+              },
+            ],
+          },
+          {
+            name: 'discrepancyThreshold',
+            type: 'number',
+            description:
+              'Threshold for using conservative scoring when LLM and calculated scores diverge (default: 0.2)',
+            required: false,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -205,18 +200,16 @@ describe('Agent Noise Resistance Tests', () => {
 
 <PropertiesTable
   content={[
-{
-name: "score",
-type: "number",
-description:
-"Robustness score between 0 and 1 (1.0 = completely robust, 0.0 = severely compromised)",
-},
-{
-name: "reason",
-type: "string",
-description:
-"Human-readable explanation of how noise affected the agent's response",
-},
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Robustness score between 0 and 1 (1.0 = completely robust, 0.0 = severely compromised)',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: "Human-readable explanation of how noise affected the agent's response",
+  },
 ]}
 />
 

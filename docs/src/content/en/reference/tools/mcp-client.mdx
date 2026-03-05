@@ -28,27 +28,26 @@ constructor({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-isOptional: true,
-description:
-"Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.",
-},
-{
-name: "servers",
-type: "Record<string, MastraMCPServerDefinition>",
-description:
-"A map of server configurations, where each key is a unique server identifier and the value is the server configuration.",
-},
-{
-name: "timeout",
-type: "number",
-isOptional: true,
-defaultValue: "60000",
-description:
-"Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
-},
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.',
+  },
+  {
+    name: 'servers',
+    type: 'Record<string, MastraMCPServerDefinition>',
+    description:
+      'A map of server configurations, where each key is a unique server identifier and the value is the server configuration.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
+  },
 ]}
 />
 
@@ -63,83 +62,82 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 
 <PropertiesTable
   content={[
-{
-name: "command",
-type: "string",
-isOptional: true,
-description: "For Stdio servers: The command to execute.",
-},
-{
-name: "args",
-type: "string[]",
-isOptional: true,
-description: "For Stdio servers: Arguments to pass to the command.",
-},
-{
-name: "env",
-type: "Record<string, string>",
-isOptional: true,
-description:
-"For Stdio servers: Environment variables to set for the command.",
-},
-{
-name: "url",
-type: "URL",
-isOptional: true,
-description:
-"For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
-},
-{
-name: "requestInit",
-type: "RequestInit",
-isOptional: true,
-description: "For HTTP servers: Request configuration for the fetch API.",
-},
-{
-name: "eventSourceInit",
-type: "EventSourceInit",
-isOptional: true,
-description:
-"For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
-},
-{
-name: "fetch",
-type: "MastraFetchLike",
-isOptional: true,
-description:
-"For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.",
-},
-{
-name: "logger",
-type: "LogHandler",
-isOptional: true,
-description: "Optional additional handler for logging.",
-},
-{
-name: "timeout",
-type: "number",
-isOptional: true,
-description: "Server-specific timeout in milliseconds.",
-},
-{
-name: "capabilities",
-type: "ClientCapabilities",
-isOptional: true,
-description: "Server-specific capabilities configuration.",
-},
-{
-name: "authProvider",
-type: "OAuthClientProvider",
-isOptional: true,
-description: "For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.",
-},
-{
-name: "enableServerLogs",
-type: "boolean",
-isOptional: true,
-defaultValue: "true",
-description: "Whether to enable logging for this server.",
-},
+  {
+    name: 'command',
+    type: 'string',
+    isOptional: true,
+    description: 'For Stdio servers: The command to execute.',
+  },
+  {
+    name: 'args',
+    type: 'string[]',
+    isOptional: true,
+    description: 'For Stdio servers: Arguments to pass to the command.',
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    isOptional: true,
+    description: 'For Stdio servers: Environment variables to set for the command.',
+  },
+  {
+    name: 'url',
+    type: 'URL',
+    isOptional: true,
+    description: 'For HTTP servers (Streamable HTTP or SSE): The URL of the server.',
+  },
+  {
+    name: 'requestInit',
+    type: 'RequestInit',
+    isOptional: true,
+    description: 'For HTTP servers: Request configuration for the fetch API.',
+  },
+  {
+    name: 'eventSourceInit',
+    type: 'EventSourceInit',
+    isOptional: true,
+    description:
+      'For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.',
+  },
+  {
+    name: 'fetch',
+    type: 'MastraFetchLike',
+    isOptional: true,
+    description:
+      'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
+  },
+  {
+    name: 'logger',
+    type: 'LogHandler',
+    isOptional: true,
+    description: 'Optional additional handler for logging.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    description: 'Server-specific timeout in milliseconds.',
+  },
+  {
+    name: 'capabilities',
+    type: 'ClientCapabilities',
+    isOptional: true,
+    description: 'Server-specific capabilities configuration.',
+  },
+  {
+    name: 'authProvider',
+    type: 'OAuthClientProvider',
+    isOptional: true,
+    description:
+      'For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.',
+  },
+  {
+    name: 'enableServerLogs',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Whether to enable logging for this server.',
+  },
 ]}
 />
 
