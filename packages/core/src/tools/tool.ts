@@ -202,6 +202,11 @@ export class Tool<
   >['onOutput'];
 
   /**
+   * Examples of valid tool inputs passed through to the AI SDK.
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -228,6 +233,7 @@ export class Tool<
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
+    this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
     this.onInputStart = opts.onInputStart;
     this.onInputDelta = opts.onInputDelta;
