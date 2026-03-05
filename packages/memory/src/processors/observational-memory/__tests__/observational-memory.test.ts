@@ -4957,7 +4957,7 @@ describe('Async Buffering Processor Logic', () => {
       expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
 
-    it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
+    it('should use smaller async buffering intervals once pending tokens reach the warm band (>=0.8x threshold)', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
@@ -4970,30 +4970,20 @@ describe('Async Buffering Processor Logic', () => {
         reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
 
-      // threshold=40000, bufferTokens=4000, rampPoint=40000-4000*1.1=35600, halved=2000
-      const lockKey = 'thread:halve-test';
+      const lockKey = 'thread:warm-band-test';
 
-      // Well below ramp point (35600): normal 4000 interval
-      // At 3000 tokens, interval = floor(3000/4000) = 0, last = 0 → no trigger
+      // Base interval: 4000
       expect((om as any).shouldTriggerAsyncObservation(3000, lockKey, mockRecord, 40000)).toBe(false);
-      // At 4000 tokens, interval = floor(4000/4000) = 1, last = 0 → trigger
       expect((om as any).shouldTriggerAsyncObservation(4000, lockKey, mockRecord, 40000)).toBe(true);
 
-      // Still below ramp point: normal 4000 interval
+      // Warm band starts at >= 0.8x threshold (32000), interval halves to 2000.
       const recordAt32k = { isBufferingObservation: false, lastBufferedAtTokens: 32000 } as any;
-      // At 35000 tokens (below rampPoint 35600), interval = floor(35000/4000) = 8, last = floor(32000/4000) = 8 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(false);
-
-      // Above ramp point (35600): halved 2000 interval
-      // At 36000 tokens, halved interval = 2000
-      // interval = floor(36000/2000) = 18, last = floor(32000/2000) = 16 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(true);
       expect((om as any).shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, 40000)).toBe(true);
 
-      // Simulate buffering at 36000
+      // Simulate buffering at 36000 with 2000-token interval
       const recordAt36k = { isBufferingObservation: false, lastBufferedAtTokens: 36000 } as any;
-      // At 37000 tokens, interval = floor(37000/2000) = 18, last = floor(36000/2000) = 18 → no trigger
       expect((om as any).shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, 40000)).toBe(false);
-      // At 38000 tokens, interval = floor(38000/2000) = 19, last = 18 → trigger
       expect((om as any).shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, 40000)).toBe(true);
     });
 
@@ -5809,6 +5799,36 @@ describe('Full Async Buffering Flow', () => {
 
     // Observer should have been called for buffering
     expect(observerCalls.length).toBeGreaterThan(0);
+  });
+
+  it('should pre-seal unobserved messages when near threshold before activation', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 800,
+      bufferActivation: 1000,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 12,
+    });
+
+    await step(0);
+    await waitForAsyncOps();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 200,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const sealedCount = messages.filter(m => {
+      const metadata = m.content?.metadata as { mastra?: { sealed?: boolean } } | undefined;
+      return metadata?.mastra?.sealed === true;
+    }).length;
+
+    expect(sealedCount).toBeGreaterThan(0);
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record).toBeDefined();
   });
 
   it('should activate buffered observations when threshold is reached', async () => {
@@ -7699,6 +7719,189 @@ describe('Full Async Buffering Flow', () => {
 
     const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
     expect(chunkMsgIds.some(id => !remainingIds.has(id))).toBe(true);
+  });
+
+  it('should back off removals when projection drifts and final remaining tokens would fall below the floor', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999,
+      bufferTokens: 999998,
+      bufferActivation: 0.5,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 20,
+    });
+
+    const messageListAfterStep0 = await step(0);
+    await waitForAsyncOps();
+
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const chunkMsgIds = contextMsgs.slice(0, 10).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(10);
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+
+    await storage.updateBufferedObservations({
+      id: recordId,
+      chunk: {
+        observations: 'Manual chunk projection-drift observations',
+        tokenCount: 120,
+        messageIds: chunkMsgIds,
+        messageTokens: 3000,
+        lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, 30)),
+        cycleId: 'manual-cycle-projection-drift',
+      },
+    });
+
+    (om as any).observationConfig.messageTokens = 1000;
+    (om as any).observationConfig.bufferTokens = 500;
+    (om as any).observationConfig.blockAfter = 1200;
+    (om as any).observationConfig.bufferActivation = 2000;
+
+    const expectedFloor = resolveRetentionFloor(
+      (om as any).observationConfig.bufferActivation,
+      (om as any).observationConfig.messageTokens,
+    );
+
+    const omCounter = (om as any).tokenCounter;
+    const originalCountMessages = omCounter.countMessages.bind(omCounter);
+    omCounter.countMessages = (messages: any[]) => {
+      if (Array.isArray(messages) && messages.length > 0) {
+        return expectedFloor + 200;
+      }
+      return originalCountMessages(messages);
+    };
+
+    try {
+      const messageListAfterStep1 = await step(1);
+      await waitForAsyncOps();
+
+      const remainingMessages = messageListAfterStep1.get.all.db();
+      const remainingTokens = new TokenCounter().countMessages(remainingMessages);
+      expect(remainingTokens).toBeGreaterThanOrEqual(Math.floor(expectedFloor * 0.65));
+    } finally {
+      omCounter.countMessages = originalCountMessages;
+    }
+  });
+
+  it('should retain floor after real multi-chunk buffered activation without monkeypatching counter methods', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999,
+      bufferTokens: 999998,
+      bufferActivation: 0.5,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 40,
+    });
+
+    const tokenFlood = 'token '.repeat(1400);
+    const extraMessages = Array.from({ length: 40 }, (_, i) => ({
+      id: `flood-${i}`,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Flood ${i}: ${tokenFlood}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 10, i)),
+      threadId,
+      resourceId,
+    }));
+    await storage.saveMessages({ messages: extraMessages as any });
+
+    const messageListAfterStep0 = await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const candidateIds = contextMsgs.slice(0, 33).map((m: any) => m.id);
+    expect(candidateIds.length).toBe(33);
+
+    const chunkGroups = [
+      candidateIds.slice(0, 5),
+      candidateIds.slice(5, 10),
+      candidateIds.slice(10, 15),
+      candidateIds.slice(15, 20),
+      candidateIds.slice(20, 25),
+      candidateIds.slice(25, 29),
+      candidateIds.slice(29, 33),
+    ];
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+
+    for (let i = 0; i < chunkGroups.length; i++) {
+      const group = chunkGroups[i]!;
+      await storage.updateBufferedObservations({
+        id: recordId,
+        chunk: {
+          observations: `Manual chunk non-monkeypatch observations ${i}`,
+          tokenCount: 372,
+          messageIds: group,
+          messageTokens: 4211,
+          lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, 40 + i)),
+          cycleId: `manual-cycle-non-monkeypatch-${i}`,
+        },
+      });
+    }
+
+    (om as any).observationConfig.messageTokens = 30000;
+    (om as any).observationConfig.bufferTokens = 6000;
+    (om as any).observationConfig.blockAfter = 60000;
+    (om as any).observationConfig.bufferActivation = 2000;
+
+    const expectedFloor = resolveRetentionFloor(
+      (om as any).observationConfig.bufferActivation,
+      (om as any).observationConfig.messageTokens,
+    );
+
+    let capturedObservedIds: string[] | undefined;
+    let capturedMinRemaining: number | undefined;
+    const originalCleanup = (om as any).cleanupAfterObservation.bind(om);
+    (om as any).cleanupAfterObservation = async (...args: any[]) => {
+      capturedObservedIds = args[5];
+      capturedMinRemaining = args[6];
+      return originalCleanup(...args);
+    };
+
+    const messageListAfterStep1 = await step(1);
+    await waitForAsyncOps();
+
+    const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordAfterStep1?.activeObservations).toContain('Manual chunk non-monkeypatch observations');
+
+    (om as any).cleanupAfterObservation = originalCleanup;
+
+    expect(capturedMinRemaining).toBe(expectedFloor);
+    expect(capturedObservedIds?.length).toBe(33);
+
+    const remainingMessages = messageListAfterStep1.get.all.db();
+    const remainingTokensCached = new TokenCounter().countMessages(remainingMessages);
+
+    const uncachedMessages = JSON.parse(JSON.stringify(remainingMessages));
+    for (const msg of uncachedMessages) {
+      if (msg?.content?.parts && Array.isArray(msg.content.parts)) {
+        for (const part of msg.content.parts) {
+          if (part?.providerMetadata?.mastra?.tokenEstimate) {
+            delete part.providerMetadata.mastra.tokenEstimate;
+          }
+        }
+      }
+      if (msg?.content?.metadata?.mastra?.tokenEstimate) {
+        delete msg.content.metadata.mastra.tokenEstimate;
+      }
+      if (msg?.metadata?.mastra?.tokenEstimate) {
+        delete msg.metadata.mastra.tokenEstimate;
+      }
+    }
+
+    const remainingTokensUncached = new TokenCounter().countMessages(uncachedMessages);
+
+    expect(remainingTokensCached).toBeGreaterThanOrEqual(expectedFloor);
+    expect(Math.abs(remainingTokensCached - remainingTokensUncached)).toBeLessThanOrEqual(100);
+
+    const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
+    expect(candidateIds.some(id => !remainingIds.has(id))).toBe(true);
+    expect(remainingMessages.length).toBeGreaterThan(2);
   });
 
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {
