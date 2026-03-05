@@ -198,7 +198,15 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const isTaskWrite = this.toolName === 'task_write';
     const isWebSearch = isWebSearchTool(this.toolName);
 
-    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite || isWebSearch) {
+    if (
+      isShellCommand ||
+      isViewCommand ||
+      isEditCommand ||
+      isWriteCommand ||
+      isProcessCommand ||
+      isTaskWrite ||
+      isWebSearch
+    ) {
       // No background - let terminal colors show through
       this.contentBox.setBgFn((text: string) => text);
       return;
