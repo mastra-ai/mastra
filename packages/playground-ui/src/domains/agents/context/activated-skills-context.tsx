@@ -60,16 +60,14 @@ export function ActivatedSkillsProvider({ children }: ActivatedSkillsProviderPro
   );
 }
 
+const FALLBACK_CONTEXT: ActivatedSkillsContextValue = {
+  activatedSkills: new Set<string>(),
+  activateSkill: () => {},
+  deactivateSkill: () => {},
+  isSkillActivated: () => false,
+  clearActivatedSkills: () => {},
+};
+
 export function useActivatedSkills(): ActivatedSkillsContextValue {
-  const context = useContext(ActivatedSkillsContext);
-  if (!context) {
-    return {
-      activatedSkills: new Set(),
-      activateSkill: () => {},
-      deactivateSkill: () => {},
-      isSkillActivated: () => false,
-      clearActivatedSkills: () => {},
-    };
-  }
-  return context;
+  return useContext(ActivatedSkillsContext) ?? FALLBACK_CONTEXT;
 }
