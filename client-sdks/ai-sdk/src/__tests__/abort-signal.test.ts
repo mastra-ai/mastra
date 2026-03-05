@@ -1,9 +1,9 @@
 /**
  * Tests for issue #13038: chatRoute should pass abort signal to enable request cancellation.
  */
+import type { UIMessage } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import type { UIMessage } from 'ai';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 
