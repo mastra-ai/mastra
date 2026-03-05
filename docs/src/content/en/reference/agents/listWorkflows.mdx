@@ -19,28 +19,27 @@ await agent.listWorkflows()
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "{ requestContext?: RequestContext }",
-isOptional: true,
-defaultValue: "{}",
-description: "Optional configuration object containing request context.",
-properties: [
-{
-type: "{ requestContext?: RequestContext }",
-parameters: [
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "new RequestContext()",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-],
-},
-],
-},
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'new RequestContext()',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -48,12 +47,11 @@ description:
 
 <PropertiesTable
   content={[
-{
-name: "workflows",
-type: "Promise<Record<string, Workflow>>",
-description:
-"A promise that resolves to a record of workflow names to their corresponding Workflow instances.",
-},
+  {
+    name: 'workflows',
+    type: 'Promise<Record<string, Workflow>>',
+    description: 'A promise that resolves to a record of workflow names to their corresponding Workflow instances.',
+  },
 ]}
 />
 

@@ -32,52 +32,54 @@ const toolSearch = new ToolSearchProcessor({
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "ToolSearchProcessorOptions",
-description: "Configuration options for the tool search processor",
-isOptional: false,
-properties: [
-{
-type: "ToolSearchProcessorOptions",
-parameters: [
-{
-name: "tools",
-type: "Record<string, Tool>",
-description: "All tools that can be searched and loaded dynamically. These tools are not immediately available to the agent — they must be discovered via search and loaded on demand.",
-isOptional: false,
-},
-{
-name: "search",
-type: "{ topK?: number; minScore?: number }",
-description: "Configuration for the search behavior.",
-isOptional: true,
-},
-{
-name: "search.topK",
-type: "number",
-description: "Maximum number of tools to return in search results.",
-isOptional: true,
-default: "5",
-},
-{
-name: "search.minScore",
-type: "number",
-description: "Minimum relevance score (0-1) for including a tool in search results.",
-isOptional: true,
-default: "0",
-},
-{
-name: "ttl",
-type: "number",
-description: "Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.",
-isOptional: true,
-default: "3600000",
-},
-],
-},
-],
-},
+  {
+    name: 'options',
+    type: 'ToolSearchProcessorOptions',
+    description: 'Configuration options for the tool search processor',
+    isOptional: false,
+    properties: [
+      {
+        type: 'ToolSearchProcessorOptions',
+        parameters: [
+          {
+            name: 'tools',
+            type: 'Record<string, Tool>',
+            description:
+              'All tools that can be searched and loaded dynamically. These tools are not immediately available to the agent — they must be discovered via search and loaded on demand.',
+            isOptional: false,
+          },
+          {
+            name: 'search',
+            type: '{ topK?: number; minScore?: number }',
+            description: 'Configuration for the search behavior.',
+            isOptional: true,
+          },
+          {
+            name: 'search.topK',
+            type: 'number',
+            description: 'Maximum number of tools to return in search results.',
+            isOptional: true,
+            default: '5',
+          },
+          {
+            name: 'search.minScore',
+            type: 'number',
+            description: 'Minimum relevance score (0-1) for including a tool in search results.',
+            isOptional: true,
+            default: '0',
+          },
+          {
+            name: 'ttl',
+            type: 'number',
+            description:
+              'Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.',
+            isOptional: true,
+            default: '3600000',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -85,24 +87,25 @@ default: "3600000",
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Processor identifier set to 'tool-search'",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Processor display name set to 'Tool Search Processor'",
-isOptional: false,
-},
-{
-name: "processInputStep",
-type: "(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>",
-description: "Processes each step to inject search/load meta-tools and any previously loaded tools into the agent's tool set.",
-isOptional: false,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'tool-search'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Processor display name set to 'Tool Search Processor'",
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
+    description:
+      "Processes each step to inject search/load meta-tools and any previously loaded tools into the agent's tool set.",
+    isOptional: false,
+  },
 ]}
 />
 

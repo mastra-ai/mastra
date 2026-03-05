@@ -57,12 +57,12 @@ await voice.connect({
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "Record<string, unknown>",
-description: "Provider-specific connection options",
-isOptional: true,
-},
+  {
+    name: 'options',
+    type: 'Record<string, unknown>',
+    description: 'Provider-specific connection options',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -78,20 +78,20 @@ Each real-time voice provider may support different options for the `connect()` 
 
 <PropertiesTable
   content={[
-{
-name: "options.timeout",
-type: "number",
-description: "Connection timeout in milliseconds",
-isOptional: true,
-defaultValue: "30000",
-},
-{
-name: "options.reconnect",
-type: "boolean",
-description: "Whether to automatically reconnect on connection loss",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'options.timeout',
+    type: 'number',
+    description: 'Connection timeout in milliseconds',
+    isOptional: true,
+    defaultValue: '30000',
+  },
+  {
+    name: 'options.reconnect',
+    type: 'boolean',
+    description: 'Whether to automatically reconnect on connection loss',
+    isOptional: true,
+    defaultValue: 'false',
+  },
 ]}
 />
 

@@ -14,22 +14,22 @@ It provides vector search capabilities with enterprise-grade scalability and hig
 
 <PropertiesTable
   content={[
-{
-name: "token",
-type: "string",
-description: "Astra DB API token",
-},
-{
-name: "endpoint",
-type: "string",
-description: "Astra DB API endpoint",
-},
-{
-name: "keyspace",
-type: "string",
-isOptional: true,
-description: "Optional keyspace name",
-},
+  {
+    name: 'token',
+    type: 'string',
+    description: 'Astra DB API token',
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Astra DB API endpoint',
+  },
+  {
+    name: 'keyspace',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional keyspace name',
+  },
 ]}
 />
 
@@ -39,24 +39,23 @@ description: "Optional keyspace name",
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to create",
-},
-{
-name: "dimension",
-type: "number",
-description: "Vector dimension (must match your embedding model)",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description:
-"Distance metric for similarity search (maps to dot_product for dotproduct)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search (maps to dot_product for dotproduct)',
+  },
 ]}
 />
 
@@ -64,28 +63,28 @@ description:
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to upsert into",
-},
-{
-name: "vectors",
-type: "number[][]",
-description: "Array of embedding vectors",
-},
-{
-name: "metadata",
-type: "Record<string, any>[]",
-isOptional: true,
-description: "Metadata for each vector",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Optional vector IDs (auto-generated if not provided)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to upsert into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
 ]}
 />
 
@@ -93,36 +92,36 @@ description: "Optional vector IDs (auto-generated if not provided)",
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to query",
-},
-{
-name: "queryVector",
-type: "number[]",
-description: "Query vector to find similar vectors",
-},
-{
-name: "topK",
-type: "number",
-isOptional: true,
-defaultValue: "10",
-description: "Number of results to return",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filters for the query",
-},
-{
-name: "includeVector",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include vectors in the results",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to query',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters for the query',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include vectors in the results',
+  },
 ]}
 />
 
@@ -134,11 +133,11 @@ Returns an array of index names as strings.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to describe",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to describe',
+  },
 ]}
 />
 
@@ -156,11 +155,11 @@ interface IndexStats {
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to delete',
+  },
 ]}
 />
 
@@ -168,35 +167,35 @@ description: "Name of the index to delete",
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the vector to update",
-},
-{
-name: "update",
-type: "object",
-description: "Update object containing vector and/or metadata changes",
-properties: [
-{
-name: "vector",
-type: "number[]",
-isOptional: true,
-description: "New vector values",
-},
-{
-name: "metadata",
-type: "Record<string, any>",
-isOptional: true,
-description: "New metadata values",
-},
-],
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector to update',
+  },
+  {
+    name: 'update',
+    type: 'object',
+    description: 'Update object containing vector and/or metadata changes',
+    properties: [
+      {
+        name: 'vector',
+        type: 'number[]',
+        isOptional: true,
+        description: 'New vector values',
+      },
+      {
+        name: 'metadata',
+        type: 'Record<string, any>',
+        isOptional: true,
+        description: 'New metadata values',
+      },
+    ],
+  },
 ]}
 />
 
@@ -204,16 +203,16 @@ description: "New metadata values",
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the index containing the vector",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the vector to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector to delete',
+  },
 ]}
 />
 
