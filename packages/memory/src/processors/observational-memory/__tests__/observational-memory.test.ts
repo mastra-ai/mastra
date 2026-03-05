@@ -3,6 +3,7 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import { getUnobservedMessages, applySealToMessages } from '../message-parts';
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
@@ -21,6 +22,11 @@ import {
   validateCompression,
   buildReflectorSystemPrompt,
 } from '../reflector-agent';
+import {
+  combineObservationsForBuffering,
+  replaceOrAppendThreadSection,
+  sortThreadsByOldestMessage,
+} from '../thread-utils';
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 
@@ -2589,7 +2595,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = replaceOrAppendThreadSection(existing, threadId, newSection);
 
       expect(result).toBe(newSection);
     });
@@ -2599,7 +2605,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 New observation\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = replaceOrAppendThreadSection(existing, threadId, newSection);
 
       expect(result).toContain(existing);
       expect(result).toContain(newSection);
@@ -2617,7 +2623,7 @@ describe('Thread Attribution Helpers', () => {
       const threadId = 'thread-1';
       const newSection = '<thread id="thread-1">\n- 🔴 Updated observation\n- 🟡 New detail\n</thread>';
 
-      const result = (om as any).replaceOrAppendThreadSection(existing, threadId, newSection);
+      const result = replaceOrAppendThreadSection(existing, threadId, newSection);
 
       // Should append, not replace - preserves temporal ordering
       expect(result).toContain(newSection);
@@ -2650,7 +2656,7 @@ describe('Thread Attribution Helpers', () => {
         ['thread-middle', [{ ...createTestMessage('msg5'), createdAt: new Date(now - 5000) }]],
       ]);
 
-      const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
+      const result = sortThreadsByOldestMessage(messagesByThread);
 
       expect(result).toEqual(['thread-oldest', 'thread-middle', 'thread-recent']);
     });
@@ -2662,7 +2668,7 @@ describe('Thread Attribution Helpers', () => {
         ['thread-no-date', [{ ...createTestMessage('msg2'), createdAt: undefined as any }]],
       ]);
 
-      const result = (om as any).sortThreadsByOldestMessage(messagesByThread);
+      const result = sortThreadsByOldestMessage(messagesByThread);
 
       // Thread with no date should be treated as "now" (most recent)
       expect(result[0]).toBe('thread-with-date');
@@ -4587,13 +4593,6 @@ describe('Async Buffering Processor Logic', () => {
   describe('getUnobservedMessages filtering with buffered chunks', () => {
     it('should exclude messages already in buffered chunks from unobserved list', async () => {
       const storage = createInMemoryStorage();
-      const om = new ObservationalMemory({
-        storage,
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
 
       const record = await storage.initializeObservationalMemory({
         threadId: 'thread-1',
@@ -4625,11 +4624,11 @@ describe('Async Buffering Processor Logic', () => {
       ];
 
       // Default: buffered messages are NOT excluded (main agent still sees them)
-      const unobserved = (om as any).getUnobservedMessages(allMessages, updatedRecord!);
+      const unobserved = getUnobservedMessages(allMessages, updatedRecord!);
       expect(unobserved).toHaveLength(3);
 
       // With excludeBuffered: buffered messages ARE excluded (buffering path only)
-      const unobservedForBuffering = (om as any).getUnobservedMessages(allMessages, updatedRecord!, {
+      const unobservedForBuffering = getUnobservedMessages(allMessages, updatedRecord!, {
         excludeBuffered: true,
       });
       expect(unobservedForBuffering).toHaveLength(1);
@@ -4638,13 +4637,6 @@ describe('Async Buffering Processor Logic', () => {
 
     it('should include all messages when no buffered chunks exist', async () => {
       const storage = createInMemoryStorage();
-      const om = new ObservationalMemory({
-        storage,
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
 
       const record = await storage.initializeObservationalMemory({
         threadId: 'thread-1',
@@ -4654,20 +4646,13 @@ describe('Async Buffering Processor Logic', () => {
       });
 
       const allMessages = createTestMessages(3);
-      const unobserved = (om as any).getUnobservedMessages(allMessages, record);
+      const unobserved = getUnobservedMessages(allMessages, record);
 
       expect(unobserved).toHaveLength(3);
     });
 
     it('should exclude messages in both observedMessageIds and buffered chunks', async () => {
       const storage = createInMemoryStorage();
-      const om = new ObservationalMemory({
-        storage,
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
 
       const record = await storage.initializeObservationalMemory({
         threadId: 'thread-1',
@@ -4708,12 +4693,12 @@ describe('Async Buffering Processor Logic', () => {
       ];
 
       // Default (excludeBuffered=false): only observedMessageIds are excluded, buffered messages still visible
-      const unobservedDefault = (om as any).getUnobservedMessages(allMessages, updatedRecord!);
+      const unobservedDefault = getUnobservedMessages(allMessages, updatedRecord!);
       expect(unobservedDefault).toHaveLength(3);
       expect(unobservedDefault.map((m: MastraDBMessage) => m.id)).toEqual(['msg-1', 'msg-2', 'msg-3']);
 
       // With excludeBuffered=true: both observedMessageIds AND buffered chunks are excluded
-      const unobservedExcluded = (om as any).getUnobservedMessages(allMessages, updatedRecord!, {
+      const unobservedExcluded = getUnobservedMessages(allMessages, updatedRecord!, {
         excludeBuffered: true,
       });
       expect(unobservedExcluded).toHaveLength(2);
@@ -4721,126 +4706,22 @@ describe('Async Buffering Processor Logic', () => {
     });
   });
 
-  describe('getBufferedChunks defensive parsing', () => {
-    it('should return empty array for null record', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).getBufferedChunks(null)).toEqual([]);
-      expect((om as any).getBufferedChunks(undefined)).toEqual([]);
-    });
-
-    it('should return empty array for record without chunks', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).getBufferedChunks({})).toEqual([]);
-      expect((om as any).getBufferedChunks({ bufferedObservationChunks: undefined })).toEqual([]);
-    });
-
-    it('should parse JSON string chunks', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }];
-      const result = (om as any).getBufferedChunks({
-        bufferedObservationChunks: JSON.stringify(chunks),
-      });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].observations).toBe('- test');
-    });
-
-    it('should return empty array for invalid JSON string', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).getBufferedChunks({ bufferedObservationChunks: 'not-json' })).toEqual([]);
-      expect((om as any).getBufferedChunks({ bufferedObservationChunks: '42' })).toEqual([]);
-    });
-
-    it('should pass through array chunks directly', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      const chunks = [{ observations: '- test', tokenCount: 10, messageIds: ['msg-1'], cycleId: 'c1' }];
-      expect((om as any).getBufferedChunks({ bufferedObservationChunks: chunks })).toBe(chunks);
-    });
-  });
-
   describe('combineObservationsForBuffering', () => {
     it('should return undefined when both are empty', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).combineObservationsForBuffering(undefined, undefined)).toBeUndefined();
-      expect((om as any).combineObservationsForBuffering('', '')).toBeUndefined();
+      expect(combineObservationsForBuffering(undefined, undefined)).toBeUndefined();
+      expect(combineObservationsForBuffering('', '')).toBeUndefined();
     });
 
     it('should return active observations when no buffered', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).combineObservationsForBuffering('- Active obs', undefined)).toBe('- Active obs');
+      expect(combineObservationsForBuffering('- Active obs', undefined)).toBe('- Active obs');
     });
 
     it('should return buffered observations when no active', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      expect((om as any).combineObservationsForBuffering(undefined, '- Buffered obs')).toBe('- Buffered obs');
+      expect(combineObservationsForBuffering(undefined, '- Buffered obs')).toBe('- Buffered obs');
     });
 
     it('should combine both with separator when both present', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
-      const result = (om as any).combineObservationsForBuffering('- Active', '- Buffered');
+      const result = combineObservationsForBuffering('- Active', '- Buffered');
       expect(result).toContain('- Active');
       expect(result).toContain('- Buffered');
       expect(result).toContain('BUFFERED (pending activation)');
@@ -5157,22 +5038,14 @@ describe('Async Buffering Processor Logic', () => {
     });
   });
 
-  describe('sealMessagesForBuffering', () => {
+  describe('applySealToMessages', () => {
     it('should set sealed metadata on messages', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
       const messages = [
         createTestMessage('Message 1', 'user', 'msg-1'),
         createTestMessage('Message 2', 'assistant', 'msg-2'),
       ];
 
-      (om as any).sealMessagesForBuffering(messages);
+      applySealToMessages(messages);
 
       for (const msg of messages) {
         const metadata = msg.content.metadata as { mastra?: { sealed?: boolean } };
@@ -5186,19 +5059,11 @@ describe('Async Buffering Processor Logic', () => {
     });
 
     it('should skip messages without parts', () => {
-      const om = new ObservationalMemory({
-        storage: createInMemoryStorage(),
-        scope: 'thread',
-        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
-        observation: { messageTokens: 50000 },
-        reflection: { observationTokens: 20000 },
-      });
-
       const msg = createTestMessage('Test', 'user', 'msg-1');
       msg.content.parts = [];
 
       // Should not throw
-      (om as any).sealMessagesForBuffering([msg]);
+      applySealToMessages([msg]);
       expect(msg.content.metadata).toBeUndefined();
     });
   });
