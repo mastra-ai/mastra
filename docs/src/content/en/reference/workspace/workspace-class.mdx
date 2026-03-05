@@ -374,30 +374,31 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
 
 <PropertiesTable
   content={[
-{
-name: "backgroundProcesses.onStdout",
-type: "(data: string, meta: BackgroundProcessMeta) => void",
-description: "Callback for stdout chunks from background processes.",
-isOptional: true,
-},
-{
-name: "backgroundProcesses.onStderr",
-type: "(data: string, meta: BackgroundProcessMeta) => void",
-description: "Callback for stderr chunks from background processes.",
-isOptional: true,
-},
-{
-name: "backgroundProcesses.onExit",
-type: "(meta: BackgroundProcessExitMeta) => void",
-description: "Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.",
-isOptional: true,
-},
-{
-name: "backgroundProcesses.abortSignal",
-type: "AbortSignal | null | false",
-description: "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
-isOptional: true,
-},
+  {
+    name: 'backgroundProcesses.onStdout',
+    type: '(data: string, meta: BackgroundProcessMeta) => void',
+    description: 'Callback for stdout chunks from background processes.',
+    isOptional: true,
+  },
+  {
+    name: 'backgroundProcesses.onStderr',
+    type: '(data: string, meta: BackgroundProcessMeta) => void',
+    description: 'Callback for stderr chunks from background processes.',
+    isOptional: true,
+  },
+  {
+    name: 'backgroundProcesses.onExit',
+    type: '(meta: BackgroundProcessExitMeta) => void',
+    description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
+    isOptional: true,
+  },
+  {
+    name: 'backgroundProcesses.abortSignal',
+    type: 'AbortSignal | null | false',
+    description:
+      "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
+    isOptional: true,
+  },
 ]}
 />
 
