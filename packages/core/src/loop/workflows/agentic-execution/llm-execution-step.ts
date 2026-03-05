@@ -266,7 +266,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   args: chunk.payload.args ?? {},
                 },
                 providerMetadata: chunk.payload.providerMetadata,
-                providerExecuted: chunk.payload.providerExecuted,
+                ...({ providerExecuted: chunk.payload.providerExecuted } as { providerExecuted: boolean | undefined }),
               },
             ],
           },
