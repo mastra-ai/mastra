@@ -607,6 +607,7 @@ export type DataChunkType = {
   type: `data-${string}`;
   data: any;
   id?: string;
+  /** When true, the chunk is streamed to the client but not persisted to storage. */
   transient?: boolean;
 };
 
