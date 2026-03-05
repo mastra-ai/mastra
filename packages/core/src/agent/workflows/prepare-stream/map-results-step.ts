@@ -19,6 +19,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   resourceId?: string;
+  threadId?: string;
   runId: string;
   requestContext: RequestContext;
   memory?: MastraMemory;
@@ -36,6 +37,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   capabilities,
   options,
   resourceId,
+  threadId: threadIdFromArgs,
   runId,
   requestContext,
   memory,
@@ -66,7 +68,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       temperature: options.modelSettings?.temperature,
       toolChoice: options.toolChoice,
       thread: memoryData.thread,
-      threadId: memoryData.thread?.id,
+      threadId: memoryData.thread?.id ?? threadIdFromArgs,
       resourceId,
       requestContext,
       messageList: memoryData.messageList,
