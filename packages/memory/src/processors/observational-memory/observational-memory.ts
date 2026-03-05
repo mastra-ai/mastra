@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
@@ -18,77 +17,6 @@ import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk
 import xxhash from 'xxhash-wasm';
 
 const OM_DEBUG_LOG = process.env.OM_DEBUG ? join(process.cwd(), 'om-debug.log') : null;
-const OM_REPRO_CAPTURE_ENABLED = process.env.OM_REPRO_CAPTURE === '1';
-const OM_REPRO_CAPTURE_DIR = process.env.OM_REPRO_CAPTURE_DIR ?? '.mastra-om-repro';
-
-function safeCaptureJson(value: unknown): unknown {
-  return JSON.parse(
-    JSON.stringify(value, (_key, current) => {
-      if (typeof current === 'bigint') return current.toString();
-      if (typeof current === 'function') return '[function]';
-      if (current instanceof Error) return { name: current.name, message: current.message, stack: current.stack };
-      if (current instanceof Set) return { __type: 'Set', values: Array.from(current.values()) };
-      if (current instanceof Map) return { __type: 'Map', entries: Array.from(current.entries()) };
-      return current;
-    }),
-  );
-}
-
-function buildReproMessageFingerprint(message: MastraDBMessage): string {
-  const createdAt =
-    message.createdAt instanceof Date
-      ? message.createdAt.toISOString()
-      : message.createdAt
-        ? new Date(message.createdAt).toISOString()
-        : '';
-
-  return JSON.stringify({
-    role: message.role,
-    createdAt,
-    content: message.content,
-  });
-}
-
-function inferReproIdRemap(
-  preMessages: MastraDBMessage[],
-  postMessages: MastraDBMessage[],
-): Array<{ fromId: string; toId: string; fingerprint: string }> {
-  const preByFingerprint = new Map<string, string[]>();
-  const postByFingerprint = new Map<string, string[]>();
-
-  for (const message of preMessages) {
-    if (!message.id) continue;
-    const fingerprint = buildReproMessageFingerprint(message);
-    const list = preByFingerprint.get(fingerprint) ?? [];
-    list.push(message.id);
-    preByFingerprint.set(fingerprint, list);
-  }
-
-  for (const message of postMessages) {
-    if (!message.id) continue;
-    const fingerprint = buildReproMessageFingerprint(message);
-    const list = postByFingerprint.get(fingerprint) ?? [];
-    list.push(message.id);
-    postByFingerprint.set(fingerprint, list);
-  }
-
-  const remap: Array<{ fromId: string; toId: string; fingerprint: string }> = [];
-
-  for (const [fingerprint, preIds] of preByFingerprint.entries()) {
-    const postIds = postByFingerprint.get(fingerprint);
-    if (!postIds || preIds.length !== 1 || postIds.length !== 1) continue;
-
-    const fromId = preIds[0];
-    const toId = postIds[0];
-    if (!fromId || !toId || fromId === toId) {
-      continue;
-    }
-
-    remap.push({ fromId, toId, fingerprint });
-  }
-
-  return remap;
-}
 
 function omDebug(msg: string) {
   if (!OM_DEBUG_LOG) return;
@@ -143,6 +71,7 @@ import {
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import { safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -2040,101 +1969,6 @@ ${suggestedResponse}
     return content;
   }
 
-  private writeProcessInputStepReproCapture(params: {
-    threadId: string;
-    resourceId?: string;
-    stepNumber: number;
-    args: ProcessInputStepArgs;
-    preRecord: ObservationalMemoryRecord;
-    postRecord: ObservationalMemoryRecord;
-    preMessages: MastraDBMessage[];
-    preSerializedMessageList: ReturnType<MessageList['serialize']>;
-    messageList: MessageList;
-    details: Record<string, unknown>;
-  }) {
-    if (!OM_REPRO_CAPTURE_ENABLED) {
-      return;
-    }
-
-    try {
-      const runId = `${Date.now()}-step-${params.stepNumber}-${randomUUID()}`;
-      const captureDir = join(process.cwd(), OM_REPRO_CAPTURE_DIR, params.threadId, runId);
-      mkdirSync(captureDir, { recursive: true });
-
-      const contextMessages = params.messageList.get.all.db();
-      const memoryContext = parseMemoryRequestContext(params.args.requestContext);
-      const preMessageIds = new Set(params.preMessages.map(message => message.id));
-      const postMessageIds = new Set(contextMessages.map(message => message.id));
-      const removedMessageIds = params.preMessages
-        .map(message => message.id)
-        .filter((id): id is string => Boolean(id) && !postMessageIds.has(id));
-      const addedMessageIds = contextMessages
-        .map(message => message.id)
-        .filter((id): id is string => Boolean(id) && !preMessageIds.has(id));
-      const idRemap = inferReproIdRemap(params.preMessages, contextMessages);
-
-      const rawState = (params.args.state as Record<string, unknown>) ?? {};
-      const inputPayload = safeCaptureJson({
-        stepNumber: params.stepNumber,
-        threadId: params.threadId,
-        resourceId: params.resourceId,
-        readOnly: memoryContext?.memoryConfig?.readOnly,
-        messageCount: contextMessages.length,
-        messageIds: contextMessages.map(message => message.id),
-        stateKeys: Object.keys(rawState),
-        state: rawState,
-        args: {
-          messages: params.args.messages,
-          steps: params.args.steps,
-          systemMessages: params.args.systemMessages,
-          retryCount: params.args.retryCount,
-          tools: params.args.tools,
-          toolChoice: params.args.toolChoice,
-          activeTools: params.args.activeTools,
-          providerOptions: params.args.providerOptions,
-          modelSettings: params.args.modelSettings,
-          structuredOutput: params.args.structuredOutput,
-        },
-      });
-
-      const preStatePayload = safeCaptureJson({
-        record: params.preRecord,
-        bufferedChunks: this.getBufferedChunks(params.preRecord),
-        contextTokenCount: this.tokenCounter.countMessages(params.preMessages),
-        messages: params.preMessages,
-        messageList: params.preSerializedMessageList,
-      });
-
-      const outputPayload = safeCaptureJson({
-        details: params.details,
-        messageDiff: {
-          removedMessageIds,
-          addedMessageIds,
-          idRemap,
-        },
-      });
-
-      const postStatePayload = safeCaptureJson({
-        record: params.postRecord,
-        bufferedChunks: this.getBufferedChunks(params.postRecord),
-        contextTokenCount: this.tokenCounter.countMessages(contextMessages),
-        messageCount: contextMessages.length,
-        messageIds: contextMessages.map(message => message.id),
-        messages: contextMessages,
-        messageList: params.messageList.serialize(),
-      });
-
-      writeFileSync(join(captureDir, 'input.json'), `${JSON.stringify(inputPayload, null, 2)}\n`);
-      writeFileSync(join(captureDir, 'pre-state.json'), `${JSON.stringify(preStatePayload, null, 2)}\n`);
-      writeFileSync(join(captureDir, 'output.json'), `${JSON.stringify(outputPayload, null, 2)}\n`);
-      writeFileSync(join(captureDir, 'post-state.json'), `${JSON.stringify(postStatePayload, null, 2)}\n`);
-
-      omDebug(`[OM:repro-capture] wrote processInputStep capture to ${captureDir}`);
-    } catch (error) {
-      omDebug(`[OM:repro-capture] failed to write processInputStep capture: ${String(error)}`);
-    }
-  }
-
   /**
    * Get threadId and resourceId from either RequestContext or MessageList
    */
@@ -3330,7 +3164,7 @@ ${suggestedResponse}
       // Persist the computed token count so the UI can display it on page load
       this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
 
-      this.writeProcessInputStepReproCapture({
+      writeProcessInputStepReproCapture({
         threadId,
         resourceId,
         stepNumber,
@@ -3338,7 +3172,11 @@ ${suggestedResponse}
         preRecord: preRecordSnapshot,
         postRecord: freshRecord,
         preMessages: preMessagesSnapshot,
+        preBufferedChunks: this.getBufferedChunks(preRecordSnapshot),
+        preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
         preSerializedMessageList,
+        postBufferedChunks: this.getBufferedChunks(freshRecord),
+        postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
         messageList,
         details: {
           ...reproCaptureDetails,
@@ -3349,6 +3187,7 @@ ${suggestedResponse}
           otherThreadTokens,
           contextMessageCount: contextMessages.length,
         },
+        debug: omDebug,
       });
     }
 
