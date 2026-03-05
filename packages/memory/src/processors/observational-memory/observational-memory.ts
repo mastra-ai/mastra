@@ -1,7 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Agent } from '@mastra/core/agent';
-import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
+import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
@@ -12,7 +12,7 @@ import type {
   ProcessorStreamWriter,
 } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
@@ -194,6 +194,72 @@ export interface ObservationalMemoryConfig {
    * @default false
    */
   shareTokenBudget?: boolean;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Gateway API types
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Arguments for `prepareContext` — the gateway-friendly entry point that
+ * replaces `processInputStep` step-0 logic.
+ */
+export interface PrepareContextArgs {
+  /** Thread identifier for this conversation */
+  threadId: string;
+  /** Optional resource identifier (user ID) for cross-thread memory */
+  resourceId?: string;
+  /** Current conversation messages (will be loaded from storage if omitted) */
+  messages?: MastraDBMessage[];
+  /** Optional abort signal for cancellation */
+  abortSignal?: AbortSignal;
+  /** Optional stream writer for Playground-style status events */
+  writer?: ProcessorStreamWriter;
+}
+
+/**
+ * Result from `prepareContext` containing enriched messages and observation context.
+ */
+export interface PrepareContextResult {
+  /** The observation system message to prepend to the LLM call (null if no observations exist) */
+  systemMessage: string | null;
+  /**
+   * Messages to send to the LLM, with already-observed messages filtered out.
+   * Includes the continuation hint message when observations are injected.
+   */
+  messages: MastraDBMessage[];
+  /** The OM record for this thread (useful for debugging/inspection) */
+  record: ObservationalMemoryRecord;
+}
+
+/**
+ * Arguments for `processResponse` — saves messages and triggers observation/reflection.
+ */
+export interface ProcessResponseArgs {
+  /** Thread identifier for this conversation */
+  threadId: string;
+  /** Optional resource identifier (user ID) for cross-thread memory */
+  resourceId?: string;
+  /** The user's input messages from this turn */
+  inputMessages: MastraDBMessage[];
+  /** The LLM's response messages from this turn */
+  responseMessages: MastraDBMessage[];
+  /** Optional abort signal for cancellation */
+  abortSignal?: AbortSignal;
+  /** Optional stream writer for Playground-style status events */
+  writer?: ProcessorStreamWriter;
+}
+
+/**
+ * Result from `processResponse`.
+ */
+export interface ProcessResponseResult {
+  /** Whether messages were saved successfully */
+  saved: boolean;
+  /** Whether observation was triggered */
+  observationTriggered: boolean;
+  /** The updated OM record */
+  record: ObservationalMemoryRecord;
 }
 
 /**
@@ -2230,7 +2296,7 @@ ${suggestedResponse}
     lockKey: string,
     writer: ProcessInputStepArgs['writer'],
     abortSignal: ProcessInputStepArgs['abortSignal'],
-    abort: ProcessInputStepArgs['abort'],
+    abort?: ProcessInputStepArgs['abort'],
     requestContext?: RequestContext,
   ): Promise<{
     observationSucceeded: boolean;
@@ -2395,14 +2461,19 @@ ${suggestedResponse}
           const updatedTime = updatedRecord.lastObservedAt?.getTime() ?? 0;
           observationSucceeded = updatedTime > preObservationTime;
         } catch (error) {
-          if (abortSignal?.aborted) {
-            abort('Agent execution was aborted');
+          if (abort) {
+            if (abortSignal?.aborted) {
+              abort('Agent execution was aborted');
+            } else {
+              abort(
+                `Encountered error during memory observation ${error instanceof Error ? error.message : JSON.stringify(error, null, 2)}`,
+              );
+            }
+            // abort() throws, so this line is only reached if abort doesn't throw
           } else {
-            abort(
-              `Encountered error during memory observation ${error instanceof Error ? error.message : JSON.stringify(error, null, 2)}`,
-            );
+            // Gateway context: no abort function, re-throw the error
+            throw error;
           }
-          // abort() throws, so this line is only reached if abort doesn't throw
         }
       }
     });
@@ -5505,5 +5576,347 @@ ${formattedMessages}
    */
   getReflectionConfig(): ResolvedReflectionConfig {
     return this.reflectionConfig;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // GATEWAY API
+  // These methods provide a simpler interface for environments that don't use
+  // Mastra's Agent pipeline (e.g., LLM gateway proxies). They wrap the same
+  // core logic as processInputStep/processOutputResult but accept raw messages
+  // instead of MessageList + ProcessorContext.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Prepare context for an LLM call by loading observations and enriching messages.
+   *
+   * This is the gateway-friendly equivalent of `processInputStep` step-0 logic.
+   * It performs:
+   * 1. Load/create the OM record for this thread
+   * 2. Load historical unobserved messages from storage (merged with provided messages)
+   * 3. Load other threads' unobserved context (resource scope)
+   * 4. Activate buffered observations if threshold is reached
+   * 5. Check and trigger reflection if needed
+   * 6. Build the observation system message
+   * 7. Filter out already-observed messages
+   *
+   * @returns The observation system message and filtered messages to send to the LLM
+   */
+  async prepareContext(args: PrepareContextArgs): Promise<PrepareContextResult> {
+    const { threadId, resourceId, messages: inputMessages, abortSignal: _abortSignal, writer } = args;
+
+    omDebug(
+      `[OM:prepareContext:ENTER] threadId=${threadId}, resourceId=${resourceId ?? 'none'}, inputMsgs=${inputMessages?.length ?? 0}`,
+    );
+
+    // Build a MessageList to reuse existing private methods
+    const messageList = new MessageList({ threadId, resourceId });
+
+    // Build a RequestContext so getThreadContext can resolve threadId/resourceId
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+    });
+
+    // Add caller-provided messages to the message list
+    if (inputMessages && inputMessages.length > 0) {
+      for (const msg of inputMessages) {
+        if (msg.role !== 'system') {
+          messageList.add(msg, 'user');
+        }
+      }
+    }
+
+    // Fetch fresh record
+    let record = await this.getOrCreateRecord(threadId, resourceId);
+    omDebug(
+      `[OM:prepareContext] recordId=${record.id}, genCount=${record.generationCount}, obsTokens=${record.observationTokenCount}, activeObsLen=${record.activeObservations?.length}`,
+    );
+
+    // ── STEP 1: Load historical messages ──
+    const state: Record<string, unknown> = {};
+    await this.loadHistoricalMessagesIfNeeded(messageList, state, threadId, resourceId, record.lastObservedAt);
+
+    // ── STEP 1b: Load other threads' unobserved context (resource scope) ──
+    let unobservedContextBlocks: string | undefined;
+    if (this.scope === 'resource' && resourceId) {
+      unobservedContextBlocks = await this.loadOtherThreadsContext(resourceId, threadId);
+    }
+
+    // ── STEP 1c: Activate buffered observations ──
+    if (this.isAsyncObservationEnabled()) {
+      const lockKey = this.getLockKey(threadId, resourceId);
+      const bufferedChunks = this.getBufferedChunks(record);
+
+      // Reset stale lastBufferedBoundary
+      {
+        const bufKey = this.getObservationBufferKey(lockKey);
+        const dbBoundary = record.lastBufferedAtTokens ?? 0;
+        const currentContextTokens = this.tokenCounter.countMessages(messageList.get.all.db());
+        if (dbBoundary > currentContextTokens) {
+          ObservationalMemory.lastBufferedBoundary.set(bufKey, currentContextTokens);
+          this.storage.setBufferingObservationFlag(record.id, false, currentContextTokens).catch(() => {});
+        }
+      }
+
+      if (bufferedChunks.length > 0) {
+        const allMsgsForCheck = messageList.get.all.db();
+        const unobservedMsgsForCheck = this.getUnobservedMessages(allMsgsForCheck, record);
+        const otherThreadTokensForCheck = unobservedContextBlocks
+          ? this.tokenCounter.countString(unobservedContextBlocks)
+          : 0;
+        const currentObsTokensForCheck = record.observationTokenCount ?? 0;
+        const { totalPendingTokens: step0PendingTokens, threshold: step0Threshold } =
+          this.calculateObservationThresholds(
+            allMsgsForCheck,
+            unobservedMsgsForCheck,
+            0,
+            otherThreadTokensForCheck,
+            currentObsTokensForCheck,
+            record,
+          );
+
+        if (step0PendingTokens >= step0Threshold) {
+          const activationResult = await this.tryActivateBufferedObservations(
+            record,
+            lockKey,
+            step0PendingTokens,
+            writer,
+            messageList,
+          );
+
+          if (activationResult.success && activationResult.updatedRecord) {
+            record = activationResult.updatedRecord;
+
+            const activatedIds = activationResult.activatedMessageIds ?? [];
+            if (activatedIds.length > 0) {
+              const activatedSet = new Set(activatedIds);
+              const allMsgs = messageList.get.all.db();
+              const idsToRemove = allMsgs
+                .filter(msg => msg?.id && msg.id !== 'om-continuation' && activatedSet.has(msg.id))
+                .map(msg => msg.id);
+              if (idsToRemove.length > 0) {
+                messageList.removeByIds(idsToRemove);
+              }
+            }
+
+            this.cleanupStaticMaps(threadId, resourceId, activatedIds);
+
+            const bufKey = this.getObservationBufferKey(lockKey);
+            ObservationalMemory.lastBufferedBoundary.set(bufKey, 0);
+            this.storage.setBufferingObservationFlag(record.id, false, 0).catch(() => {});
+
+            // Propagate continuation hints
+            const thread = await this.storage.getThreadById({ threadId });
+            if (thread) {
+              const newMetadata = setThreadOMMetadata(thread.metadata, {
+                suggestedResponse: activationResult.suggestedContinuation,
+                currentTask: activationResult.currentTask,
+              });
+              await this.storage.updateThread({
+                id: threadId,
+                title: thread.title ?? '',
+                metadata: newMetadata,
+              });
+            }
+
+            // Check reflection
+            await this.maybeReflect({
+              record,
+              observationTokens: record.observationTokenCount ?? 0,
+              threadId,
+              writer,
+              messageList,
+              requestContext,
+            });
+            record = await this.getOrCreateRecord(threadId, resourceId);
+          }
+        }
+      }
+    }
+
+    // ── STEP 1d: Reflection check ──
+    {
+      const obsTokens = record.observationTokenCount ?? 0;
+      if (this.shouldReflect(obsTokens)) {
+        await this.maybeReflect({
+          record,
+          observationTokens: obsTokens,
+          threadId,
+          writer,
+          messageList,
+          requestContext,
+        });
+        record = await this.getOrCreateRecord(threadId, resourceId);
+      } else if (this.isAsyncReflectionEnabled()) {
+        const lockKey = this.getLockKey(threadId, resourceId);
+        if (this.shouldTriggerAsyncReflection(obsTokens, lockKey, record)) {
+          await this.maybeAsyncReflect(record, obsTokens, writer, messageList, requestContext);
+          record = await this.getOrCreateRecord(threadId, resourceId);
+        }
+      }
+    }
+
+    // ── STEP 3: Build observation system message ──
+    let systemMessage: string | null = null;
+    if (record.activeObservations) {
+      const thread = await this.storage.getThreadById({ threadId });
+      const threadOMMetadata = getThreadOMMetadata(thread?.metadata);
+      const currentTask = threadOMMetadata?.currentTask;
+      const suggestedResponse = threadOMMetadata?.suggestedResponse;
+
+      systemMessage = this.formatObservationsForContext(
+        record.activeObservations,
+        currentTask,
+        suggestedResponse,
+        unobservedContextBlocks,
+        new Date(),
+      );
+    }
+
+    // ── STEP 4: Filter already-observed messages ──
+    this.filterAlreadyObservedMessages(messageList, record);
+
+    // Extract the final messages from the message list
+    const resultMessages = messageList.get.all.db();
+
+    omDebug(
+      `[OM:prepareContext:EXIT] systemMessage=${systemMessage ? 'present' : 'null'}, messages=${resultMessages.length}`,
+    );
+
+    return {
+      systemMessage,
+      messages: resultMessages,
+      record,
+    };
+  }
+
+  /**
+   * Process an LLM response by saving messages and triggering observation/reflection.
+   *
+   * This is the gateway-friendly equivalent of `processOutputResult` + the
+   * threshold-checking parts of `processInputStep`.
+   * It performs:
+   * 1. Save input + response messages to storage
+   * 2. Check observation thresholds and trigger observation if needed
+   * 3. Trigger async buffered observation if below threshold but above buffer interval
+   *
+   * @returns Whether messages were saved and whether observation was triggered
+   */
+  async processResponse(args: ProcessResponseArgs): Promise<ProcessResponseResult> {
+    const { threadId, resourceId, inputMessages, responseMessages, abortSignal, writer } = args;
+
+    omDebug(
+      `[OM:processResponse:ENTER] threadId=${threadId}, resourceId=${resourceId ?? 'none'}, input=${inputMessages.length}, response=${responseMessages.length}`,
+    );
+
+    let record = await this.getOrCreateRecord(threadId, resourceId);
+
+    // Build a RequestContext for internal methods
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      thread: { id: threadId },
+      resourceId,
+    });
+
+    // ── Save all messages ──
+    const allMessages = [...inputMessages, ...responseMessages];
+    if (allMessages.length > 0) {
+      await this.messageHistory.persistMessages({
+        messages: allMessages,
+        threadId,
+        resourceId,
+      });
+    }
+
+    omDebug(`[OM:processResponse] saved ${allMessages.length} messages`);
+
+    // ── Check observation thresholds ──
+    let observationTriggered = false;
+
+    // Load all unobserved messages (includes what we just saved)
+    const storedMessages = await this.loadUnobservedMessages(threadId, resourceId, record.lastObservedAt);
+    const unobservedMessages = this.getUnobservedMessages(storedMessages, record);
+
+    let unobservedContextBlocks: string | undefined;
+    if (this.scope === 'resource' && resourceId) {
+      unobservedContextBlocks = await this.loadOtherThreadsContext(resourceId, threadId);
+    }
+    const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
+    const currentObservationTokens = record.observationTokenCount ?? 0;
+
+    const { totalPendingTokens, threshold } = this.calculateObservationThresholds(
+      storedMessages,
+      unobservedMessages,
+      0,
+      otherThreadTokens,
+      currentObservationTokens,
+      record,
+    );
+
+    const lockKey = this.getLockKey(threadId, resourceId);
+
+    // Build a lightweight MessageList for methods that require one
+    const messageList = new MessageList({ threadId, resourceId });
+    for (const msg of storedMessages) {
+      if (msg.role !== 'system') {
+        messageList.add(msg, 'memory');
+      }
+    }
+
+    if (totalPendingTokens >= threshold) {
+      omDebug(
+        `[OM:processResponse] threshold reached: pending=${totalPendingTokens}, threshold=${threshold}, triggering observation`,
+      );
+
+      const { observationSucceeded, updatedRecord } = await this.handleThresholdReached(
+        messageList,
+        record,
+        threadId,
+        resourceId,
+        threshold,
+        lockKey,
+        writer,
+        abortSignal,
+        undefined,
+        requestContext,
+      );
+
+      if (observationSucceeded && updatedRecord) {
+        record = updatedRecord;
+        observationTriggered = true;
+      }
+    } else if (this.isAsyncObservationEnabled()) {
+      // Below threshold — check if async buffering should be triggered
+      const bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
+      const shouldTrigger = this.shouldTriggerAsyncObservation(totalPendingTokens, lockKey, record, threshold);
+
+      if (shouldTrigger) {
+        omDebug(
+          `[OM:processResponse] async buffering triggered: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}`,
+        );
+        this.startAsyncBufferedObservation(
+          record,
+          threadId,
+          unobservedMessages,
+          lockKey,
+          writer,
+          unbufferedPendingTokens,
+          requestContext,
+        );
+      }
+    }
+
+    // Re-fetch record to capture any changes
+    record = await this.getOrCreateRecord(threadId, resourceId);
+
+    omDebug(`[OM:processResponse:EXIT] saved=true, observationTriggered=${observationTriggered}`);
+
+    return {
+      saved: allMessages.length > 0,
+      observationTriggered,
+      record,
+    };
   }
 }
