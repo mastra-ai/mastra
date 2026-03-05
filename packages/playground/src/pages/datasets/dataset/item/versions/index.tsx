@@ -1,15 +1,3 @@
-import { Fragment, useState } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router';
-import {
-  Database,
-  ArrowLeft,
-  HistoryIcon,
-  GitCompareIcon,
-  ArrowLeftIcon,
-  ColumnsIcon,
-  GitCompareArrowsIcon,
-} from 'lucide-react';
-import { format } from 'date-fns';
 import {
   Header,
   MainContentLayout,
@@ -31,9 +19,21 @@ import {
   Columns,
   Column,
   ButtonsGroup,
-  type DatasetItemVersion,
   Chip,
 } from '@mastra/playground-ui';
+import type { DatasetItemVersion } from '@mastra/playground-ui';
+import { format } from 'date-fns';
+import {
+  Database,
+  ArrowLeft,
+  HistoryIcon,
+  GitCompareIcon,
+  ArrowLeftIcon,
+  ColumnsIcon,
+  GitCompareArrowsIcon,
+} from 'lucide-react';
+import { Fragment, useState } from 'react';
+import { useParams, useSearchParams, Link } from 'react-router';
 import { cn } from '@/lib/utils';
 
 function versionToText(version: DatasetItemVersion): string {

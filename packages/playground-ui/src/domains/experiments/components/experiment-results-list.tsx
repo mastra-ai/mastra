@@ -9,6 +9,9 @@ export type ExperimentResultsListProps = {
   columns: { name: string; label: string; size: string }[];
   scoresByItemId?: Record<string, ClientScoreRowData[]>;
   scorerIds?: string[];
+  setEndOfListElement?: (element: HTMLDivElement | null) => void;
+  isFetchingNextPage?: boolean;
+  hasNextPage?: boolean;
 };
 
 /**
@@ -22,6 +25,9 @@ export function ExperimentResultsList({
   columns,
   scoresByItemId,
   scorerIds,
+  setEndOfListElement,
+  isFetchingNextPage,
+  hasNextPage,
 }: ExperimentResultsListProps) {
   if (isLoading) {
     return <ExperimentResultsListSkeleton columns={columns} />;
@@ -76,6 +82,13 @@ export function ExperimentResultsList({
             );
           })}
         </ItemList.Items>
+        <ItemList.NextPageLoading
+          setEndOfListElement={setEndOfListElement}
+          isLoading={isFetchingNextPage}
+          hasMore={hasNextPage}
+          loadingText="Loading more results..."
+          noMoreDataText="All results loaded"
+        />
       </ItemList.Scroller>
     </ItemList>
   );

@@ -1,13 +1,13 @@
 /**
  * Local Process Manager
  *
- * Local implementation of SandboxProcessManager using child_process.spawn.
+ * Local implementation of SandboxProcessManager using execa.
  * Tracks processes in-memory since there's no server to query.
  */
 
-import * as childProcess from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
+import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
+import { getExeca } from './execa';
 import type { LocalSandbox } from './local-sandbox';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
@@ -18,41 +18,40 @@ import type { CommandResult } from './types';
 // =============================================================================
 
 /**
- * Local implementation of ProcessHandle wrapping a node ChildProcess.
+ * Local implementation of ProcessHandle wrapping an execa subprocess.
  * Not exported — internal to this module.
  */
 class LocalProcessHandle extends ProcessHandle {
   readonly pid: number;
   exitCode: number | undefined;
 
-  private proc: ChildProcess;
+  private subprocess: ResultPromise;
   private readonly waitPromise: Promise<CommandResult>;
   private readonly startTime: number;
 
-  constructor(proc: ChildProcess, startTime: number, options?: SpawnProcessOptions) {
+  constructor(subprocess: ResultPromise, pid: number, startTime: number, options?: SpawnProcessOptions) {
     super(options);
-    if (!proc.pid) {
-      throw new Error('Process has no PID - it may have failed to spawn');
-    }
-    this.pid = proc.pid;
-    this.proc = proc;
+    this.pid = pid;
+    this.subprocess = subprocess;
     this.startTime = startTime;
 
     let timedOut = false;
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
-          // Kill the process group so child processes are also terminated
+          // Kill the entire process group so child processes are also terminated.
+          // We handle timeout ourselves rather than using execa's timeout option
+          // because execa only kills the direct subprocess, not the process group.
           try {
             process.kill(-this.pid, 'SIGTERM');
           } catch {
-            proc.kill('SIGTERM');
+            subprocess.kill('SIGTERM');
           }
         }, options.timeout)
       : undefined;
 
     this.waitPromise = new Promise<CommandResult>(resolve => {
-      proc.on('close', (code, signal) => {
+      subprocess.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
         if (timeoutId) clearTimeout(timeoutId);
         if (timedOut) {
           const timeoutMsg = `\nProcess timed out after ${options!.timeout}ms`;
@@ -63,7 +62,7 @@ class LocalProcessHandle extends ProcessHandle {
         }
         resolve({
           success: this.exitCode === 0,
-          exitCode: this.exitCode,
+          exitCode: this.exitCode!,
           stdout: this.stdout,
           stderr: this.stderr,
           executionTimeMs: Date.now() - this.startTime,
@@ -72,7 +71,7 @@ class LocalProcessHandle extends ProcessHandle {
         });
       });
 
-      proc.on('error', err => {
+      subprocess.on('error', (err: Error) => {
         if (timeoutId) clearTimeout(timeoutId);
         this.emitStderr(err.message);
         this.exitCode = 1;
@@ -86,11 +85,11 @@ class LocalProcessHandle extends ProcessHandle {
       });
     });
 
-    proc.stdout?.on('data', (data: Buffer) => {
+    subprocess.stdout?.on('data', (data: Buffer) => {
       this.emitStdout(data.toString());
     });
 
-    proc.stderr?.on('data', (data: Buffer) => {
+    subprocess.stderr?.on('data', (data: Buffer) => {
       this.emitStderr(data.toString());
     });
   }
@@ -104,12 +103,14 @@ class LocalProcessHandle extends ProcessHandle {
     // Kill the entire process group (negative PID) to ensure child processes
     // spawned by the shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
+    // Execa doesn't handle process tree killing natively.
     try {
       process.kill(-this.pid, 'SIGKILL');
       return true;
     } catch {
       // Fallback to direct kill if process group kill fails
-      return this.proc.kill('SIGKILL');
+      this.subprocess.kill('SIGKILL');
+      return true;
     }
   }
 
@@ -117,11 +118,11 @@ class LocalProcessHandle extends ProcessHandle {
     if (this.exitCode !== undefined) {
       throw new Error(`Process ${this.pid} has already exited with code ${this.exitCode}`);
     }
-    if (!this.proc.stdin) {
+    if (!this.subprocess.stdin) {
       throw new Error(`Process ${this.pid} does not have stdin available`);
     }
     return new Promise<void>((resolve, reject) => {
-      this.proc.stdin!.write(data, err => (err ? reject(err) : resolve()));
+      this.subprocess.stdin!.write(data, (err: Error | null | undefined) => (err ? reject(err) : resolve()));
     });
   }
 }
@@ -132,7 +133,7 @@ class LocalProcessHandle extends ProcessHandle {
 
 /**
  * Local implementation of SandboxProcessManager.
- * Spawns processes via child_process.spawn and tracks them in-memory.
+ * Spawns processes via execa and tracks them in-memory.
  */
 export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
@@ -140,18 +141,35 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 
-    // detached: true creates a new process group so we can kill the entire tree.
-    // Non-isolated: use shell mode so the host shell interprets the command string.
-    // Isolated (seatbelt/bwrap): the wrapper already includes `sh -c` inside the
-    // sandbox, so we spawn the wrapper binary directly.
-    const proc = childProcess.spawn(wrapped.command, wrapped.args, {
+    const execaOptions: ExecaOptions = {
       cwd,
       env,
       shell: this.sandbox.isolation === 'none',
+      // detached: true creates a new process group so we can kill the entire tree.
       detached: true,
       stdio: 'pipe',
-    });
-    const handle = new LocalProcessHandle(proc, Date.now(), options);
+      // Don't throw on non-zero exit — we handle exit codes ourselves.
+      reject: false,
+      // Don't buffer output — we stream it via ProcessHandle callbacks.
+      buffer: false,
+      // Don't strip newlines — preserve raw output for ProcessHandle accumulation.
+      stripFinalNewline: false,
+      // Don't extend process.env — the sandbox controls the full environment via buildEnv().
+      extendEnv: false,
+    };
+
+    const execa = await getExeca();
+    const subprocess = execa(wrapped.command, wrapped.args, execaOptions);
+
+    // execa sets pid synchronously when the process spawns successfully.
+    // If pid is undefined, the spawn failed (bad cwd, missing command, etc.).
+    // Await the subprocess to get execa's detailed error message.
+    if (!subprocess.pid) {
+      const result = await subprocess;
+      throw new Error(result.message || 'Process failed to spawn');
+    }
+
+    const handle = new LocalProcessHandle(subprocess, subprocess.pid, Date.now(), options);
     this._tracked.set(handle.pid, handle);
     return handle;
   }

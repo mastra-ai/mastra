@@ -358,12 +358,49 @@ createVectorTestSuite({
   deleteIndex: async (indexName: string) => {
     await deleteIndexAndWait(mongodbVector, indexName);
   },
-  waitForIndexing: async () => {
-    // Vectors need time to be indexed by mongot after upsert.
-    // History: 5000ms (original) → 3000ms (upstream) → 2000ms (current).
-    // 2000ms is safe based on zero mongodb-specific flakiness in upstream CI
-    // with 3000ms, and atlas-local mongot typically indexes within 500-1000ms.
-    await new Promise(resolve => setTimeout(resolve, 2000));
+  waitForIndexing: async (indexName: string) => {
+    // Poll until mongot's $vectorSearch result count matches countDocuments (immediate).
+    // Uses a large topK and exact-match check so this works for upserts and deletes:
+    //   - Upsert (count goes up):  stale mongot returns fewer  → keeps polling
+    //   - Delete (count goes down): stale mongot returns more   → keeps polling
+    // For updates (count unchanged), count matches on the first poll so we can't
+    // detect the change. A minimum sleep of 1000ms covers this case — mongot on
+    // atlas-local CI typically indexes within 200-500ms, so 1000ms is a 2-5× buffer.
+    // This is still half the original 2000ms fixed sleep.
+    const interval = 200;
+    const timeout = 10000;
+    const largeTopK = 10000;
+    const minSleep = 1000;
+    const start = Date.now();
+    let firstPoll = true;
+    while (Date.now() - start < timeout) {
+      try {
+        const stats = await mongodbVector.describeIndex({ indexName });
+        const docCount = stats?.count ?? 0;
+        if (docCount === 0) {
+          await mongodbVector.query({ indexName, queryVector: new Array(1536).fill(0.1), topK: 1 });
+          return;
+        }
+        const results = await mongodbVector.query({
+          indexName,
+          queryVector: new Array(1536).fill(0.1),
+          topK: largeTopK,
+        });
+        if (results.length === docCount) {
+          if (firstPoll) {
+            // Count matched immediately — likely an update (count didn't change).
+            // Sleep to give mongot time to re-index the updated data.
+            await new Promise(resolve => setTimeout(resolve, minSleep));
+          }
+          return;
+        }
+      } catch {
+        // Index not queryable yet — keep polling.
+      }
+      firstPoll = false;
+      await new Promise(resolve => setTimeout(resolve, interval));
+    }
+    // Timeout — don't throw. Let the test assertion surface the real failure.
   },
   supportsContains: false,
   // MongoDB limitations:

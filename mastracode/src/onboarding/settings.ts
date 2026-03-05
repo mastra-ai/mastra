@@ -56,6 +56,9 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
+/** Valid persisted thinking level values. */
+export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface GlobalSettings {
   // Onboarding tracking
   onboarding: {
@@ -95,6 +98,8 @@ export interface GlobalSettings {
   preferences: {
     yolo: boolean | null;
     theme: 'auto' | 'dark' | 'light';
+    /** Default reasoning effort level used for all threads/models unless overridden in-session. */
+    thinkingLevel: ThinkingLevelSetting;
     /** When true, components like subagent output collapse to compact summaries on completion. */
     quietMode: boolean;
   };
@@ -106,6 +111,8 @@ export interface GlobalSettings {
   customProviders: CustomProviderSetting[];
   // Model usage counts for ranking in the selector
   modelUseCounts: Record<string, number>;
+  // Version the user dismissed the update prompt for (skip until they manually update past this)
+  updateDismissedVersion: string | null;
   // LSP configuration forwarded to the workspace
   lsp?: LSPConfig;
 }
@@ -135,14 +142,34 @@ const DEFAULTS: GlobalSettings = {
   preferences: {
     yolo: null,
     theme: 'auto',
+    thinkingLevel: 'off',
     quietMode: false,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
   customProviders: [],
   modelUseCounts: {},
+  updateDismissedVersion: null,
   lsp: {},
 };
+
+const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
+
+function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
+  return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
+    ? (value as ThinkingLevelSetting)
+    : DEFAULTS.preferences.thinkingLevel;
+}
+
+function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
+  const raw = rawPreferences && typeof rawPreferences === 'object' ? (rawPreferences as Record<string, unknown>) : {};
+
+  return {
+    ...DEFAULTS.preferences,
+    ...raw,
+    thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+  };
+}
 
 export function getSettingsPath(): string {
   return join(getAppDataDir(), 'settings.json');
@@ -239,7 +266,7 @@ function migrateFromAuth(settingsPath: string): boolean {
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: { ...DEFAULTS.models, ...raw.models },
-        preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+        preferences: parsePreferences(raw.preferences),
         storage: {
           ...STORAGE_DEFAULTS,
           ...raw.storage,
@@ -249,6 +276,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
         customProviders: parseCustomProviders(raw.customProviders),
         modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+        updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       };
     } catch {
@@ -354,7 +382,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       ...raw,
       onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
       models: { ...DEFAULTS.models, ...raw.models },
-      preferences: { ...DEFAULTS.preferences, ...raw.preferences },
+      preferences: parsePreferences(raw.preferences),
       storage: {
         ...STORAGE_DEFAULTS,
         ...raw.storage,
@@ -364,6 +392,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       customModelPacks: Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [],
       customProviders: parseCustomProviders(raw.customProviders),
       modelUseCounts: raw.modelUseCounts && typeof raw.modelUseCounts === 'object' ? raw.modelUseCounts : {},
+      updateDismissedVersion: typeof raw.updateDismissedVersion === 'string' ? raw.updateDismissedVersion : null,
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
     };
 

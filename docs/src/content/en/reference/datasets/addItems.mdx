@@ -37,33 +37,35 @@ console.log(`Added ${items.length} items`)
 
 <PropertiesTable
   content={[
-{
-name: "items",
-type: "Array<object>",
-description: "Array of items to add. Each item has the same shape as the dataset.addItem() input.",
-properties: [{
-type: "DatasetItem",
-parameters: [
-{
-name: "input",
-type: "unknown",
-description: "Input data for the item.",
-},
-{
-name: "groundTruth",
-type: "unknown",
-isOptional: true,
-description: "Expected output or ground truth.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-isOptional: true,
-description: "Arbitrary metadata.",
-},
-],
-}],
-},
+  {
+    name: 'items',
+    type: 'Array<object>',
+    description: 'Array of items to add. Each item has the same shape as the dataset.addItem() input.',
+    properties: [
+      {
+        type: 'DatasetItem',
+        parameters: [
+          {
+            name: 'input',
+            type: 'unknown',
+            description: 'Input data for the item.',
+          },
+          {
+            name: 'groundTruth',
+            type: 'unknown',
+            isOptional: true,
+            description: 'Expected output or ground truth.',
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            isOptional: true,
+            description: 'Arbitrary metadata.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -71,10 +73,10 @@ description: "Arbitrary metadata.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<DatasetItem[]>",
-description: "Array of created dataset items. See dataset.addItem() for the item shape.",
-},
+  {
+    name: 'result',
+    type: 'Promise<DatasetItem[]>',
+    description: 'Array of created dataset items. See dataset.addItem() for the item shape.',
+  },
 ]}
 />
