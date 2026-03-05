@@ -2,7 +2,10 @@ import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
+import { ConsoleLogger } from '../../logger';
 import { createObservabilityContext } from '../../observability';
+import { ProcessorRunner } from '../../processors/runner';
+import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
@@ -29,6 +32,18 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
+      // Create a ProcessorRunner for data-* chunks so they go through output processors
+      // instead of bypassing them (fixes #13341)
+      const hasOutputProcessors = rest.outputProcessors && rest.outputProcessors.length > 0;
+      const dataChunkProcessorRunner = hasOutputProcessors
+        ? new ProcessorRunner({
+            outputProcessors: rest.outputProcessors,
+            logger: rest.logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId || 'unknown',
+          })
+        : undefined;
+      const dataChunkProcessorStates = hasOutputProcessors ? new Map<string, ProcessorState>() : undefined;
+
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
@@ -50,6 +65,28 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             resourceId: _internal?.resourceId,
           };
           messageList.add(message, 'response');
+
+          // Run data-* chunks through output processors (fixes #13341)
+          if (dataChunkProcessorRunner) {
+            const streamWriter = {
+              custom: async (data: { type: string }) => {
+                safeEnqueue(controller, data as ChunkType<OUTPUT>);
+              },
+            };
+            const { part: processed, blocked } = await dataChunkProcessorRunner.processPart(
+              chunk,
+              dataChunkProcessorStates!,
+              undefined, // observabilityContext
+              rest.requestContext,
+              messageList,
+              0,
+              streamWriter,
+            );
+            if (!blocked && processed) {
+              safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+            }
+            return;
+          }
         }
         safeEnqueue(controller, chunk);
       };
