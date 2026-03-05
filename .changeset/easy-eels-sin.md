@@ -1,6 +1,5 @@
 ---
 '@mastra/core': patch
-'@mastra/playground-ui': patch
 ---
 
 **Skill tools are now stable across conversation turns and prompt-cache friendly.**
