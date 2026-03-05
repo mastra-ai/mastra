@@ -20,22 +20,22 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "analyzeStepResult",
-type: "object",
-description:
-"Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
-},
-{
-name: "score",
-type: "number",
-description: "Tone consistency/stability score (0-1).",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description:
+      'Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Tone consistency/stability score (0-1).',
+  },
 ]}
 />
 

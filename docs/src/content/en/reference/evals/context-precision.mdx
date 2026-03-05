@@ -34,39 +34,38 @@ Use when optimizing context selection for:
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraModelConfig",
-description: "The language model to use for evaluating context relevance",
-required: true,
-},
-{
-name: "options",
-type: "ContextPrecisionMetricOptions",
-description: "Configuration options for the scorer",
-required: true,
-children: [
-{
-name: "context",
-type: "string[]",
-description: "Array of context pieces to evaluate for relevance",
-required: false,
-},
-{
-name: "contextExtractor",
-type: "(input, output) => string[]",
-description:
-"Function to dynamically extract context from the run input and output",
-required: false,
-},
-{
-name: "scale",
-type: "number",
-description: "Scale factor to multiply the final score (default: 1)",
-required: false,
-},
-],
-},
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for evaluating context relevance',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'ContextPrecisionMetricOptions',
+    description: 'Configuration options for the scorer',
+    required: true,
+    children: [
+      {
+        name: 'context',
+        type: 'string[]',
+        description: 'Array of context pieces to evaluate for relevance',
+        required: false,
+      },
+      {
+        name: 'contextExtractor',
+        type: '(input, output) => string[]',
+        description: 'Function to dynamically extract context from the run input and output',
+        required: false,
+      },
+      {
+        name: 'scale',
+        type: 'number',
+        description: 'Scale factor to multiply the final score (default: 1)',
+        required: false,
+      },
+    ],
+  },
 ]}
 />
 
@@ -76,18 +75,16 @@ required: false,
 
 <PropertiesTable
   content={[
-{
-name: "score",
-type: "number",
-description:
-"Mean Average Precision score between 0 and scale (default 0-1)",
-},
-{
-name: "reason",
-type: "string",
-description:
-"Human-readable explanation of the context precision evaluation",
-},
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Mean Average Precision score between 0 and scale (default 0-1)',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Human-readable explanation of the context precision evaluation',
+  },
 ]}
 />
 

@@ -19,24 +19,25 @@ await workflow.createRun()
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "Optional custom identifier for the workflow run",
-isOptional: true,
-},
-{
-name: "resourceId",
-type: "string",
-description: "Optional identifier to associate the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the workflow run and can be used for filtering and querying runs.",
-isOptional: true,
-},
-{
-name: "disableScorers",
-type: "boolean",
-description: "Optional flag to disable scorers for this workflow run",
-isOptional: true,
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'Optional custom identifier for the workflow run',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      'Optional identifier to associate the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the workflow run and can be used for filtering and querying runs.',
+    isOptional: true,
+  },
+  {
+    name: 'disableScorers',
+    type: 'boolean',
+    description: 'Optional flag to disable scorers for this workflow run',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -44,12 +45,11 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "run",
-type: "Run",
-description:
-"A new workflow run instance that can be used to execute the workflow",
-},
+  {
+    name: 'run',
+    type: 'Run',
+    description: 'A new workflow run instance that can be used to execute the workflow',
+  },
 ]}
 />
 

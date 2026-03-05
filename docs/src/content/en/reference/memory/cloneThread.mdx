@@ -21,91 +21,86 @@ const { thread, clonedMessages } = await memory.cloneThread({
 
 <PropertiesTable
   content={[
-{
-name: "sourceThreadId",
-type: "string",
-description: "The ID of the thread to clone",
-isOptional: false,
-},
-{
-name: "newThreadId",
-type: "string",
-description:
-"Optional custom ID for the cloned thread. If not provided, one will be generated.",
-isOptional: true,
-},
-{
-name: "resourceId",
-type: "string",
-description:
-"Optional resource ID for the cloned thread. Defaults to the source thread's resourceId.",
-isOptional: true,
-},
-{
-name: "title",
-type: "string",
-description:
-"Optional title for the cloned thread. Defaults to '[source title] (Copy)'.",
-isOptional: true,
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-description:
-"Optional metadata to merge with the source thread's metadata. Clone metadata is automatically added.",
-isOptional: true,
-},
-{
-name: "options",
-type: "CloneOptions",
-description: "Optional filtering options for the clone operation.",
-isOptional: true,
-properties: [
-{
-type: "CloneOptions",
-parameters: [
-{
-name: "messageLimit",
-type: "number",
-description:
-"Maximum number of messages to clone. When set, clones the most recent N messages.",
-isOptional: true,
-},
-{
-name: "messageFilter",
-type: "MessageFilter",
-description: "Filter criteria for selecting which messages to clone.",
-isOptional: true,
-properties: [
-{
-type: "MessageFilter",
-parameters: [
-{
-name: "startDate",
-type: "Date",
-description: "Only clone messages created on or after this date.",
-isOptional: true,
-},
-{
-name: "endDate",
-type: "Date",
-description: "Only clone messages created on or before this date.",
-isOptional: true,
-},
-{
-name: "messageIds",
-type: "string[]",
-description: "Only clone messages with these specific IDs.",
-isOptional: true,
-},
-],
-},
-],
-},
-],
-},
-],
-},
+  {
+    name: 'sourceThreadId',
+    type: 'string',
+    description: 'The ID of the thread to clone',
+    isOptional: false,
+  },
+  {
+    name: 'newThreadId',
+    type: 'string',
+    description: 'Optional custom ID for the cloned thread. If not provided, one will be generated.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: "Optional resource ID for the cloned thread. Defaults to the source thread's resourceId.",
+    isOptional: true,
+  },
+  {
+    name: 'title',
+    type: 'string',
+    description: "Optional title for the cloned thread. Defaults to '[source title] (Copy)'.",
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: "Optional metadata to merge with the source thread's metadata. Clone metadata is automatically added.",
+    isOptional: true,
+  },
+  {
+    name: 'options',
+    type: 'CloneOptions',
+    description: 'Optional filtering options for the clone operation.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'CloneOptions',
+        parameters: [
+          {
+            name: 'messageLimit',
+            type: 'number',
+            description: 'Maximum number of messages to clone. When set, clones the most recent N messages.',
+            isOptional: true,
+          },
+          {
+            name: 'messageFilter',
+            type: 'MessageFilter',
+            description: 'Filter criteria for selecting which messages to clone.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'MessageFilter',
+                parameters: [
+                  {
+                    name: 'startDate',
+                    type: 'Date',
+                    description: 'Only clone messages created on or after this date.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'endDate',
+                    type: 'Date',
+                    description: 'Only clone messages created on or before this date.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'messageIds',
+                    type: 'string[]',
+                    description: 'Only clone messages with these specific IDs.',
+                    isOptional: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -113,24 +108,22 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "thread",
-type: "StorageThreadType",
-description: "The newly created cloned thread with clone metadata.",
-},
-{
-name: "clonedMessages",
-type: "MastraDBMessage[]",
-description:
-"Array of the cloned messages with new IDs assigned to the new thread.",
-},
-{
-name: "messageIdMap",
-type: "Record<string, string>",
-description:
-"A mapping from source message IDs to their corresponding cloned message IDs.",
-isOptional: true,
-},
+  {
+    name: 'thread',
+    type: 'StorageThreadType',
+    description: 'The newly created cloned thread with clone metadata.',
+  },
+  {
+    name: 'clonedMessages',
+    type: 'MastraDBMessage[]',
+    description: 'Array of the cloned messages with new IDs assigned to the new thread.',
+  },
+  {
+    name: 'messageIdMap',
+    type: 'Record<string, string>',
+    description: 'A mapping from source message IDs to their corresponding cloned message IDs.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -140,23 +133,22 @@ The cloned thread's metadata includes a `clone` property with:
 
 <PropertiesTable
   content={[
-{
-name: "sourceThreadId",
-type: "string",
-description: "The ID of the original thread that was cloned.",
-},
-{
-name: "clonedAt",
-type: "Date",
-description: "Timestamp when the clone was created.",
-},
-{
-name: "lastMessageId",
-type: "string",
-description:
-"The ID of the last message in the source thread at the time of cloning.",
-isOptional: true,
-},
+  {
+    name: 'sourceThreadId',
+    type: 'string',
+    description: 'The ID of the original thread that was cloned.',
+  },
+  {
+    name: 'clonedAt',
+    type: 'Date',
+    description: 'Timestamp when the clone was created.',
+  },
+  {
+    name: 'lastMessageId',
+    type: 'string',
+    description: 'The ID of the last message in the source thread at the time of cloning.',
+    isOptional: true,
+  },
 ]}
 />
 

@@ -19,28 +19,27 @@ await agent.getModel()
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "{ requestContext?: RequestContext }",
-isOptional: true,
-defaultValue: "{}",
-description: "Optional configuration object containing request context.",
-properties: [
-{
-type: "{ requestContext?: RequestContext }",
-parameters: [
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "undefined",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-],
-},
-],
-},
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'undefined',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -48,12 +47,12 @@ description:
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraLanguageModel | Promise<MastraLanguageModel>",
-description:
-"The language model configured for the agent, either as a direct instance or a promise that resolves to the model.",
-},
+  {
+    name: 'model',
+    type: 'MastraLanguageModel | Promise<MastraLanguageModel>',
+    description:
+      'The language model configured for the agent, either as a direct instance or a promise that resolves to the model.',
+  },
 ]}
 />
 
