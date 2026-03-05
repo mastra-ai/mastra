@@ -1314,7 +1314,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       generationCount: Number(doc.generationCount || 0),
       activeObservations: doc.activeObservations || '',
       // Handle new chunk-based structure
-      bufferedObservationChunks: doc.bufferedObservationChunks || undefined,
+      bufferedObservationChunks: Array.isArray(doc.bufferedObservationChunks)
+        ? doc.bufferedObservationChunks
+        : undefined,
       // Deprecated fields (for backward compatibility)
       bufferedObservations: doc.activeObservationsPendingUpdate || undefined,
       bufferedObservationTokens: doc.bufferedObservationTokens ? Number(doc.bufferedObservationTokens) : undefined,
@@ -1482,7 +1484,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         totalTokensObserved: record.totalTokensObserved || 0,
         observationTokenCount: record.observationTokenCount || 0,
         observedMessageIds: record.observedMessageIds || null,
-        bufferedObservationChunks: record.bufferedObservationChunks || null,
+        bufferedObservationChunks: Array.isArray(record.bufferedObservationChunks)
+          ? record.bufferedObservationChunks
+          : [],
         bufferedReflection: record.bufferedReflection || null,
         bufferedReflectionTokens: record.bufferedReflectionTokens ?? null,
         bufferedReflectionInputTokens: record.bufferedReflectionInputTokens ?? null,
@@ -1851,18 +1855,19 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         currentTask: input.chunk.currentTask,
       };
 
-      // Use $push to append chunk to array atomically
-      const $set: Record<string, any> = { updatedAt: new Date() };
-      if (input.lastBufferedAtTime) {
-        $set.lastBufferedAtTime = input.lastBufferedAtTime;
-      }
-      const result = await collection.updateOne(
-        { id: input.id },
-        {
-          $push: { bufferedObservationChunks: newChunk as any },
-          $set,
+      // Use an update pipeline so legacy null/missing fields are coerced to arrays atomically
+      const now = new Date();
+      const setStage: Record<string, any> = {
+        updatedAt: now,
+        bufferedObservationChunks: {
+          $concatArrays: [{ $ifNull: ['$bufferedObservationChunks', []] }, [newChunk as any]],
         },
-      );
+      };
+      if (input.lastBufferedAtTime) {
+        setStage.lastBufferedAtTime = input.lastBufferedAtTime;
+      }
+
+      const result = await collection.updateOne({ id: input.id }, [{ $set: setStage }]);
 
       if (result.matchedCount === 0) {
         throw new MastraError({
@@ -2025,7 +2030,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
             activeObservations: newActive,
             observationTokenCount: newTokenCount,
             pendingMessageTokens: newPending,
-            bufferedObservationChunks: remainingChunks.length > 0 ? remainingChunks : null,
+            bufferedObservationChunks: remainingChunks,
             lastObservedAt,
             updatedAt: new Date(),
           },

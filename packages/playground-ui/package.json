@@ -132,7 +132,7 @@
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.5.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.7.1-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@tanstack/react-query": "^5.81.5",
@@ -161,7 +161,7 @@
     "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^5.1.4",
     "@vitest/ui": "catalog:",
-    "autoprefixer": "^10.4.24",
+    "autoprefixer": "^10.4.27",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "postcss": "^8.5.6",

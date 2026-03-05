@@ -2174,7 +2174,49 @@ ${suggestedResponse}
       `[OM:cleanupBranch] allMsgs=${allMsgs.length}, markerFound=${markerIdx !== -1}, markerIdx=${markerIdx}, observedMessageIds=${observedMessageIds?.length ?? 'undefined'}, allIds=${allMsgs.map(m => m.id?.slice(0, 8)).join(',')}`,
     );
 
-    if (markerMsg && markerIdx !== -1) {
+    if (observedMessageIds && observedMessageIds.length > 0) {
+      // Activation-based cleanup: remove activated message IDs first.
+      // This path must take precedence over marker cleanup so absolute retention
+      // floors are enforced during buffered activation.
+      const observedSet = new Set(observedMessageIds);
+      const idsToRemove = new Set<string>();
+      let skipped = 0;
+      let backoffTriggered = false;
+
+      for (const msg of allMsgs) {
+        if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
+          continue;
+        }
+
+        if (typeof minRemaining === 'number') {
+          const nextRemainingMessages = allMsgs.filter(
+            m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
+          );
+          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
+          if (remainingIfRemoved < minRemaining) {
+            skipped += 1;
+            backoffTriggered = true;
+            break;
+          }
+        }
+
+        idsToRemove.add(msg.id);
+      }
+
+      omDebug(
+        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.size}, skipped=${skipped}, backoffTriggered=${backoffTriggered}, idsToRemove=${[...idsToRemove].map(id => id.slice(0, 8)).join(',')}`,
+      );
+
+      // Remove activated messages from context. No need to re-save — these were
+      // already persisted by handlePerStepSave or runAsyncBufferedObservation.
+      const idsToRemoveList = [...idsToRemove];
+      if (idsToRemoveList.length > 0) {
+        messageList.removeByIds(idsToRemoveList);
+        omDebug(
+          `[OM:cleanupActivation] removed ${idsToRemoveList.length} messages, remaining=${messageList.get.all.db().length}`,
+        );
+      }
+    } else if (markerMsg && markerIdx !== -1) {
       // Collect all messages before the marker (these are fully observed)
       const idsToRemove: string[] = [];
       const messagesToSave: MastraDBMessage[] = [];
@@ -2211,46 +2253,6 @@ ${suggestedResponse}
       // Save all observed messages (with their markers) to DB
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
-      }
-    } else if (observedMessageIds && observedMessageIds.length > 0) {
-      // Activation-based cleanup: remove observed messages from context.
-      // Each LLM step is a fresh request — processInputStep prepares the context
-      // window before each call. Removing observed messages here ensures the next
-      // step sees a trimmed context with observations instead of raw messages.
-      const observedSet = new Set(observedMessageIds);
-      const messagesToSave: MastraDBMessage[] = [];
-      const idsToRemove: string[] = [];
-      const totalTokens = typeof minRemaining === 'number' ? this.tokenCounter.countMessages(allMsgs) : undefined;
-      let removedTokens = 0;
-      let skipped = 0;
-
-      for (const msg of allMsgs) {
-        if (msg?.id && msg.id !== 'om-continuation' && observedSet.has(msg.id)) {
-          if (typeof minRemaining === 'number') {
-            const msgTokens = this.tokenCounter.countMessage(msg);
-            const remainingIfRemoved = (totalTokens ?? 0) - removedTokens - msgTokens;
-            if (remainingIfRemoved < minRemaining) {
-              skipped += 1;
-              continue;
-            }
-            removedTokens += msgTokens;
-          }
-          messagesToSave.push(msg);
-          idsToRemove.push(msg.id);
-        }
-      }
-
-      omDebug(
-        `[OM:cleanupActivation] observedSet=${[...observedSet].map(id => id.slice(0, 8)).join(',')}, matched=${idsToRemove.length}, skipped=${skipped}, idsToRemove=${idsToRemove.map(id => id.slice(0, 8)).join(',')}`,
-      );
-
-      // Remove activated messages from context. No need to re-save — these were
-      // already persisted by handlePerStepSave or runAsyncBufferedObservation.
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
-        omDebug(
-          `[OM:cleanupActivation] removed ${idsToRemove.length} messages, remaining=${messageList.get.all.db().length}`,
-        );
       }
     } else {
       // No marker found — fall back to source-based clearing
@@ -2766,7 +2768,7 @@ ${suggestedResponse}
               : undefined;
           const minRemaining =
             typeof this.observationConfig.bufferActivation === 'number'
-              ? Math.min(1000, resolveRetentionFloor(this.observationConfig.bufferActivation, threshold))
+              ? resolveRetentionFloor(this.observationConfig.bufferActivation, threshold)
               : undefined;
           omDebug(
             `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}, minRemaining=${minRemaining ?? 'n/a'}`,

@@ -33,8 +33,8 @@ export function getAuthStorage(): AuthStorage {
 /**
  * Set a custom AuthStorage instance (useful for TUI integration)
  */
-export function setAuthStorage(storage: AuthStorage): void {
-  authStorageInstance = storage;
+export function setAuthStorage(storage: AuthStorage | undefined): void {
+  authStorageInstance = storage ?? null;
 }
 
 // Default instructions for Codex API (required)
@@ -121,7 +121,7 @@ export function openaiCodexProvider(
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const openai = createOpenAI({
-      apiKey: process.env.OPENAI_API_KEY || 'test-api-key',
+      apiKey: 'test-api-key',
     });
     return wrapLanguageModel({
       model: openai.responses(modelId),
