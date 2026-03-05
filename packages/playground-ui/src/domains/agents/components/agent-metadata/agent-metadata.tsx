@@ -338,20 +338,20 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
   return (
     <AgentMetadataList>
       {skills.map(skill => {
-        const loaded = isSkillActivated(skill.name);
+        const isActivated = isSkillActivated(skill.name);
         const badge = (
           <Badge
-            icon={<SkillIcon className={`h-3 w-3 ${loaded ? 'text-green-400' : 'text-accent2'}`} />}
-            variant={loaded ? 'success' : 'default'}
+            icon={<SkillIcon className={`h-3 w-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
+            variant={isActivated ? 'success' : 'default'}
           >
             {skill.name}
-            {loaded && <span className="sr-only">Loaded</span>}
+            {isActivated && <span className="sr-only">Active</span>}
           </Badge>
         );
 
         return (
           <AgentMetadataListItem key={skill.name}>
-            {loaded ? (
+            {isActivated ? (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -359,7 +359,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                       {badge}
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Loaded</TooltipContent>
+                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Active</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (
