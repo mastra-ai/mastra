@@ -36,30 +36,30 @@ const versionedItems = await dataset.listItems({ version: 2 })
 
 <PropertiesTable
   content={[
-{
-name: "version",
-type: "number",
-isOptional: true,
-description: "Dataset version to list items at. When set, returns all items at that version (no pagination).",
-},
-{
-name: "page",
-type: "number",
-isOptional: true,
-description: "Page number for pagination. Defaults to `0`.",
-},
-{
-name: "perPage",
-type: "number",
-isOptional: true,
-description: "Number of items per page. Defaults to `20`.",
-},
-{
-name: "search",
-type: "string",
-isOptional: true,
-description: "Search string to filter items.",
-},
+  {
+    name: 'version',
+    type: 'number',
+    isOptional: true,
+    description: 'Dataset version to list items at. When set, returns all items at that version (no pagination).',
+  },
+  {
+    name: 'page',
+    type: 'number',
+    isOptional: true,
+    description: 'Page number for pagination. Defaults to `0`.',
+  },
+  {
+    name: 'perPage',
+    type: 'number',
+    isOptional: true,
+    description: 'Number of items per page. Defaults to `20`.',
+  },
+  {
+    name: 'search',
+    type: 'string',
+    isOptional: true,
+    description: 'Search string to filter items.',
+  },
 ]}
 />
 
@@ -69,11 +69,11 @@ When `version` is specified:
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<DatasetItem[]>",
-description: "Array of all items at the specified dataset version.",
-},
+  {
+    name: 'result',
+    type: 'Promise<DatasetItem[]>',
+    description: 'Array of all items at the specified dataset version.',
+  },
 ]}
 />
 
@@ -83,50 +83,54 @@ When `version` is not specified:
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<object>",
-description: "Paginated response.",
-properties: [{
-type: "object",
-parameters: [
-{
-name: "items",
-type: "DatasetItem[]",
-description: "Array of items for the current page.",
-},
-{
-name: "pagination",
-type: "object",
-description: "Pagination metadata.",
-properties: [{
-type: "object",
-parameters: [
-{
-name: "total",
-type: "number",
-description: "Total number of items.",
-},
-{
-name: "page",
-type: "number",
-description: "Current page number.",
-},
-{
-name: "perPage",
-type: "number | false",
-description: "Items per page, or `false` if unpaginated.",
-},
-{
-name: "hasMore",
-type: "boolean",
-description: "Whether more pages are available.",
-},
-],
-}],
-},
-],
-}],
-},
+  {
+    name: 'result',
+    type: 'Promise<object>',
+    description: 'Paginated response.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'items',
+            type: 'DatasetItem[]',
+            description: 'Array of items for the current page.',
+          },
+          {
+            name: 'pagination',
+            type: 'object',
+            description: 'Pagination metadata.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'total',
+                    type: 'number',
+                    description: 'Total number of items.',
+                  },
+                  {
+                    name: 'page',
+                    type: 'number',
+                    description: 'Current page number.',
+                  },
+                  {
+                    name: 'perPage',
+                    type: 'number | false',
+                    description: 'Items per page, or `false` if unpaginated.',
+                  },
+                  {
+                    name: 'hasMore',
+                    type: 'boolean',
+                    description: 'Whether more pages are available.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
