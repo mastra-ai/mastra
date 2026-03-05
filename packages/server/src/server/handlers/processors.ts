@@ -268,7 +268,16 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               };
               break;
             case 'outputResult':
-              // outputResult only needs base fields
+              inputData = {
+                ...inputData,
+                state: {},
+                result: {
+                  text: extractTextFromMessages(messages),
+                  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                  finishReason: 'unknown',
+                  steps: [],
+                },
+              };
               break;
             case 'outputStep':
               inputData = {
@@ -414,7 +423,13 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             }
             result = await processor.processOutputResult({
               ...baseContext,
-              streamParts: [],
+              state: {},
+              result: {
+                text: extractTextFromMessages(messages),
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                finishReason: 'unknown',
+                steps: [],
+              },
             });
             break;
 
