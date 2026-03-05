@@ -3,11 +3,26 @@ import type { JSONSchema7 } from 'json-schema';
 /**
  * JSON Schema for MastraDBMessage
  */
+const CONTENT_SCHEMA: JSONSchema7 = {
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'object',
+      description: 'Structured content (format 2 with parts)',
+    },
+    {
+      type: 'array',
+      description: 'Content parts array',
+      items: { type: 'object' },
+    },
+  ],
+};
+
 const MESSAGE_SCHEMA: JSONSchema7 = {
   type: 'object',
   properties: {
     role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
-    content: { type: 'string' },
+    content: CONTENT_SCHEMA,
   },
   required: ['role', 'content'],
 };
@@ -36,7 +51,7 @@ const SCORER_RUN_INPUT_FOR_AGENT: JSONSchema7 = {
         type: 'object',
         properties: {
           role: { type: 'string', enum: ['system'] },
-          content: { type: 'string' },
+          content: CONTENT_SCHEMA,
         },
         required: ['role', 'content'],
       },
@@ -50,7 +65,7 @@ const SCORER_RUN_INPUT_FOR_AGENT: JSONSchema7 = {
           type: 'object',
           properties: {
             role: { type: 'string', enum: ['system'] },
-            content: { type: 'string' },
+            content: CONTENT_SCHEMA,
           },
           required: ['role', 'content'],
         },
@@ -135,23 +150,12 @@ const SCORER_CUSTOM_INPUT_SCHEMA: JSONSchema7 = {
 };
 
 /**
- * JSON Schema for scorer output (score and reason from scoreRowDataSchema).
+ * JSON Schema for scorer ground truth — permissive, accepts any shape.
+ * Ground truth depends on what the scorer evaluates and is user-defined.
  */
 const SCORER_OUTPUT_SCHEMA: JSONSchema7 = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  type: 'object',
-  description: 'Scorer result (score and reason)',
-  properties: {
-    score: {
-      type: 'number',
-      description: 'Numeric score value',
-    },
-    reason: {
-      type: 'string',
-      description: 'Explanation for the score',
-    },
-  },
-  required: ['score'],
+  description: 'Scorer ground truth (any shape)',
 };
 
 /**

@@ -439,7 +439,11 @@ export class MessageList {
 
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
-        return messages.map(aiV5ModelMessageToV2PromptMessage);
+        return messages
+          .map(aiV5ModelMessageToV2PromptMessage)
+          .filter(
+            message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
+          );
       },
     },
 

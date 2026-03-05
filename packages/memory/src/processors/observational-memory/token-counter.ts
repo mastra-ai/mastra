@@ -213,6 +213,24 @@ export class TokenCounter {
     return tokens;
   }
 
+  private resolveToolResultForTokenCounting(
+    part: CacheablePart,
+    invocationResult: unknown,
+  ): { value: unknown; usingStoredModelOutput: boolean } {
+    const mastraMetadata = (part as any)?.providerMetadata?.mastra;
+    if (mastraMetadata && typeof mastraMetadata === 'object' && 'modelOutput' in mastraMetadata) {
+      return {
+        value: (mastraMetadata as Record<string, unknown>).modelOutput,
+        usingStoredModelOutput: true,
+      };
+    }
+
+    return {
+      value: invocationResult,
+      usingStoredModelOutput: false,
+    };
+  }
+
   /**
    * Count tokens in a single message
    */
@@ -257,12 +275,26 @@ export class TokenCounter {
               }
             } else if (invocation.state === 'result') {
               toolResultCount++;
-              if (invocation.result !== undefined) {
-                if (typeof invocation.result === 'string') {
-                  payloadTokens += this.readOrPersistPartEstimate(part, 'tool-result', invocation.result);
+
+              const { value: resultForCounting, usingStoredModelOutput } = this.resolveToolResultForTokenCounting(
+                part,
+                invocation.result,
+              );
+
+              if (resultForCounting !== undefined) {
+                if (typeof resultForCounting === 'string') {
+                  payloadTokens += this.readOrPersistPartEstimate(
+                    part,
+                    usingStoredModelOutput ? 'tool-result-model-output' : 'tool-result',
+                    resultForCounting,
+                  );
                 } else {
-                  const resultJson = JSON.stringify(invocation.result);
-                  payloadTokens += this.readOrPersistPartEstimate(part, 'tool-result-json', resultJson);
+                  const resultJson = JSON.stringify(resultForCounting);
+                  payloadTokens += this.readOrPersistPartEstimate(
+                    part,
+                    usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
+                    resultJson,
+                  );
                   overhead -= 12;
                 }
               }

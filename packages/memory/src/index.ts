@@ -70,6 +70,7 @@ const CHARS_PER_TOKEN = 4;
 
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
+const VECTOR_DELETE_BATCH_SIZE = 100;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
@@ -387,6 +388,48 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     await memoryStore.deleteThread({ threadId });
+    if (this.vector) {
+      void this.deleteThreadVectors(threadId);
+    }
+  }
+
+  /**
+   * Lists all vector indexes that match the memory messages prefix.
+   * Handles separator differences across vector store backends (e.g. '_' vs '-').
+   */
+  private async getMemoryVectorIndexes(): Promise<string[]> {
+    if (!this.vector) return [];
+    const separator = this.vector.indexSeparator ?? '_';
+    const prefix = `memory${separator}messages`;
+    const indexes = await this.vector.listIndexes();
+    return indexes.filter(name => name.startsWith(prefix));
+  }
+
+  /**
+   * Deletes all vector embeddings associated with a thread.
+   * This is called internally by deleteThread to clean up orphaned vectors.
+   *
+   * @param threadId - The ID of the thread whose vectors should be deleted
+   */
+  private async deleteThreadVectors(threadId: string): Promise<void> {
+    try {
+      const memoryIndexes = await this.getMemoryVectorIndexes();
+
+      await Promise.all(
+        memoryIndexes.map(async (indexName: string) => {
+          try {
+            await this.vector!.deleteVectors({
+              indexName,
+              filter: { thread_id: threadId },
+            });
+          } catch {
+            this.logger.debug(`Failed to delete vectors for thread ${threadId} in ${indexName}, skipping`);
+          }
+        }),
+      );
+    } catch {
+      this.logger.debug(`Failed to clean up vectors for thread ${threadId}`);
+    }
   }
 
   async updateWorkingMemory({
@@ -416,28 +459,40 @@ export class Memory extends MastraMemory {
       );
     }
 
-    const memoryStore = await this.getMemoryStore();
-    if (scope === 'resource' && resourceId) {
-      // Update working memory in resource table
-      await memoryStore.updateResource({
-        resourceId,
-        workingMemory,
-      });
-    } else {
-      // Update working memory in thread metadata (existing behavior)
-      const thread = await this.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
-      }
+    // Use mutex to prevent race conditions when multiple concurrent calls update the same resource/thread
+    const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
+    const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
+      ? this.updateWorkingMemoryMutexes.get(mutexKey)!
+      : new Mutex();
+    this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
+    const release = await mutex.acquire();
 
-      await memoryStore.updateThread({
-        id: threadId,
-        title: thread.title || '',
-        metadata: {
-          ...thread.metadata,
+    try {
+      const memoryStore = await this.getMemoryStore();
+      if (scope === 'resource' && resourceId) {
+        // Update working memory in resource table
+        await memoryStore.updateResource({
+          resourceId,
           workingMemory,
-        },
-      });
+        });
+      } else {
+        // Update working memory in thread metadata (existing behavior)
+        const thread = await this.getThreadById({ threadId });
+        if (!thread) {
+          throw new Error(`Thread ${threadId} not found`);
+        }
+
+        await memoryStore.updateThread({
+          id: threadId,
+          title: thread.title || '',
+          metadata: {
+            ...thread.metadata,
+            workingMemory,
+          },
+        });
+      }
+    } finally {
+      release();
     }
   }
 
@@ -480,19 +535,37 @@ export class Memory extends MastraMemory {
       const template = await this.getWorkingMemoryTemplate({ memoryConfig });
 
       let reason = '';
+
+      // Normalize content for comparison (handles whitespace variations)
+      // This catches template duplicates even when LLM returns slightly different whitespace
+      const normalizeForComparison = (str: string) => str.replace(/\s+/g, ' ').trim();
+      const normalizedNewMemory = normalizeForComparison(workingMemory);
+      const normalizedTemplate = template?.content ? normalizeForComparison(template.content) : '';
+
       if (existingWorkingMemory) {
         if (searchString && existingWorkingMemory?.includes(searchString)) {
           workingMemory = existingWorkingMemory.replace(searchString, workingMemory);
           reason = `found and replaced searchString with newMemory`;
         } else if (
           existingWorkingMemory.includes(workingMemory) ||
-          template?.content?.trim() === workingMemory.trim()
+          template?.content?.trim() === workingMemory.trim() ||
+          // Also check normalized versions to catch template variations with different whitespace
+          normalizedNewMemory === normalizedTemplate
         ) {
           return {
             success: false,
             reason: `attempted to insert duplicate data into working memory. this entry was skipped`,
           };
         } else {
+          // Before appending, check if the new content is essentially the empty template
+          // This prevents template duplication when the LLM sends the template again
+          if (normalizedNewMemory === normalizedTemplate) {
+            return {
+              success: false,
+              reason: `attempted to append empty template to working memory. this entry was skipped`,
+            };
+          }
+
           if (searchString) {
             reason = `attempted to replace working memory string that doesn't exist. Appending to working memory instead.`;
           } else {
@@ -504,7 +577,7 @@ export class Memory extends MastraMemory {
             `
 ${workingMemory}`;
         }
-      } else if (workingMemory === template?.content) {
+      } else if (workingMemory === template?.content || normalizedNewMemory === normalizedTemplate) {
         return {
           success: false,
           reason: `try again when you have data to add. newMemory was equal to the working memory template`,
@@ -513,8 +586,16 @@ ${workingMemory}`;
         reason = `started new working memory`;
       }
 
-      // remove empty template insertions which models sometimes duplicate
-      workingMemory = template?.content ? workingMemory.replaceAll(template?.content, '') : workingMemory;
+      // Remove empty template insertions which models sometimes duplicate
+      // Use both exact and normalized matching to catch variations
+      if (template?.content) {
+        workingMemory = workingMemory.replaceAll(template.content, '');
+        // Also try to remove template with normalized line endings
+        const templateWithUnixLineEndings = template.content.replace(/\r\n/g, '\n');
+        const templateWithWindowsLineEndings = template.content.replace(/\n/g, '\r\n');
+        workingMemory = workingMemory.replaceAll(templateWithUnixLineEndings, '');
+        workingMemory = workingMemory.replaceAll(templateWithWindowsLineEndings, '');
+      }
 
       const scope = config.workingMemory.scope || 'resource';
 
@@ -1201,27 +1282,26 @@ Notes:
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
-            const indexes = await this.vector.listIndexes();
-            const memoryIndexes = indexes.filter(name => name.startsWith('memory_messages'));
+            const memoryIndexes = await this.getMemoryVectorIndexes();
+            const idsToDelete = [...messageIdsNeedingDeletion];
 
-            for (const indexName of memoryIndexes) {
-              for (const messageId of messageIdsNeedingDeletion) {
-                try {
-                  await this.vector.deleteVectors({
-                    indexName,
-                    filter: { message_id: messageId },
-                  });
-                } catch {
-                  // Ignore errors if vectors don't exist for this message
-                  this.logger.debug(
-                    `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
-                  );
+            await Promise.all(
+              memoryIndexes.map(async indexName => {
+                for (let i = 0; i < idsToDelete.length; i += VECTOR_DELETE_BATCH_SIZE) {
+                  const batch = idsToDelete.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+                  try {
+                    await this.vector!.deleteVectors({
+                      indexName,
+                      filter: { message_id: { $in: batch } },
+                    });
+                  } catch {
+                    this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+                  }
                 }
-              }
-            }
+              }),
+            );
           } catch {
-            // Ignore errors if no indexes exist yet
-            this.logger.debug(`No memory indexes found to delete from`);
+            this.logger.debug(`Failed to clean up old vectors during message update`);
           }
         }
 
@@ -1289,13 +1369,43 @@ Notes:
       throw new Error('All message IDs must be non-empty strings');
     }
 
-    // Delete from storage
+    // Delete from storage, then fire-and-forget vector cleanup
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.deleteMessages(messageIds);
 
-    // TODO: Delete from vector store if semantic recall is enabled
-    // This would require getting the messages first to know their threadId/resourceId
-    // and then querying the vector store to delete associated embeddings
+    await memoryStore.deleteMessages(messageIds);
+    if (this.vector) {
+      void this.deleteMessageVectors(messageIds);
+    }
+  }
+
+  /**
+   * Deletes vector embeddings for specific messages.
+   * This is called internally by deleteMessages to clean up orphaned vectors.
+   *
+   * @param messageIds - The IDs of the messages whose vectors should be deleted
+   */
+  private async deleteMessageVectors(messageIds: string[]): Promise<void> {
+    try {
+      const memoryIndexes = await this.getMemoryVectorIndexes();
+
+      await Promise.all(
+        memoryIndexes.map(async (indexName: string) => {
+          for (let i = 0; i < messageIds.length; i += VECTOR_DELETE_BATCH_SIZE) {
+            const batch = messageIds.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+            try {
+              await this.vector!.deleteVectors({
+                indexName,
+                filter: { message_id: { $in: batch } },
+              });
+            } catch {
+              this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+            }
+          }
+        }),
+      );
+    } catch {
+      this.logger.debug(`Failed to clean up vectors for deleted messages`);
+    }
   }
 
   /**

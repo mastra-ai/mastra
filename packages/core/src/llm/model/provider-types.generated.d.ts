@@ -623,11 +623,11 @@ export type ProviderModelsMap = {
     'gpt-5.2',
     'gpt-5.2-codex',
     'gpt-5.3-codex',
+    'gpt-5.4',
     'kimi-k2.5',
     'minimax-m2.1',
     'minimax-m2.5',
     'minimax-m2.5-free',
-    'trinity-large-preview-free',
   ];
   readonly poe: readonly [
     'anthropic/claude-haiku-3',
@@ -2712,6 +2712,10 @@ export type ProviderModelsMap = {
     'openai/gpt-5.2-pro-2025-12-11',
     'openai/gpt-5.3-chat-latest',
     'openai/gpt-5.3-codex',
+    'openai/gpt-5.4',
+    'openai/gpt-5.4-2026-03-05',
+    'openai/gpt-5.4-pro',
+    'openai/gpt-5.4-pro-2026-03-05',
     'openai/o3',
     'openai/o3-mini',
     'openai/o4-mini',
