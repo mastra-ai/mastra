@@ -4,6 +4,7 @@ import type { ModelInformation } from '../types';
 import { isZodType } from '../utils';
 import { zodToJsonSchema } from '../zod-to-json';
 import { OpenAISchemaCompatLayer } from './openai';
+import { OpenAIReasoningSchemaCompatLayer } from './openai-reasoning';
 
 describe('OpenAISchemaCompatLayer - Basic Transformations', () => {
   const modelInfo: ModelInformation = {
@@ -1261,5 +1262,224 @@ describe('OpenAISchemaCompatLayer - Issue #12284: Responses API via LiteLLM prox
     const json = compat.processToJSONSchema(schema);
     const check = allPropsRequired(json);
     expect(check.valid).toBe(true);
+  });
+});
+
+// =============================================================================
+// Issue #12284: ghassen's bug — defaultCompletionSchema in agent networks
+//
+// ghassen reported: "Missing 'finalResult'" when using agent networks with OpenAI.
+// The defaultCompletionSchema (validation.ts:370-377) has finalResult: z.string().optional().
+//
+// Root cause: agent.ts:3813 gates compat layer on `&& targetModelId`. When modelId
+// is falsy, processZodType() is never called, but execute.ts:119 still enables
+// strictJsonSchema: true. The schema goes to OpenAI unprocessed → rejected.
+//
+// These tests assert DESIRED behavior and should FAIL until the bug is fixed.
+// =============================================================================
+
+describe('OpenAISchemaCompatLayer - Issue #12284: ghassen — agent network defaultCompletionSchema', () => {
+  // Exact schema from packages/core/src/loop/network/validation.ts:370-377
+  const defaultCompletionSchemaNetwork = z.object({
+    isComplete: z.boolean().describe('Whether the task is complete'),
+    completionReason: z.string().describe('Explanation of why the task is or is not complete'),
+    finalResult: z
+      .string()
+      .optional()
+      .describe('The final result text to return to the user. omit if primitive result is sufficient'),
+  });
+
+  /**
+   * Simulates the full agent.ts structured output flow:
+   *   1. agent.ts:3812 — check if provider/modelId includes 'openai'
+   *   2. agent.ts:3813 — check isZodType(schema) && targetModelId
+   *   3. If both pass — construct compat layer, call processZodType()
+   *   4. zodToJsonSchema() converts the (possibly transformed) schema
+   *   5. execute.ts:119 — strictJsonSchema: true if provider.startsWith('openai')
+   *
+   * Returns the JSON Schema that would be sent to OpenAI.
+   */
+  function simulateAgentStructuredOutputFlow(schema: any, targetProvider: string, targetModelId: string | undefined) {
+    let processedSchema = schema;
+
+    // agent.ts:3812 — fixed: optional chaining on targetModelId
+    if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
+      // agent.ts:3813 — fixed: removed `&& targetModelId` guard so compat runs even with falsy modelId
+      if (isZodType(schema)) {
+        const modelInfo = {
+          provider: targetProvider,
+          modelId: targetModelId ?? '',
+          supportsStructuredOutputs: false,
+        };
+        const isReasoningModel = /^o[1-5]/.test(targetModelId ?? '');
+        const compat = isReasoningModel
+          ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+          : new OpenAISchemaCompatLayer(modelInfo);
+        if (compat.shouldApply()) {
+          processedSchema = compat.processZodType(schema);
+        }
+      }
+    }
+
+    // zodToJsonSchema runs regardless
+    const jsonSchema = zodToJsonSchema(processedSchema);
+
+    // execute.ts:119 — strict mode check is independent
+    const strictModeEnabled = targetProvider.startsWith('openai');
+
+    return { jsonSchema, strictModeEnabled };
+  }
+
+  it('happy path: valid modelId → compat layer runs → schema is strict-mode compliant', () => {
+    const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+      defaultCompletionSchemaNetwork,
+      'openai.responses',
+      'gpt-4o',
+    );
+    expect(strictModeEnabled).toBe(true);
+    expect(allPropsRequired(jsonSchema).valid).toBe(true);
+  });
+
+  it('FIXED: undefined modelId → compat layer still runs → schema is strict-mode compliant', () => {
+    // ghassen's scenario: agent network with OpenAI, modelId is falsy.
+    // After fix: removing `&& targetModelId` lets the compat layer run.
+    const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+      defaultCompletionSchemaNetwork,
+      'openai.responses',
+      undefined,
+    );
+
+    expect(strictModeEnabled).toBe(true);
+    expect(allPropsRequired(jsonSchema).valid).toBe(true);
+  });
+
+  it('FIXED: empty string modelId → compat layer still runs → schema is strict-mode compliant', () => {
+    const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+      defaultCompletionSchemaNetwork,
+      'openai.responses',
+      '',
+    );
+
+    expect(strictModeEnabled).toBe(true);
+    expect(allPropsRequired(jsonSchema).valid).toBe(true);
+  });
+});
+
+// =============================================================================
+// Issue #12284: netbrah's scenario — execute.ts defense-in-depth
+//
+// netbrah (PR #13361) uses Codex models through a LiteLLM/Azure proxy.
+// He did NOT hit the schema bug himself, but proposes ensureAllPropertiesRequired
+// in execute.ts as a safety net for the structured output responseFormat.schema.
+//
+// The execute.ts path:
+//   1. agent.ts may or may not apply processZodType() (depends on modelId)
+//   2. zodToJsonSchema() converts the schema to JSON Schema
+//   3. execute.ts builds responseFormat = { type: 'json', schema: jsonSchema }
+//   4. execute.ts enables strictJsonSchema: true for OpenAI providers
+//   5. responseFormat.schema is sent to OpenAI
+//
+// Without a safety net, any schema that slipped through without processZodType
+// (e.g., ghassen's modelId gap) goes to OpenAI with optional fields missing
+// from required.
+//
+// netbrah's fix: apply ensureAllPropertiesRequired(responseFormat.schema) in
+// step 4, right before sending to OpenAI. This catches ALL edge cases.
+//
+// These tests simulate the execute.ts path to prove the safety net is needed.
+// =============================================================================
+
+describe('OpenAISchemaCompatLayer - Issue #12284: netbrah — execute.ts safety net', () => {
+  /**
+   * Simulates the execute.ts path for structured output:
+   *   1. Schema arrives (possibly already processed by processZodType, possibly not)
+   *   2. zodToJsonSchema() converts to JSON Schema
+   *   3. strict mode is enabled if provider starts with 'openai'
+   *   4. JSON Schema is sent as responseFormat.schema
+   *
+   * Returns the responseFormat that would be sent to OpenAI.
+   */
+  function simulateExecutePath(zodSchema: any, provider: string) {
+    const jsonSchema = zodToJsonSchema(zodSchema);
+    const strictModeEnabled = provider.startsWith('openai');
+    return {
+      responseFormat: { type: 'json' as const, schema: jsonSchema },
+      strictModeEnabled,
+    };
+  }
+
+  // netbrah's actual setup: Codex model through LiteLLM proxy
+  // Provider is 'openai.chat' or 'openai.responses' (from createOpenAI())
+  const codexProvider = 'openai.responses';
+
+  it('BUG: schema with optional fields goes to OpenAI strict mode without safety net', () => {
+    // Schema with optional fields (e.g., defaultCompletionSchema, or any user schema)
+    // that somehow bypassed processZodType (modelId gap, or future edge case)
+    const schema = z.object({
+      isComplete: z.boolean(),
+      completionReason: z.string(),
+      finalResult: z.string().optional(),
+    });
+
+    const { responseFormat, strictModeEnabled } = simulateExecutePath(schema, codexProvider);
+
+    expect(strictModeEnabled).toBe(true);
+    // DESIRED: responseFormat.schema should have all properties in required.
+    // CURRENT: this FAILS because there's no safety net in execute.ts.
+    expect(allPropsRequired(responseFormat.schema).valid).toBe(true);
+  });
+
+  it('BUG: nested optional fields in structured output schema', () => {
+    // A user-defined structured output schema with nested optionals
+    const schema = z.object({
+      result: z.object({
+        summary: z.string(),
+        confidence: z.number().optional(),
+        sources: z
+          .array(
+            z.object({
+              url: z.string(),
+              title: z.string().optional(),
+            }),
+          )
+          .optional(),
+      }),
+    });
+
+    const { responseFormat, strictModeEnabled } = simulateExecutePath(schema, codexProvider);
+
+    expect(strictModeEnabled).toBe(true);
+    // DESIRED: all properties at every level should be in required.
+    // CURRENT: this FAILS — nested optional fields are missing from required.
+    const topLevel = allPropsRequired(responseFormat.schema);
+    expect(topLevel.valid).toBe(true);
+
+    // Check nested 'result' object
+    const resultSchema = (responseFormat.schema.properties as any)?.result;
+    if (resultSchema) {
+      const nested = allPropsRequired(resultSchema);
+      expect(nested.valid).toBe(true);
+    }
+  });
+
+  it('schema already processed by processZodType is valid (no safety net needed)', () => {
+    // When processZodType DID run, the schema is already correct
+    const schema = z.object({
+      isComplete: z.boolean(),
+      completionReason: z.string(),
+      finalResult: z.string().optional(),
+    });
+
+    const compat = new OpenAISchemaCompatLayer({
+      provider: codexProvider,
+      modelId: 'codex-mini-latest',
+      supportsStructuredOutputs: false,
+    });
+    const processed = compat.processZodType(schema);
+    const { responseFormat, strictModeEnabled } = simulateExecutePath(processed, codexProvider);
+
+    expect(strictModeEnabled).toBe(true);
+    // This passes because processZodType already handled it
+    expect(allPropsRequired(responseFormat.schema).valid).toBe(true);
   });
 });

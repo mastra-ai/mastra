@@ -7,6 +7,7 @@ import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionS
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
+import { ensureAllPropertiesRequired } from '../zod-to-json';
 import {
   isOptional,
   isObj,
@@ -128,6 +129,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
+  }
+
+  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(zodSchema);
+    return ensureAllPropertiesRequired(jsonSchema);
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
