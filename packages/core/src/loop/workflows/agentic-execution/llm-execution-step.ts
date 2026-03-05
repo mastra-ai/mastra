@@ -52,6 +52,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   logger?: IMastraLogger;
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
+  persistedToolCallIds?: Set<string>;
 };
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -67,6 +68,7 @@ async function processOutputStream<OUTPUT = undefined>({
   logger,
   transportRef,
   transportResolver,
+  persistedToolCallIds,
 }: ProcessOutputStreamOptions<OUTPUT>) {
   let transportSet = false;
 
@@ -99,7 +101,6 @@ async function processOutputStream<OUTPUT = undefined>({
     // Streaming
     if (
       chunk.type !== 'text-delta' &&
-      chunk.type !== 'tool-call' &&
       // not 100% sure about this being the right fix.
       // basically for some llm providers they add response-metadata after each text-delta
       // we then flush the chunks by calling messageList.add (a few lines down)
@@ -245,6 +246,35 @@ async function processOutputStream<OUTPUT = undefined>({
             logger?.error('Error calling onInputDelta', error);
           }
         }
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
+      case 'tool-call': {
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant' as const,
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: chunk.payload.toolCallId,
+                  toolName: chunk.payload.toolName,
+                  args: chunk.payload.args ?? {},
+                },
+                providerMetadata: chunk.payload.providerMetadata,
+                providerExecuted: chunk.payload.providerExecuted,
+              },
+            ],
+          },
+          createdAt: new Date(),
+        };
+
+        messageList.add(message, 'response');
+        persistedToolCallIds?.add(chunk.payload.toolCallId);
         safeEnqueue(controller, chunk);
         break;
       }
@@ -556,6 +586,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let warnings: any;
       let request: any;
       let rawResponse: any;
+      const persistedToolCallIds = new Set<string>();
 
       const { outputStream, callBail, runState, stepTools, stepWorkspace } = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
@@ -876,6 +907,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger,
             transportRef: _internal?.transportRef,
             transportResolver,
+            persistedToolCallIds,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -1006,17 +1038,31 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
        * Add tool calls to the message list
        */
 
-      const toolCalls = outputStream._getImmediateToolCalls()?.map(chunk => {
-        return chunk.payload;
-      });
+      const toolResults = outputStream._getImmediateToolResults()?.map(chunk => chunk.payload) ?? [];
+      const toolResultById = new Map(toolResults.map(result => [result.toolCallId, result]));
 
-      if (toolCalls.length > 0) {
+      const toolCalls =
+        outputStream._getImmediateToolCalls()?.map(chunk => {
+          const toolResult = toolResultById.get(chunk.payload.toolCallId);
+          const output = chunk.payload.output ?? toolResult?.result;
+          return {
+            ...chunk.payload,
+            args: chunk.payload.args ?? toolResult?.args ?? {},
+            ...(output !== undefined ? { output } : {}),
+            providerExecuted: chunk.payload.providerExecuted ?? toolResult?.providerExecuted,
+            providerMetadata: chunk.payload.providerMetadata ?? toolResult?.providerMetadata,
+          };
+        }) ?? [];
+
+      const toolCallsToPersist = toolCalls.filter(toolCall => !persistedToolCallIds.has(toolCall.toolCallId));
+
+      if (toolCallsToPersist.length > 0) {
         const message: MastraDBMessage = {
           id: messageId,
           role: 'assistant' as const,
           content: {
             format: 2,
-            parts: toolCalls.map(toolCall => {
+            parts: toolCallsToPersist.map(toolCall => {
               return {
                 type: 'tool-invocation' as const,
                 toolInvocation: {
