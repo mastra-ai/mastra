@@ -58,6 +58,11 @@ function fileLink(displayText: string, filePath: string, line?: number): string 
   return `\x1b]8;;file://${absPath}${lineFragment}\x07${displayText}\x1b]8;;\x07`;
 }
 
+/** Check if a tool name is a web search provider tool (e.g. web_search, web_search_20250305) */
+function isWebSearchTool(name: string): boolean {
+  return name === 'web_search' || /^web_search_\d+$/.test(name);
+}
+
 /**
  * Extract the actual content from tool result text.
  */
@@ -238,7 +243,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.renderTaskWriteEnhanced();
         break;
       default:
-        this.renderGenericToolEnhanced();
+        if (isWebSearchTool(this.toolName)) {
+          this.renderWebSearchEnhanced();
+        } else {
+          this.renderGenericToolEnhanced();
+        }
     }
   }
 
@@ -910,6 +919,87 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.contentBox.addChild(new Text(theme.fg('error', output), 0, 0));
       }
     }
+  }
+
+  private renderWebSearchEnhanced(): void {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const query = argsObj?.query ? String(argsObj.query) : '';
+    const status = this.getStatusIndicator();
+
+    const queryDisplay = query ? ` ${theme.fg('accent', `"${query}"`)}` : '';
+    const header = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
+
+    if (!this.result || this.isPartial) {
+      this.contentBox.addChild(new Text(header, 0, 0));
+      return;
+    }
+
+    if (this.result.isError) {
+      this.renderErrorResult(header);
+      return;
+    }
+
+    // Parse search results and format as a clean list of titles + URLs
+    const output = this.formatWebSearchResults();
+    if (output) {
+      this.collapsible = new CollapsibleComponent(
+        {
+          header,
+          expanded: this.expanded,
+          collapsedLines: 10,
+          expandedLines: 200,
+          showLineCount: true,
+        },
+        this.ui,
+      );
+      this.collapsible.setContent(output);
+      this.contentBox.addChild(this.collapsible);
+    } else {
+      this.contentBox.addChild(new Text(header, 0, 0));
+    }
+  }
+
+  /**
+   * Format web search results as a clean list of titles + URLs.
+   * Handles both Anthropic provider results (JSON array with encryptedContent)
+   * and Tavily results (markdown-formatted text).
+   */
+  private formatWebSearchResults(): string {
+    const raw = this.getFormattedOutput();
+    if (!raw) return '';
+
+    // Try to parse as JSON array (Anthropic provider format)
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const lines: string[] = [];
+        for (const item of parsed) {
+          if (typeof item !== 'object' || item === null) continue;
+          const url = typeof item.url === 'string' ? item.url : '';
+          if (!url) continue;
+          const title = typeof item.title === 'string' && item.title ? item.title : url;
+          const age = typeof item.pageAge === 'string' && item.pageAge ? theme.fg('muted', ` (${item.pageAge})`) : '';
+          lines.push(`  ${theme.fg('accent', title)}${age}`);
+          lines.push(`  ${theme.fg('muted', url)}`);
+        }
+        if (lines.length > 0) return lines.join('\n');
+
+        // Parsed as JSON array but couldn't extract results — strip encryptedContent
+        // before falling through, so we never dump huge base64 blobs to the terminal
+        const stripped = parsed.map((item: unknown) => {
+          if (typeof item !== 'object' || item === null) return item;
+          const { encryptedContent, ...rest } = item as Record<string, unknown>;
+          return rest;
+        });
+        return JSON.stringify(stripped, null, 2);
+      }
+    } catch {
+      // Not JSON — fall through to raw text (Tavily format)
+    }
+
+    // Tavily format is already readable markdown text.
+    // As a safety net, strip any encryptedContent fields that might appear in raw output.
+    return raw.replace(/"encryptedContent"\s*:\s*"[^"]*"/g, '"encryptedContent":"[redacted]"');
   }
 
   private renderGenericToolEnhanced(): void {
