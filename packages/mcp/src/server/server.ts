@@ -49,7 +49,7 @@ import type {
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from './types';
@@ -63,7 +63,7 @@ import type { MCPServerPrompts, MCPServerResources, ElicitationActions } from '.
  * ```typescript
  * import { MCPServer } from '@mastra/mcp';
  * import { createTool } from '@mastra/core/tools';
- * import { z } from 'zod';
+ * import { z } from 'zod/v3';
  *
  * const weatherTool = createTool({
  *   id: 'getWeather',
@@ -210,7 +210,7 @@ export class MCPServer extends MCPServerBase {
    * import { MCPServer } from '@mastra/mcp';
    * import { Agent } from '@mastra/core/agent';
    * import { createTool } from '@mastra/core/tools';
-   * import { z } from 'zod';
+   * import { z } from 'zod/v3';
    *
    * const myAgent = new Agent({
    *   id: 'helper',
