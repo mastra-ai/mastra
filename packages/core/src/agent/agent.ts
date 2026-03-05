@@ -27,12 +27,7 @@ import type {
 } from '../llm/model/base.types';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import { ModelRouterLanguageModel } from '../llm/model/router';
-import type {
-  MastraLanguageModel,
-  MastraLanguageModelV2,
-  MastraLegacyLanguageModel,
-  MastraModelConfig,
-} from '../llm/model/shared.types';
+import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
@@ -3828,14 +3823,12 @@ export class Agent<
     // Apply OpenAI schema compatibility layer for structured output
     // The schema is already StandardSchemaWithJSON (converted at API boundary in generate/stream)
     // but may need OpenAI-specific transforms for optional fields
-    if ('structuredOutput' in options && options.structuredOutput?.schema) {
-      let structuredOutputModel = llm.getModel();
-      if (options.structuredOutput?.model) {
-        structuredOutputModel = (await this.resolveModelConfig(
-          options.structuredOutput?.model,
-          requestContext,
-        )) as MastraLanguageModelV2;
-      }
+    //
+    // Skip when structuredOutput.model is provided because the StructuredOutputProcessor will
+    // create its own inner agent call, which will apply its own compat layer. Applying it here
+    // would convert the schema to JSONSchema7, which the processor can't properly re-convert.
+    if ('structuredOutput' in options && options.structuredOutput?.schema && !options.structuredOutput?.model) {
+      const structuredOutputModel = llm.getModel();
 
       const targetProvider = structuredOutputModel.provider;
       const targetModelId = structuredOutputModel.modelId;
@@ -3850,11 +3843,19 @@ export class Agent<
         const compatLayers = [new OpenAIReasoningSchemaCompatLayer(modelInfo), new OpenAISchemaCompatLayer(modelInfo)];
         // Apply OpenAI compat transforms (unwraps StandardSchemaWithJSON, processes, re-wraps)
         // For OpenAI models, this converts .optional() → .nullable().transform() for compatibility
-        options.structuredOutput.schema = applyCompatLayer({
+        const processedSchema = applyCompatLayer({
           schema: options.structuredOutput.schema,
           compatLayers,
           mode: 'jsonSchema',
         });
+        // Create a new structuredOutput object to avoid mutating the original
+        options = {
+          ...options,
+          structuredOutput: {
+            ...options.structuredOutput,
+            schema: processedSchema,
+          },
+        };
       }
     }
 
