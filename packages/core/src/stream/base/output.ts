@@ -525,11 +525,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
 
-              // If step has tripwire, text should be empty (rejected response).
-              // If step has tool calls, discard accumulated text — some models
-              // echo tool-result JSON as text content in intermediate steps.
-              const stepHasToolCalls = self.#bufferedByStep.toolCalls.length > 0;
-              const stepText = stepTripwire || stepHasToolCalls ? '' : self.#bufferedByStep.text;
+              // If step has tripwire, text should be empty (rejected response)
+              const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
 
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
