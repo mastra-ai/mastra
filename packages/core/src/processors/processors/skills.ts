@@ -205,7 +205,7 @@ ${skillsMd}`;
    * Process input step - inject available skills metadata into the system
    * message.  Tools are provided by `Agent.listSkillTools()` instead.
    */
-  async processInputStep({ messageList, tools, stepNumber, requestContext }: ProcessInputStepArgs) {
+  async processInputStep({ messageList, stepNumber, requestContext }: ProcessInputStepArgs) {
     // Refresh skills on first step only (not every step in the agentic loop)
     if (stepNumber === 0) {
       await this.skills?.maybeRefresh({ requestContext });
@@ -232,10 +232,5 @@ ${skillsMd}`;
           'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission first.',
       });
     }
-
-    return {
-      messageList,
-      tools,
-    };
   }
 }

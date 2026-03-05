@@ -174,7 +174,7 @@ describe('SkillsProcessor', () => {
 
   describe('processInputStep', () => {
     it('should inject available skills into system message (XML format)', async () => {
-      const result = await processor.processInputStep({
+      await processor.processInputStep({
         messageList: mockMessageList as any,
         tools: {},
       } as any);
@@ -194,11 +194,6 @@ describe('SkillsProcessor', () => {
           content: expect.stringContaining('`skill` tool'),
         }),
       );
-
-      // Processor should NOT add tools (tools are now in Agent.listSkillTools)
-      expect(result.tools).not.toHaveProperty('skill-activate');
-      expect(result.tools).not.toHaveProperty('skill');
-      expect(result.tools).not.toHaveProperty('skill_search');
     });
 
     it('should inject available skills in JSON format', async () => {
@@ -254,23 +249,6 @@ describe('SkillsProcessor', () => {
 
       // Should not add available skills when empty
       expect(mockMessageList.addSystem).not.toHaveBeenCalled();
-    });
-
-    it('should preserve existing tools without adding new ones', async () => {
-      const existingTools = {
-        'my-tool': { execute: vi.fn() },
-      };
-
-      const result = await processor.processInputStep({
-        messageList: mockMessageList as any,
-        tools: existingTools,
-      } as any);
-
-      // Existing tools preserved
-      expect(result.tools).toHaveProperty('my-tool');
-      // No skill tools added by processor
-      expect(result.tools).not.toHaveProperty('skill');
-      expect(result.tools).not.toHaveProperty('skill-activate');
     });
 
     it('should load skills based on request context', async () => {
@@ -355,38 +333,17 @@ describe('SkillsProcessor', () => {
       const noSkillsWorkspace = createMockWorkspace(undefined);
       const noSkillsProcessor = new SkillsProcessor({ workspace: noSkillsWorkspace });
 
-      const result = await noSkillsProcessor.processInputStep({
+      await noSkillsProcessor.processInputStep({
         messageList: mockMessageList as any,
         tools: { existingTool: {} as any },
       } as any);
 
       // Should not add any system messages
       expect(mockMessageList.addSystem).not.toHaveBeenCalled();
-
-      // Should preserve existing tools
-      expect(result.tools).toHaveProperty('existingTool');
-      // Should not add any skill tools
-      expect(result.tools).not.toHaveProperty('skill');
-      expect(result.tools).not.toHaveProperty('skill-activate');
     });
   });
 
   describe('model calls skill name directly as tool (issue #12654)', () => {
-    it('should NOT expose skill names as callable tools from the processor', async () => {
-      const result = await processor.processInputStep({
-        messageList: mockMessageList as any,
-        tools: {},
-      } as any);
-
-      // Processor should NOT add any tools
-      expect(result.tools).not.toHaveProperty('skill');
-      expect(result.tools).not.toHaveProperty('skill-activate');
-
-      // Skill names should NOT be available as tools
-      expect(result.tools).not.toHaveProperty('code-review');
-      expect(result.tools).not.toHaveProperty('testing');
-    });
-
     it('should provide clear instructions about how to use skills', async () => {
       await processor.processInputStep({
         messageList: mockMessageList as any,
