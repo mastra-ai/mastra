@@ -20,7 +20,7 @@ jobs:
           - description: 'Combined store Tests (vector+storage)'
           - description: 'Memory Tests'
           - description: 'RAG Tests'
-          - description: 'Tool Builder Tests'
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5

@@ -1106,11 +1106,9 @@ export class PgVector extends MastraVector<PGVectorFilter> {
             AND n.nspname = $2;
             `;
 
-      const [dimResult, countResult, indexResult] = await Promise.all([
-        client.query(dimensionQuery, [tableName]),
-        client.query(countQuery),
-        client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']),
-      ]);
+      const dimResult = await client.query(dimensionQuery, [tableName]);
+      const countResult = await client.query(countQuery);
+      const indexResult = await client.query(indexQuery, [`${indexName}_vector_idx`, this.schema || 'public']);
 
       const { index_method, index_def, operator_class } = indexResult.rows[0] || {
         index_method: 'flat',

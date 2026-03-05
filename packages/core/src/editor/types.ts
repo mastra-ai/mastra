@@ -179,6 +179,7 @@ export interface IEditorAgentNamespace {
       requestContext?: RequestContext;
     },
   ): Promise<StorageResolvedAgentType>;
+  applyStoredOverrides(agent: Agent): Promise<Agent>;
 }
 
 // ============================================================================
