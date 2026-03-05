@@ -312,7 +312,11 @@ ${skillInstructions}`;
         'Read a reference file from an activated skill. Optionally specify line range to read a portion of the file.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        referencePath: z.string().describe('Path to the reference file (relative to references/ directory)'),
+        referencePath: z
+          .string()
+          .describe(
+            'Path to the reference file (relative to the skill root directory, e.g. "references/colors.md" or "docs/schema.md")',
+          ),
         startLine: z
           .number()
           .optional()
@@ -375,7 +379,9 @@ ${skillInstructions}`;
         'Read a script file from an activated skill. Scripts contain executable code. Optionally specify line range.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        scriptPath: z.string().describe('Path to the script file (relative to scripts/ directory)'),
+        scriptPath: z
+          .string()
+          .describe('Path to the script file (relative to the skill root directory, e.g. "scripts/run.sh")'),
         startLine: z
           .number()
           .optional()
@@ -438,7 +444,9 @@ ${skillInstructions}`;
         'Read an asset file from an activated skill. Assets include templates, data files, and other static resources. Binary files are returned as base64.',
       inputSchema: z.object({
         skillName: z.string().describe('The name of the activated skill'),
-        assetPath: z.string().describe('Path to the asset file (relative to assets/ directory)'),
+        assetPath: z
+          .string()
+          .describe('Path to the asset file (relative to the skill root directory, e.g. "assets/logo.png")'),
       }),
       execute: async ({ skillName, assetPath }) => {
         if (!skills) {
@@ -539,16 +547,29 @@ ${skillInstructions}`;
   }
 
   // ===========================================================================
+  // Helpers
+  // ===========================================================================
+
+  /**
+   * Mark a tool as never requiring approval.
+   * Skill tools are internal plumbing and should bypass requireToolApproval.
+   */
+  private withNoApproval<T extends object>(tool: T): T & { needsApprovalFn: () => false } {
+    (tool as any).needsApprovalFn = () => false as const;
+    return tool as T & { needsApprovalFn: () => false };
+  }
+
+  // ===========================================================================
   // Processor Interface
   // ===========================================================================
 
   /**
    * Process input step - inject available skills and provide skill tools
    */
-  async processInputStep({ messageList, tools, stepNumber }: ProcessInputStepArgs) {
+  async processInputStep({ messageList, tools, stepNumber, requestContext }: ProcessInputStepArgs) {
     // Refresh skills on first step only (not every step in the agentic loop)
     if (stepNumber === 0) {
-      await this.skills?.maybeRefresh();
+      await this.skills?.maybeRefresh({ requestContext });
     }
     const skillsList = await this.skills?.list();
     const hasSkills = skillsList && skillsList.length > 0;
@@ -564,10 +585,13 @@ ${skillInstructions}`;
       }
 
       // Add instruction to activate skills proactively
+      // Be explicit that skills are NOT tools and must be activated via skill-activate
       messageList.addSystem({
         role: 'system',
         content:
-          'When a user asks about a topic covered by an available skill, activate that skill immediately using the skill-activate tool. Do not ask for permission - just activate the skill and use its instructions to answer the question.',
+          'IMPORTANT: Skills are NOT tools. Do not call skill names directly. ' +
+          'To use a skill, call the skill-activate tool with the skill name as the "name" parameter. ' +
+          'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission.',
       });
     }
 
@@ -586,14 +610,14 @@ ${skillInstructions}`;
     const skillTools: Record<string, unknown> = {};
 
     if (hasSkills) {
-      skillTools['skill-activate'] = this.createSkillActivateTool();
-      skillTools['skill-search'] = this.createSkillSearchTool();
+      skillTools['skill-activate'] = this.withNoApproval(this.createSkillActivateTool());
+      skillTools['skill-search'] = this.withNoApproval(this.createSkillSearchTool());
     }
 
     if (this._activatedSkills.size > 0) {
-      skillTools['skill-read-reference'] = this.createSkillReadReferenceTool();
-      skillTools['skill-read-script'] = this.createSkillReadScriptTool();
-      skillTools['skill-read-asset'] = this.createSkillReadAssetTool();
+      skillTools['skill-read-reference'] = this.withNoApproval(this.createSkillReadReferenceTool());
+      skillTools['skill-read-script'] = this.withNoApproval(this.createSkillReadScriptTool());
+      skillTools['skill-read-asset'] = this.withNoApproval(this.createSkillReadAssetTool());
     }
 
     return {

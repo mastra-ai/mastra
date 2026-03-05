@@ -20,35 +20,35 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-    {
-      name: "runId",
-      type: "string",
-      description: "The id of the run (optional).",
-    },
-    {
-      name: "preprocessStepResult",
-      type: "object",
-      description:
-        "Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
-    },
-    {
-      name: "analyzeStepResult",
-      type: "object",
-      description:
-        "Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
-    },
-    {
-      name: "score",
-      type: "number",
-      description:
-        "Coverage score (0-1) representing the proportion of matched keywords.",
-    },
-  ]}
+{
+name: "runId",
+type: "string",
+description: "The id of the run (optional).",
+},
+{
+name: "preprocessStepResult",
+type: "object",
+description:
+"Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
+},
+{
+name: "analyzeStepResult",
+type: "object",
+description:
+"Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
+},
+{
+name: "score",
+type: "number",
+description:
+"Coverage score (0-1) representing the proportion of matched keywords.",
+},
+]}
 />
 
 `.run()` returns a result in the following shape:
 
-```typescript
+```typescript prettier:false
 {
   runId: string,
   extractStepResult: {
@@ -78,7 +78,7 @@ The scorer evaluates keyword coverage by matching keywords with the following fe
    - Filters out common words and stop words
    - Normalizes case and word forms
    - Handles special terms and compounds
-2. Calculates keyword coverage:
+1. Calculates keyword coverage:
    - Matches keywords between texts
    - Counts successful matches
    - Computes coverage ratio
@@ -110,23 +110,23 @@ The scorer handles several special cases:
 Evaluate keyword coverage between input queries and agent responses:
 
 ```typescript title="src/example-keyword-coverage.ts"
-import { runEvals } from "@mastra/core/evals";
-import { createKeywordCoverageScorer } from "@mastra/evals/scorers/prebuilt";
-import { myAgent } from "./agent";
+import { runEvals } from '@mastra/core/evals'
+import { createKeywordCoverageScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
 
-const scorer = createKeywordCoverageScorer();
+const scorer = createKeywordCoverageScorer()
 
 const result = await runEvals({
   data: [
     {
-      input: "JavaScript frameworks like React and Vue",
+      input: 'JavaScript frameworks like React and Vue',
     },
     {
-      input: "TypeScript offers interfaces, generics, and type inference",
+      input: 'TypeScript offers interfaces, generics, and type inference',
     },
     {
       input:
-        "Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning",
+        'Machine learning models require data preprocessing, feature engineering, and hyperparameter tuning',
     },
   ],
   scorers: [scorer],
@@ -134,11 +134,11 @@ const result = await runEvals({
   onItemComplete: ({ scorerResults }) => {
     console.log({
       score: scorerResults[scorer.id].score,
-    });
+    })
   },
-});
+})
 
-console.log(result.scores);
+console.log(result.scores)
 ```
 
 For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).

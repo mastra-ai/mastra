@@ -21,16 +21,16 @@ By combining writable tool streams with agent streaming, you gain fine grained c
 Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
 
 ```typescript {2,9}
-import { Agent } from "@mastra/core/agent";
-import { testTool } from "../tools/test-tool";
+import { Agent } from '@mastra/core/agent'
+import { testTool } from '../tools/test-tool'
 
 export const testAgent = new Agent({
-  id: "test-agent",
-  name: "Test Agent",
-  instructions: "You are a weather agent.",
-  model: "openai/gpt-5.1",
+  id: 'test-agent',
+  name: 'Test Agent',
+  instructions: 'You are a weather agent.',
+  model: 'openai/gpt-5.1',
   tools: { testTool },
-});
+})
 ```
 
 ### Using `context.writer`
@@ -43,7 +43,7 @@ You must `await` the call to `writer.write()` or else you will lock the stream a
 
 :::
 
-```typescript {4,7,14}
+```typescript {4,7,14} prettier:false
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
@@ -72,7 +72,7 @@ export const testTool = createTool({
 You can also use `writer.custom()` if you want to emit top level stream chunks, This useful and relevant when
 integrating with UI Frameworks
 
-```typescript {4,7,14}
+```typescript {4,7,14} prettier:false
 import { createTool } from "@mastra/core/tools";
 
 export const testTool = createTool({
@@ -103,14 +103,11 @@ export const testTool = createTool({
 Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or tool-specific data.
 
 ```typescript
-const stream = await testAgent.stream([
-  "What is the weather in London?",
-  "Use the testTool",
-]);
+const stream = await testAgent.stream(['What is the weather in London?', 'Use the testTool'])
 
 for await (const chunk of stream) {
-  if (chunk.payload.output?.type === "custom-event") {
-    console.log(JSON.stringify(chunk, null, 2));
+  if (chunk.payload.output?.type === 'custom-event') {
+    console.log(JSON.stringify(chunk, null, 2))
   }
 }
 ```
@@ -122,12 +119,12 @@ Tools support lifecycle hooks that allow you to monitor different stages of tool
 ### Example: Using onInputAvailable and onOutput
 
 ```typescript
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: "weather-tool",
-  description: "Get weather information",
+  id: 'weather-tool',
+  description: 'Get weather information',
   inputSchema: z.object({
     city: z.string(),
   }),
@@ -137,17 +134,17 @@ export const weatherTool = createTool({
   }),
   // Called when the complete input is available
   onInputAvailable: ({ input, toolCallId }) => {
-    console.log(`Weather requested for: ${input.city}`);
+    console.log(`Weather requested for: ${input.city}`)
   },
-  execute: async (input) => {
-    const weather = await fetchWeather(input.city);
-    return weather;
+  execute: async input => {
+    const weather = await fetchWeather(input.city)
+    return weather
   },
   // Called after successful execution
   onOutput: ({ output, toolName }) => {
-    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`);
+    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`)
   },
-});
+})
 ```
 
 ### Available Hooks
@@ -159,26 +156,32 @@ export const weatherTool = createTool({
 
 For detailed documentation on all lifecycle hooks, see the [createTool() reference](/reference/tools/create-tool#tool-lifecycle-hooks).
 
+### Streaming tool input in UIs
+
+When a model generates a tool call, the arguments arrive incrementally as `tool-call-delta` stream chunks before the final `tool-call` chunk. UIs can listen for the corresponding `tool_input_start`, `tool_input_delta`, and `tool_input_end` events to render tool arguments as they stream in — for example, showing a file path or command immediately rather than waiting for the complete tool call.
+
+Using a partial JSON parser on the accumulated `argsTextDelta` fragments lets you extract usable argument values before the JSON is complete. This enables features like live diff previews for edit tools, streaming file content for write tools, and instant display of search patterns or file paths.
+
 ## Tool using an agent
 
 Pipe an agent's `fullStream` to the tool's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the tool run.
 
 ```typescript
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const testTool = createTool({
   execute: async (inputData, context) => {
-    const { city } = inputData;
+    const { city } = inputData
 
-    const agent = context?.mastra?.getAgent("testAgent");
-    const stream = await agent?.stream(`What is the weather in ${city}?`);
+    const agent = context?.mastra?.getAgent('testAgent')
+    const stream = await agent?.stream(`What is the weather in ${city}?`)
 
-    await stream!.fullStream.pipeTo(context?.writer!);
+    await stream!.fullStream.pipeTo(context?.writer!)
 
     return {
       value: await stream!.text,
-    };
+    }
   },
-});
+})
 ```

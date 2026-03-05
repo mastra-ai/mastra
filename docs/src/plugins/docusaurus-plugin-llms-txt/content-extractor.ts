@@ -101,17 +101,16 @@ const CLASS_PATTERNS_TO_REMOVE = [
   /hash-link/,
   /sr-only/,
   /codeBlockTitle/,
-  /^tabs$/,
-  /tabs__item/,
-  /font-mono.*font-bold.*capitalize/,
+  // Note: tabs/tabs__item preserved for tab label extraction
+  // Note: font-mono.*font-bold.*capitalize removed - was catching admonition titles
   /tocCollapsible/,
 ]
 
 // Pre-compiled aria-label patterns
 const ARIA_LABEL_PATTERNS_TO_REMOVE = [/^breadcrumbs$/, /^Direct link to/]
 
-// Pre-compiled role patterns
-const ROLES_TO_REMOVE = new Set(['tablist', 'tab'])
+// Pre-compiled role patterns - tablist/tab preserved for tabs handling
+const ROLES_TO_REMOVE = new Set<string>([])
 
 /**
  * Check if an element should be removed based on its properties

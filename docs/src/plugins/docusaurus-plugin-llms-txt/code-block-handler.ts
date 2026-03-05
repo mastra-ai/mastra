@@ -1,7 +1,9 @@
 /**
  * Custom handler for code blocks to preserve language hints
  *
- * Docusaurus places language classes on <pre> elements (e.g., <pre class="language-typescript">), not on <code> elements. The default rehype-remark handler only checks <code> elements, so we need a custom handler to extract the language from the <pre> element.
+ * Docusaurus places language classes on <pre> elements (e.g., <pre class="language-typescript">),
+ * not on <code> elements. The default rehype-remark handler only checks <code> elements,
+ * so we need a custom handler to extract the language from the <pre> element.
  */
 
 import type { Element, Text } from 'hast'
@@ -69,9 +71,6 @@ export function handleCodeBlock(_state: State, node: Element): Code {
     const codeClassNames = codeElement.properties?.className as string[] | undefined
     lang = extractLanguage(codeClassNames)
   }
-
-  // Also check parent div for language class (Docusaurus sometimes puts it there)
-  // This is handled at a higher level, so we don't need to worry about it here
 
   // Extract code content
   const code = codeElement ? extractTextContent(codeElement) : extractTextContent(node)

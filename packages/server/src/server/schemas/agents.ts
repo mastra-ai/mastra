@@ -1,5 +1,6 @@
 import z from 'zod';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -105,9 +106,12 @@ export const serializedAgentSchema = z.object({
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
   modelList: z.array(modelConfigSchema).optional(),
-  defaultOptions: z.record(z.string(), z.any()).optional(),
+  defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  activeVersionId: z.string().optional(),
+  hasDraft: z.boolean().optional(),
 });
 
 /**

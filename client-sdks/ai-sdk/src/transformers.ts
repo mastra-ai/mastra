@@ -87,7 +87,9 @@ const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
 export function WorkflowStreamToAISDKTransformer({
   includeTextStreamParts,
-}: { includeTextStreamParts?: boolean } = {}) {
+  sendReasoning,
+  sendSources,
+}: { includeTextStreamParts?: boolean; sendReasoning?: boolean; sendSources?: boolean } = {}) {
   const bufferedWorkflows = new Map<
     string,
     {
@@ -119,7 +121,10 @@ export function WorkflowStreamToAISDKTransformer({
       });
     },
     transform(chunk, controller) {
-      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts);
+      const transformed = transformWorkflow<any>(chunk, bufferedWorkflows, false, includeTextStreamParts, {
+        sendReasoning,
+        sendSources,
+      });
       if (transformed) controller.enqueue(transformed);
     },
   });
@@ -418,6 +423,7 @@ export function transformWorkflow<OUTPUT>(
   >,
   isNested?: boolean,
   includeTextStreamParts?: boolean,
+  streamOptions?: { sendReasoning?: boolean; sendSources?: boolean },
 ) {
   switch (payload.type) {
     case 'workflow-start':
@@ -520,6 +526,8 @@ export function transformWorkflow<OUTPUT>(
 
         const transformedChunk = convertFullStreamChunkToUIMessageStream({
           part: part as any,
+          sendReasoning: streamOptions?.sendReasoning,
+          sendSources: streamOptions?.sendSources,
           onError(error) {
             return safeParseErrorObject(error);
           },
@@ -844,8 +852,25 @@ export function transformNetwork(
         },
       } as const;
 
+      // Check if the routing agent handled the request directly (no delegation)
+      // In that case, the result text is the selectionReason (routing logic), not user-facing content.
+      // Text events for the actual answer will come from the validation step instead.
+      // Scope to the current step (via payload.payload.runId) to avoid stale matches in multi-iteration scenarios.
+      const finishStepId = payload.payload?.runId;
+      const routingStep = current.steps.find(
+        step => step.id === finishStepId && step.task?.id === 'none' && step.task?.type === 'none',
+      );
+      const isDirectHandling = !!routingStep;
+
       // Fallback: emit text events from result if core didn't send routing-agent-text-* events
-      if (!current.hasEmittedText && resultText && typeof resultText === 'string' && resultText.length > 0) {
+      // Skip this when routing agent handled directly, as the result contains internal routing reasoning
+      if (
+        !isDirectHandling &&
+        !current.hasEmittedText &&
+        resultText &&
+        typeof resultText === 'string' &&
+        resultText.length > 0
+      ) {
         current.hasEmittedText = true;
         return [
           { type: 'text-start', id: payload.runId } as const,

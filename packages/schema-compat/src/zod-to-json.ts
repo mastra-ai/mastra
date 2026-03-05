@@ -1,7 +1,6 @@
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
-import type { ZodType as ZodSchemaV4 } from 'zod/v4';
+import { z as zV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
@@ -28,7 +27,7 @@ function patchRecordSchemas(schema: any): any {
     // The bug: z.record(valueSchema) puts the value in keyType instead of valueType
     // Fix: move it to valueType and set keyType to string (the default)
     def.valueType = def.keyType;
-    def.keyType = (z as any).string();
+    def.keyType = zV4.string();
   }
 
   // Recursively patch nested schemas
@@ -164,18 +163,41 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   return result;
 }
 
+// export function zotToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7', strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative'): JSONSchema7 {
+//   const target = 'draft-07' as StandardJSONSchemaV1.Target;
+//   const standardSchema = toStandardSchema(zodSchema);
+//   const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
+//     target,
+//   });
+
+//   traverse(jsonSchema, {
+//     cb: {
+//       pre: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+//         this.preProcessJSONNode(schema, parentSchema);
+//       },
+//       post: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+//         this.postProcessJSONNode(schema, parentSchema);
+//       },
+//     },
+//   });
+
+// }
+
 export function zodToJsonSchema(
-  zodSchema: ZodSchemaV3 | ZodSchemaV4,
+  zodSchema: any,
   target: Targets = 'jsonSchema7',
   strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
 ): JSONSchema7 {
-  const fn = 'toJSONSchema';
-
-  if (fn in z) {
+  // Route based on whether the schema is v4 (has _zod) or v3 (only has _def).
+  // We use zV4.toJSONSchema (imported from 'zod/v4') for v4 schemas, since the
+  // default 'zod' import may resolve to v3 depending on the environment.
+  // Without this check, v3 schemas passed to v4's toJSONSchema would throw
+  // "Cannot read properties of undefined (reading 'def')".
+  if (zodSchema?._zod) {
     // Zod v4 path - patch record schemas before converting
     patchRecordSchemas(zodSchema);
 
-    const jsonSchema = (z as any)[fn](zodSchema, {
+    const jsonSchema = zV4.toJSONSchema(zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
         // Handle both Zod v4 structures: _def directly or nested in _zod
@@ -186,7 +208,7 @@ export function zodToJsonSchema(
           ctx.jsonSchema.format = 'date-time';
         }
       },
-    }) satisfies JSONSchema7;
+    }) as JSONSchema7;
 
     // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
     return fixAnyOfNullable(jsonSchema);

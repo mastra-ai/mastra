@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
-import { Spinner } from '@/ds/components/Spinner';
 import { Info } from 'lucide-react';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { ProviderLogo } from './provider-logo';
-import { cleanProviderId } from '../utils';
+import { cleanProviderId, findProviderById } from '../utils';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 export interface LLMProvidersProps {
   value: string;
@@ -66,14 +66,13 @@ export const LLMProviders = ({
   };
 
   if (providersLoading) {
-    return (
-      <div className="flex items-center gap-2">
-        <Spinner className="w-4 h-4" />
-      </div>
-    );
+    return <Skeleton className="w-full h-8" />;
   }
 
-  const currentModelProvider = cleanProviderId(value);
+  // Find the matching provider, handling gateway prefix fallback
+  // (e.g., value='custom' should match provider with id='acme/custom')
+  const matchedProvider = findProviderById(providers, value);
+  const currentModelProvider = matchedProvider?.id || cleanProviderId(value);
 
   return (
     <Combobox

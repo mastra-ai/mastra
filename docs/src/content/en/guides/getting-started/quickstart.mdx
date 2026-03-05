@@ -15,7 +15,7 @@ If you need more control over the setup, see the [manual installation guide](/do
 
 ## Before you begin
 
-* You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
+- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
 
 ## Initialize Mastra
 
@@ -29,9 +29,13 @@ npm create mastra@latest
 
 This creates a new directory for your project with a `src/mastra` folder containing an example weather agent and the following files:
 
-- `index.ts` - Mastra config, including memory
-- `tools/weather-tool.ts` - a tool to fetch weather for a given location
-- `agents/weather-agent.ts` - a weather agent with a prompt that uses the tool
+- `index.ts`: Entry point for all Mastra-related code and configuration
+- `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool
+- `tools/weather-tool.ts`: A tool to fetch weather for a given location
+- `workflows/weather-workflow.ts`: A workflow that runs the weather agent
+- `scorers/weather-scorer.ts`: A scorer to evaluate the weather agent's responses
+
+Depending on your choices, you'll also end up with [Mastra Skills](/docs/build-with-ai/skills) or the [MCP Docs Server](/docs/build-with-ai/mcp-docs-server) installed.
 
 :::tip
 
@@ -45,7 +49,9 @@ Once setup is complete, follow the instructions in your terminal to start the Ma
 
 Try asking about the weather. If your API key is set up correctly, you'll get a response:
 
-<VideoPlayer src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4" />
+<VideoPlayer
+  src="https://res.cloudinary.com/mastra-assets/video/upload/v1751406022/local-dev-agents-playground_100_m3begx.mp4"
+/>
 
 [Studio](/docs/getting-started/studio) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your app using the guides below.
 
@@ -53,5 +59,6 @@ Try asking about the weather. If your API key is set up correctly, you'll get a 
 
 - Integrate Mastra with your frontend framework: [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro)
 - Read more about [Mastra's features](/docs#why-mastra)
+- Learn how you can [build Mastra with AI](/docs/getting-started/build-with-ai)
 - Build an agent from scratch following one of our [guides](/guides)
 - Watch conceptual guides on our [YouTube channel](https://www.youtube.com/@mastra-ai) and [subscribe](https://www.youtube.com/@mastra-ai?sub_confirmation=1)

@@ -15,7 +15,7 @@ describe('MCP Server Logging', () => {
     weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
 
     // Start the weather SSE server
-    weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
+    weatherProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
       env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) },
     });
 
@@ -69,7 +69,7 @@ describe('MCP Server Logging', () => {
         },
         stock: {
           command: 'npx',
-          args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+          args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__', 'stock-price.ts')],
           env: {
             FAKE_CREDS: 'test',
           },

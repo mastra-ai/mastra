@@ -155,6 +155,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         type: 'data-tool-call-approval',
         id: chunk.payload.toolCallId,
         data: {
+          state: 'data-tool-call-approval',
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
@@ -167,6 +168,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
         type: 'data-tool-call-suspended',
         id: chunk.payload.toolCallId,
         data: {
+          state: 'data-tool-call-suspended',
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
@@ -497,8 +499,11 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'start': {
       if (sendStart) {
-        // Prefer messageId from the chunk itself (from backend), fall back to responseMessageId parameter
-        const messageId = ('messageId' in part ? part.messageId : undefined) || responseMessageId;
+        // Prefer responseMessageId (from client's last assistant message) when set,
+        // fall back to messageId from the chunk (server-generated).
+        // This ensures continuation flows (e.g. addToolResult) use the client's
+        // existing message ID so the response appends to the correct message.
+        const messageId = responseMessageId || ('messageId' in part ? part.messageId : undefined);
         return {
           type: 'start' as const,
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),

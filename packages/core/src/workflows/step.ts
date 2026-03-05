@@ -1,14 +1,14 @@
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
-import type { StepResult } from './types';
-import type { Workflow } from './workflow';
+import type { OutputWriter, StepResult, StepMetadata } from './types';
+import type { AnyWorkflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
@@ -28,7 +28,7 @@ export type ExecuteFunctionParams<
   TSuspend,
   EngineType,
   TRequestContext extends Record<string, any> | unknown = unknown,
-> = {
+> = Partial<ObservabilityContext> & {
   runId: string;
   resourceId?: string;
   workflowId: string;
@@ -40,8 +40,7 @@ export type ExecuteFunctionParams<
   resumeData?: TResume;
   suspendData?: TSuspend;
   retryCount: number;
-  tracingContext: TracingContext;
-  getInitData<T>(): T extends Workflow<any, any, any, any, any, any, any> ? InferZodLikeSchema<T['inputSchema']> : T;
+  getInitData<T>(): T extends AnyWorkflow ? InferZodLikeSchema<T['inputSchema']> : T;
   getStepResult<TOutput>(step: string): TOutput;
   getStepResult<TStep extends Step<string, any, any, any, any, any, EngineType>>(
     step: TStep,
@@ -62,6 +61,7 @@ export type ExecuteFunctionParams<
   engine: EngineType;
   abortSignal: AbortSignal;
   writer: ToolStream;
+  outputWriter?: OutputWriter;
   validateSchemas?: boolean;
 };
 
@@ -167,10 +167,12 @@ export interface Step<
   scorers?: DynamicArgument<MastraScorers>;
   retries?: number;
   component?: string;
+  metadata?: StepMetadata;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {
   let result;
+
   if (typeof step === 'string') {
     result = stepResults[step];
   } else {

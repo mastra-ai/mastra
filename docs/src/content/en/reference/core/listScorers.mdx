@@ -12,13 +12,13 @@ The `listScorers()` method returns all scorers that have been registered with th
 ## Usage Example
 
 ```typescript
-import { mastra } from "./mastra";
+import { mastra } from './mastra'
 
 // Get all registered scorers
-const allScorers = mastra.listScorers();
+const allScorers = mastra.listScorers()
 
 // Access a specific scorer
-const myScorer = allScorers.relevancyScorer;
+const myScorer = allScorers.relevancyScorer
 ```
 
 ## Parameters
@@ -29,13 +29,13 @@ This method takes no parameters.
 
 <PropertiesTable
   content={[
-    {
-      name: "scorers",
-      type: "Record<string, MastraScorer> | undefined",
-      description:
-        "An object containing all registered scorers, where keys are scorer names and values are MastraScorer instances. Returns undefined if no scorers are registered.",
-    },
-  ]}
+{
+name: "scorers",
+type: "Record<string, MastraScorer> | undefined",
+description:
+"An object containing all registered scorers, where keys are scorer names and values are MastraScorer instances. Returns undefined if no scorers are registered.",
+},
+]}
 />
 
 ## Related

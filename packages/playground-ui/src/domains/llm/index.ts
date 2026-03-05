@@ -1,3 +1,3 @@
 export * from './components';
 export * from './hooks';
-export { cleanProviderId } from './utils';
+export { cleanProviderId, findProviderById } from './utils';
