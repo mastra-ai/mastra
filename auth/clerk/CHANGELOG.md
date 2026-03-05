@@ -1,5 +1,12 @@
 # @mastra/auth-clerk
 
+## 1.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ae52b89`](https://github.com/mastra-ai/mastra/commit/ae52b89cf1c78e2ab5231975492a84173dcd04dc), [`1ea40a9`](https://github.com/mastra-ai/mastra/commit/1ea40a99f0104faa528bc13b0ae99a48c3c5201d)]:
+  - @mastra/auth@1.0.1-alpha.0
+
 ## 1.0.0
 
 ### Major Changes
