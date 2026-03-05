@@ -146,6 +146,34 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('transient chunks', () => {
+    it('marks stdout and stderr chunks as transient', async () => {
+      const { context, writerCustom } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          opts?.onStdout?.('output\n');
+          opts?.onStderr?.('warning\n');
+          return { success: true, exitCode: 0, stdout: 'output\n', stderr: 'warning\n', executionTimeMs: 10 };
+        },
+      });
+
+      await execute({ command: 'echo', args: [], timeout: null, cwd: null }, context);
+
+      const stdoutChunks = getChunks(writerCustom, 'data-sandbox-stdout');
+      const stderrChunks = getChunks(writerCustom, 'data-sandbox-stderr');
+      const exitChunks = getChunks(writerCustom, 'data-sandbox-exit');
+
+      for (const chunk of stdoutChunks) {
+        expect(chunk.transient).toBe(true);
+      }
+      for (const chunk of stderrChunks) {
+        expect(chunk.transient).toBe(true);
+      }
+      for (const chunk of exitChunks) {
+        expect(chunk.transient).toBeUndefined();
+      }
+    });
+  });
+
   describe('exit chunk data', () => {
     it('emits exit chunk with success on successful command', async () => {
       const { context, writerCustom } = createMockContext({

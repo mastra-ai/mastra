@@ -607,6 +607,7 @@ export type DataChunkType = {
   type: `data-${string}`;
   data: any;
   id?: string;
+  transient?: boolean;
 };
 
 export type NetworkChunkType<OUTPUT = undefined> =
