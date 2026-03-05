@@ -1,24 +1,21 @@
+import 'dotenv/config'
 import prismMastraDark from './src/theme/prism-mastra-dark.js'
 import prismMastraLight from './src/theme/prism-mastra-light.js'
-import 'dotenv/config'
 import type { Config } from '@docusaurus/types'
+import type { ThemeConfig } from '@docusaurus/preset-classic'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
 
 const config: Config = {
   title: 'Mastra Docs',
-  tagline: 'TypeScript agent framework',
+  tagline: 'The TypeScript Agent Framework',
   favicon: '/img/favicon.ico',
-
-  // Set the production url of your site here
   url: 'https://mastra.ai',
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
-
+  // hint: do NOT set trailingSlash to any value to avoid rendering issues on vercel
+  // see: https://github.com/slorber/trailing-slash-guide
+  // trailingSlash: false,
   onBrokenLinks: 'throw',
-
-  // Markdown configuration
   markdown: {
     hooks: {
       onBrokenMarkdownLinks: 'warn',
@@ -32,13 +29,13 @@ const config: Config = {
     },
     experimental_faster: true,
   },
-
   // Custom fields for Algolia search, HubSpot, and Analytics
   customFields: {
     algoliaAppId: process.env.ALGOLIA_APP_ID,
     algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
+    hsFormGuidLearn: process.env.HS_FORM_GUID_LEARN,
     mastraWebsite: process.env.MASTRA_WEBSITE,
     // Analytics
     gaId: process.env.GA_ID,
@@ -47,27 +44,9 @@ const config: Config = {
     kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
     kapaGroupId: process.env.KAPA_GROUP_ID,
   },
-
-  // Preconnect to Google Fonts
-  headTags: [
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossorigin: 'anonymous',
-      },
-    },
-  ],
-
   plugins: [
+    [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
+    [require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
     [
       '@docusaurus/plugin-vercel-analytics',
       {
@@ -108,8 +87,17 @@ const config: Config = {
         remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
       },
     ],
+    [
+      require.resolve('./src/plugins/docusaurus-plugin-llms-txt'),
+      {
+        siteUrl: 'https://mastra.ai',
+        siteTitle: 'Mastra',
+        siteDescription:
+          'Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server.',
+        excludeRoutes: ['/404'],
+      },
+    ],
   ],
-
   presets: [
     [
       'classic',
@@ -125,7 +113,7 @@ const config: Config = {
         },
         blog: false,
         theme: {
-          customCss: './src/css/custom.css',
+          customCss: './custom.css',
         },
         sitemap: {
           lastmod: 'date',
@@ -137,19 +125,19 @@ const config: Config = {
       },
     ],
   ],
-
-  themeConfig:
-    /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
-    {
-      colorMode: {
-        respectPrefersColorScheme: true,
-      },
-      prism: {
-        theme: prismMastraLight,
-        darkTheme: prismMastraDark,
-        additionalLanguages: ['diff', 'bash'],
-      },
+  themeConfig: {
+    image: 'img/og-image.png',
+    colorMode: {
+      respectPrefersColorScheme: true,
     },
+    prism: {
+      // @ts-expect-error: FIXME
+      theme: prismMastraLight,
+      // @ts-expect-error: FIXME
+      darkTheme: prismMastraDark,
+      additionalLanguages: ['diff', 'bash'],
+    },
+  } satisfies ThemeConfig,
 }
 
 export default config

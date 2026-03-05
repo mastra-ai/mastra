@@ -533,6 +533,261 @@ describe('ArizeExporter', () => {
     });
   });
 
+  describe('Span Kind Mapping', () => {
+    it('maps workflow_run spans to CHAIN span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const workflowRunSpan: Mutable<AnyExportedSpan> = {
+        id: 'workflow-run-span',
+        traceId: 'trace-workflow-run',
+        type: SpanType.WORKFLOW_RUN,
+        name: 'Data Processing Workflow',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        input: { data: [1, 2, 3] },
+        output: { processed: true, count: 3 },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: workflowRunSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Workflow spans should be mapped to CHAIN span kind, not LLM
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
+    });
+
+    it('maps workflow_step spans to CHAIN span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const workflowStepSpan: Mutable<AnyExportedSpan> = {
+        id: 'workflow-step-span',
+        traceId: 'trace-workflow-step',
+        parentSpanId: 'parent-workflow',
+        type: SpanType.WORKFLOW_STEP,
+        name: 'Process Data Step',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { item: 1 },
+        output: { result: 'processed' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: workflowStepSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Workflow step spans should be mapped to CHAIN span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
+    });
+
+    it('maps agent_run spans to AGENT span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const agentRunSpan: Mutable<AnyExportedSpan> = {
+        id: 'agent-run-span',
+        traceId: 'trace-agent-run',
+        type: SpanType.AGENT_RUN,
+        name: 'Customer Support Agent',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        input: { prompt: 'Hello' },
+        output: { response: 'Hi there!' },
+        attributes: {
+          agentId: 'support-agent',
+        },
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: agentRunSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Agent spans should be mapped to AGENT span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('AGENT');
+    });
+
+    it('maps model_generation spans to LLM span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const modelGenerationSpan: Mutable<AnyExportedSpan> = {
+        id: 'model-gen-span',
+        traceId: 'trace-model-gen',
+        parentSpanId: 'parent-agent',
+        type: SpanType.MODEL_GENERATION,
+        name: 'gpt-4 generation',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { messages: [{ role: 'user', content: 'Hello' }] },
+        output: { text: 'Hi!' },
+        attributes: {
+          model: 'gpt-4',
+          provider: 'openai',
+        },
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: modelGenerationSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Model generation spans should be mapped to LLM span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('LLM');
+    });
+
+    it('maps processor_run spans to CHAIN span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const processorRunSpan: Mutable<AnyExportedSpan> = {
+        id: 'processor-run-span',
+        traceId: 'trace-processor-run',
+        parentSpanId: 'parent-agent',
+        type: SpanType.PROCESSOR_RUN,
+        name: 'Input Processor',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { raw: 'input data' },
+        output: { processed: 'transformed data' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: processorRunSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Processor spans should be mapped to CHAIN span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
+    });
+
+    it('maps generic spans to CHAIN span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const genericSpan: Mutable<AnyExportedSpan> = {
+        id: 'generic-span',
+        traceId: 'trace-generic',
+        parentSpanId: 'parent-workflow',
+        type: SpanType.GENERIC,
+        name: 'Custom Operation',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { data: 'some input' },
+        output: { result: 'some output' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: genericSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Generic spans should be mapped to CHAIN span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
+    });
+
+    it('maps mcp_tool_call spans to TOOL span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      const mcpToolCallSpan: Mutable<AnyExportedSpan> = {
+        id: 'mcp-tool-span',
+        traceId: 'trace-mcp-tool',
+        parentSpanId: 'parent-agent',
+        type: SpanType.MCP_TOOL_CALL,
+        name: 'execute_tool filesystem.readFile',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: false,
+        input: { path: '/tmp/file.txt' },
+        output: { content: 'file contents' },
+        attributes: {
+          mcpServer: 'filesystem-server',
+        },
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mcpToolCallSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // MCP tool call spans should be mapped to TOOL span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('TOOL');
+    });
+
+    it('defaults unknown span types to CHAIN span kind', async () => {
+      exporter = new ArizeExporter({
+        endpoint: 'http://localhost:4318/v1/traces',
+      });
+
+      // Simulate a future span type that doesn't exist in the mapping
+      const unknownSpan: Mutable<AnyExportedSpan> = {
+        id: 'unknown-span',
+        traceId: 'trace-unknown',
+        type: 'some_future_span_type' as any,
+        name: 'Future Operation',
+        startTime: new Date(),
+        endTime: new Date(),
+        isRootSpan: true,
+        input: { data: 'input' },
+        output: { result: 'output' },
+        attributes: {},
+      } as unknown as AnyExportedSpan;
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: unknownSpan,
+      });
+
+      expect(exportedSpans.length).toBe(1);
+      const attrs = exportedSpans[0].attributes;
+
+      // Unknown span types should default to CHAIN span kind
+      expect(attrs[SemanticConventions.OPENINFERENCE_SPAN_KIND]).toBe('CHAIN');
+    });
+  });
+
   describe('Tool Call Span Support', () => {
     it('maps tool call input/output to OpenInference INPUT_VALUE/OUTPUT_VALUE', async () => {
       exporter = new ArizeExporter({

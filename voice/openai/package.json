@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-openai",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Mastra OpenAI speech integration",
   "type": "module",
   "files": [
@@ -24,14 +24,14 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "postbuild": "pnpx tsx ../../scripts/generate-package-docs.ts voice/openai",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "openai": "^5.11.0"
+    "openai": "^5.23.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

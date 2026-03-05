@@ -1,0 +1,9 @@
+.env
+.env.development
+node_modules
+.vercel
+.mastra
+.sandbox/
+.sandbox-profiles/
+
+.agents/

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "2.0.0",
+  "version": "2.1.2",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "build:docs": "pnpx tsx ../../scripts/generate-package-docs.ts packages/rag",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "vitest": "vitest",
     "test": "vitest run",
@@ -38,7 +38,7 @@
     "js-tiktoken": "^1.0.21",
     "node-html-better-parser": "^1.5.8",
     "pathe": "^2.0.3",
-    "zeroentropy": "0.1.0-alpha.6"
+    "zeroentropy": "0.1.0-alpha.7"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

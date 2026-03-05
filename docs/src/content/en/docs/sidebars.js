@@ -15,17 +15,16 @@
 const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
-    'index',
+    {
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
     {
       type: 'category',
-      label: 'Getting Started',
+      label: 'Fundamentals',
       collapsed: false,
       items: [
-        {
-          type: 'doc',
-          id: 'getting-started/start',
-          label: 'Start',
-        },
         {
           type: 'doc',
           id: 'getting-started/studio',
@@ -38,13 +37,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'getting-started/mcp-docs-server',
-          label: 'MCP Docs Server',
+          id: 'getting-started/manual-install',
+          label: 'Manual Install',
         },
         {
           type: 'doc',
-          id: 'getting-started/manual-install',
-          label: 'Manual Install',
+          id: 'getting-started/build-with-ai',
+          label: 'Build with AI',
         },
       ],
     },
@@ -71,6 +70,11 @@ const sidebars = {
           type: 'doc',
           id: 'agents/structured-output',
           label: 'Structured Output',
+        },
+        {
+          type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
         },
         {
           type: 'doc',
@@ -220,6 +224,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/working-memory',
           label: 'Working Memory',
         },
@@ -268,6 +280,40 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Workspaces',
+      customProps: {
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'workspace/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/filesystem',
+          label: 'Filesystem',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/sandbox',
+          label: 'Sandbox',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'workspace/search',
+          label: 'Search and Indexing',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Server',
       items: [
         {
@@ -279,17 +325,11 @@ const sidebars = {
           type: 'doc',
           id: 'server/server-adapters',
           label: 'Server Adapters',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'server/custom-adapters',
           label: 'Custom Adapters',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -329,6 +369,11 @@ const sidebars = {
               type: 'doc',
               id: 'server/auth/jwt',
               label: 'JSON Web Token',
+            },
+            {
+              type: 'doc',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
             },
             {
               type: 'doc',
@@ -382,6 +427,11 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/mastra-server',
           label: 'Mastra Server',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/studio',
+          label: 'Studio',
         },
         {
           type: 'doc',
@@ -549,6 +599,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
@@ -600,6 +666,24 @@ const sidebars = {
           type: 'doc',
           id: 'voice/speech-to-speech',
           label: 'Speech to Speech',
+        },
+      ],
+    },
+
+    {
+      type: 'category',
+      label: 'Build with AI',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'build-with-ai/skills',
+          label: 'Skills',
+        },
+        {
+          type: 'doc',
+          id: 'build-with-ai/mcp-docs-server',
+          label: 'MCP Docs Server',
         },
       ],
     },

@@ -5,8 +5,9 @@ import type {
   LanguageModelV2Prompt,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider';
+import { wrapLanguageModel } from '@internal/ai-sdk-v5';
 import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
 import { MessageHistory, SemanticRecall, WorkingMemory } from '@mastra/core/processors';
@@ -21,7 +22,6 @@ import type { MemoryStorage } from '@mastra/core/storage';
 import { convertFullStreamChunkToMastra } from '@mastra/core/stream';
 import type { ChunkType } from '@mastra/core/stream';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
-import { wrapLanguageModel } from 'ai';
 import { toAISDKFinishReason } from './helpers';
 
 /**
@@ -242,11 +242,176 @@ export function withMastra(model: LanguageModelV2, options: WithMastraOptions = 
 interface ProcessorMiddlewareState {
   tripwire?: boolean;
   reason?: string;
+  originalInputCount?: number;
 }
 
 interface TextPart {
   type: 'text';
   text: string;
+}
+
+interface ToolCallState {
+  toolCallId: string;
+  toolName?: string;
+  args?: unknown;
+  argDeltas?: string[];
+  result?: unknown;
+  providerMetadata?: Record<string, unknown>;
+}
+
+class StreamOutputAccumulator {
+  /** Ordered sequence of part placeholders: either a text buffer index or a tool call ID */
+  private partOrder: ({ kind: 'text'; bufferIndex: number } | { kind: 'tool'; toolCallId: string })[] = [];
+  private textBuffers: string[][] = [];
+  private toolStates = new Map<string, ToolCallState>();
+
+  addChunk(chunk: ChunkType): void {
+    switch (chunk.type) {
+      case 'text-delta':
+        if (chunk.payload.text) {
+          this.appendTextDelta(chunk.payload.text);
+        }
+        return;
+      case 'tool-call-input-streaming-start': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        state.toolName = state.toolName || chunk.payload.toolName;
+        state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
+        if (!state.argDeltas) {
+          state.argDeltas = [];
+        }
+        return;
+      }
+      case 'tool-call-delta': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        if (chunk.payload.argsTextDelta) {
+          if (!state.argDeltas) state.argDeltas = [];
+          state.argDeltas.push(chunk.payload.argsTextDelta);
+        }
+        return;
+      }
+      case 'tool-call-input-streaming-end': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        this.finalizeToolArgs(state);
+        return;
+      }
+      case 'tool-call': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        state.toolName = state.toolName || chunk.payload.toolName;
+        if (chunk.payload.args !== undefined) {
+          state.args = chunk.payload.args;
+        } else {
+          this.finalizeToolArgs(state);
+        }
+        state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
+        return;
+      }
+      case 'tool-result': {
+        const state = this.ensureToolState(chunk.payload.toolCallId);
+        state.toolName = state.toolName || chunk.payload.toolName;
+        state.result = chunk.payload.result;
+        if (state.args === undefined) {
+          this.finalizeToolArgs(state);
+        }
+        state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  buildResponseMessage(memory?: ProcessorMemoryContext): MastraDBMessage | null {
+    if (this.partOrder.length === 0) {
+      return null;
+    }
+
+    const parts: MastraMessagePart[] = [];
+    const textSegments: string[] = [];
+
+    for (const entry of this.partOrder) {
+      if (entry.kind === 'text') {
+        const text = this.textBuffers[entry.bufferIndex]!.join('');
+        parts.push({ type: 'text', text });
+        textSegments.push(text);
+      } else {
+        const state = this.toolStates.get(entry.toolCallId)!;
+        this.finalizeToolArgs(state);
+        parts.push(this.buildToolPart(state));
+      }
+    }
+
+    const textContent = textSegments.join('');
+
+    const content: MastraDBMessage['content'] = {
+      format: 2,
+      parts,
+      ...(textContent ? { content: textContent } : {}),
+    };
+
+    return {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content,
+      createdAt: new Date(),
+      ...(memory?.threadId && { threadId: memory.threadId }),
+      ...(memory?.resourceId && { resourceId: memory.resourceId }),
+    };
+  }
+
+  private ensureToolState(toolCallId: string): ToolCallState {
+    let state = this.toolStates.get(toolCallId);
+    if (!state) {
+      state = { toolCallId };
+      this.toolStates.set(toolCallId, state);
+      this.partOrder.push({ kind: 'tool', toolCallId });
+    }
+    return state;
+  }
+
+  private finalizeToolArgs(state: ToolCallState): void {
+    if (state.args !== undefined || !state.argDeltas?.length) {
+      return;
+    }
+    try {
+      state.args = JSON.parse(state.argDeltas.join(''));
+    } catch {
+      return;
+    }
+  }
+
+  private appendTextDelta(text: string): void {
+    const last = this.partOrder[this.partOrder.length - 1];
+    if (last?.kind === 'text') {
+      this.textBuffers[last.bufferIndex]!.push(text);
+      return;
+    }
+    const bufferIndex = this.textBuffers.length;
+    this.textBuffers.push([text]);
+    this.partOrder.push({ kind: 'text', bufferIndex });
+  }
+
+  private buildToolPart(state: ToolCallState): MastraMessagePart {
+    const hasResult = state.result !== undefined;
+    const toolInvocation: {
+      state: 'call' | 'result';
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      result?: unknown;
+    } = {
+      state: hasResult ? 'result' : 'call',
+      toolCallId: state.toolCallId,
+      toolName: state.toolName || 'unknown',
+      args: state.args ?? {},
+      ...(hasResult ? { result: state.result } : {}),
+    };
+
+    return {
+      type: 'tool-invocation',
+      toolInvocation,
+      ...(state.providerMetadata ? { providerMetadata: state.providerMetadata } : {}),
+    } as MastraMessagePart;
+  }
 }
 
 /**
@@ -255,7 +420,7 @@ interface TextPart {
  *
  * @example
  * ```typescript
- * import { wrapLanguageModel, generateText } from 'ai';
+ * import { wrapLanguageModel, generateText } from '@internal/ai-sdk-v5';
  * import { openai } from '@ai-sdk/openai';
  * import { createProcessorMiddleware } from '@mastra/ai-sdk';
  *
@@ -307,6 +472,8 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         }
       }
 
+      const originalInputCount = params.prompt.filter(msg => msg.role !== 'system').length;
+
       // Run each input processor
       for (const processor of inputProcessors) {
         if (processor.processInput) {
@@ -348,6 +515,13 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       return {
         ...params,
         prompt: newPrompt,
+        providerOptions: {
+          ...params.providerOptions,
+          mastraProcessors: {
+            ...(params.providerOptions?.mastraProcessors as ProcessorMiddlewareState | undefined),
+            originalInputCount,
+          } satisfies ProcessorMiddlewareState,
+        },
       };
     },
 
@@ -378,12 +552,20 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
         resourceId: memory?.resourceId,
       });
 
-      // Add the transformed prompt messages to the list
+      // Processors may prepend historical messages to the prompt. Tag those as 'memory'
+      // so output processors don't re-persist them.
+      const originalInputCount =
+        processorState?.originalInputCount ?? params.prompt.filter(m => m.role !== 'system').length;
+      const nonSystemTotal = params.prompt.filter(m => m.role !== 'system').length;
+      const memoryCount = nonSystemTotal - originalInputCount;
+
+      let nonSystemIndex = 0;
       for (const msg of params.prompt) {
         if (msg.role === 'system') {
           messageList.addSystem(msg.content);
         } else {
-          messageList.add(msg, 'input');
+          messageList.add(msg, nonSystemIndex < memoryCount ? 'memory' : 'input');
+          nonSystemIndex++;
         }
       }
 
@@ -414,6 +596,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
             await processor.processOutputResult({
               messages: messageList.get.all.db(),
               messageList,
+              state: {},
               requestContext,
               abort: (reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
@@ -463,8 +646,12 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
       if (!outputProcessors.length) return { stream, ...rest };
 
       // Transform stream through output processors
+      const outputResultProcessors = outputProcessors.filter(processor => processor.processOutputResult);
+      const streamAccumulator = outputResultProcessors.length ? new StreamOutputAccumulator() : null;
       const processorStates = new Map<string, { streamParts: ChunkType[]; customState: Record<string, unknown> }>();
       const runId = crypto.randomUUID();
+      let streamAborted = false;
+      let sawFinish = false;
 
       const transformedStream = stream.pipeThrough(
         new TransformStream<LanguageModelV2StreamPart, LanguageModelV2StreamPart>({
@@ -510,6 +697,7 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                 } catch (error) {
                   if (error instanceof TripWire) {
                     // Emit error and close stream
+                    streamAborted = true;
                     controller.enqueue({
                       type: 'error',
                       error: new Error(error.message),
@@ -522,11 +710,76 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               }
             }
 
+            if (mastraChunk) {
+              if (mastraChunk.type === 'finish') {
+                sawFinish = true;
+              }
+              if (streamAccumulator) {
+                streamAccumulator.addChunk(mastraChunk);
+              }
+            }
+
             // Convert back to AI SDK format and enqueue if not filtered
             if (mastraChunk) {
               const aiChunk = convertMastraChunkToAISDKStreamPart(mastraChunk);
               if (aiChunk) {
                 controller.enqueue(aiChunk);
+              }
+            }
+          },
+          async flush(controller) {
+            if (!streamAccumulator || streamAborted || !sawFinish) {
+              return;
+            }
+
+            const messageList = new MessageList({
+              threadId: memory?.threadId,
+              resourceId: memory?.resourceId,
+            });
+
+            // Tag historical messages as 'memory' so output processors don't re-persist them.
+            const flushOriginalInputCount =
+              processorState?.originalInputCount ?? params.prompt.filter(m => m.role !== 'system').length;
+            const flushNonSystemTotal = params.prompt.filter(m => m.role !== 'system').length;
+            const flushMemoryCount = flushNonSystemTotal - flushOriginalInputCount;
+
+            let flushNonSystemIndex = 0;
+            for (const msg of params.prompt) {
+              if (msg.role === 'system') {
+                messageList.addSystem(msg.content);
+              } else {
+                messageList.add(msg, flushNonSystemIndex < flushMemoryCount ? 'memory' : 'input');
+                flushNonSystemIndex++;
+              }
+            }
+
+            const responseMessage = streamAccumulator.buildResponseMessage(memory);
+            if (responseMessage) {
+              messageList.add(responseMessage, 'response');
+            }
+
+            for (const processor of outputResultProcessors) {
+              if (!processor.processOutputResult) continue;
+              try {
+                const procState = processorStates.get(processor.id);
+                await processor.processOutputResult({
+                  messages: messageList.get.all.db(),
+                  messageList,
+                  state: procState?.customState ?? {},
+                  requestContext,
+                  abort: (reason?: string): never => {
+                    throw new TripWire(reason || 'Aborted by processor');
+                  },
+                } as ProcessOutputResultArgs);
+              } catch (error) {
+                if (error instanceof TripWire) {
+                  controller.enqueue({
+                    type: 'error',
+                    error: new Error(error.message),
+                  });
+                  return;
+                }
+                throw error;
               }
             }
           },

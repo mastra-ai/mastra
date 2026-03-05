@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useCallback } from 'react';
 import { useForm, FormProvider, DefaultValues } from 'react-hook-form';
 import { parseSchema, getDefaultValues } from '@autoform/core';
 import { AutoFormProps, AutoFormProvider } from '@autoform/react';
@@ -17,7 +17,8 @@ export function CustomAutoForm<T extends Record<string, any>>({
   onFormInit = () => {},
   formProps = {},
 }: AutoFormProps<T>) {
-  const parsedSchema = parseSchema(schema);
+  // Memoize parsed schema to prevent re-parsing on every render
+  const parsedSchema = useMemo(() => parseSchema(schema), [schema]);
   const methods = useForm<T>({
     defaultValues: {
       ...(getDefaultValues(schema) as Partial<T>),
@@ -32,48 +33,55 @@ export function CustomAutoForm<T extends Record<string, any>>({
     }
   }, [onFormInit, methods]);
 
-  const handleSubmit = async (dataRaw: T) => {
-    const data = removeEmptyValues(dataRaw);
-    const validationResult = schema.validateSchema(data as T);
-    if (validationResult.success) {
-      await onSubmit(validationResult.data, methods);
-    } else {
-      methods.clearErrors();
-      let isFocused: boolean = false;
-      validationResult.errors?.forEach(error => {
-        const path = error.path.join('.');
-        methods.setError(
-          path as any,
-          {
-            type: 'custom',
-            message: error.message,
-          },
-          { shouldFocus: !isFocused },
-        );
+  const handleSubmit = useCallback(
+    async (dataRaw: T) => {
+      const data = removeEmptyValues(dataRaw);
+      const validationResult = schema.validateSchema(data as T);
+      if (validationResult.success) {
+        await onSubmit(validationResult.data, methods);
+      } else {
+        methods.clearErrors();
+        let isFocused: boolean = false;
+        validationResult.errors?.forEach(error => {
+          const path = error.path.join('.');
+          methods.setError(
+            path as any,
+            {
+              type: 'custom',
+              message: error.message,
+            },
+            { shouldFocus: !isFocused },
+          );
 
-        isFocused = true;
+          isFocused = true;
 
-        // For some custom errors, zod adds the final element twice for some reason
-        const correctedPath = error.path?.slice?.(0, -1);
-        if (correctedPath?.length > 0) {
-          methods.setError(correctedPath.join('.') as any, {
-            type: 'custom',
-            message: error.message,
-          });
-        }
-      });
-    }
-  };
+          // For some custom errors, zod adds the final element twice for some reason
+          const correctedPath = error.path?.slice?.(0, -1);
+          if (correctedPath?.length > 0) {
+            methods.setError(correctedPath.join('.') as any, {
+              type: 'custom',
+              message: error.message,
+            });
+          }
+        });
+      }
+    },
+    [schema, onSubmit, methods],
+  );
+
+  // Memoize the provider value to prevent unnecessary re-renders of form fields
+  const providerValue = useMemo(
+    () => ({
+      schema: parsedSchema,
+      uiComponents,
+      formComponents,
+    }),
+    [parsedSchema, uiComponents, formComponents],
+  );
 
   return (
     <FormProvider {...methods}>
-      <AutoFormProvider
-        value={{
-          schema: parsedSchema,
-          uiComponents,
-          formComponents,
-        }}
-      >
+      <AutoFormProvider value={providerValue}>
         <uiComponents.Form onSubmit={methods.handleSubmit(handleSubmit)} {...formProps}>
           {parsedSchema.fields.map(field => (
             <CustomAutoFormField key={field.key} field={field} path={[field.key]} />

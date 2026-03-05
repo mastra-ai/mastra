@@ -8,7 +8,7 @@ import type {
   ObservabilityInstance,
   ExportedSpan,
 } from '@mastra/core/observability';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
 // Custom matchers for OpenTelemetry ID validation
@@ -70,6 +70,10 @@ const mockConsole = {
 
 vi.stubGlobal('console', mockConsole);
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 // Test exporter for capturing events
 class TestExporter implements ObservabilityExporter {
   name = 'test-exporter';
@@ -80,6 +84,10 @@ class TestExporter implements ObservabilityExporter {
   }
 
   async shutdown(): Promise<void> {
+    // no-op
+  }
+
+  async flush(): Promise<void> {
     // no-op
   }
 
@@ -519,8 +527,8 @@ describe('Tracing', () => {
         attributes: {},
       });
 
-      // Wait for async export to complete
-      await new Promise(resolve => setTimeout(resolve, 0));
+      // Wait for fire-and-forget async export to complete
+      await Promise.resolve();
 
       // Should continue with other exporters despite failure
       expect(testExporter.events).toHaveLength(1);
@@ -531,6 +539,7 @@ describe('Tracing', () => {
       const mockExporter = {
         name: 'mock-exporter',
         exportTracingEvent: vi.fn(),
+        flush: vi.fn().mockResolvedValue(undefined),
         shutdown: vi.fn().mockResolvedValue(undefined),
       };
 

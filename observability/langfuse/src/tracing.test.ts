@@ -1598,6 +1598,8 @@ describe('LangfuseExporter', () => {
     });
 
     it('should handle cached input tokens from inputDetails', async () => {
+      // inputTokens from usage.ts is the total (non-cached + cached)
+      // Langfuse expects 'input' to be NON-cached only
       const llmSpan = createMockSpan({
         id: 'llm-v5-cached-span',
         name: 'llm-generation-cached',
@@ -1607,7 +1609,7 @@ describe('LangfuseExporter', () => {
           model: 'claude-3-5-sonnet',
           provider: 'anthropic',
           usage: {
-            inputTokens: 150,
+            inputTokens: 150, // total: 50 non-cached + 100 cacheRead
             outputTokens: 75,
             inputDetails: { cacheRead: 100 },
           },
@@ -1623,9 +1625,11 @@ describe('LangfuseExporter', () => {
         expect.objectContaining({
           model: 'claude-3-5-sonnet',
           usageDetails: {
-            input: 150,
+            // input is non-cached: 150 - 100 = 50
+            input: 50,
             output: 75,
             cache_read_input_tokens: 100,
+            // total = input (50) + output (75) + cache_read (100) = 225
             total: 225,
           },
         }),

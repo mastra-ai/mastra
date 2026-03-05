@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { tsConfigPaths, hasPaths } from './tsconfig-paths';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { rollup } from 'rollup';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { tsConfigPaths, hasPaths } from './tsconfig-paths';
 
 describe('tsconfig-paths plugin', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));

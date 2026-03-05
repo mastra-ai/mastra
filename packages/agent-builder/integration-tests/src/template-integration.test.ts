@@ -139,10 +139,32 @@ describe('Template Workflow Integration Tests', () => {
     // Note: AI discovery is non-deterministic and may return either export names (e.g., csvToQuestionsWorkflow)
     // or filename-based IDs (e.g., csv-to-questions-workflow), so we check for either naming convention
     const expectedPatterns = [
-      { dir: 'src/mastra/agents', patterns: ['csvQuestionAgent.ts', 'csv-question-agent.ts'] },
+      {
+        dir: 'src/mastra/agents',
+        // Template has csv-summarization-agent.ts and text-question-agent.ts;
+        // AI discovery may return export names or filename-based IDs,
+        // and convertNaming adapts to the target project's convention
+        patterns: [
+          'csvSummarizationAgent.ts',
+          'csv-summarization-agent.ts',
+          'textQuestionAgent.ts',
+          'text-question-agent.ts',
+          'csvQuestionAgent.ts',
+          'csv-question-agent.ts',
+        ],
+      },
       {
         dir: 'src/mastra/tools',
-        patterns: ['csvFetcherTool.ts', 'csv-fetcher-tool.ts', 'download-csv-tool.ts'],
+        // AI discovery may return export name (csvFetcherTool) or filename-based ID (download-csv-tool),
+        // and convertNaming then adapts to the target project's convention
+        patterns: [
+          'csvFetcherTool.ts',
+          'csv-fetcher-tool.ts',
+          'download-csv-tool.ts',
+          'downloadCsvTool.ts',
+          'generateQuestionsFromTextTool.ts',
+          'generate-questions-from-text-tool.ts',
+        ],
       },
       {
         dir: 'src/mastra/workflows',
@@ -285,8 +307,8 @@ describe('Template Workflow Integration Tests', () => {
   it('should validate git history shows proper template integration', async () => {
     // Check git log for template commits
     const gitLog = exec('git log --oneline', targetRepo);
-    // The copy step always creates this commit
-    expect(gitLog).toContain('feat(template): copy 7 files from csv-to-questions@');
+    // The copy step always creates this commit (file count varies based on conflicts)
+    expect(gitLog).toMatch(/feat\(template\): copy \d+ files from csv-to-questions@/);
     // These commits are created by AI agents and may not always appear (non-deterministic)
     // - feat(template): resolve conflicts for csv-to-questions@
     // - fix(template): resolve validation errors for csv-to-questions@

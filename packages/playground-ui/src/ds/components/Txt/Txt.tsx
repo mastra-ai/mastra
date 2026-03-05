@@ -4,7 +4,7 @@ import { FontSizes } from '../../tokens';
 import { cn } from '@/lib/utils';
 
 export interface TxtProps extends React.HTMLAttributes<HTMLDivElement | HTMLLabelElement> {
-  as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label';
+  as?: 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'div';
   variant?: keyof typeof FontSizes;
   font?: 'mono';
   htmlFor?: string;

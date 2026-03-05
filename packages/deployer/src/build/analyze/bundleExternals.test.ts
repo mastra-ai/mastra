@@ -1,14 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createVirtualDependencies, bundleExternals } from './bundleExternals';
-import type { DependencyMetadata } from '../types';
-import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ensureDir, remove, pathExists, writeFile } from 'fs-extra';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import type { DependencyMetadata } from '../types';
+import type * as UtilsModule from '../utils';
+import { createVirtualDependencies, bundleExternals } from './bundleExternals';
 
 // Mock the utilities that bundleExternals depends on
 vi.mock('../utils', async importOriginal => {
-  const actual = await importOriginal<typeof import('../utils')>();
+  const actual = await importOriginal<typeof UtilsModule>();
   return {
     ...actual,
     getCompiledDepCachePath: vi.fn((rootPath: string, fileName: string) =>
@@ -103,9 +104,9 @@ describe('createVirtualDependencies', () => {
       outputDir: '/.mastra/.build',
     });
 
-    expect(result.fileNameToDependencyMap.get('.mastra/.build/@types-node')).toBe('@types/node');
+    expect(result.fileNameToDependencyMap.get('.mastra/.build/@types__node')).toBe('@types/node');
     expect(result.optimizedDependencyEntries.get('@types/node')).toEqual({
-      name: '.mastra/.build/@types-node',
+      name: '.mastra/.build/@types__node',
       virtual: "export * from '@types/node';",
     });
   });
@@ -234,13 +235,13 @@ export { default } from 'full-lib';`,
       outputDir: '/.mastra/.build',
     });
 
-    expect(result.fileNameToDependencyMap.get('.mastra/.build/@scope-package')).toBe('@scope/package');
-    expect(result.fileNameToDependencyMap.get('.mastra/.build/@another-deeply-nested-package')).toBe(
+    expect(result.fileNameToDependencyMap.get('.mastra/.build/@scope__package')).toBe('@scope/package');
+    expect(result.fileNameToDependencyMap.get('.mastra/.build/@another__deeply__nested__package')).toBe(
       '@another/deeply/nested/package',
     );
 
     expect(result.optimizedDependencyEntries.get('@scope/package')).toEqual({
-      name: '.mastra/.build/@scope-package',
+      name: '.mastra/.build/@scope__package',
       virtual: "export { someExport } from '@scope/package';",
     });
   });
@@ -321,7 +322,7 @@ export { default } from 'full-lib';`,
       },
     });
 
-    const compiledDepCachePath = `packages/internal-lib/node_modules/.cache/@workspace-internal-lib`;
+    const compiledDepCachePath = `packages/internal-lib/node_modules/.cache/@workspace__internal-lib`;
     expect(result.fileNameToDependencyMap.get(compiledDepCachePath)).toBe('@workspace/internal-lib');
     expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
       name: compiledDepCachePath,
@@ -352,14 +353,14 @@ export { default } from 'full-lib';`,
 
     const entryName = result.optimizedDependencyEntries.get('@workspace/internal-lib')?.name;
     expect(entryName).not.toContain('node_modules/.cache');
-    expect(entryName).toBe('app/.mastra/.build/@workspace-internal-lib');
+    expect(entryName).toBe('app/.mastra/.build/@workspace__internal-lib');
 
-    expect(result.fileNameToDependencyMap.get('app/.mastra/.build/@workspace-internal-lib')).toBe(
+    expect(result.fileNameToDependencyMap.get('app/.mastra/.build/@workspace__internal-lib')).toBe(
       '@workspace/internal-lib',
     );
 
     expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
-      name: 'app/.mastra/.build/@workspace-internal-lib',
+      name: 'app/.mastra/.build/@workspace__internal-lib',
       virtual: "export { internalUtil, default } from '@workspace/internal-lib';",
     });
   });

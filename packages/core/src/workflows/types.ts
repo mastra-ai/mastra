@@ -6,7 +6,7 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, TracingContext, TracingPolicy, TracingProperties } from '../observability';
+import type { AnySpan, ObservabilityContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
 import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/schema';
@@ -18,6 +18,19 @@ import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
 export type OutputWriter<TChunk = any> = (chunk: TChunk) => Promise<void>;
+
+/**
+ * Options for `Run.start()` beyond the generic `inputData`/`initialState`/`requestContext` fields.
+ */
+export type WorkflowRunStartOptions = {
+  outputWriter?: OutputWriter;
+  tracingOptions?: TracingOptions;
+  outputOptions?: {
+    includeState?: boolean;
+    includeResumeLabels?: boolean;
+  };
+  perStep?: boolean;
+} & Partial<ObservabilityContext>;
 
 export type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 export type { MastraWorkflowStream } from '../stream/MastraWorkflowStream';
@@ -36,6 +49,7 @@ export type RestartExecutionParams = {
   activeStepsPath: Record<string, number[]>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   state?: Record<string, any>;
+  stepExecutionPath?: string[];
 };
 
 export type TimeTravelExecutionParams = {
@@ -46,6 +60,7 @@ export type TimeTravelExecutionParams = {
   steps: string[];
   state?: Record<string, any>;
   resumeData?: any;
+  stepExecutionPath?: string[];
 };
 
 export type StepMetadata = Record<string, any>;
@@ -279,6 +294,7 @@ export interface WorkflowState {
   // Execution State
   status: WorkflowRunStatus;
   initialState?: Record<string, any>;
+  stepExecutionPath?: string[];
   // Optional detailed fields (can be excluded for performance)
   activeStepsPath?: Record<string, number[]>;
   serializedStepGraph?: SerializedStepFlowEntry[];
@@ -333,6 +349,7 @@ export interface WorkflowRunState {
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
+  stepExecutionPath?: string[];
 }
 
 /**
@@ -365,6 +382,7 @@ export interface WorkflowFinishCallbackResult {
   logger: IMastraLogger;
   /** The final workflow state */
   state: Record<string, any>;
+  stepExecutionPath?: string[];
 }
 
 /**
@@ -395,6 +413,7 @@ export interface WorkflowErrorCallbackInfo {
   logger: IMastraLogger;
   /** The final workflow state */
   state: Record<string, any>;
+  stepExecutionPath?: string[];
 }
 
 export interface WorkflowOptions {
@@ -429,6 +448,7 @@ export type WorkflowInfo = {
   inputSchema: string | undefined;
   outputSchema: string | undefined;
   stateSchema: string | undefined;
+  requestContextSchema: string | undefined;
   options?: WorkflowOptions;
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
@@ -468,7 +488,7 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   Step<any, any, any, any, any, any, TEngineType>,
-  'id' | 'description'
+  'id' | 'description' | 'metadata'
 > & {
   component?: string;
   serializedStepFlow?: SerializedStepFlowEntry[];
@@ -539,6 +559,7 @@ export type StepParams<
   TOutputSchema extends z.ZodTypeAny,
   TResumeSchema extends z.ZodTypeAny | undefined = undefined,
   TSuspendSchema extends z.ZodTypeAny | undefined = undefined,
+  TRequestContextSchema extends z.ZodTypeAny | undefined = undefined,
 > = {
   id: TStepId;
   description?: string;
@@ -547,15 +568,22 @@ export type StepParams<
   resumeSchema?: TResumeSchema;
   suspendSchema?: TSuspendSchema;
   stateSchema?: TStateSchema;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: TRequestContextSchema;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
+  metadata?: StepMetadata;
   execute: ExecuteFunction<
     TStateSchema extends z.ZodTypeAny ? z.infer<TStateSchema> : unknown,
     z.infer<TInputSchema>,
     z.infer<TOutputSchema>,
     TResumeSchema extends z.ZodTypeAny ? z.infer<TResumeSchema> : unknown,
     TSuspendSchema extends z.ZodTypeAny ? z.infer<TSuspendSchema> : unknown,
-    DefaultEngineType
+    DefaultEngineType,
+    TRequestContextSchema extends z.ZodTypeAny ? z.infer<TRequestContextSchema> : unknown
   >;
 };
 
@@ -563,7 +591,15 @@ export type StepParams<
  * Legacy StepParams type for backward compatibility.
  * Use the schema-based StepParams for new code.
  */
-export type StepParamsLegacy<TStepId extends string, TState, TStepInput, TStepOutput, TResume, TSuspend> = {
+export type StepParamsLegacy<
+  TStepId extends string,
+  TState,
+  TStepInput,
+  TStepOutput,
+  TResume,
+  TSuspend,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   id: TStepId;
   description?: string;
   inputSchema: SchemaWithValidation<TStepInput>;
@@ -571,9 +607,14 @@ export type StepParamsLegacy<TStepId extends string, TState, TStepInput, TStepOu
   resumeSchema?: SchemaWithValidation<TResume>;
   suspendSchema?: SchemaWithValidation<TSuspend>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema before step execution.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   retries?: number;
   scorers?: DynamicArgument<MastraScorers>;
-  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+  execute: ExecuteFunction<TState, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType, TRequestContext>;
 };
 
 export type ToolStep<
@@ -592,6 +633,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
   | ({
       status: 'success';
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       result: TOutput;
       input: TInput;
@@ -610,6 +652,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       status: 'failed';
       input: TInput;
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -627,6 +670,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       status: 'tripwire';
       input: TInput;
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -645,6 +689,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       status: 'suspended';
       input: TInput;
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       steps: {
         [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
@@ -662,6 +707,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
   | ({
       status: 'paused';
       state?: TState;
+      stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       input: TInput;
       steps: {
@@ -693,13 +739,26 @@ export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<st
       };
     };
 
-export type WorkflowConfig<TWorkflowId extends string, TState, TInput, TOutput, TSteps extends Step[]> = {
+export type WorkflowConfig<
+  TWorkflowId extends string,
+  TState,
+  TInput,
+  TOutput,
+  TSteps extends Step[],
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> = {
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
   inputSchema: SchemaWithValidation<TInput>;
   outputSchema: SchemaWithValidation<TOutput>;
   stateSchema?: SchemaWithValidation<TState>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema when the workflow starts.
+   * If validation fails, a validation error is thrown.
+   */
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: {
@@ -749,6 +808,7 @@ export type ExecutionContext = {
   workflowId: string;
   runId: string;
   executionPath: number[];
+  stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;
   foreachIndex?: number;
   suspendedPaths: Record<string, number[]>;
@@ -853,7 +913,6 @@ export type RegularStepExecutionParams = {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
-  tracingContext?: TracingContext;
   writableStream?: WritableStream<ChunkType>;
   startedAt: number;
   resumeDataToUse?: any;
@@ -863,7 +922,7 @@ export type RegularStepExecutionParams = {
   serializedStepGraph: SerializedStepFlowEntry[];
   resourceId?: string;
   disableScorers?: boolean;
-};
+} & Partial<ObservabilityContext>;
 
 /**
  * Result from step execution core logic
@@ -937,4 +996,6 @@ export type FormattedWorkflowResult = {
   suspendPayload?: any;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
+  /** The sequence of step IDs executed in this run */
+  stepExecutionPath?: string[];
 };

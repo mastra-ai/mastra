@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -26,10 +26,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   // Check if working memory is enabled
   const isWorkingMemoryEnabled = Boolean(config?.workingMemory?.enabled);
 
-  if (isLoading || isConfigLoading) {
-    return <Skeleton className="h-32 w-full" />;
-  }
-
+  // All hooks must be called before any early returns
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: workingMemoryData ?? '',
     copyMessage: 'Working memory copied!',
@@ -40,6 +37,10 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
   React.useEffect(() => {
     setEditValue(workingMemoryData ?? '');
   }, [workingMemoryData]);
+
+  if (isLoading || isConfigLoading) {
+    return <Skeleton className="h-32 w-full" />;
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4">

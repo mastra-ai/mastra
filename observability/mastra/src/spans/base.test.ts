@@ -577,6 +577,32 @@ describe('Span', () => {
       expect(result.tracingContext).toBeUndefined();
     });
 
+    it('should handle keysToStrip as a plain object (bundler compatibility)', () => {
+      const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
+      const options = {
+        ...DEFAULT_DEEP_CLEAN_OPTIONS,
+        keysToStrip: { logger: true, tracingContext: true },
+      };
+      const result = deepClean(input, options);
+      expect(result.name).toBe('test');
+      expect(result.data).toBe('keep');
+      expect(result.logger).toBeUndefined();
+      expect(result.tracingContext).toBeUndefined();
+    });
+
+    it('should handle keysToStrip as an array (bundler compatibility)', () => {
+      const input = { name: 'test', logger: { level: 'info' }, tracingContext: { traceId: '123' }, data: 'keep' };
+      const options = {
+        ...DEFAULT_DEEP_CLEAN_OPTIONS,
+        keysToStrip: ['logger', 'tracingContext'],
+      };
+      const result = deepClean(input, options);
+      expect(result.name).toBe('test');
+      expect(result.data).toBe('keep');
+      expect(result.logger).toBeUndefined();
+      expect(result.tracingContext).toBeUndefined();
+    });
+
     it('should handle max depth', () => {
       const deepObj: any = { level: 0 };
       let current = deepObj;
@@ -629,15 +655,16 @@ describe('Span', () => {
         exporters: [testExporter],
       });
 
-      const longString = 'a'.repeat(2000);
+      // Default maxStringLength is 128KB - create a string longer than that
+      const longString = 'a'.repeat(150 * 1024);
       const span = tracing.startSpan({
         type: SpanType.GENERIC,
         name: 'test',
         input: { data: longString },
       });
 
-      // Default maxStringLength is 1024
-      expect(span.input.data.length).toBeLessThanOrEqual(1024 + 15);
+      // Default maxStringLength is 128 * 1024 (128KB)
+      expect(span.input.data.length).toBeLessThanOrEqual(128 * 1024 + 15);
       expect(span.input.data).toContain('[truncated]');
       span.end();
     });

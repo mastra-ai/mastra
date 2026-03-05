@@ -1,7 +1,8 @@
 import type { RequestContext } from '@mastra/core/di';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
+// FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
+export type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type {
   ClientCapabilities,
   ElicitRequest,
@@ -9,6 +10,40 @@ import type {
   LoggingLevel,
   ProgressNotification,
 } from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * Extended fetch function type that receives the current request context as a third argument.
+ *
+ * This allows custom fetch implementations to access request-scoped data (e.g., authentication
+ * cookies, bearer tokens) from the incoming request and forward them to the MCP server.
+ *
+ * The `requestContext` parameter is `null` when no context is available (e.g., during
+ * initial connection or when a tool is called without a request context).
+ *
+ * @example
+ * ```typescript
+ * const mcp = new MCPClient({
+ *   servers: {
+ *     myServer: {
+ *       url: new URL('https://api.example.com/mcp'),
+ *       fetch: (url, init, requestContext) => {
+ *         const headers = new Headers(init?.headers);
+ *         const cookie = requestContext?.get('cookie');
+ *         if (cookie) {
+ *           headers.set('cookie', cookie);
+ *         }
+ *         return fetch(url, { ...init, headers });
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export type MastraFetchLike = (
+  url: string | URL,
+  init?: RequestInit,
+  requestContext?: RequestContext | null,
+) => Promise<Response>;
 
 // Re-export MCP SDK LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/sdk/types.js';
@@ -156,8 +191,13 @@ export type HttpServerDefinition = BaseServerOptions & {
    *
    * When provided, this function will be used for all HTTP requests, allowing you to:
    * - Add dynamic authentication headers (e.g., refreshing bearer tokens)
+   * - Forward request-scoped data (cookies, tokens) from the incoming request to the MCP server
    * - Customize request behavior per-request
    * - Intercept and modify requests/responses
+   *
+   * The third `requestContext` parameter provides access to request-scoped data set by middleware
+   * or passed during agent/tool execution. It is `null` when no context is available (e.g.,
+   * during the initial connection handshake).
    *
    * When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional,
    * as you can handle these concerns within your custom fetch function.
@@ -166,20 +206,19 @@ export type HttpServerDefinition = BaseServerOptions & {
    * ```typescript
    * {
    *   url: new URL('https://api.example.com/mcp'),
-   *   fetch: async (url, init) => {
-   *     const token = await getAuthToken(); // Your token refresh logic
-   *     return fetch(url, {
-   *       ...init,
-   *       headers: {
-   *         ...init?.headers,
-   *         Authorization: `Bearer ${token}`,
-   *       },
-   *     });
+   *   fetch: async (url, init, requestContext) => {
+   *     const headers = new Headers(init?.headers);
+   *     // Forward auth cookie from the incoming request
+   *     const cookie = requestContext?.get('cookie');
+   *     if (cookie) {
+   *       headers.set('cookie', cookie);
+   *     }
+   *     return fetch(url, { ...init, headers });
    *   },
    * }
    * ```
    */
-  fetch?: FetchLike;
+  fetch?: MastraFetchLike;
   /** Optional request configuration for HTTP requests (optional when `fetch` is provided) */
   requestInit?: StreamableHTTPClientTransportOptions['requestInit'];
   /** Optional configuration for SSE fallback (required when using custom headers with SSE, optional when `fetch` is provided) */
@@ -255,4 +294,3 @@ export type InternalMastraMCPClientOptions = {
   /** Optional timeout in milliseconds */
   timeout?: number;
 };
-

@@ -1,4 +1,5 @@
 import type { RequestOptions, ClientOptions } from '../types';
+import { MastraClientError } from '../types';
 import { normalizeRoutePath } from '../utils';
 
 export class BaseResource {
@@ -8,21 +9,6 @@ export class BaseResource {
   constructor(options: ClientOptions) {
     this.options = options;
     this.apiPrefix = normalizeRoutePath(options.apiPrefix ?? '/api');
-  }
-
-  /**
-   * Path segments that should NOT have the API prefix applied (protocol-specific paths).
-   * These are special protocol endpoints that exist at the root level.
-   */
-  private static readonly NON_API_PATHS = ['/a2a', '/.well-known'];
-
-  /**
-   * Checks if a path should have the API prefix applied.
-   * Returns false for protocol-specific paths like /a2a and /.well-known
-   * Matches exact path or path followed by / to avoid false positives (e.g., /a2a-other)
-   */
-  private shouldApplyPrefix(path: string): boolean {
-    return !BaseResource.NON_API_PATHS.some(nonApiPath => path === nonApiPath || path.startsWith(nonApiPath + '/'));
   }
 
   /**
@@ -46,8 +32,7 @@ export class BaseResource {
 
     let delay = backoffMs;
 
-    // Build the full URL with apiPrefix (unless it's a protocol-specific path)
-    const fullPath = this.shouldApplyPrefix(path) ? `${this.apiPrefix}${path}` : path;
+    const fullPath = `${this.apiPrefix}${path}`;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -56,7 +41,10 @@ export class BaseResource {
           headers: {
             ...(options.body &&
             !(options.body instanceof FormData) &&
-            (options.method === 'POST' || options.method === 'PUT')
+            (options.method === 'POST' ||
+              options.method === 'PUT' ||
+              options.method === 'PATCH' ||
+              options.method === 'DELETE')
               ? { 'content-type': 'application/json' }
               : {}),
             ...headers,
@@ -72,16 +60,17 @@ export class BaseResource {
 
         if (!response.ok) {
           const errorBody = await response.text();
+          let parsedBody: unknown;
           let errorMessage = `HTTP error! status: ${response.status}`;
           try {
-            const errorJson = JSON.parse(errorBody);
-            errorMessage += ` - ${JSON.stringify(errorJson)}`;
+            parsedBody = JSON.parse(errorBody);
+            errorMessage += ` - ${JSON.stringify(parsedBody)}`;
           } catch {
             if (errorBody) {
               errorMessage += ` - ${errorBody}`;
             }
           }
-          throw new Error(errorMessage);
+          throw new MastraClientError(response.status, response.statusText, errorMessage, parsedBody);
         }
 
         if (options.stream) {
@@ -92,6 +81,12 @@ export class BaseResource {
         return data as T;
       } catch (error) {
         lastError = error as Error;
+
+        // Don't retry 4xx client errors - they won't resolve with retries
+        const status = (error as Error & { status?: number }).status;
+        if (status !== undefined && status >= 400 && status < 500) {
+          throw error;
+        }
 
         if (attempt === retries) {
           break;

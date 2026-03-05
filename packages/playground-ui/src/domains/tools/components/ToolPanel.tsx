@@ -11,12 +11,16 @@ import ToolExecutor from './ToolExecutor';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { useMemo, useEffect } from 'react';
 import { toast } from '@/lib/toast';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ToolPanelProps {
   toolId: string;
 }
 
 export const ToolPanel = ({ toolId }: ToolPanelProps) => {
+  const { canExecute } = usePermissions();
+  const canExecuteTool = canExecute('tools');
+
   const { data: agents = {} } = useAgents();
 
   // Check if tool exists in any agent's tools
@@ -47,13 +51,21 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
     if (!tool) return;
+
+    // Merge global playground request context with schema request context.
+    // Schema values take precedence and explicitly override global values,
+    // including when schema values are empty strings (user intentionally cleared them).
+    const requestContext = {
+      ...(playgroundRequestContext ?? {}),
+      ...(schemaRequestContext ?? {}),
+    };
 
     return executeTool({
       toolId: tool.id,
       input: data,
-      requestContext: playgroundRequestContext,
+      requestContext,
     });
   };
 
@@ -81,6 +93,15 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       </div>
     );
 
+  if (!canExecuteTool)
+    return (
+      <div className="py-12 text-center px-6">
+        <Txt variant="ui-sm" className="text-neutral3">
+          You don't have permission to execute tools.
+        </Txt>
+      </div>
+    );
+
   return (
     <ToolExecutor
       executionResult={result}
@@ -89,6 +110,7 @@ export const ToolPanel = ({ toolId }: ToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
+      requestContextSchema={tool.requestContextSchema}
     />
   );
 };

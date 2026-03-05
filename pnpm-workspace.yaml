@@ -1,10 +1,13 @@
 packages:
+  - mastracode
+  - docs
   - packages/_vendored/*
   - packages/*
   - deployers/*
   - stores/*
   - voice/*
   - workflows/*
+  - workspaces/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
@@ -16,12 +19,15 @@ packages:
   - e2e-tests/client-js/_test-utils
   - e2e-tests/client-js/zod-v3
   - e2e-tests/client-js/zod-v4
+  - e2e-tests/workspace-compat
 
 catalog:
-  '@vitest/coverage-v8': 4.0.12
-  '@vitest/ui': 4.0.12
-  vitest: 4.0.16
+  "@microsoft/api-extractor": "^7.56.3"
+  "@vitest/coverage-v8": 4.0.18
+  "@vitest/ui": 4.0.18
   typescript: ^5.9.3
+  vitest: 4.0.18
+  zod: ^4.3.6
 
 patchedDependencies:
-  '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
+  "@changesets/get-dependents-graph": patches/@changesets__get-dependents-graph.patch
