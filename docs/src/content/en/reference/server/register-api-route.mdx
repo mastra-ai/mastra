@@ -33,36 +33,36 @@ registerApiRoute("/items/:itemId", { ... })
 
 <PropertiesTable
   content={[
-{
-name: "method",
-type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
-description: "HTTP method for the route",
-isOptional: false,
-},
-{
-name: "handler",
-type: "Handler",
-description: "Route handler function receiving Hono Context. Use either `handler` or `createHandler`, not both.",
-isOptional: true,
-},
-{
-name: "createHandler",
-type: "(c: Context) => Promise<Handler>",
-description: "Async factory function to create the handler. Use either `handler` or `createHandler`, not both.",
-isOptional: true,
-},
-{
-name: "middleware",
-type: "MiddlewareHandler | MiddlewareHandler[]",
-description: "Route-specific middleware functions",
-isOptional: true,
-},
-{
-name: "openapi",
-type: "DescribeRouteOptions",
-description: "OpenAPI metadata for Swagger UI documentation",
-isOptional: true,
-},
+  {
+    name: 'method',
+    type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
+    description: 'HTTP method for the route',
+    isOptional: false,
+  },
+  {
+    name: 'handler',
+    type: 'Handler',
+    description: 'Route handler function receiving Hono Context. Use either `handler` or `createHandler`, not both.',
+    isOptional: true,
+  },
+  {
+    name: 'createHandler',
+    type: '(c: Context) => Promise<Handler>',
+    description: 'Async factory function to create the handler. Use either `handler` or `createHandler`, not both.',
+    isOptional: true,
+  },
+  {
+    name: 'middleware',
+    type: 'MiddlewareHandler | MiddlewareHandler[]',
+    description: 'Route-specific middleware functions',
+    isOptional: true,
+  },
+  {
+    name: 'openapi',
+    type: 'DescribeRouteOptions',
+    description: 'OpenAPI metadata for Swagger UI documentation',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -72,54 +72,54 @@ The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-
 
 <PropertiesTable
   content={[
-{
-name: "summary",
-type: "string",
-description: "Short summary of the operation",
-isOptional: true,
-},
-{
-name: "description",
-type: "string",
-description: "Detailed description of the operation",
-isOptional: true,
-},
-{
-name: "tags",
-type: "string[]",
-description: "Tags for grouping in Swagger UI. Defaults to ['custom'] if not specified.",
-isOptional: true,
-},
-{
-name: "deprecated",
-type: "boolean",
-description: "Mark the operation as deprecated",
-isOptional: true,
-},
-{
-name: "parameters",
-type: "ParameterObject[]",
-description: "Path, query, and header parameters",
-isOptional: true,
-},
-{
-name: "requestBody",
-type: "RequestBodyObject",
-description: "Request body specification",
-isOptional: true,
-},
-{
-name: "responses",
-type: "ResponsesObject",
-description: "Response specifications by status code",
-isOptional: true,
-},
-{
-name: "security",
-type: "SecurityRequirementObject[]",
-description: "Security requirements for the operation",
-isOptional: true,
-},
+  {
+    name: 'summary',
+    type: 'string',
+    description: 'Short summary of the operation',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Detailed description of the operation',
+    isOptional: true,
+  },
+  {
+    name: 'tags',
+    type: 'string[]',
+    description: "Tags for grouping in Swagger UI. Defaults to ['custom'] if not specified.",
+    isOptional: true,
+  },
+  {
+    name: 'deprecated',
+    type: 'boolean',
+    description: 'Mark the operation as deprecated',
+    isOptional: true,
+  },
+  {
+    name: 'parameters',
+    type: 'ParameterObject[]',
+    description: 'Path, query, and header parameters',
+    isOptional: true,
+  },
+  {
+    name: 'requestBody',
+    type: 'RequestBodyObject',
+    description: 'Request body specification',
+    isOptional: true,
+  },
+  {
+    name: 'responses',
+    type: 'ResponsesObject',
+    description: 'Response specifications by status code',
+    isOptional: true,
+  },
+  {
+    name: 'security',
+    type: 'SecurityRequirementObject[]',
+    description: 'Security requirements for the operation',
+    isOptional: true,
+  },
 ]}
 />
 

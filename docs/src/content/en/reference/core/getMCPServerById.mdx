@@ -39,19 +39,17 @@ const serverByKey = mastra.getMCPServer('customKey')
 
 <PropertiesTable
   content={[
-{
-name: "serverId",
-type: "string",
-description:
-"The intrinsic id property of the MCP server (set when the server was instantiated).",
-},
-{
-name: "version",
-type: "string",
-description:
-"Optional. If provided, returns the server only if its version matches.",
-isOptional: true,
-},
+  {
+    name: 'serverId',
+    type: 'string',
+    description: 'The intrinsic id property of the MCP server (set when the server was instantiated).',
+  },
+  {
+    name: 'version',
+    type: 'string',
+    description: 'Optional. If provided, returns the server only if its version matches.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -59,12 +57,11 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "server",
-type: "MCPServerBase | undefined",
-description:
-"The MCP server instance with the specified id (and version, if provided), or undefined if not found.",
-},
+  {
+    name: 'server',
+    type: 'MCPServerBase | undefined',
+    description: 'The MCP server instance with the specified id (and version, if provided), or undefined if not found.',
+  },
 ]}
 />
 
