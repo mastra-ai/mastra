@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 15.2.0-alpha.1
+
+### Patch Changes
+
+- Fixed documentation link in empty datasets page pointing to the correct datasets docs instead of evals ([#13872](https://github.com/mastra-ai/mastra/pull/13872))
+
 ## 15.2.0-alpha.0
 
 ### Minor Changes
