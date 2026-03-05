@@ -1001,6 +1001,10 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
           return rest;
         });
         return JSON.stringify(stripped, null, 2);
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        // JSON object (not array) — strip encryptedContent if present
+        const { encryptedContent, ...rest } = parsed as Record<string, unknown>;
+        return JSON.stringify(rest, null, 2);
       }
     } catch {
       // Not JSON — fall through to raw text (Tavily format)
