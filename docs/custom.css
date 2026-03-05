@@ -807,6 +807,7 @@ article p {
 
 .accordion-group details > div > div {
   border-top: 0;
+  margin-top: 0;
 }
 
 .accordion-group details:first-of-type {
