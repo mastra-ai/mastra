@@ -222,6 +222,34 @@ describe('createDynamicTools – denied tool filtering', () => {
   });
 });
 
+describe('createDynamicTools – disabledTools filtering', () => {
+  it('should omit disabled built-in tools', () => {
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, [
+      'request_sandbox_access',
+      'execute_command',
+    ]);
+
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    expect(tools).not.toHaveProperty('request_sandbox_access');
+    expect(tools).not.toHaveProperty('execute_command');
+    // web_search is provided by the Anthropic model mock and should survive filtering
+    expect(tools).toHaveProperty('web_search');
+  });
+
+  it('should omit disabled extraTools', () => {
+    const myTool = createTool({
+      id: 'my_tool',
+      description: 'A custom tool',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'custom' }),
+    });
+
+    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, undefined, ['my_tool']);
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+    expect(tools).not.toHaveProperty('my_tool');
+  });
+});
+
 describe('buildToolGuidance – denied tool filtering', () => {
   it('should omit guidance for denied tools', () => {
     const guidance = buildToolGuidance('build', {
