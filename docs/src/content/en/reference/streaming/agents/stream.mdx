@@ -13,7 +13,7 @@ The `.stream()` method enables real-time streaming of responses from an agent wi
 
 ## Usage example
 
-```ts title="index.ts"
+```ts
 const stream = await agent.stream('message for agent')
 ```
 
@@ -38,14 +38,10 @@ name: "options",
 type: "AgentExecutionOptions<Output, Format>",
 isOptional: true,
 description: "Optional configuration for the streaming process.",
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
+properties: [
+{
+type: "AgentExecutionOptions<Output, Format>",
+parameters: [
 {
 name: "maxSteps",
 type: "number",
@@ -823,6 +819,10 @@ type: "string[]",
 isOptional: true,
 description:
 "Tags to apply to this trace. String labels for categorizing and filtering traces.",
+},
+],
+},
+],
 },
 ],
 },

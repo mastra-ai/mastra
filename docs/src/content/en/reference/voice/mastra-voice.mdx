@@ -99,12 +99,50 @@ name: "config.speechModel",
 type: "BuiltInModelConfig",
 description: "Configuration for the text-to-speech model",
 isOptional: true,
+properties: [
+{
+type: "BuiltInModelConfig",
+parameters: [
+{
+name: "name",
+type: "string",
+description: "Name of the model to use",
+isOptional: false,
+},
+{
+name: "apiKey",
+type: "string",
+description: "API key for the model service",
+isOptional: true,
+},
+],
+},
+],
 },
 {
 name: "config.listeningModel",
 type: "BuiltInModelConfig",
 description: "Configuration for the speech-to-text model",
 isOptional: true,
+properties: [
+{
+type: "BuiltInModelConfig",
+parameters: [
+{
+name: "name",
+type: "string",
+description: "Name of the model to use",
+isOptional: false,
+},
+{
+name: "apiKey",
+type: "string",
+description: "API key for the model service",
+isOptional: true,
+},
+],
+},
+],
 },
 {
 name: "config.speaker",
@@ -123,33 +161,10 @@ name: "config.realtimeConfig",
 type: "object",
 description: "Configuration for real-time speech-to-speech capabilities",
 isOptional: true,
-},
-]}
-/>
-
-### BuiltInModelConfig
-
-<PropertiesTable
-  content={[
+properties: [
 {
-name: "name",
-type: "string",
-description: "Name of the model to use",
-isOptional: false,
-},
-{
-name: "apiKey",
-type: "string",
-description: "API key for the model service",
-isOptional: true,
-},
-]}
-/>
-
-### RealtimeConfig
-
-<PropertiesTable
-  content={[
+type: "object",
+parameters: [
 {
 name: "model",
 type: "string",
@@ -167,6 +182,10 @@ name: "options",
 type: "unknown",
 description: "Provider-specific options for real-time capabilities",
 isOptional: true,
+},
+],
+},
+],
 },
 ]}
 />

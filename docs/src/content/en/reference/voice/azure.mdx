@@ -51,54 +51,79 @@ name: "speechModel",
 type: "AzureSpeechConfig",
 description: "Configuration for text-to-speech synthesis.",
 isOptional: true,
+properties: [
+{
+type: "AzureSpeechConfig",
+parameters: [
+{
+name: "apiKey",
+type: "string",
+description: "Azure Speech Services API key (NOT Azure OpenAI key). Falls back to AZURE_API_KEY environment variable.",
+isOptional: true,
+},
+{
+name: "region",
+type: "string",
+description: "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_REGION environment variable.",
+isOptional: true,
+},
+{
+name: "voiceName",
+type: "string",
+description: "Voice ID for speech synthesis (e.g., 'en-US-AriaNeural', 'en-US-JennyNeural'). Only used in speechModel. See voice list below.",
+isOptional: true,
+},
+{
+name: "language",
+type: "string",
+description: "Recognition language code (e.g., 'en-US', 'fr-FR'). Only used in listeningModel.",
+isOptional: true,
+},
+],
+},
+],
 },
 {
 name: "listeningModel",
 type: "AzureSpeechConfig",
 description: "Configuration for speech-to-text recognition.",
 isOptional: true,
-},
+properties: [
 {
-name: "speaker",
-type: "string",
-description: "Default voice ID for speech synthesis.",
-isOptional: true,
-},
-]}
-/>
-
-### AzureSpeechConfig
-
-Configuration object for speech synthesis (`speechModel`) and recognition (`listeningModel`).
-
-<PropertiesTable
-  content={[
+type: "AzureSpeechConfig",
+parameters: [
 {
 name: "apiKey",
 type: "string",
-description:
-"Azure Speech Services API key (NOT Azure OpenAI key). Falls back to AZURE_API_KEY environment variable.",
+description: "Azure Speech Services API key (NOT Azure OpenAI key). Falls back to AZURE_API_KEY environment variable.",
 isOptional: true,
 },
 {
 name: "region",
 type: "string",
-description:
-"Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_REGION environment variable.",
+description: "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_REGION environment variable.",
 isOptional: true,
 },
 {
 name: "voiceName",
 type: "string",
-description:
-"Voice ID for speech synthesis (e.g., 'en-US-AriaNeural', 'en-US-JennyNeural'). Only used in speechModel. See voice list below.",
+description: "Voice ID for speech synthesis (e.g., 'en-US-AriaNeural', 'en-US-JennyNeural'). Only used in speechModel. See voice list below.",
 isOptional: true,
 },
 {
 name: "language",
 type: "string",
-description:
-"Recognition language code (e.g., 'en-US', 'fr-FR'). Only used in listeningModel.",
+description: "Recognition language code (e.g., 'en-US', 'fr-FR'). Only used in listeningModel.",
+isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID for speech synthesis.",
 isOptional: true,
 },
 ]}

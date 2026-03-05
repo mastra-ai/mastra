@@ -45,21 +45,10 @@ name: "speechModel",
 type: "CloudflareSpeechConfig",
 description: "Configuration for text-to-speech synthesis.",
 isOptional: true,
-},
+properties: [
 {
-name: "speaker",
-type: "string",
-description: "Default voice ID for speech synthesis.",
-isOptional: true,
-defaultValue: "'en-US-1'",
-},
-]}
-/>
-
-### CloudflareSpeechConfig
-
-<PropertiesTable
-  content={[
+type: "CloudflareSpeechConfig",
+parameters: [
 {
 name: "name",
 type: "string",
@@ -70,16 +59,25 @@ defaultValue: "'@cf/meta/m2m100-1.2b'",
 {
 name: "apiKey",
 type: "string",
-description:
-"Cloudflare API token with Workers AI access. Falls back to CLOUDFLARE_API_TOKEN environment variable.",
+description: "Cloudflare API token with Workers AI access. Falls back to CLOUDFLARE_API_TOKEN environment variable.",
 isOptional: true,
 },
 {
 name: "accountId",
 type: "string",
-description:
-"Cloudflare account ID. Falls back to CLOUDFLARE_ACCOUNT_ID environment variable.",
+description: "Cloudflare account ID. Falls back to CLOUDFLARE_ACCOUNT_ID environment variable.",
 isOptional: true,
+},
+],
+},
+],
+},
+{
+name: "speaker",
+type: "string",
+description: "Default voice ID for speech synthesis.",
+isOptional: true,
+defaultValue: "'en-US-1'",
 },
 ]}
 />

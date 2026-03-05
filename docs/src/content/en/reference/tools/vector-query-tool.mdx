@@ -103,40 +103,57 @@ defaultValue: "true",
 {
 name: "reranker",
 type: "RerankConfig",
-description:
-"Options for reranking results. (Can be set at creation or overridden at runtime.)",
+description: "Options for reranking results. (Can be set at creation or overridden at runtime.)",
 isOptional: true,
+properties: [
+{
+type: "RerankConfig",
+parameters: [
+{
+name: "model",
+type: "MastraLanguageModel",
+description: "Language model to use for reranking",
+isOptional: false,
+},
+{
+name: "options",
+type: "RerankerOptions",
+description: "Options for the reranking process",
+isOptional: true,
+properties: [
+{
+type: "RerankerOptions",
+parameters: [
+{
+name: "weights",
+description: "Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
+isOptional: true,
+type: "WeightConfig",
+},
+{
+name: "topK",
+description: "Number of top results to return",
+isOptional: true,
+type: "number",
+defaultValue: "3",
+},
+],
+},
+],
+},
+],
+},
+],
 },
 {
 name: "databaseConfig",
 type: "DatabaseConfig",
-description:
-"Database-specific configuration options for optimizing queries. (Can be set at creation or overridden at runtime.)",
+description: "Database-specific configuration options for optimizing queries. (Can be set at creation or overridden at runtime.)",
 isOptional: true,
-},
+properties: [
 {
-name: "providerOptions",
-type: "Record<string, Record<string, any>>",
-description:
-"Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
-isOptional: true,
-},
-{
-name: "vectorStore",
-type: "MastraVector | VectorStoreResolver",
-description:
-"Direct vector store instance or a resolver function for dynamic selection. Use a function for multi-tenant applications where the vector store is selected based on request context. When provided, `vectorStoreName` becomes optional.",
-isOptional: true,
-},
-]}
-/>
-
-### DatabaseConfig
-
-The `DatabaseConfig` type allows you to specify database-specific configurations that are automatically applied to query operations. This enables you to take advantage of unique features and optimizations offered by different vector stores.
-
-<PropertiesTable
-  content={[
+type: "DatabaseConfig",
+parameters: [
 {
 name: "pinecone",
 type: "PineconeConfig",
@@ -144,7 +161,7 @@ description: "Configuration specific to Pinecone vector store",
 isOptional: true,
 properties: [
 {
-type: "object",
+type: "PineconeConfig",
 parameters: [
 {
 name: "namespace",
@@ -165,12 +182,11 @@ type: "{ indices: number[]; values: number[]; }",
 {
 name: "pgvector",
 type: "PgVectorConfig",
-description:
-"Configuration specific to PostgreSQL with pgvector extension",
+description: "Configuration specific to PostgreSQL with pgvector extension",
 isOptional: true,
 properties: [
 {
-type: "object",
+type: "PgVectorConfig",
 parameters: [
 {
 name: "minScore",
@@ -180,15 +196,13 @@ type: "number",
 },
 {
 name: "ef",
-description:
-"HNSW search parameter - controls accuracy vs speed tradeoff",
+description: "HNSW search parameter - controls accuracy vs speed tradeoff",
 isOptional: true,
 type: "number",
 },
 {
 name: "probes",
-description:
-"IVFFlat probe parameter - number of cells to visit during search",
+description: "IVFFlat probe parameter - number of cells to visit during search",
 isOptional: true,
 type: "number",
 },
@@ -203,7 +217,7 @@ description: "Configuration specific to Chroma vector store",
 isOptional: true,
 properties: [
 {
-type: "object",
+type: "ChromaConfig",
 parameters: [
 {
 name: "where",
@@ -221,45 +235,21 @@ type: "Record<string, any>",
 },
 ],
 },
-]}
-/>
-
-### RerankConfig
-
-<PropertiesTable
-  content={[
-{
-name: "model",
-type: "MastraLanguageModel",
-description: "Language model to use for reranking",
-isOptional: false,
-},
-{
-name: "options",
-type: "RerankerOptions",
-description: "Options for the reranking process",
-isOptional: true,
-properties: [
-{
-type: "object",
-parameters: [
-{
-name: "weights",
-description:
-"Weights for scoring components (semantic: 0.4, vector: 0.4, position: 0.2)",
-isOptional: true,
-type: "WeightConfig",
-},
-{
-name: "topK",
-description: "Number of top results to return",
-isOptional: true,
-type: "number",
-defaultValue: "3",
-},
 ],
 },
 ],
+},
+{
+name: "providerOptions",
+type: "Record<string, Record<string, any>>",
+description: "Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
+isOptional: true,
+},
+{
+name: "vectorStore",
+type: "MastraVector | VectorStoreResolver",
+description: "Direct vector store instance or a resolver function for dynamic selection. Use a function for multi-tenant applications where the vector store is selected based on request context. When provided, `vectorStoreName` becomes optional.",
+isOptional: true,
 },
 ]}
 />
