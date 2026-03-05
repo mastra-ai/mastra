@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
@@ -37,6 +38,7 @@ import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import type {
+  FetchLike,
   LogHandler,
   ElicitationHandler,
   ProgressHandler,
@@ -52,6 +54,7 @@ export type {
   LogHandler,
   ElicitationHandler,
   ProgressHandler,
+  MastraFetchLike,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   Root,
@@ -102,7 +105,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableProgressTracking?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private currentOperationContext: RequestContext | null = null;
+  private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private _roots: Root[];
@@ -193,7 +196,7 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
-        requestContext: this.currentOperationContext,
+        requestContext: this.operationContextStore.getStore() ?? null,
       });
     }
   }
@@ -295,7 +298,14 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch } = this.serverConfig;
+
+    // Wrap the user's fetch function to inject requestContext as the third argument.
+    // The transport calls fetch with standard (url, init) signature, but we forward
+    // the current operation context so users can access request-scoped data (e.g., auth cookies).
+    const fetch: FetchLike | undefined = userFetch
+      ? (url: string | URL, init?: RequestInit) => userFetch(url, init, this.operationContextStore.getStore() ?? null)
+      : undefined;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -780,90 +790,94 @@ export class InternalMastraMCPClient extends MastraBase {
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
           execute: async (input: any, context?: { requestContext?: RequestContext | null; runId?: string }) => {
-            const previousContext = this.currentOperationContext;
-            this.currentOperationContext = context?.requestContext || null; // Set current context
+            const operationContext = context?.requestContext ?? null;
 
-            const executeToolCall = async () => {
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
-              const res = await this.client.callTool(
-                {
-                  name: tool.name,
-                  arguments: input,
-                  // Use runId as progress token if available, otherwise generate a random UUID
-                  ...(this.enableProgressTracking
-                    ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
-                    : {}),
-                },
-                CallToolResultSchema,
-                {
-                  timeout: this.timeout,
-                },
-              );
+            return this.operationContextStore.run(operationContext, async () => {
+              const executeToolCall = async () => {
+                this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+                const res = await this.client.callTool(
+                  {
+                    name: tool.name,
+                    arguments: input,
+                    // Use runId as progress token if available, otherwise generate a random UUID
+                    ...(this.enableProgressTracking
+                      ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
+                      : {}),
+                  },
+                  CallToolResultSchema,
+                  {
+                    timeout: this.timeout,
+                  },
+                );
 
-              this.log('debug', `Tool executed successfully: ${tool.name}`);
+                this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-              // When a tool has an outputSchema, return the structuredContent directly
-              // so that output validation works correctly
-              if (res.structuredContent !== undefined) {
-                return res.structuredContent;
-              }
+                // When a tool has an outputSchema, return the structuredContent directly
+                // so that output validation works correctly
+                if (res.structuredContent !== undefined) {
+                  return res.structuredContent;
+                }
 
-              // When the tool has an outputSchema but the server didn't return
-              // structuredContent (e.g. older MCP protocol versions that predate the
-              // structuredContent spec), extract the result from the content array.
-              // Without this, the raw CallToolResult envelope ({ content, isError,
-              // _meta }) gets validated against the outputSchema and Zod strips all
-              // unrecognised keys, producing {}.
-              if (tool.outputSchema && !res.isError) {
-                const content = res.content as Array<{ type: string; text?: string }> | undefined;
-                if (content && content.length === 1 && content[0]!.type === 'text' && content[0]!.text !== undefined) {
-                  try {
-                    return JSON.parse(content[0]!.text);
-                  } catch {
-                    return content[0]!.text;
+                // When the tool has an outputSchema but the server didn't return
+                // structuredContent (e.g. older MCP protocol versions that predate the
+                // structuredContent spec), extract the result from the content array.
+                // Without this, the raw CallToolResult envelope ({ content, isError,
+                // _meta }) gets validated against the outputSchema and Zod strips all
+                // unrecognised keys, producing {}.
+                if (tool.outputSchema && !res.isError) {
+                  const content = res.content as Array<{ type: string; text?: string }> | undefined;
+                  if (
+                    content &&
+                    content.length === 1 &&
+                    content[0]!.type === 'text' &&
+                    content[0]!.text !== undefined
+                  ) {
+                    try {
+                      return JSON.parse(content[0]!.text);
+                    } catch {
+                      return content[0]!.text;
+                    }
                   }
                 }
-              }
 
-              return res;
-            };
+                return res;
+              };
 
-            try {
-              return await executeToolCall();
-            } catch (e) {
-              // Check if this is a session-related error that requires reconnection
-              if (this.isSessionError(e)) {
-                this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
-                  error: e instanceof Error ? e.message : String(e),
-                });
-
-                try {
-                  // Force reconnection
-                  await this.forceReconnect();
-
-                  // Retry the tool call with fresh connection
-                  this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
-                  return await executeToolCall();
-                } catch (reconnectError) {
-                  this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
-                    originalError: e instanceof Error ? e.message : String(e),
-                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
-                    toolArgs: input,
+              try {
+                return await executeToolCall();
+              } catch (e) {
+                // Check if this is a session-related error that requires reconnection
+                if (this.isSessionError(e)) {
+                  this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
+                    error: e instanceof Error ? e.message : String(e),
                   });
-                  // Throw the original error if reconnection/retry fails
-                  throw e;
-                }
-              }
 
-              // For non-session errors, log and rethrow
-              this.log('error', `Error calling tool: ${tool.name}`, {
-                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                toolArgs: input,
-              });
-              throw e;
-            } finally {
-              this.currentOperationContext = previousContext; // Restore previous context
-            }
+                  try {
+                    // Force reconnection
+                    await this.forceReconnect();
+
+                    // Retry the tool call with fresh connection
+                    this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
+                    return await executeToolCall();
+                  } catch (reconnectError) {
+                    this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
+                      originalError: e instanceof Error ? e.message : String(e),
+                      reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
+                      toolArgs: input,
+                    });
+                    // Throw the original error if reconnection/retry fails
+                    throw e;
+                  }
+                }
+
+                // For non-session errors, log and rethrow
+                this.log('error', `Error calling tool: ${tool.name}`, {
+                  error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
+                  toolArgs: input,
+                });
+                throw e;
+              }
+            });
           },
         });
 

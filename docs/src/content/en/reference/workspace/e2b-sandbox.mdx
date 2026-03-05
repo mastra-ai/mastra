@@ -48,56 +48,57 @@ const agent = new Agent({
 
 <PropertiesTable
   content={[
-{
-name: "apiKey",
-type: "string",
-description: "E2B API key. Falls back to E2B_API_KEY environment variable.",
-isOptional: true,
-},
-{
-name: "timeout",
-type: "number",
-description: "Execution timeout in milliseconds",
-isOptional: true,
-defaultValue: "300000 (5 minutes)",
-},
-{
-name: "template",
-type: "string | TemplateBuilder | function",
-description: "Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.",
-isOptional: true,
-},
-{
-name: "env",
-type: "Record<string, string>",
-description: "Environment variables to set in the sandbox",
-isOptional: true,
-},
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this sandbox instance",
-isOptional: true,
-defaultValue: "Auto-generated",
-},
-{
-name: "domain",
-type: "string",
-description: "Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var.",
-isOptional: true,
-},
-{
-name: "apiUrl",
-type: "string",
-description: "API URL for self-hosted E2B. Falls back to E2B_API_URL env var.",
-isOptional: true,
-},
-{
-name: "accessToken",
-type: "string",
-description: "Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var.",
-isOptional: true,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'E2B API key. Falls back to E2B_API_KEY environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Execution timeout in milliseconds',
+    isOptional: true,
+    defaultValue: '300000 (5 minutes)',
+  },
+  {
+    name: 'template',
+    type: 'string | TemplateBuilder | function',
+    description:
+      'Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.',
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables to set in the sandbox',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'domain',
+    type: 'string',
+    description: 'Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var.',
+    isOptional: true,
+  },
+  {
+    name: 'apiUrl',
+    type: 'string',
+    description: 'API URL for self-hosted E2B. Falls back to E2B_API_URL env var.',
+    isOptional: true,
+  },
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -105,31 +106,31 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Sandbox instance identifier",
-},
-{
-name: "name",
-type: "string",
-description: "Provider name ('E2BSandbox')",
-},
-{
-name: "provider",
-type: "string",
-description: "Provider identifier ('e2b')",
-},
-{
-name: "status",
-type: "ProviderStatus",
-description: "'pending' | 'initializing' | 'ready' | 'error'",
-},
-{
-name: "supportsMounting",
-type: "boolean",
-description: "Always true - E2B sandboxes support mounting cloud filesystems",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('E2BSandbox')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('e2b')",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'pending' | 'initializing' | 'ready' | 'error'",
+  },
+  {
+    name: 'supportsMounting',
+    type: 'boolean',
+    description: 'Always true - E2B sandboxes support mounting cloud filesystems',
+  },
 ]}
 />
 
@@ -177,47 +178,47 @@ const npmResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
 
 <PropertiesTable
   content={[
-{
-name: "command",
-type: "string",
-description: "Command to execute",
-},
-{
-name: "args",
-type: "string[]",
-description: "Command arguments",
-isOptional: true,
-},
-{
-name: "options.timeout",
-type: "number",
-description: "Execution timeout in milliseconds",
-isOptional: true,
-},
-{
-name: "options.cwd",
-type: "string",
-description: "Working directory for the command",
-isOptional: true,
-},
-{
-name: "options.env",
-type: "Record<string, string>",
-description: "Additional environment variables",
-isOptional: true,
-},
-{
-name: "options.onStdout",
-type: "(data: string) => void",
-description: "Callback for stdout streaming",
-isOptional: true,
-},
-{
-name: "options.onStderr",
-type: "(data: string) => void",
-description: "Callback for stderr streaming",
-isOptional: true,
-},
+  {
+    name: 'command',
+    type: 'string',
+    description: 'Command to execute',
+  },
+  {
+    name: 'args',
+    type: 'string[]',
+    description: 'Command arguments',
+    isOptional: true,
+  },
+  {
+    name: 'options.timeout',
+    type: 'number',
+    description: 'Execution timeout in milliseconds',
+    isOptional: true,
+  },
+  {
+    name: 'options.cwd',
+    type: 'string',
+    description: 'Working directory for the command',
+    isOptional: true,
+  },
+  {
+    name: 'options.env',
+    type: 'Record<string, string>',
+    description: 'Additional environment variables',
+    isOptional: true,
+  },
+  {
+    name: 'options.onStdout',
+    type: '(data: string) => void',
+    description: 'Callback for stdout streaming',
+    isOptional: true,
+  },
+  {
+    name: 'options.onStderr',
+    type: '(data: string) => void',
+    description: 'Callback for stderr streaming',
+    isOptional: true,
+  },
 ]}
 />
 

@@ -25,7 +25,13 @@ function DatasetExperimentPage() {
     error: experimentError,
   } = useDatasetExperiment(datasetId!, experimentId!);
 
-  const { data: resultsData, isLoading: resultsLoading } = useDatasetExperimentResults({
+  const {
+    data: results,
+    isLoading: resultsLoading,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useDatasetExperimentResults({
     datasetId: datasetId!,
     experimentId: experimentId!,
     experimentStatus: experiment?.status,
@@ -55,8 +61,6 @@ function DatasetExperimentPage() {
     );
   }
 
-  const results = resultsData?.results ?? [];
-
   return (
     <MainContentLayout>
       <Header>
@@ -79,7 +83,15 @@ function DatasetExperimentPage() {
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
           <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
-          <ExperimentPageContent experimentId={experimentId!} results={results} isLoading={resultsLoading} />
+          <ExperimentPageContent
+            experimentId={experimentId!}
+            experimentStatus={experiment?.status}
+            results={results ?? []}
+            isLoading={resultsLoading}
+            setEndOfListElement={setEndOfListElement}
+            isFetchingNextPage={isFetchingNextPage}
+            hasNextPage={hasNextPage}
+          />
         </div>
       </div>
     </MainContentLayout>

@@ -1305,7 +1305,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           return {
             type: 'file' as const,
             data: f.data,
-            mimeType: f.mediaType,
+            mediaType: f.mediaType,
             filename: f.filename,
           };
         });
@@ -1507,9 +1507,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           break;
         }
         case 'file':
+          if (typeof part.data !== 'string') {
+            console.warn('[Harness] Skipping file part with non-string data:', typeof part.data);
+            break;
+          }
           content.push({
             type: 'file',
-            data: typeof part.data === 'string' ? part.data : '',
+            data: part.data,
             mediaType:
               (part as { mediaType?: string }).mediaType ??
               (part as { mimeType?: string }).mimeType ??
