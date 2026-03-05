@@ -1,0 +1,2309 @@
+{
+  "record": {
+    "id": "62ed9257-826a-4498-b41c-8dba9306e47e",
+    "scope": "thread",
+    "threadId": "1772668741183-7yxlih8ln",
+    "resourceId": "mastra-c597b1a88f39",
+    "createdAt": "2026-03-04T23:59:01.534Z",
+    "updatedAt": "2026-03-04T23:59:15.429Z",
+    "originType": "initial",
+    "generationCount": 0,
+    "activeObservations": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:record:active-observations]",
+    "bufferedObservationChunks": {},
+    "totalTokensObserved": 0,
+    "observationTokenCount": 0,
+    "pendingMessageTokens": 9366,
+    "isReflecting": false,
+    "isObserving": false,
+    "isBufferingObservation": true,
+    "isBufferingReflection": false,
+    "lastBufferedAtTokens": 6013,
+    "lastBufferedAtTime": null,
+    "config": {
+      "observation": {
+        "messageTokens": 30000,
+        "shareTokenBudget": false,
+        "modelSettings": {
+          "temperature": 0.3
+        },
+        "providerOptions": {
+          "google": {
+            "thinkingConfig": {
+              "thinkingBudget": 215
+            }
+          }
+        },
+        "maxTokensPerBatch": 10000,
+        "bufferTokens": 6000,
+        "bufferActivation": 2000,
+        "blockAfter": 60000
+      },
+      "reflection": {
+        "observationTokens": 40000,
+        "shareTokenBudget": false,
+        "modelSettings": {
+          "temperature": 0
+        },
+        "providerOptions": {
+          "google": {
+            "thinkingConfig": {
+              "thinkingBudget": 1024
+            }
+          }
+        },
+        "bufferActivation": 0.5,
+        "blockAfter": 44000
+      },
+      "scope": "thread"
+    },
+    "observedMessageIds": {},
+    "observedTimezone": "UTC"
+  },
+  "bufferedChunks": [],
+  "contextTokenCount": 11475,
+  "messageCount": 4,
+  "messageIds": [
+    "834244a6-65eb-4e93-8e32-dd486b42f115",
+    "e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd",
+    "ab2fb403-6752-415e-b33e-b427f915d7a0",
+    "65762a45-8398-46ed-95b6-7b4bf378388b"
+  ],
+  "messages": [
+    {
+      "id": "834244a6-65eb-4e93-8e32-dd486b42f115",
+      "role": "user",
+      "createdAt": "2026-03-04T23:59:01.228Z",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "[sanitized:text:834244a6-65eb-4e93-8e32-dd486b42f115:0]",
+            "providerMetadata": {
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "text:5193b97fb05d08b7aba79f58096b4ffc5e392cc8",
+                  "tokens": 33
+                }
+              }
+            },
+            "metadata": {
+              "mastra": {
+                "sealedAt": 1772668750453
+              }
+            }
+          }
+        ],
+        "content": "[sanitized:content:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:0]",
+        "metadata": {
+          "mastra": {
+            "sealed": true
+          }
+        }
+      },
+      "threadId": "1772668741183-7yxlih8ln",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    {
+      "id": "e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd",
+      "role": "assistant",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 62,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 0,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:1]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_07c0921d9c53675b0169a8c74754f88192a32af7461699d05b",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_wajhXBcIMUS62xV341hdsnM3",
+              "toolName": "skill-activate",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:2:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:2:toolInvocation:result",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              }
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c7478f408192b1ef8268cc131762"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result-json:1fc8f820e73179dba34bc4db7c996acbc1923f2d",
+                  "tokens": 23
+                }
+              }
+            }
+          },
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 82,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 1,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:4]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_07c0921d9c53675b0169a8c749bef4819283850c9ea0a2d71c",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_Bv5f4ZYEjr22Drun2GmmWBwi",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:5:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:5:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c749e7548192b006100d6a8233ed"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:16739374b377f2085689b00a729f4fefe72eeb18",
+                  "tokens": 1236
+                }
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_t81EsjDN4l6wS999guSwmuoA",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:6:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:6:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c749e760819289acc0d31df165d6"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:b1f81868cadb686511888bc99361ccdc80262d33",
+                  "tokens": 2062
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_list_files",
+              "toolCallId": "call_Bv5f4ZYEjr22Drun2GmmWBwi",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_grep",
+              "toolCallId": "call_t81EsjDN4l6wS999guSwmuoA",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            }
+          },
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 3387,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 2,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:10]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_07c0921d9c53675b0169a8c74ca6288192978d89820f4a076d",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_MHvN6GiRMxiDSjDiek28HKE4",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:11:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:11:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c74cbdf081929640ebf174c5db34"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:fa90dc5ba4999c5418abe8588098a0006fb26367",
+                  "tokens": 1321
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_list_files",
+              "toolCallId": "call_MHvN6GiRMxiDSjDiek28HKE4",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            }
+          },
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 4712,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 3,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:14]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_07c0921d9c53675b0169a8c74e3fd4819289f9ded30bf235b3",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_4iKIBdm8gdoniHbkQjNOR8Tc",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:15:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:parts:15:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c74e587081929f865ce1989a608f"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:87e12c35d2017c823003099da770a172152de502",
+                  "tokens": 1297
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_list_files",
+              "toolCallId": "call_4iKIBdm8gdoniHbkQjNOR8Tc",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            },
+            "metadata": {
+              "mastra": {
+                "sealedAt": 1772668750453
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_wajhXBcIMUS62xV341hdsnM3",
+            "toolName": "skill-activate",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:0:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:0:result",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            }
+          },
+          {
+            "state": "result",
+            "toolCallId": "call_Bv5f4ZYEjr22Drun2GmmWBwi",
+            "toolName": "find_files",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:1:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:1:result]"
+          },
+          {
+            "state": "result",
+            "toolCallId": "call_t81EsjDN4l6wS999guSwmuoA",
+            "toolName": "search_content",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:2:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:2:result]"
+          },
+          {
+            "state": "result",
+            "toolCallId": "call_MHvN6GiRMxiDSjDiek28HKE4",
+            "toolName": "find_files",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:3:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:3:result]"
+          },
+          {
+            "state": "result",
+            "toolCallId": "call_4iKIBdm8gdoniHbkQjNOR8Tc",
+            "toolName": "find_files",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:4:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:1:content:toolInvocations:4:result]"
+          }
+        ],
+        "metadata": {
+          "mastra": {
+            "sealed": true
+          }
+        }
+      },
+      "createdAt": "2026-03-04T23:59:10.446Z",
+      "threadId": "1772668741183-7yxlih8ln",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    {
+      "id": "ab2fb403-6752-415e-b33e-b427f915d7a0",
+      "role": "assistant",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-om-buffering-start",
+            "data": {
+              "cycleId": "buffer-obs-1772668750453-m0fj9b9hm",
+              "operationType": "observation",
+              "startedAt": "2026-03-04T23:59:10.453Z",
+              "tokensToBuffer": 6013,
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "threadIds": ["1772668741183-7yxlih8ln"],
+              "config": {
+                "messageTokens": 30000,
+                "observationTokens": 40000,
+                "scope": "thread"
+              }
+            }
+          }
+        ]
+      },
+      "createdAt": "2026-03-04T23:59:10.453Z",
+      "threadId": "1772668741183-7yxlih8ln",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    {
+      "id": "65762a45-8398-46ed-95b6-7b4bf378388b",
+      "role": "assistant",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 6013,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "running"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 4,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:65762a45-8398-46ed-95b6-7b4bf378388b:1]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_07c0921d9c53675b0169a8c74fa190819298653acf853b4988",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_F64T0nG9ultqI46OeS97hLJc",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:2:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:2:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c74fb7448192af5e55ae96c5866b"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:14203a763be205acec6bf822eaab2ea54c0240ed",
+                  "tokens": 2014
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_grep",
+              "toolCallId": "call_F64T0nG9ultqI46OeS97hLJc",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            }
+          },
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 8041,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "running"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 5,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:65762a45-8398-46ed-95b6-7b4bf378388b:5]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_07c0921d9c53675b0169a8c752ea88819299803813b4724f33",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_OEtDzuLuz5ej1pDYWetbBX1R",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:6:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:6:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c7530560819286c030bc8df8a322"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:d4551c67ad03354001e3afb4cfebcf3bc1e6fc9a",
+                  "tokens": 1322
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_list_files",
+              "toolCallId": "call_OEtDzuLuz5ej1pDYWetbBX1R",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            }
+          },
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 9366,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "running"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 6,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:65762a45-8398-46ed-95b6-7b4bf378388b:9]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_07c0921d9c53675b0169a8c7549824819295c120a671fe9126",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_H3iFVNK1XdWQAlWIYZ2fpJvk",
+              "toolName": "view",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:10:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:10:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c754de3c8192836a6d91f58b4e33"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:73658f7ca5a4aa5a6ff72cf88795dffce2e8ab80",
+                  "tokens": 2082
+                }
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_Sm8orolTKzNcVQ3R3KiHVhrL",
+              "toolName": "view",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:11:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:parts:11:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_07c0921d9c53675b0169a8c754de4c81929b921bf2c95665e2"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:29c1476d6aaeaf63322f9002d8a16e99c9626b4e",
+                  "tokens": 19
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_read_file",
+              "toolCallId": "call_H3iFVNK1XdWQAlWIYZ2fpJvk",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_read_file",
+              "toolCallId": "call_Sm8orolTKzNcVQ3R3KiHVhrL",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-04T23:59:01.221Z",
+              "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+              "filesystem": {
+                "id": "local-fs-mmcp76n9-dhsdke",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            }
+          },
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 11475,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "running"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+              "threadId": "1772668741183-7yxlih8ln",
+              "stepNumber": 7,
+              "generationCount": 0
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_F64T0nG9ultqI46OeS97hLJc",
+            "toolName": "search_content",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:0:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:0:result]"
+          },
+          {
+            "state": "result",
+            "toolCallId": "call_OEtDzuLuz5ej1pDYWetbBX1R",
+            "toolName": "find_files",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:1:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:1:result]"
+          },
+          {
+            "state": "result",
+            "toolCallId": "call_Sm8orolTKzNcVQ3R3KiHVhrL",
+            "toolName": "view",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:2:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:2:result]"
+          },
+          {
+            "state": "result",
+            "toolCallId": "call_H3iFVNK1XdWQAlWIYZ2fpJvk",
+            "toolName": "view",
+            "args": {
+              "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:3:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messages:3:content:toolInvocations:3:result]"
+          }
+        ]
+      },
+      "createdAt": "2026-03-04T23:59:17.148Z",
+      "threadId": "1772668741183-7yxlih8ln",
+      "resourceId": "mastra-c597b1a88f39"
+    }
+  ],
+  "messageList": {
+    "messages": [
+      {
+        "id": "834244a6-65eb-4e93-8e32-dd486b42f115",
+        "role": "user",
+        "createdAt": "Wed, 04 Mar 2026 23:59:01 GMT",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "text",
+              "text": "[sanitized:text:834244a6-65eb-4e93-8e32-dd486b42f115:0]",
+              "providerMetadata": {
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "text:5193b97fb05d08b7aba79f58096b4ffc5e392cc8",
+                    "tokens": 33
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772668750453
+                }
+              }
+            }
+          ],
+          "content": "[sanitized:content:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:0]",
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "threadId": "1772668741183-7yxlih8ln",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 62,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 0,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:1]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_07c0921d9c53675b0169a8c74754f88192a32af7461699d05b",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_wajhXBcIMUS62xV341hdsnM3",
+                "toolName": "skill-activate",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:2:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:2:toolInvocation:result",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                }
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c7478f408192b1ef8268cc131762"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result-json:1fc8f820e73179dba34bc4db7c996acbc1923f2d",
+                    "tokens": 23
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 82,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 1,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:4]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_07c0921d9c53675b0169a8c749bef4819283850c9ea0a2d71c",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_Bv5f4ZYEjr22Drun2GmmWBwi",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:5:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:5:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c749e7548192b006100d6a8233ed"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:16739374b377f2085689b00a729f4fefe72eeb18",
+                    "tokens": 1236
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_t81EsjDN4l6wS999guSwmuoA",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:6:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:6:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c749e760819289acc0d31df165d6"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:b1f81868cadb686511888bc99361ccdc80262d33",
+                    "tokens": 2062
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_Bv5f4ZYEjr22Drun2GmmWBwi",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_t81EsjDN4l6wS999guSwmuoA",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 3387,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 2,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:10]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_07c0921d9c53675b0169a8c74ca6288192978d89820f4a076d",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_MHvN6GiRMxiDSjDiek28HKE4",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:11:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:11:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c74cbdf081929640ebf174c5db34"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:fa90dc5ba4999c5418abe8588098a0006fb26367",
+                    "tokens": 1321
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_MHvN6GiRMxiDSjDiek28HKE4",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 4712,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 3,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd:14]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_07c0921d9c53675b0169a8c74e3fd4819289f9ded30bf235b3",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_4iKIBdm8gdoniHbkQjNOR8Tc",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:15:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:parts:15:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c74e587081929f865ce1989a608f"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:87e12c35d2017c823003099da770a172152de502",
+                    "tokens": 1297
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_4iKIBdm8gdoniHbkQjNOR8Tc",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772668750453
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_wajhXBcIMUS62xV341hdsnM3",
+              "toolName": "skill-activate",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:0:result",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              }
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_Bv5f4ZYEjr22Drun2GmmWBwi",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:1:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:1:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_t81EsjDN4l6wS999guSwmuoA",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:2:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:2:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_MHvN6GiRMxiDSjDiek28HKE4",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:3:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:3:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_4iKIBdm8gdoniHbkQjNOR8Tc",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:4:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:1:content:toolInvocations:4:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "Wed, 04 Mar 2026 23:59:10 GMT",
+        "threadId": "1772668741183-7yxlih8ln",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "ab2fb403-6752-415e-b33e-b427f915d7a0",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-buffering-start",
+              "data": {
+                "cycleId": "buffer-obs-1772668750453-m0fj9b9hm",
+                "operationType": "observation",
+                "startedAt": "2026-03-04T23:59:10.453Z",
+                "tokensToBuffer": 6013,
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "threadIds": ["1772668741183-7yxlih8ln"],
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                }
+              }
+            }
+          ]
+        },
+        "createdAt": "Wed, 04 Mar 2026 23:59:10 GMT",
+        "threadId": "1772668741183-7yxlih8ln",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "65762a45-8398-46ed-95b6-7b4bf378388b",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 6013,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 4,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:65762a45-8398-46ed-95b6-7b4bf378388b:1]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_07c0921d9c53675b0169a8c74fa190819298653acf853b4988",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_F64T0nG9ultqI46OeS97hLJc",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:2:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:2:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c74fb7448192af5e55ae96c5866b"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:14203a763be205acec6bf822eaab2ea54c0240ed",
+                    "tokens": 2014
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_F64T0nG9ultqI46OeS97hLJc",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 8041,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 5,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:65762a45-8398-46ed-95b6-7b4bf378388b:5]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_07c0921d9c53675b0169a8c752ea88819299803813b4724f33",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_OEtDzuLuz5ej1pDYWetbBX1R",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:6:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:6:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c7530560819286c030bc8df8a322"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:d4551c67ad03354001e3afb4cfebcf3bc1e6fc9a",
+                    "tokens": 1322
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_OEtDzuLuz5ej1pDYWetbBX1R",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 9366,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 6,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:65762a45-8398-46ed-95b6-7b4bf378388b:9]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_07c0921d9c53675b0169a8c7549824819295c120a671fe9126",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_H3iFVNK1XdWQAlWIYZ2fpJvk",
+                "toolName": "view",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:10:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:10:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c754de3c8192836a6d91f58b4e33"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:73658f7ca5a4aa5a6ff72cf88795dffce2e8ab80",
+                    "tokens": 2082
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_Sm8orolTKzNcVQ3R3KiHVhrL",
+                "toolName": "view",
+                "args": {
+                  "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:11:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:parts:11:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_07c0921d9c53675b0169a8c754de4c81929b921bf2c95665e2"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:29c1476d6aaeaf63322f9002d8a16e99c9626b4e",
+                    "tokens": 19
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_H3iFVNK1XdWQAlWIYZ2fpJvk",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_Sm8orolTKzNcVQ3R3KiHVhrL",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-04T23:59:01.221Z",
+                "lastAccessedAt": "2026-03-04T23:59:01.221Z",
+                "filesystem": {
+                  "id": "local-fs-mmcp76n9-dhsdke",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 11475,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "62ed9257-826a-4498-b41c-8dba9306e47e",
+                "threadId": "1772668741183-7yxlih8ln",
+                "stepNumber": 7,
+                "generationCount": 0
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_F64T0nG9ultqI46OeS97hLJc",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:0:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_OEtDzuLuz5ej1pDYWetbBX1R",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:1:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:1:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_Sm8orolTKzNcVQ3R3KiHVhrL",
+              "toolName": "view",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:2:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:2:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_H3iFVNK1XdWQAlWIYZ2fpJvk",
+              "toolName": "view",
+              "args": {
+                "redacted": "collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:3:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:messages:3:content:toolInvocations:3:result]"
+            }
+          ]
+        },
+        "createdAt": "Wed, 04 Mar 2026 23:59:17 GMT",
+        "threadId": "1772668741183-7yxlih8ln",
+        "resourceId": "mastra-c597b1a88f39"
+      }
+    ],
+    "systemMessages": [
+      {
+        "role": "system",
+        "content": "[sanitized:message-content:collapse-to-0p3k-step23-1772668741183/1772668757148-step-7-b40fa6ac-6f8f-4dcf-9b1b-8d750aca2224/post-state.json:messageList:systemMessages:0]",
+        "metadata": {
+          "mastra": {
+            "tokenEstimate": {
+              "v": 1,
+              "source": "v1:o200k_base",
+              "key": "message-content:9ebc2fe77c33b5cfa009fb974fca731d795d69e8",
+              "tokens": 3563
+            }
+          }
+        }
+      }
+    ],
+    "taggedSystemMessages": {},
+    "memoryInfo": {
+      "threadId": "1772668741183-7yxlih8ln",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    "_agentNetworkAppend": false,
+    "memoryMessages": [
+      "834244a6-65eb-4e93-8e32-dd486b42f115",
+      "e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd",
+      "ab2fb403-6752-415e-b33e-b427f915d7a0",
+      "65762a45-8398-46ed-95b6-7b4bf378388b"
+    ],
+    "newUserMessages": [],
+    "newResponseMessages": ["65762a45-8398-46ed-95b6-7b4bf378388b"],
+    "userContextMessages": [],
+    "memoryMessagesPersisted": [
+      "834244a6-65eb-4e93-8e32-dd486b42f115",
+      "e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd",
+      "ab2fb403-6752-415e-b33e-b427f915d7a0",
+      "65762a45-8398-46ed-95b6-7b4bf378388b"
+    ],
+    "newUserMessagesPersisted": ["834244a6-65eb-4e93-8e32-dd486b42f115"],
+    "newResponseMessagesPersisted": [
+      "e56b73d0-1b99-4709-aa0f-4dcf9ccf3efd",
+      "ab2fb403-6752-415e-b33e-b427f915d7a0",
+      "65762a45-8398-46ed-95b6-7b4bf378388b"
+    ],
+    "userContextMessagesPersisted": []
+  }
+}

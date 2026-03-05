@@ -1,0 +1,44 @@
+{
+  "details": {
+    "step0Activation": null,
+    "thresholdCleanup": {
+      "observationSucceeded": true,
+      "observedIdsCount": 5,
+      "observedIds": [
+        "50322ef7-af20-429a-9933-b5534b07b7a3",
+        "609847ab-9306-40e2-9418-2f978e3ed794",
+        "281623cb-530d-4674-a967-bfd60aa42c40",
+        "9b86edde-2630-4a1f-8eae-be0bef587acc",
+        "c30ebb5f-093e-4cd7-9009-7d24c9d15b20"
+      ],
+      "minRemaining": 2000,
+      "updatedRecordObservedIds": {}
+    },
+    "thresholdReached": true,
+    "backpressure": {
+      "ratio": 1.0370666666666666,
+      "waitMsApplied": 1000,
+      "tokensAfterWait": 31112,
+      "thresholdAfterWait": 30000,
+      "isBufferingObservationAfterWait": true,
+      "bufferedChunksAfterWait": 2
+    },
+    "totalPendingTokens": 2265,
+    "threshold": 30000,
+    "effectiveObservationTokensThreshold": 40000,
+    "currentObservationTokens": 1123,
+    "otherThreadTokens": 0,
+    "contextMessageCount": 3
+  },
+  "messageDiff": {
+    "removedMessageIds": [
+      "50322ef7-af20-429a-9933-b5534b07b7a3",
+      "281623cb-530d-4674-a967-bfd60aa42c40",
+      "9b86edde-2630-4a1f-8eae-be0bef587acc",
+      "c30ebb5f-093e-4cd7-9009-7d24c9d15b20",
+      "80b087b0-5ba5-4f10-a984-88f61950e27e"
+    ],
+    "addedMessageIds": ["om-continuation"],
+    "idRemap": []
+  }
+}

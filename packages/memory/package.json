@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.6.1-alpha.0",
+  "version": "1.6.0",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,7 +41,8 @@
     "test:unit": "pnpm vitest run ./src/*",
     "test": "pnpm test:integration && pnpm test:unit",
     "lint": "eslint .",
-    "analyze:om-repro": "node ./scripts/analyze-om-repro.mjs"
+    "analyze:om-repro": "node ./scripts/analyze-om-repro.mjs",
+    "sanitize:om-repro": "node ./scripts/sanitize-om-repro.mjs"
   },
   "keywords": [],
   "author": "",

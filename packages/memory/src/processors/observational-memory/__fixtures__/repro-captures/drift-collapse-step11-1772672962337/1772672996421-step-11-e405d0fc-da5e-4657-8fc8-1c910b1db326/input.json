@@ -1,0 +1,3066 @@
+{
+  "stepNumber": 11,
+  "threadId": "1772672962337-n33sjn0oo",
+  "resourceId": "mastra-c597b1a88f39",
+  "messageCount": 2,
+  "messageIds": ["om-continuation", "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427"],
+  "stateKeys": ["initialSetupDone", "sealedIds"],
+  "state": {
+    "initialSetupDone": true,
+    "sealedIds": {
+      "__type": "Set",
+      "values": [
+        "0ede1387-781b-4e5b-9568-5e4270706612",
+        "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427",
+        "333dcc93-6e57-4eaf-983f-121732456080",
+        "b1f3d72f-60b4-4a8f-be34-965822132a87"
+      ]
+    }
+  },
+  "args": {
+    "messages": [
+      {
+        "id": "0ede1387-781b-4e5b-9568-5e4270706612",
+        "role": "user",
+        "createdAt": "2026-03-05T01:09:22.370Z",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "text",
+              "text": "[sanitized:text:0ede1387-781b-4e5b-9568-5e4270706612:0]",
+              "providerMetadata": {
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "text:c74391fd602a243e987a8deccf446f6fcb894a92",
+                    "tokens": 33
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672969549
+                }
+              }
+            }
+          ],
+          "content": "[sanitized:content:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:0]",
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "threadId": "1772672962337-n33sjn0oo",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 62,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 0,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:5a881aeb-5c0a-48d6-a4fa-b2ddf523e427:1]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7c41d80819286c164001048968b",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_Gg8vZbiLqqR6IpKrbQ76wqTo",
+                "toolName": "skill-activate",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:2:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:2:toolInvocation:result",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                }
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7c4425881928ebb79835532bb17"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result-json:0d5b861c544028ae3e9ea812c7f5852c58428f3b",
+                    "tokens": 23
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 82,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 1,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:5a881aeb-5c0a-48d6-a4fa-b2ddf523e427:4]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7c54c4c8192a9e31bc88f382301",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_PGJNW6ZRnpKMlwH0CAJgaHx1",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:5:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:5:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7c5543c8192baf9d36fc6bac3be"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:113f3fc520d8c86643b98365a18b4693f4380dff",
+                    "tokens": 1297
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_PGJNW6ZRnpKMlwH0CAJgaHx1",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 1382,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 2,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:5a881aeb-5c0a-48d6-a4fa-b2ddf523e427:8]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7c6997c8192af9d30b32fb9648f",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_iAEve5yPavEwwzS2iepVUX1c",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:9:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:9:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7c6c96c8192ab48f18759534773"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:3a76115a64f0eca8863d3d112d2a6fd2d729a876",
+                    "tokens": 2006
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_bTSPRRvMc67dNAWLJj74DVbE",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:10:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:10:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7c6c97c8192832e518ca1f9ecf4"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:9c79fe07afd7c7f567b5d9eea4b17ef13c4f0f32",
+                    "tokens": 2032
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_ByV3HdtKDANuvILtmweLPqlg",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:11:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:parts:11:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7c6c98481928942cacf718ef2c9"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:0094b53ff69dd0ec8f36ffa946086b9bd869e5a6",
+                    "tokens": 2022
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_iAEve5yPavEwwzS2iepVUX1c",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_bTSPRRvMc67dNAWLJj74DVbE",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_ByV3HdtKDANuvILtmweLPqlg",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672969549
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_Gg8vZbiLqqR6IpKrbQ76wqTo",
+              "toolName": "skill-activate",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:0:result",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              }
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_PGJNW6ZRnpKMlwH0CAJgaHx1",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:1:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:1:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_iAEve5yPavEwwzS2iepVUX1c",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:2:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:2:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_bTSPRRvMc67dNAWLJj74DVbE",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:3:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:3:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_ByV3HdtKDANuvILtmweLPqlg",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:4:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:1:content:toolInvocations:4:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T01:09:29.535Z",
+        "threadId": "1772672962337-n33sjn0oo",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "333dcc93-6e57-4eaf-983f-121732456080",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-buffering-start",
+              "data": {
+                "cycleId": "buffer-obs-1772672969551-ey3y22ms4",
+                "operationType": "observation",
+                "startedAt": "2026-03-05T01:09:29.551Z",
+                "tokensToBuffer": 7454,
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "threadIds": ["1772672962337-n33sjn0oo"],
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672983127
+                }
+              }
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T01:09:29.551Z",
+        "threadId": "1772672962337-n33sjn0oo",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "b1f3d72f-60b4-4a8f-be34-965822132a87",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 7454,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 3,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b1f3d72f-60b4-4a8f-be34-965822132a87:1]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7cb41508192bfbbede2fcfa83f5",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_u04h3QY03C79WBcf7QSXvT5X",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:2:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:2:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7cb4e548192bc103b02a7c4b4ae"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:dd656627869d27d6d475e46e32685a3533286821",
+                    "tokens": 1299
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_u04h3QY03C79WBcf7QSXvT5X",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 8767,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 4,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b1f3d72f-60b4-4a8f-be34-965822132a87:5]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7cda55c81929ee28d717a3f3509",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_jvSi7d5Y4kjlIgt4I1tCVBL2",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:6:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:6:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7cdb0fc81929a07ff62086665a0"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:cb59d285efcdf7e44bf80b2f14a5388a57e5464b",
+                    "tokens": 465
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_jvSi7d5Y4kjlIgt4I1tCVBL2",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 9235,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 5,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b1f3d72f-60b4-4a8f-be34-965822132a87:9]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7cef0bc81929c22dfd92fdf5623",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_yp1znw8SpQPpInGRzY1njr2C",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:10:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:10:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7cef96c819286c9587a650b4cb8"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:a5769292a89813029a79e187ce27811608056368",
+                    "tokens": 2014
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_yp1znw8SpQPpInGRzY1njr2C",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 11253,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 6,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b1f3d72f-60b4-4a8f-be34-965822132a87:13]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7d07f7881929df2d412dfdc941c",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_QMOcvoXVHuv471xobPPSqJlp",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:14:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:14:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d0ae1c8192a3d7f1e1b577f511"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:bd49617c334db8aef9774a2c72cd168cd270651c",
+                    "tokens": 1997
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_3Hoxm2C5q8yjtds4CFew01t9",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:15:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:15:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d0ae2c819282da9ac3c7ab5c51"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:b763459d531d9a799d9c862864f13cad2168b8d9",
+                    "tokens": 785
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_xx94IxaP08eHRVtXCM6F6Az3",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:16:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:16:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d0ae4c81928a260ac7340a0c47"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:fc0ace21eec8ea118d25b08341b6b9127c570d5d",
+                    "tokens": 2007
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_QMOcvoXVHuv471xobPPSqJlp",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_3Hoxm2C5q8yjtds4CFew01t9",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_xx94IxaP08eHRVtXCM6F6Az3",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 16054,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 7,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b1f3d72f-60b4-4a8f-be34-965822132a87:21]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7d2296c81928a7a6f089fe6a815",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_N4JwocEQw2rUIUfJDsTJOsJX",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:22:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:22:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d25128819298da9c11a9110da6"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:81e49cd621b6657b0f1730d197311f38fbd622cd",
+                    "tokens": 1299
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_KyEhXQoPQU1DhliUwTnKYr4u",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:23:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:23:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d2513881928a092f4a8368d173"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:a75c7a5e0986d3fa15da207ab43125bd88788cb6",
+                    "tokens": 1265
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_lar2Y3YLfT3RHzdPPhzSl46X",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:24:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:24:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d2514081929c4bcfe827c0f434"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:522c21807dd67cc83285194e7beb36a7797ebf17",
+                    "tokens": 1302
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_N4JwocEQw2rUIUfJDsTJOsJX",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_KyEhXQoPQU1DhliUwTnKYr4u",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_lar2Y3YLfT3RHzdPPhzSl46X",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 19931,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 8,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b1f3d72f-60b4-4a8f-be34-965822132a87:29]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7d493c88192b34d8634946f2da5",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_IUtQNVdCog7F3rl6T2VcH4QI",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:30:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:30:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d49da88192b73c270fa0db448c"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:4284dd301b510fcec22f77a0ff7bb950cdcb7b4b",
+                    "tokens": 36
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_IUtQNVdCog7F3rl6T2VcH4QI",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 19971,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 9,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "data-om-buffering-end",
+              "data": {
+                "cycleId": "buffer-obs-1772672969551-ey3y22ms4",
+                "operationType": "observation",
+                "completedAt": "2026-03-05T01:09:42.383Z",
+                "durationMs": 12832,
+                "tokensBuffered": 7454,
+                "bufferedTokens": 346,
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "observations": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:33:data:observations]"
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b1f3d72f-60b4-4a8f-be34-965822132a87:34]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7d6444481928932c04f2880ccd0",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_nBFFJ3rvgh4vh5nHzvWAaZwG",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:35:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:35:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d68b1481928dcc8b3e9381f731"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:1c0cc39c1f016bdfe5612c17dac751e5faeaa937",
+                    "tokens": 2029
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_gNCjVKWa2kFCCICnuhQFNe6d",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:36:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:36:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d68b248192ad7f213edf04a20d"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:823adfcb94b79895ef04264cc25d886ab2f3c8cf",
+                    "tokens": 2038
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_PSTe7ncGDat8j8oVDdHWkwk4",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:37:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:37:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d68b2c8192b6551e2f03465721"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:c53a13c408a700ae9d07a517b0524434583bf4b8",
+                    "tokens": 2039
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_R0zFyUtpgLgHTIv7rCUFRuFG",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:38:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:38:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d68b3481929b7d14ddbe9accf1"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:ad6f43fae91d975bc23a9d7e3ec0278099477af6",
+                    "tokens": 2028
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_8SrDpdUz7pXspKFqkr7i7D7T",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:39:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:parts:39:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d68b3c8192905a583171217dac"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:74c37ef4f90e62fd26daeff537201d2716b68694",
+                    "tokens": 1190
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_nBFFJ3rvgh4vh5nHzvWAaZwG",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_gNCjVKWa2kFCCICnuhQFNe6d",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_PSTe7ncGDat8j8oVDdHWkwk4",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_R0zFyUtpgLgHTIv7rCUFRuFG",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_8SrDpdUz7pXspKFqkr7i7D7T",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672983127
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_u04h3QY03C79WBcf7QSXvT5X",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:0:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_jvSi7d5Y4kjlIgt4I1tCVBL2",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:1:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:1:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_yp1znw8SpQPpInGRzY1njr2C",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:2:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:2:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_QMOcvoXVHuv471xobPPSqJlp",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:3:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:3:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_3Hoxm2C5q8yjtds4CFew01t9",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:4:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:4:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_xx94IxaP08eHRVtXCM6F6Az3",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:5:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:5:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_N4JwocEQw2rUIUfJDsTJOsJX",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:6:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:6:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_KyEhXQoPQU1DhliUwTnKYr4u",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:7:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:7:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_lar2Y3YLfT3RHzdPPhzSl46X",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:8:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:8:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_IUtQNVdCog7F3rl6T2VcH4QI",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:9:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:9:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_nBFFJ3rvgh4vh5nHzvWAaZwG",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:10:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:10:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_gNCjVKWa2kFCCICnuhQFNe6d",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:11:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:11:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_PSTe7ncGDat8j8oVDdHWkwk4",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:12:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:12:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_R0zFyUtpgLgHTIv7rCUFRuFG",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:13:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:13:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_8SrDpdUz7pXspKFqkr7i7D7T",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:14:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:3:content:toolInvocations:14:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T01:09:43.100Z",
+        "threadId": "1772672962337-n33sjn0oo",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "b013d267-4ab3-4a4a-8786-075ded5992b7",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-buffering-start",
+              "data": {
+                "cycleId": "buffer-obs-1772672983127-by2zv95nx",
+                "operationType": "observation",
+                "startedAt": "2026-03-05T01:09:43.128Z",
+                "tokensToBuffer": 21884,
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "threadIds": ["1772672962337-n33sjn0oo"],
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 29319,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 7454,
+                      "projectedMessageRemoval": 7454,
+                      "observationTokens": 346,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 10,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:b013d267-4ab3-4a4a-8786-075ded5992b7:2]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0e2b3c73066fb9360169a8d7d930288192a20484300e5c1724",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_xPj443gQxPfjxht6nUu27AnY",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:4:content:parts:3:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:4:content:parts:3:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0e2b3c73066fb9360169a8d7d94f3081929a9c8e76b2c62cf5"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:466cf64f6647818d5faa2aa90b68667eb0877cb2",
+                    "tokens": 2003
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_xPj443gQxPfjxht6nUu27AnY",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:56:43.161Z",
+                "lastAccessedAt": "2026-03-05T00:56:43.161Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr9dw8-yrnxaz",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "running",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-buffering-end",
+              "data": {
+                "cycleId": "buffer-obs-1772672983127-by2zv95nx",
+                "operationType": "observation",
+                "completedAt": "2026-03-05T01:09:55.776Z",
+                "durationMs": 12649,
+                "tokensBuffered": 21884,
+                "bufferedTokens": 674,
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "observations": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:4:content:parts:5:data:observations]"
+              }
+            },
+            {
+              "type": "data-om-activation",
+              "data": {
+                "cycleId": "buffer-obs-1772672969551-ey3y22ms4",
+                "operationType": "observation",
+                "activatedAt": "2026-03-05T01:09:56.418Z",
+                "chunksActivated": 1,
+                "tokensActivated": 7454,
+                "observationTokens": 346,
+                "messagesActivated": 2,
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "generationCount": 0,
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                },
+                "observations": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:4:content:parts:6:data:observations]"
+              }
+            },
+            {
+              "type": "data-om-activation",
+              "data": {
+                "cycleId": "buffer-obs-1772672983127-by2zv95nx",
+                "operationType": "observation",
+                "activatedAt": "2026-03-05T01:09:56.419Z",
+                "chunksActivated": 1,
+                "tokensActivated": 21884,
+                "observationTokens": 328,
+                "messagesActivated": 2,
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "generationCount": 0,
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                },
+                "observations": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:4:content:parts:7:data:observations]"
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_xPj443gQxPfjxht6nUu27AnY",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:4:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:messages:4:content:toolInvocations:0:result]"
+            }
+          ]
+        },
+        "createdAt": "2026-03-05T01:09:56.419Z",
+        "threadId": "1772672962337-n33sjn0oo",
+        "resourceId": "mastra-c597b1a88f39"
+      }
+    ],
+    "steps": [],
+    "systemMessages": [
+      {
+        "role": "system",
+        "content": "[sanitized:message-content:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/input.json:args:systemMessages:0]",
+        "metadata": {
+          "mastra": {
+            "tokenEstimate": {
+              "v": 1,
+              "source": "v1:o200k_base",
+              "key": "message-content:9a6c51bd343b09d93ff94fa729cbf490aad83d9a",
+              "tokens": 3563
+            }
+          }
+        }
+      }
+    ],
+    "retryCount": 0,
+    "tools": {
+      "request_access": {
+        "type": "function",
+        "description": "Request permission to access a directory outside the current project. Use this when you need to read or write files in a directory that is not within the project root. The user will be prompted to approve or deny the request.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "request_access",
+        "parameters": {
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["path", "reason"],
+            "additionalProperties": false
+          },
+          "validate": "[function]"
+        }
+      },
+      "web_search": {
+        "type": "function",
+        "description": "Search the web for information. Use this to find documentation, look up error messages, check package APIs, or research any topic. Returns relevant web results with content snippets and optionally images.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "web-search",
+        "parameters": {
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "searchDepth": {
+                "default": "basic",
+                "type": "string",
+                "enum": ["basic", "advanced"]
+              },
+              "maxResults": {
+                "default": 10,
+                "type": "number"
+              },
+              "includeImages": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": ["query", "searchDepth", "maxResults", "includeImages"],
+            "additionalProperties": false
+          },
+          "validate": "[function]"
+        }
+      },
+      "web_extract": {
+        "type": "function",
+        "description": "Extract content from one or more URLs. Use this to read web pages, documentation, articles, or any URL. Returns the raw content in markdown format. You can provide up to 20 URLs at once.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "web-extract",
+        "parameters": {
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "extractDepth": {
+                "default": "basic",
+                "type": "string",
+                "enum": ["basic", "advanced"]
+              },
+              "includeImages": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": ["urls", "extractDepth", "includeImages"],
+            "additionalProperties": false
+          },
+          "validate": "[function]"
+        }
+      },
+      "ask_user": {
+        "type": "function",
+        "description": "Ask the user a question and wait for their response. Use this when you need clarification, want to validate assumptions, or need the user to make a decision between options. Provide options for structured choices (2-4 options), or omit them for open-ended questions.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "ask_user",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The question to ask the user. Should be clear and specific."
+              },
+              "options": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "description": "Short display text for this option (1-5 words)"
+                        },
+                        "description": {
+                          "type": ["string", "null"]
+                        }
+                      },
+                      "required": ["label", "description"],
+                      "additionalProperties": false
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["question", "options"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "submit_plan": {
+        "type": "function",
+        "description": "Submit a completed implementation plan for user review. The plan will be rendered as markdown and the user can approve, reject, or request changes. Use this when your exploration is complete and you have a concrete plan ready for review. On approval, the system automatically switches to the default mode so you can implement.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "submit_plan",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": ["string", "null"]
+              },
+              "plan": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The full plan content in markdown format. Should include Overview, Steps, and Verification sections."
+              }
+            },
+            "required": ["title", "plan"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "task_write": {
+        "type": "function",
+        "description": "Create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.\n\nUsage:\n- Pass the FULL task list each time (replaces previous list)\n- Each task has: content (imperative), status (pending|in_progress|completed), activeForm (present continuous)\n- Mark tasks in_progress BEFORE starting work (only ONE at a time)\n- Mark tasks completed IMMEDIATELY after finishing\n- Use this for multi-step tasks requiring 3+ distinct actions\n\nStates:\n- pending: Not yet started\n- in_progress: Currently working on (limit to ONE)\n- completed: Finished successfully",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "task_write",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Task description in imperative form (e.g., 'Fix authentication bug')"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "in_progress", "completed"],
+                      "description": "Current task status"
+                    },
+                    "activeForm": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Present continuous form shown during execution (e.g., 'Fixing authentication bug')"
+                    }
+                  },
+                  "required": ["content", "status", "activeForm"],
+                  "additionalProperties": false
+                },
+                "description": "The complete updated task list"
+              }
+            },
+            "required": ["tasks"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "task_check": {
+        "type": "function",
+        "description": "Check the completion status of your current task list. Use this before deciding to end work on a task to ensure all tasks are completed.\n\nReturns:\n- Total number of tasks\n- Number of completed, in progress, and pending tasks\n- List of incomplete tasks (if any)\n- Boolean indicating if all tasks are done",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "task_check",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "subagent": {
+        "type": "function",
+        "description": "Delegate a focused task to a specialized subagent. The subagent runs independently with a constrained toolset, then returns its findings as text.\n\nAvailable agent types:\n- **explore** (Explore): Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.\n- **plan** (Plan): Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.\n- **execute** (Execute): Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.\n\nThe subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.\n\nUse this tool when:\n- You want to run multiple investigations in parallel\n- The task is self-contained and can be delegated",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "subagent",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "agentType": {
+                "type": "string",
+                "enum": ["explore", "plan", "execute"],
+                "description": "Type of subagent to spawn"
+              },
+              "task": {
+                "type": "string",
+                "description": "Clear, self-contained description of what the subagent should do. Include all relevant context — the subagent cannot see the parent conversation."
+              },
+              "modelId": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["agentType", "task", "modelId"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "view": {
+        "type": "function",
+        "description": "Read the contents of a file from the workspace filesystem. Use offset/limit parameters to read specific line ranges for large files.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "view",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to read (e.g., \"/data/config.json\")"
+              },
+              "encoding": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["utf-8", "utf8", "base64", "hex", "binary"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "offset": {
+                "type": ["number", "null"]
+              },
+              "limit": {
+                "type": ["number", "null"]
+              },
+              "showLineNumbers": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "encoding", "offset", "limit", "showLineNumbers"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "write_file": {
+        "type": "function",
+        "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "write_file",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+              },
+              "content": {
+                "type": "string",
+                "description": "The content to write to the file"
+              },
+              "overwrite": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "content", "overwrite"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "string_replace_lsp": {
+        "type": "function",
+        "description": "Edit a file by replacing specific text. The old_string must match exactly and be unique in the file.\n\nUsage:\n- Read the file first to get the exact text to replace.\n- By default, read file output includes line number prefixes (e.g., \"     1→\"). Ensure you preserve the exact indentation as it appears AFTER the arrow. Never include any part of the line number prefix in old_string or new_string.\n- Include enough surrounding context (multiple lines) to make old_string unique. If it still isn't unique, include more lines.\n- Use replace_all only when intentionally replacing all occurrences.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "string_replace_lsp",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to edit"
+              },
+              "old_string": {
+                "type": "string",
+                "description": "The exact text to find and replace. Must be unique in the file."
+              },
+              "new_string": {
+                "type": "string",
+                "description": "The text to replace old_string with"
+              },
+              "replace_all": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "old_string", "new_string", "replace_all"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "find_files": {
+        "type": "function",
+        "description": "List files and directories in the workspace filesystem.\nReturns a compact tab-indented listing for efficient token usage.\nOptions mirror common tree command flags for familiarity.\n\nExamples:\n- List root: { path: \"./\" }\n- Deep listing: { path: \"./src\", maxDepth: 5 }\n- Directories only: { path: \"./\", dirsOnly: true }\n- Exclude node_modules: { path: \"./\", exclude: \"node_modules\" }\n- Find TypeScript files: { path: \"./src\", pattern: \"**/*.ts\" }\n- Find config files: { path: \"./\", pattern: \"*.config.{js,ts}\" }\n- Multiple patterns: { path: \"./\", pattern: [\"**/*.ts\", \"**/*.tsx\"] }",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "find_files",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": ["string", "null"]
+              },
+              "maxDepth": {
+                "anyOf": [
+                  {
+                    "type": ["number", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "showHidden": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dirsOnly": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "exclude": {
+                "type": ["string", "null"]
+              },
+              "extension": {
+                "type": ["string", "null"]
+              },
+              "pattern": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "respectGitignore": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "maxDepth",
+              "showHidden",
+              "dirsOnly",
+              "exclude",
+              "extension",
+              "pattern",
+              "respectGitignore"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "delete_file": {
+        "type": "function",
+        "description": "Delete a file or directory from the workspace filesystem",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "delete_file",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file or directory to delete"
+              },
+              "recursive": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "recursive"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "file_stat": {
+        "type": "function",
+        "description": "Get file or directory metadata from the workspace. Returns existence, type, size, and modification time.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "file_stat",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to check"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "mkdir": {
+        "type": "function",
+        "description": "Create a directory in the workspace filesystem",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "mkdir",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path of the directory to create"
+              },
+              "recursive": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "recursive"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "search_content": {
+        "type": "function",
+        "description": "Search file contents using a regex pattern. Walks the filesystem and returns matching lines with file paths and line numbers.\n\nUsage:\n- Basic search: { pattern: \"TODO\" }\n- Regex: { pattern: \"function\\s+\\w+\\(\" }\n- Multiple terms: { pattern: \"TODO|FIXME|HACK\" }\n- Case-insensitive: { pattern: \"error\", caseSensitive: false }\n- Search in directory: { pattern: \"import\", path: \"./src\" }\n- Filter by glob: { pattern: \"import\", path: \"**/*.ts\" }\n- Combined path + glob: { pattern: \"import\", path: \"src/**/*.ts\" }\n- Multiple file types: { pattern: \"import\", path: \"**/*.{ts,tsx,js}\" }\n- Multiple directories: { pattern: \"TODO\", path: \"{src,lib}/**/*.ts\" }\n- With context: { pattern: \"function\", contextLines: 2 }",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "search_content",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "Regex pattern to search for"
+              },
+              "path": {
+                "anyOf": [
+                  {
+                    "type": ["string", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "contextLines": {
+                "anyOf": [
+                  {
+                    "type": ["number", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "maxCount": {
+                "type": ["number", "null"]
+              },
+              "caseSensitive": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "includeHidden": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["pattern", "path", "contextLines", "maxCount", "caseSensitive", "includeHidden"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "ast_smart_edit": {
+        "type": "function",
+        "description": "Edit code using AST-based analysis for intelligent transformations.\n\nUse `transform` for structured operations (imports, renames). Use `pattern`/`replacement` only for general find-and-replace.\n\nTransforms:\n- add-import: Add or merge imports. Skips duplicates. For default imports, put the default name first in `names`.\n  { transform: \"add-import\", importSpec: { module: \"react\", names: [\"useState\", \"useEffect\"] } }\n  { transform: \"add-import\", importSpec: { module: \"express\", names: [\"express\"], isDefault: true } }\n  { transform: \"add-import\", importSpec: { module: \"express\", names: [\"express\", \"Router\"], isDefault: true } } → import express, { Router } from 'express'\n- remove-import: Remove an import by module name.\n  { transform: \"remove-import\", targetName: \"lodash\" }\n- rename: Rename all occurrences of an identifier (not scope-aware).\n  { transform: \"rename\", targetName: \"oldName\", newName: \"newName\" }\n\nPattern replace (for everything else):\n  { pattern: \"console.log($ARG)\", replacement: \"logger.debug($ARG)\" }",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "ast_smart_edit",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to edit"
+              },
+              "pattern": {
+                "type": ["string", "null"]
+              },
+              "replacement": {
+                "type": ["string", "null"]
+              },
+              "transform": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["add-import", "remove-import", "rename"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "targetName": {
+                "type": ["string", "null"]
+              },
+              "newName": {
+                "type": ["string", "null"]
+              },
+              "importSpec": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "module": {
+                        "type": "string",
+                        "description": "Module to import from"
+                      },
+                      "names": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Names to import. For default imports, put the default name first.\nconstraints: minimum length 1"
+                      },
+                      "isDefault": {
+                        "type": ["boolean", "null"]
+                      }
+                    },
+                    "required": ["module", "names", "isDefault"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "execute_command": {
+        "type": "function",
+        "description": "Execute a shell command in the workspace sandbox.\n\nExamples:\n  \"npm install && npm run build\"\n  \"ls -la src/\"\n  \"cat config.json | jq '.database'\"\n  \"cd /app && python main.py\"\n\nUsage:\n- Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.\n- Always quote file paths that contain spaces (e.g., cd \"/path/with spaces\").\n- Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.\n- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.\n\nSet background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "execute_command",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The shell command to execute (e.g., \"npm install\", \"ls -la src/\", \"cat file.txt | grep error\")"
+              },
+              "timeout": {
+                "type": ["number", "null"]
+              },
+              "cwd": {
+                "type": ["string", "null"]
+              },
+              "tail": {
+                "type": ["number", "null"]
+              },
+              "background": {
+                "type": ["boolean", "null"]
+              }
+            },
+            "required": ["command", "timeout", "cwd", "tail", "background"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        },
+        "toModelOutput": "[function]"
+      },
+      "get_process_output": {
+        "type": "function",
+        "description": "Get the current output (stdout, stderr) and status of a background process by its PID.\n\nUse this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "get_process_output",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "pid": {
+                "type": "number",
+                "description": "The process ID returned when the background command was started"
+              },
+              "tail": {
+                "type": ["number", "null"]
+              },
+              "wait": {
+                "type": ["boolean", "null"]
+              }
+            },
+            "required": ["pid", "tail", "wait"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        },
+        "toModelOutput": "[function]"
+      },
+      "kill_process": {
+        "type": "function",
+        "description": "Kill a background process by its PID.\n\nUse this to stop a long-running background process that was started with execute_command (background: true). Returns the last 50 lines of output.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "kill_process",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "pid": {
+                "type": "number",
+                "description": "The process ID of the background process to kill"
+              }
+            },
+            "required": ["pid"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        },
+        "toModelOutput": "[function]"
+      }
+    },
+    "toolChoice": "auto",
+    "modelSettings": {
+      "temperature": 1
+    }
+  }
+}

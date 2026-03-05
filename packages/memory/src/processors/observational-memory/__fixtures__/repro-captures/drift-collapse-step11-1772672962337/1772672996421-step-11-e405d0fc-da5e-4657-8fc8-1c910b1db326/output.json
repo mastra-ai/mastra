@@ -1,0 +1,42 @@
+{
+  "details": {
+    "step0Activation": null,
+    "thresholdCleanup": {
+      "observationSucceeded": true,
+      "observedIdsCount": 4,
+      "observedIds": [
+        "0ede1387-781b-4e5b-9568-5e4270706612",
+        "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427",
+        "333dcc93-6e57-4eaf-983f-121732456080",
+        "b1f3d72f-60b4-4a8f-be34-965822132a87"
+      ],
+      "minRemaining": 2000,
+      "updatedRecordObservedIds": {}
+    },
+    "thresholdReached": true,
+    "backpressure": {
+      "ratio": 1.0442,
+      "waitMsApplied": 1000,
+      "tokensAfterWait": 31326,
+      "thresholdAfterWait": 30000,
+      "isBufferingObservationAfterWait": true,
+      "bufferedChunksAfterWait": 1
+    },
+    "totalPendingTokens": 254,
+    "threshold": 30000,
+    "effectiveObservationTokensThreshold": 40000,
+    "currentObservationTokens": 674,
+    "otherThreadTokens": 0,
+    "contextMessageCount": 2
+  },
+  "messageDiff": {
+    "removedMessageIds": [
+      "0ede1387-781b-4e5b-9568-5e4270706612",
+      "333dcc93-6e57-4eaf-983f-121732456080",
+      "b1f3d72f-60b4-4a8f-be34-965822132a87",
+      "b013d267-4ab3-4a4a-8786-075ded5992b7"
+    ],
+    "addedMessageIds": ["om-continuation"],
+    "idRemap": []
+  }
+}

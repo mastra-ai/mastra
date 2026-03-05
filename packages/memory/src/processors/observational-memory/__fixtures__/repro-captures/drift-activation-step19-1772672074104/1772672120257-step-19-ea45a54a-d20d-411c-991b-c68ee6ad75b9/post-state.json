@@ -1,0 +1,608 @@
+{
+  "record": {
+    "id": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+    "scope": "thread",
+    "threadId": "1772672074104-7vn8lvk1e",
+    "resourceId": "mastra-c597b1a88f39",
+    "createdAt": "2026-03-05T00:54:34.433Z",
+    "updatedAt": "2026-03-05T00:55:20.256Z",
+    "lastObservedAt": "2026-03-05T00:55:06.849Z",
+    "originType": "initial",
+    "generationCount": 0,
+    "activeObservations": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:record:active-observations]",
+    "totalTokensObserved": 0,
+    "observationTokenCount": 1123,
+    "pendingMessageTokens": 1963,
+    "isReflecting": false,
+    "isObserving": false,
+    "isBufferingObservation": false,
+    "isBufferingReflection": false,
+    "lastBufferedAtTokens": 0,
+    "lastBufferedAtTime": "2026-03-05T00:55:06.849Z",
+    "config": {
+      "observation": {
+        "messageTokens": 30000,
+        "shareTokenBudget": false,
+        "modelSettings": {
+          "temperature": 0.3
+        },
+        "providerOptions": {
+          "google": {
+            "thinkingConfig": {
+              "thinkingBudget": 215
+            }
+          }
+        },
+        "maxTokensPerBatch": 10000,
+        "bufferTokens": 6000,
+        "bufferActivation": 2000,
+        "blockAfter": 60000
+      },
+      "reflection": {
+        "observationTokens": 40000,
+        "shareTokenBudget": false,
+        "modelSettings": {
+          "temperature": 0
+        },
+        "providerOptions": {
+          "google": {
+            "thinkingConfig": {
+              "thinkingBudget": 1024
+            }
+          }
+        },
+        "bufferActivation": 0.5,
+        "blockAfter": 44000
+      },
+      "scope": "thread"
+    },
+    "observedMessageIds": {},
+    "observedTimezone": "UTC"
+  },
+  "bufferedChunks": [],
+  "contextTokenCount": 2270,
+  "messageCount": 3,
+  "messageIds": ["om-continuation", "7a554f64-90a8-4517-85d2-2e296f3570ed", "609847ab-9306-40e2-9418-2f978e3ed794"],
+  "messages": [
+    {
+      "id": "om-continuation",
+      "role": "user",
+      "createdAt": "1970-01-01T00:00:00.000Z",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "[sanitized:text:om-continuation:0]",
+            "providerMetadata": {
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "text:240693abf390b864efd20cbd3fc2e53b7f269b4d",
+                  "tokens": 225
+                }
+              }
+            }
+          }
+        ]
+      },
+      "threadId": "1772672074104-7vn8lvk1e",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    {
+      "id": "7a554f64-90a8-4517-85d2-2e296f3570ed",
+      "role": "assistant",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-om-buffering-start",
+            "data": {
+              "cycleId": "buffer-obs-1772672106865-c3trsp691",
+              "operationType": "observation",
+              "startedAt": "2026-03-05T00:55:06.865Z",
+              "tokensToBuffer": 12279,
+              "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+              "threadId": "1772672074104-7vn8lvk1e",
+              "threadIds": ["1772672074104-7vn8lvk1e"],
+              "config": {
+                "messageTokens": 30000,
+                "observationTokens": 40000,
+                "scope": "thread"
+              }
+            }
+          },
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 27060,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 0,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 2,
+                    "messageTokens": 14824,
+                    "projectedMessageRemoval": 14824,
+                    "observationTokens": 660,
+                    "status": "running"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+              "threadId": "1772672074104-7vn8lvk1e",
+              "stepNumber": 17,
+              "generationCount": 0
+            }
+          },
+          {
+            "type": "reasoning",
+            "reasoning": "[sanitized:reasoning:7a554f64-90a8-4517-85d2-2e296f3570ed:2]",
+            "details": [
+              {
+                "type": "text",
+                "text": ""
+              }
+            ],
+            "providerMetadata": {
+              "openai": {
+                "itemId": "rs_0f727263f356a5d90169a8d46d0b8c819eade2344fb6d9c413",
+                "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+              }
+            }
+          },
+          {
+            "type": "tool-invocation",
+            "toolInvocation": {
+              "state": "result",
+              "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messages:1:content:parts:3:toolInvocation:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messages:1:content:parts:3:toolInvocation:result]"
+            },
+            "providerMetadata": {
+              "openai": {
+                "itemId": "fc_0f727263f356a5d90169a8d46d1a4c819e8407a1733f26e9d3"
+              },
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "tool-result:8adfadfd29d1a0e4730a00a1e2b9efce540cf10f",
+                  "tokens": 2002
+                }
+              }
+            }
+          },
+          {
+            "type": "data-workspace-metadata",
+            "data": {
+              "toolName": "mastra_workspace_grep",
+              "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+              "id": "mastra-code-workspace-<redacted-path>",
+              "name": "Mastra Code Workspace",
+              "status": "pending",
+              "createdAt": "2026-03-05T00:54:34.136Z",
+              "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+              "filesystem": {
+                "id": "local-fs-mmcr6mc8-q6qmp3",
+                "name": "LocalFilesystem",
+                "provider": "local",
+                "status": "ready",
+                "metadata": {
+                  "basePath": "<redacted-path>",
+                  "contained": true,
+                  "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                }
+              },
+              "sandbox": {
+                "provider": "local",
+                "status": "pending",
+                "resources": {
+                  "memoryMB": 36864,
+                  "cpuCores": 14
+                }
+              }
+            },
+            "metadata": {
+              "mastra": {
+                "sealedAt": 1772672110252
+              }
+            }
+          }
+        ],
+        "toolInvocations": [
+          {
+            "state": "result",
+            "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+            "toolName": "search_content",
+            "args": {
+              "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messages:1:content:toolInvocations:0:args",
+              "type": "object",
+              "keys": ["keys", "redacted", "type"]
+            },
+            "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messages:1:content:toolInvocations:0:result]"
+          }
+        ],
+        "metadata": {
+          "mastra": {
+            "sealed": true
+          }
+        }
+      },
+      "createdAt": "2026-03-05T00:55:10.235Z",
+      "threadId": "1772672074104-7vn8lvk1e",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    {
+      "id": "609847ab-9306-40e2-9418-2f978e3ed794",
+      "role": "assistant",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 2265,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 1123,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+              "threadId": "1772672074104-7vn8lvk1e",
+              "stepNumber": 19,
+              "generationCount": 0
+            }
+          }
+        ]
+      },
+      "createdAt": "2026-03-05T00:55:20.257Z",
+      "threadId": "1772672074104-7vn8lvk1e",
+      "resourceId": "mastra-c597b1a88f39"
+    }
+  ],
+  "messageList": {
+    "messages": [
+      {
+        "id": "om-continuation",
+        "role": "user",
+        "createdAt": "Thu, 01 Jan 1970 00:00:00 GMT",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "text",
+              "text": "[sanitized:text:om-continuation:0]",
+              "providerMetadata": {
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "text:240693abf390b864efd20cbd3fc2e53b7f269b4d",
+                    "tokens": 225
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "7a554f64-90a8-4517-85d2-2e296f3570ed",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-buffering-start",
+              "data": {
+                "cycleId": "buffer-obs-1772672106865-c3trsp691",
+                "operationType": "observation",
+                "startedAt": "2026-03-05T00:55:06.865Z",
+                "tokensToBuffer": 12279,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "threadIds": ["1772672074104-7vn8lvk1e"],
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 27060,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 2,
+                      "messageTokens": 14824,
+                      "projectedMessageRemoval": 14824,
+                      "observationTokens": 660,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 17,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:7a554f64-90a8-4517-85d2-2e296f3570ed:2]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d46d0b8c819eade2344fb6d9c413",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messageList:messages:1:content:parts:3:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messageList:messages:1:content:parts:3:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d46d1a4c819e8407a1733f26e9d3"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:8adfadfd29d1a0e4730a00a1e2b9efce540cf10f",
+                    "tokens": 2002
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672110252
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messageList:messages:1:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messageList:messages:1:content:toolInvocations:0:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "Thu, 05 Mar 2026 00:55:10 GMT",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "609847ab-9306-40e2-9418-2f978e3ed794",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 2265,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 1123,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 19,
+                "generationCount": 0
+              }
+            }
+          ]
+        },
+        "createdAt": "Thu, 05 Mar 2026 00:55:20 GMT",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      }
+    ],
+    "systemMessages": [
+      {
+        "role": "system",
+        "content": "[sanitized:message-content:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messageList:systemMessages:0]",
+        "metadata": {
+          "mastra": {
+            "tokenEstimate": {
+              "v": 1,
+              "source": "v1:o200k_base",
+              "key": "message-content:afe3e888e726d0ad3577db44e7c37b6d605a1736",
+              "tokens": 3569
+            }
+          }
+        }
+      }
+    ],
+    "taggedSystemMessages": {
+      "observational-memory": [
+        {
+          "role": "system",
+          "content": "[sanitized:message-content:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/post-state.json:messageList:taggedSystemMessages:observational-memory:0]",
+          "metadata": {
+            "mastra": {
+              "tokenEstimate": {
+                "v": 1,
+                "source": "v1:o200k_base",
+                "key": "message-content:cb9790da1eaf16e34e66aab5c6061535c7759199",
+                "tokens": 1368
+              }
+            }
+          }
+        }
+      ]
+    },
+    "memoryInfo": {
+      "threadId": "1772672074104-7vn8lvk1e",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    "_agentNetworkAppend": false,
+    "memoryMessages": [
+      "7a554f64-90a8-4517-85d2-2e296f3570ed",
+      "80b087b0-5ba5-4f10-a984-88f61950e27e",
+      "om-continuation"
+    ],
+    "newUserMessages": [],
+    "newResponseMessages": ["609847ab-9306-40e2-9418-2f978e3ed794"],
+    "userContextMessages": [],
+    "memoryMessagesPersisted": [
+      "50322ef7-af20-429a-9933-b5534b07b7a3",
+      "609847ab-9306-40e2-9418-2f978e3ed794",
+      "281623cb-530d-4674-a967-bfd60aa42c40",
+      "9b86edde-2630-4a1f-8eae-be0bef587acc",
+      "c30ebb5f-093e-4cd7-9009-7d24c9d15b20",
+      "7a554f64-90a8-4517-85d2-2e296f3570ed",
+      "80b087b0-5ba5-4f10-a984-88f61950e27e",
+      "om-continuation"
+    ],
+    "newUserMessagesPersisted": ["50322ef7-af20-429a-9933-b5534b07b7a3"],
+    "newResponseMessagesPersisted": [
+      "609847ab-9306-40e2-9418-2f978e3ed794",
+      "281623cb-530d-4674-a967-bfd60aa42c40",
+      "9b86edde-2630-4a1f-8eae-be0bef587acc",
+      "c30ebb5f-093e-4cd7-9009-7d24c9d15b20",
+      "7a554f64-90a8-4517-85d2-2e296f3570ed",
+      "80b087b0-5ba5-4f10-a984-88f61950e27e",
+      "609847ab-9306-40e2-9418-2f978e3ed794"
+    ],
+    "userContextMessagesPersisted": []
+  }
+}

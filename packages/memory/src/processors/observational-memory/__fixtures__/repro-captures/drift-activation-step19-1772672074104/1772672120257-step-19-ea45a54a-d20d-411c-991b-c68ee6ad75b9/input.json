@@ -1,0 +1,3530 @@
+{
+  "stepNumber": 19,
+  "threadId": "1772672074104-7vn8lvk1e",
+  "resourceId": "mastra-c597b1a88f39",
+  "messageCount": 3,
+  "messageIds": ["om-continuation", "7a554f64-90a8-4517-85d2-2e296f3570ed", "609847ab-9306-40e2-9418-2f978e3ed794"],
+  "stateKeys": ["initialSetupDone", "sealedIds"],
+  "state": {
+    "initialSetupDone": true,
+    "sealedIds": {
+      "__type": "Set",
+      "values": [
+        "50322ef7-af20-429a-9933-b5534b07b7a3",
+        "609847ab-9306-40e2-9418-2f978e3ed794",
+        "281623cb-530d-4674-a967-bfd60aa42c40",
+        "9b86edde-2630-4a1f-8eae-be0bef587acc",
+        "c30ebb5f-093e-4cd7-9009-7d24c9d15b20",
+        "7a554f64-90a8-4517-85d2-2e296f3570ed"
+      ]
+    }
+  },
+  "args": {
+    "messages": [
+      {
+        "id": "50322ef7-af20-429a-9933-b5534b07b7a3",
+        "role": "user",
+        "createdAt": "2026-03-05T00:54:34.142Z",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "text",
+              "text": "[sanitized:text:50322ef7-af20-429a-9933-b5534b07b7a3:0]",
+              "providerMetadata": {
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "text:9da6f7a96a1b9884e9aebacc0297870e7b195fcc",
+                    "tokens": 33
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672081858
+                }
+              }
+            }
+          ],
+          "content": "[sanitized:content:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:0]",
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "609847ab-9306-40e2-9418-2f978e3ed794",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 62,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 0,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:609847ab-9306-40e2-9418-2f978e3ed794:1]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d44cb8e4819ebb70f306db4df882",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_7MfzDJdLDfC1wUC9S7wExPKl",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:2:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:2:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d44cccf8819ea921cd9a71a419c5"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:20194c9e27d8690e9abdee9e041f0ba6c0277204",
+                    "tokens": 1297
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_7MfzDJdLDfC1wUC9S7wExPKl",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 1368,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 1,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:609847ab-9306-40e2-9418-2f978e3ed794:5]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d44e208c819e98d27d26c9aa009e",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_SH2e6coIJBPOY3zNt74gwdSZ",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:6:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:6:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d44e445c819e83a8af31775a4381"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:3548ca88f04c31646e4854f7a4e85fd0b960924f",
+                    "tokens": 2045
+                  }
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_EM978EwdX1NYk3Q0MOgGc4IK",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:7:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:7:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d44e4468819e90eede3d646162a7"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:22b553d88df689ca0ee5d049bce0f56d086927dc",
+                    "tokens": 2021
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_SH2e6coIJBPOY3zNt74gwdSZ",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_EM978EwdX1NYk3Q0MOgGc4IK",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 5441,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 2,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:609847ab-9306-40e2-9418-2f978e3ed794:11]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d4509114819ebb4f5daa9e7989c7",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_c4xuhH6RwAefciOTYkagnetg",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:12:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:12:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d450a02c819eadaaf89d3a738b6a"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:597cd77c3dfa4df842673b6bc2d2abb9716909b4",
+                    "tokens": 465
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_c4xuhH6RwAefciOTYkagnetg",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 5910,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 3,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:609847ab-9306-40e2-9418-2f978e3ed794:15]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d451c288819e9536a6899a9208d4",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_1Ky4r6kEjnZnzm5oHlNN6GAa",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:16:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:parts:16:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d451c934819e9df02aaf0b58bb3d"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:9ec5a0dac6d34d835415df746e7c2f9dda82f9e2",
+                    "tokens": 297
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_1Ky4r6kEjnZnzm5oHlNN6GAa",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672081858
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_7MfzDJdLDfC1wUC9S7wExPKl",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:0:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_SH2e6coIJBPOY3zNt74gwdSZ",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:1:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:1:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_EM978EwdX1NYk3Q0MOgGc4IK",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:2:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:2:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_c4xuhH6RwAefciOTYkagnetg",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:3:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:3:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_1Ky4r6kEjnZnzm5oHlNN6GAa",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:4:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:1:content:toolInvocations:4:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T00:54:41.850Z",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "281623cb-530d-4674-a967-bfd60aa42c40",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-buffering-start",
+              "data": {
+                "cycleId": "buffer-obs-1772672081859-18lq653wp",
+                "operationType": "observation",
+                "startedAt": "2026-03-05T00:54:41.859Z",
+                "tokensToBuffer": 6211,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "threadIds": ["1772672074104-7vn8lvk1e"],
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672091494
+                }
+              }
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T00:54:41.859Z",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "9b86edde-2630-4a1f-8eae-be0bef587acc",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 6211,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 4,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:9b86edde-2630-4a1f-8eae-be0bef587acc:1]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d452f244819e99ed97eff79055fb",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_FtxMCoSsnNYejTScK2xsthFk",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:2:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:2:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d452f6cc819e87ee77114de4d399"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:f573d92adfe29f4ca64b9fe23f9eda3894020ce1",
+                    "tokens": 36
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_FtxMCoSsnNYejTScK2xsthFk",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 6261,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 5,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:9b86edde-2630-4a1f-8eae-be0bef587acc:5]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d4542620819e89fafc2965ee89c6",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_JjNeYkbMZlMv0qMtYPTlvrqQ",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:6:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:6:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d4543b2c819e99e2a6801d6df2b4"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:fb568ffa38568322cbcf14f06a97798dbae570a8",
+                    "tokens": 2004
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_JjNeYkbMZlMv0qMtYPTlvrqQ",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 8268,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 6,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:9b86edde-2630-4a1f-8eae-be0bef587acc:9]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d456738c819e82ff364b1e309538",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_5RUtBbQyxXfCq3O8HF2avFOU",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:10:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:10:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d4567fc0819e99face5e600bdc69"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:42a1845ee8cae22552eb6d40abc8c3ed2a7d2d79",
+                    "tokens": 1998
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_5RUtBbQyxXfCq3O8HF2avFOU",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 10270,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 7,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:9b86edde-2630-4a1f-8eae-be0bef587acc:13]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d457eb08819e938746fbb1449aa1",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_bd32YM8WqvubgOjuYfLpaWRY",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:14:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:14:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d457fc84819e819e59acd2d21d12"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:56e4b93a32009b391afbef7281fa33c48d42a54d",
+                    "tokens": 2023
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_bd32YM8WqvubgOjuYfLpaWRY",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 12297,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 8,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:9b86edde-2630-4a1f-8eae-be0bef587acc:17]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d45961f0819e91227b8164267505",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_jHjZNMQpF1doZlEfc6mutHlZ",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:18:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:18:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d4596944819e9218b30f9536ec31"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:dde3a97345713427dccdb3738598727e95ff1623",
+                    "tokens": 466
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_jHjZNMQpF1doZlEfc6mutHlZ",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 12767,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 9,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "data-om-buffering-end",
+              "data": {
+                "cycleId": "buffer-obs-1772672081859-18lq653wp",
+                "operationType": "observation",
+                "completedAt": "2026-03-05T00:54:50.780Z",
+                "durationMs": 8921,
+                "tokensBuffered": 6211,
+                "bufferedTokens": 297,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "observations": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:21:data:observations]"
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:9b86edde-2630-4a1f-8eae-be0bef587acc:22]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d45ad068819ebdb7a50d0af7b894",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_ly7euf3C4V5kAKdbzOV7agBo",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:23:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:parts:23:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d45adf70819eae597e3225e7bb69"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:d5b6b2e0af0b0744661dfcbee92af6432981b43b",
+                    "tokens": 2029
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_ly7euf3C4V5kAKdbzOV7agBo",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672091494
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_FtxMCoSsnNYejTScK2xsthFk",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:0:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_JjNeYkbMZlMv0qMtYPTlvrqQ",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:1:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:1:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_5RUtBbQyxXfCq3O8HF2avFOU",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:2:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:2:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_bd32YM8WqvubgOjuYfLpaWRY",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:3:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:3:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_jHjZNMQpF1doZlEfc6mutHlZ",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:4:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:4:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_ly7euf3C4V5kAKdbzOV7agBo",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:5:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:3:content:toolInvocations:5:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T00:54:51.484Z",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "c30ebb5f-093e-4cd7-9009-7d24c9d15b20",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-buffering-start",
+              "data": {
+                "cycleId": "buffer-obs-1772672091495-dfp4sfiz1",
+                "operationType": "observation",
+                "startedAt": "2026-03-05T00:54:51.495Z",
+                "tokensToBuffer": 8613,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "threadIds": ["1772672074104-7vn8lvk1e"],
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 14805,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 6211,
+                      "projectedMessageRemoval": 6211,
+                      "observationTokens": 297,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 10,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:c30ebb5f-093e-4cd7-9009-7d24c9d15b20:2]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d45c5f10819e993b78ffa12368ee",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_hKoLz1AU3ejfqm6HoIhJj7jF",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:3:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:3:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d45c63a0819e89bf4c19ba7500b5"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:374be5c110626ffc5d2159a0bb22f8536d23b2f9",
+                    "tokens": 2049
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_hKoLz1AU3ejfqm6HoIhJj7jF",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 16858,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 6211,
+                      "projectedMessageRemoval": 6211,
+                      "observationTokens": 297,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 11,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:c30ebb5f-093e-4cd7-9009-7d24c9d15b20:6]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d45e1498819eb6f6bcff371577b2",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_6jCIQw6V6fBCZzS1z8yrflv9",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:7:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:7:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d45e173c819ea6ee9f4d341301b5"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:4f033d2f61de174bd61e0ba7d959e8dfb0e62a73",
+                    "tokens": 2052
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_6jCIQw6V6fBCZzS1z8yrflv9",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 18913,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 6211,
+                      "projectedMessageRemoval": 6211,
+                      "observationTokens": 297,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 12,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:c30ebb5f-093e-4cd7-9009-7d24c9d15b20:10]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d45f7fdc819e909547689377d399",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_gRjPXAiHnJ2dyVmyH90Dzy4v",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:11:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:11:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d45f8cc8819ebf0f7b3c2d517dca"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:db276d1ca86dc3429a00c8399491d6a06e20fc80",
+                    "tokens": 2011
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_gRjPXAiHnJ2dyVmyH90Dzy4v",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 20928,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 6211,
+                      "projectedMessageRemoval": 6211,
+                      "observationTokens": 297,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 13,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:c30ebb5f-093e-4cd7-9009-7d24c9d15b20:14]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d461dc68819e85dce0fdbdde258e",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_MTAPKWGXsZnYJV2ZRt96KNUR",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:15:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:15:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d4626dc8819e98479e12a16d3fea"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:1a348890d704d798b80a27c42d3ba50082c313ee",
+                    "tokens": 2024
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_MTAPKWGXsZnYJV2ZRt96KNUR",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 22956,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 6211,
+                      "projectedMessageRemoval": 6211,
+                      "observationTokens": 297,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 14,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:c30ebb5f-093e-4cd7-9009-7d24c9d15b20:18]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d4656e04819ea70289d3b81bfdb8",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_cB0Yv5TpjvtFchdUT3VYGCwg",
+                "toolName": "find_files",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:19:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:19:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d46586ac819e847318336c6fb9d5"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:952eb8d0e70b82d0e30026c7db317b2a3457ca00",
+                    "tokens": 17
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_list_files",
+                "toolCallId": "call_cB0Yv5TpjvtFchdUT3VYGCwg",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 22977,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 6211,
+                      "projectedMessageRemoval": 6211,
+                      "observationTokens": 297,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 15,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:c30ebb5f-093e-4cd7-9009-7d24c9d15b20:22]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d467539c819eb26f2cecdefb1bf5",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_F7L1OakvQKcS7XDzwwW5DOQC",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:23:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:23:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d4675870819eb50489d51d01f97c"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:6c15f9fe879bbb73bfb8a271f6d8c10894af0cef",
+                    "tokens": 2039
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_F7L1OakvQKcS7XDzwwW5DOQC",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 25020,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 1,
+                      "messageTokens": 6211,
+                      "projectedMessageRemoval": 6211,
+                      "observationTokens": 297,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 16,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:c30ebb5f-093e-4cd7-9009-7d24c9d15b20:26]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d46a1028819e960802aae863a6f4",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "data-om-buffering-end",
+              "data": {
+                "cycleId": "buffer-obs-1772672091495-dfp4sfiz1",
+                "operationType": "observation",
+                "completedAt": "2026-03-05T00:55:06.169Z",
+                "durationMs": 14674,
+                "tokensBuffered": 8613,
+                "bufferedTokens": 660,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "observations": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:27:data:observations]"
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_N7PkCOW002iuKmzyDHYvm8rm",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:28:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:parts:28:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d46a12a0819eb8fa6dad7832781b"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:f1df81883e016f2612d03348d8b9eb0538c1e1ba",
+                    "tokens": 2032
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_N7PkCOW002iuKmzyDHYvm8rm",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672106865
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_hKoLz1AU3ejfqm6HoIhJj7jF",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:0:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_6jCIQw6V6fBCZzS1z8yrflv9",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:1:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:1:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_gRjPXAiHnJ2dyVmyH90Dzy4v",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:2:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:2:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_MTAPKWGXsZnYJV2ZRt96KNUR",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:3:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:3:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_cB0Yv5TpjvtFchdUT3VYGCwg",
+              "toolName": "find_files",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:4:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:4:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_F7L1OakvQKcS7XDzwwW5DOQC",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:5:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:5:result]"
+            },
+            {
+              "state": "result",
+              "toolCallId": "call_N7PkCOW002iuKmzyDHYvm8rm",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:6:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:4:content:toolInvocations:6:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T00:55:06.848Z",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "7a554f64-90a8-4517-85d2-2e296f3570ed",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-buffering-start",
+              "data": {
+                "cycleId": "buffer-obs-1772672106865-c3trsp691",
+                "operationType": "observation",
+                "startedAt": "2026-03-05T00:55:06.865Z",
+                "tokensToBuffer": 12279,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "threadIds": ["1772672074104-7vn8lvk1e"],
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                }
+              }
+            },
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 27060,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 2,
+                      "messageTokens": 14824,
+                      "projectedMessageRemoval": 14824,
+                      "observationTokens": 660,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 17,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:7a554f64-90a8-4517-85d2-2e296f3570ed:2]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d46d0b8c819eade2344fb6d9c413",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+                "toolName": "search_content",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:5:content:parts:3:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:5:content:parts:3:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d46d1a4c819e8407a1733f26e9d3"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:8adfadfd29d1a0e4730a00a1e2b9efce540cf10f",
+                    "tokens": 2002
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_grep",
+                "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              },
+              "metadata": {
+                "mastra": {
+                  "sealedAt": 1772672110252
+                }
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_IvfNDfhDhAIqmNi7T4fWTTdM",
+              "toolName": "search_content",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:5:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:5:content:toolInvocations:0:result]"
+            }
+          ],
+          "metadata": {
+            "mastra": {
+              "sealed": true
+            }
+          }
+        },
+        "createdAt": "2026-03-05T00:55:10.235Z",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "80b087b0-5ba5-4f10-a984-88f61950e27e",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 29066,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 0,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 2,
+                      "messageTokens": 14824,
+                      "projectedMessageRemoval": 14824,
+                      "observationTokens": 660,
+                      "status": "running"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "stepNumber": 18,
+                "generationCount": 0
+              }
+            },
+            {
+              "type": "reasoning",
+              "reasoning": "[sanitized:reasoning:80b087b0-5ba5-4f10-a984-88f61950e27e:1]",
+              "details": [
+                {
+                  "type": "text",
+                  "text": ""
+                }
+              ],
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "rs_0f727263f356a5d90169a8d4703b9c819e8f5a166ad335d963",
+                  "reasoningEncryptedContent": "[sanitized:reasoning-encrypted-content]"
+                }
+              }
+            },
+            {
+              "type": "tool-invocation",
+              "toolInvocation": {
+                "state": "result",
+                "toolCallId": "call_2DOkB9CRIlKBg0E8arusMCyk",
+                "toolName": "view",
+                "args": {
+                  "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:parts:2:toolInvocation:args",
+                  "type": "object",
+                  "keys": ["keys", "redacted", "type"]
+                },
+                "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:parts:2:toolInvocation:result]"
+              },
+              "providerMetadata": {
+                "openai": {
+                  "itemId": "fc_0f727263f356a5d90169a8d4704f98819e8220308682610609"
+                },
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "tool-result:d43eac9d03cc31af1ee938cdf2ec0c50913c3c28",
+                    "tokens": 2037
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-workspace-metadata",
+              "data": {
+                "toolName": "mastra_workspace_read_file",
+                "toolCallId": "call_2DOkB9CRIlKBg0E8arusMCyk",
+                "id": "mastra-code-workspace-<redacted-path>",
+                "name": "Mastra Code Workspace",
+                "status": "pending",
+                "createdAt": "2026-03-05T00:54:34.136Z",
+                "lastAccessedAt": "2026-03-05T00:54:34.136Z",
+                "filesystem": {
+                  "id": "local-fs-mmcr6mc8-q6qmp3",
+                  "name": "LocalFilesystem",
+                  "provider": "local",
+                  "status": "ready",
+                  "metadata": {
+                    "basePath": "<redacted-path>",
+                    "contained": true,
+                    "allowedPaths": ["<redacted-path>", "<redacted-path>", "<redacted-path>"]
+                  }
+                },
+                "sandbox": {
+                  "provider": "local",
+                  "status": "pending",
+                  "resources": {
+                    "memoryMB": 36864,
+                    "cpuCores": 14
+                  }
+                }
+              }
+            },
+            {
+              "type": "data-om-buffering-end",
+              "data": {
+                "cycleId": "buffer-obs-1772672106865-c3trsp691",
+                "operationType": "observation",
+                "completedAt": "2026-03-05T00:55:19.597Z",
+                "durationMs": 12732,
+                "tokensBuffered": 12279,
+                "bufferedTokens": 1123,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "observations": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:parts:4:data:observations]"
+              }
+            },
+            {
+              "type": "data-om-activation",
+              "data": {
+                "cycleId": "buffer-obs-1772672081859-18lq653wp",
+                "operationType": "observation",
+                "activatedAt": "2026-03-05T00:55:20.254Z",
+                "chunksActivated": 1,
+                "tokensActivated": 6211,
+                "observationTokens": 297,
+                "messagesActivated": 2,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "generationCount": 0,
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                },
+                "observations": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:parts:5:data:observations]"
+              }
+            },
+            {
+              "type": "data-om-activation",
+              "data": {
+                "cycleId": "buffer-obs-1772672091495-dfp4sfiz1",
+                "operationType": "observation",
+                "activatedAt": "2026-03-05T00:55:20.254Z",
+                "chunksActivated": 1,
+                "tokensActivated": 8613,
+                "observationTokens": 363,
+                "messagesActivated": 2,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "generationCount": 0,
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                },
+                "observations": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:parts:6:data:observations]"
+              }
+            },
+            {
+              "type": "data-om-activation",
+              "data": {
+                "cycleId": "buffer-obs-1772672106865-c3trsp691",
+                "operationType": "observation",
+                "activatedAt": "2026-03-05T00:55:20.255Z",
+                "chunksActivated": 1,
+                "tokensActivated": 12279,
+                "observationTokens": 463,
+                "messagesActivated": 1,
+                "recordId": "c7c7d38d-88ed-42b4-bae0-ac11020356b7",
+                "threadId": "1772672074104-7vn8lvk1e",
+                "generationCount": 0,
+                "config": {
+                  "messageTokens": 30000,
+                  "observationTokens": 40000,
+                  "scope": "thread"
+                },
+                "observations": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:parts:7:data:observations]"
+              }
+            }
+          ],
+          "toolInvocations": [
+            {
+              "state": "result",
+              "toolCallId": "call_2DOkB9CRIlKBg0E8arusMCyk",
+              "toolName": "view",
+              "args": {
+                "redacted": "drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:toolInvocations:0:args",
+                "type": "object",
+                "keys": ["keys", "redacted", "type"]
+              },
+              "result": "[sanitized:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:messages:6:content:toolInvocations:0:result]"
+            }
+          ]
+        },
+        "createdAt": "2026-03-05T00:55:20.255Z",
+        "threadId": "1772672074104-7vn8lvk1e",
+        "resourceId": "mastra-c597b1a88f39"
+      }
+    ],
+    "steps": [],
+    "systemMessages": [
+      {
+        "role": "system",
+        "content": "[sanitized:message-content:drift-activation-step19-1772672074104/1772672120257-step-19-ea45a54a-d20d-411c-991b-c68ee6ad75b9/input.json:args:systemMessages:0]",
+        "metadata": {
+          "mastra": {
+            "tokenEstimate": {
+              "v": 1,
+              "source": "v1:o200k_base",
+              "key": "message-content:21833e5d44b2540ad120a7b13c0d1a18355c97fb",
+              "tokens": 3569
+            }
+          }
+        }
+      }
+    ],
+    "retryCount": 0,
+    "tools": {
+      "request_access": {
+        "type": "function",
+        "description": "Request permission to access a directory outside the current project. Use this when you need to read or write files in a directory that is not within the project root. The user will be prompted to approve or deny the request.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "request_access",
+        "parameters": {
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["path", "reason"],
+            "additionalProperties": false
+          },
+          "validate": "[function]"
+        }
+      },
+      "web_search": {
+        "type": "function",
+        "description": "Search the web for information. Use this to find documentation, look up error messages, check package APIs, or research any topic. Returns relevant web results with content snippets and optionally images.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "web-search",
+        "parameters": {
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              },
+              "searchDepth": {
+                "default": "basic",
+                "type": "string",
+                "enum": ["basic", "advanced"]
+              },
+              "maxResults": {
+                "default": 10,
+                "type": "number"
+              },
+              "includeImages": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": ["query", "searchDepth", "maxResults", "includeImages"],
+            "additionalProperties": false
+          },
+          "validate": "[function]"
+        }
+      },
+      "web_extract": {
+        "type": "function",
+        "description": "Extract content from one or more URLs. Use this to read web pages, documentation, articles, or any URL. Returns the raw content in markdown format. You can provide up to 20 URLs at once.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "web-extract",
+        "parameters": {
+          "jsonSchema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+              "urls": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "extractDepth": {
+                "default": "basic",
+                "type": "string",
+                "enum": ["basic", "advanced"]
+              },
+              "includeImages": {
+                "default": false,
+                "type": "boolean"
+              }
+            },
+            "required": ["urls", "extractDepth", "includeImages"],
+            "additionalProperties": false
+          },
+          "validate": "[function]"
+        }
+      },
+      "ask_user": {
+        "type": "function",
+        "description": "Ask the user a question and wait for their response. Use this when you need clarification, want to validate assumptions, or need the user to make a decision between options. Provide options for structured choices (2-4 options), or omit them for open-ended questions.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "ask_user",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The question to ask the user. Should be clear and specific."
+              },
+              "options": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "description": "Short display text for this option (1-5 words)"
+                        },
+                        "description": {
+                          "type": ["string", "null"]
+                        }
+                      },
+                      "required": ["label", "description"],
+                      "additionalProperties": false
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["question", "options"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "submit_plan": {
+        "type": "function",
+        "description": "Submit a completed implementation plan for user review. The plan will be rendered as markdown and the user can approve, reject, or request changes. Use this when your exploration is complete and you have a concrete plan ready for review. On approval, the system automatically switches to the default mode so you can implement.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "submit_plan",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": ["string", "null"]
+              },
+              "plan": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The full plan content in markdown format. Should include Overview, Steps, and Verification sections."
+              }
+            },
+            "required": ["title", "plan"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "task_write": {
+        "type": "function",
+        "description": "Create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.\n\nUsage:\n- Pass the FULL task list each time (replaces previous list)\n- Each task has: content (imperative), status (pending|in_progress|completed), activeForm (present continuous)\n- Mark tasks in_progress BEFORE starting work (only ONE at a time)\n- Mark tasks completed IMMEDIATELY after finishing\n- Use this for multi-step tasks requiring 3+ distinct actions\n\nStates:\n- pending: Not yet started\n- in_progress: Currently working on (limit to ONE)\n- completed: Finished successfully",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "task_write",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "tasks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Task description in imperative form (e.g., 'Fix authentication bug')"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["pending", "in_progress", "completed"],
+                      "description": "Current task status"
+                    },
+                    "activeForm": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Present continuous form shown during execution (e.g., 'Fixing authentication bug')"
+                    }
+                  },
+                  "required": ["content", "status", "activeForm"],
+                  "additionalProperties": false
+                },
+                "description": "The complete updated task list"
+              }
+            },
+            "required": ["tasks"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "task_check": {
+        "type": "function",
+        "description": "Check the completion status of your current task list. Use this before deciding to end work on a task to ensure all tasks are completed.\n\nReturns:\n- Total number of tasks\n- Number of completed, in progress, and pending tasks\n- List of incomplete tasks (if any)\n- Boolean indicating if all tasks are done",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "task_check",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "subagent": {
+        "type": "function",
+        "description": "Delegate a focused task to a specialized subagent. The subagent runs independently with a constrained toolset, then returns its findings as text.\n\nAvailable agent types:\n- **explore** (Explore): Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.\n- **plan** (Plan): Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.\n- **execute** (Execute): Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.\n\nThe subagent runs in its own context — it does NOT see the parent conversation history. Write a clear, self-contained task description.\n\nUse this tool when:\n- You want to run multiple investigations in parallel\n- The task is self-contained and can be delegated",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "subagent",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "agentType": {
+                "type": "string",
+                "enum": ["explore", "plan", "execute"],
+                "description": "Type of subagent to spawn"
+              },
+              "task": {
+                "type": "string",
+                "description": "Clear, self-contained description of what the subagent should do. Include all relevant context — the subagent cannot see the parent conversation."
+              },
+              "modelId": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["agentType", "task", "modelId"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "view": {
+        "type": "function",
+        "description": "Read the contents of a file from the workspace filesystem. Use offset/limit parameters to read specific line ranges for large files.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "view",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to read (e.g., \"/data/config.json\")"
+              },
+              "encoding": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["utf-8", "utf8", "base64", "hex", "binary"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "offset": {
+                "type": ["number", "null"]
+              },
+              "limit": {
+                "type": ["number", "null"]
+              },
+              "showLineNumbers": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "encoding", "offset", "limit", "showLineNumbers"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "write_file": {
+        "type": "function",
+        "description": "Write content to a file in the workspace filesystem. Creates parent directories if needed.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "write_file",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path where to write the file (e.g., \"/data/output.txt\")"
+              },
+              "content": {
+                "type": "string",
+                "description": "The content to write to the file"
+              },
+              "overwrite": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "content", "overwrite"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "string_replace_lsp": {
+        "type": "function",
+        "description": "Edit a file by replacing specific text. The old_string must match exactly and be unique in the file.\n\nUsage:\n- Read the file first to get the exact text to replace.\n- By default, read file output includes line number prefixes (e.g., \"     1→\"). Ensure you preserve the exact indentation as it appears AFTER the arrow. Never include any part of the line number prefix in old_string or new_string.\n- Include enough surrounding context (multiple lines) to make old_string unique. If it still isn't unique, include more lines.\n- Use replace_all only when intentionally replacing all occurrences.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "string_replace_lsp",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to edit"
+              },
+              "old_string": {
+                "type": "string",
+                "description": "The exact text to find and replace. Must be unique in the file."
+              },
+              "new_string": {
+                "type": "string",
+                "description": "The text to replace old_string with"
+              },
+              "replace_all": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "old_string", "new_string", "replace_all"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "find_files": {
+        "type": "function",
+        "description": "List files and directories in the workspace filesystem.\nReturns a compact tab-indented listing for efficient token usage.\nOptions mirror common tree command flags for familiarity.\n\nExamples:\n- List root: { path: \"./\" }\n- Deep listing: { path: \"./src\", maxDepth: 5 }\n- Directories only: { path: \"./\", dirsOnly: true }\n- Exclude node_modules: { path: \"./\", exclude: \"node_modules\" }\n- Find TypeScript files: { path: \"./src\", pattern: \"**/*.ts\" }\n- Find config files: { path: \"./\", pattern: \"*.config.{js,ts}\" }\n- Multiple patterns: { path: \"./\", pattern: [\"**/*.ts\", \"**/*.tsx\"] }",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "find_files",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": ["string", "null"]
+              },
+              "maxDepth": {
+                "anyOf": [
+                  {
+                    "type": ["number", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "showHidden": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "dirsOnly": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "exclude": {
+                "type": ["string", "null"]
+              },
+              "extension": {
+                "type": ["string", "null"]
+              },
+              "pattern": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "respectGitignore": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "maxDepth",
+              "showHidden",
+              "dirsOnly",
+              "exclude",
+              "extension",
+              "pattern",
+              "respectGitignore"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "delete_file": {
+        "type": "function",
+        "description": "Delete a file or directory from the workspace filesystem",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "delete_file",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file or directory to delete"
+              },
+              "recursive": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "recursive"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "file_stat": {
+        "type": "function",
+        "description": "Get file or directory metadata from the workspace. Returns existence, type, size, and modification time.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "file_stat",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to check"
+              }
+            },
+            "required": ["path"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "mkdir": {
+        "type": "function",
+        "description": "Create a directory in the workspace filesystem",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "mkdir",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path of the directory to create"
+              },
+              "recursive": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "recursive"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "search_content": {
+        "type": "function",
+        "description": "Search file contents using a regex pattern. Walks the filesystem and returns matching lines with file paths and line numbers.\n\nUsage:\n- Basic search: { pattern: \"TODO\" }\n- Regex: { pattern: \"function\\s+\\w+\\(\" }\n- Multiple terms: { pattern: \"TODO|FIXME|HACK\" }\n- Case-insensitive: { pattern: \"error\", caseSensitive: false }\n- Search in directory: { pattern: \"import\", path: \"./src\" }\n- Filter by glob: { pattern: \"import\", path: \"**/*.ts\" }\n- Combined path + glob: { pattern: \"import\", path: \"src/**/*.ts\" }\n- Multiple file types: { pattern: \"import\", path: \"**/*.{ts,tsx,js}\" }\n- Multiple directories: { pattern: \"TODO\", path: \"{src,lib}/**/*.ts\" }\n- With context: { pattern: \"function\", contextLines: 2 }",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "search_content",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "Regex pattern to search for"
+              },
+              "path": {
+                "anyOf": [
+                  {
+                    "type": ["string", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "contextLines": {
+                "anyOf": [
+                  {
+                    "type": ["number", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "maxCount": {
+                "type": ["number", "null"]
+              },
+              "caseSensitive": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "includeHidden": {
+                "anyOf": [
+                  {
+                    "type": ["boolean", "null"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["pattern", "path", "contextLines", "maxCount", "caseSensitive", "includeHidden"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "ast_smart_edit": {
+        "type": "function",
+        "description": "Edit code using AST-based analysis for intelligent transformations.\n\nUse `transform` for structured operations (imports, renames). Use `pattern`/`replacement` only for general find-and-replace.\n\nTransforms:\n- add-import: Add or merge imports. Skips duplicates. For default imports, put the default name first in `names`.\n  { transform: \"add-import\", importSpec: { module: \"react\", names: [\"useState\", \"useEffect\"] } }\n  { transform: \"add-import\", importSpec: { module: \"express\", names: [\"express\"], isDefault: true } }\n  { transform: \"add-import\", importSpec: { module: \"express\", names: [\"express\", \"Router\"], isDefault: true } } → import express, { Router } from 'express'\n- remove-import: Remove an import by module name.\n  { transform: \"remove-import\", targetName: \"lodash\" }\n- rename: Rename all occurrences of an identifier (not scope-aware).\n  { transform: \"rename\", targetName: \"oldName\", newName: \"newName\" }\n\nPattern replace (for everything else):\n  { pattern: \"console.log($ARG)\", replacement: \"logger.debug($ARG)\" }",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "ast_smart_edit",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "The path to the file to edit"
+              },
+              "pattern": {
+                "type": ["string", "null"]
+              },
+              "replacement": {
+                "type": ["string", "null"]
+              },
+              "transform": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": ["add-import", "remove-import", "rename"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "targetName": {
+                "type": ["string", "null"]
+              },
+              "newName": {
+                "type": ["string", "null"]
+              },
+              "importSpec": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "module": {
+                        "type": "string",
+                        "description": "Module to import from"
+                      },
+                      "names": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Names to import. For default imports, put the default name first.\nconstraints: minimum length 1"
+                      },
+                      "isDefault": {
+                        "type": ["boolean", "null"]
+                      }
+                    },
+                    "required": ["module", "names", "isDefault"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": ["path", "pattern", "replacement", "transform", "targetName", "newName", "importSpec"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        }
+      },
+      "execute_command": {
+        "type": "function",
+        "description": "Execute a shell command in the workspace sandbox.\n\nExamples:\n  \"npm install && npm run build\"\n  \"ls -la src/\"\n  \"cat config.json | jq '.database'\"\n  \"cd /app && python main.py\"\n\nUsage:\n- Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.\n- Always quote file paths that contain spaces (e.g., cd \"/path/with spaces\").\n- Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.\n- Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.\n\nSet background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "execute_command",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The shell command to execute (e.g., \"npm install\", \"ls -la src/\", \"cat file.txt | grep error\")"
+              },
+              "timeout": {
+                "type": ["number", "null"]
+              },
+              "cwd": {
+                "type": ["string", "null"]
+              },
+              "tail": {
+                "type": ["number", "null"]
+              },
+              "background": {
+                "type": ["boolean", "null"]
+              }
+            },
+            "required": ["command", "timeout", "cwd", "tail", "background"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        },
+        "toModelOutput": "[function]"
+      },
+      "get_process_output": {
+        "type": "function",
+        "description": "Get the current output (stdout, stderr) and status of a background process by its PID.\n\nUse this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "get_process_output",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "pid": {
+                "type": "number",
+                "description": "The process ID returned when the background command was started"
+              },
+              "tail": {
+                "type": ["number", "null"]
+              },
+              "wait": {
+                "type": ["boolean", "null"]
+              }
+            },
+            "required": ["pid", "tail", "wait"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        },
+        "toModelOutput": "[function]"
+      },
+      "kill_process": {
+        "type": "function",
+        "description": "Kill a background process by its PID.\n\nUse this to stop a long-running background process that was started with execute_command (background: true). Returns the last 50 lines of output.",
+        "requireApproval": false,
+        "hasSuspendSchema": false,
+        "execute": "[function]",
+        "id": "kill_process",
+        "parameters": {
+          "jsonSchema": {
+            "type": "object",
+            "properties": {
+              "pid": {
+                "type": "number",
+                "description": "The process ID of the background process to kill"
+              }
+            },
+            "required": ["pid"],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "validate": "[function]"
+        },
+        "toModelOutput": "[function]"
+      }
+    },
+    "toolChoice": "auto",
+    "modelSettings": {
+      "temperature": 1
+    }
+  }
+}

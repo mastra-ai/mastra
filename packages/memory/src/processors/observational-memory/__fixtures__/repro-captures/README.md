@@ -1,6 +1,8 @@
 # OM Repro Capture Workflow
 
-This folder stores **real runtime OM captures** used to reproduce activation/cleanup regressions.
+This folder stores **sanitized OM repro fixtures** derived from real runtime captures and used to reproduce activation/cleanup regressions.
+
+Raw `.mastra-om-repro` captures can contain sensitive local paths, tool outputs, and conversation text. Keep raw captures local and sanitize them before committing anything from this folder.
 
 ## 1) Record a capture
 
@@ -46,6 +48,13 @@ Use a descriptive name:
 cp -R \
   /path/to/.mastra-om-repro/<threadId> \
   packages/memory/src/processors/observational-memory/__fixtures__/repro-captures/<good-fixture-name>
+```
+
+Then sanitize the copied fixture before committing it:
+
+```bash
+cd packages/memory
+pnpm sanitize:om-repro src/processors/observational-memory/__fixtures__/repro-captures/<good-fixture-name> --write
 ```
 
 Example naming style:

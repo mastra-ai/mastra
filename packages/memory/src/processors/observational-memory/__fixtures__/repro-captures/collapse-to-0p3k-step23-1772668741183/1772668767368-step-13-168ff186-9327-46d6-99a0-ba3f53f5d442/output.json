@@ -1,0 +1,14 @@
+{
+  "details": {
+    "step0Activation": null,
+    "thresholdCleanup": null,
+    "thresholdReached": false,
+    "backpressure": null,
+    "totalPendingTokens": 21053,
+    "threshold": 30000,
+    "effectiveObservationTokensThreshold": 40000,
+    "currentObservationTokens": 0,
+    "otherThreadTokens": 0,
+    "contextMessageCount": 5
+  }
+}

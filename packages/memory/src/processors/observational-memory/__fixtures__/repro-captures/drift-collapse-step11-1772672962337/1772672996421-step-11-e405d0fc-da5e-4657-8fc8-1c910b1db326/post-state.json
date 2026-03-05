@@ -1,0 +1,278 @@
+{
+  "record": {
+    "id": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+    "scope": "thread",
+    "threadId": "1772672962337-n33sjn0oo",
+    "resourceId": "mastra-c597b1a88f39",
+    "createdAt": "2026-03-05T01:09:22.386Z",
+    "updatedAt": "2026-03-05T01:09:56.420Z",
+    "lastObservedAt": "2026-03-05T01:09:43.101Z",
+    "originType": "initial",
+    "generationCount": 0,
+    "activeObservations": "[sanitized:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/post-state.json:record:active-observations]",
+    "totalTokensObserved": 0,
+    "observationTokenCount": 674,
+    "pendingMessageTokens": 0,
+    "isReflecting": false,
+    "isObserving": false,
+    "isBufferingObservation": false,
+    "isBufferingReflection": false,
+    "lastBufferedAtTokens": 0,
+    "lastBufferedAtTime": "2026-03-05T01:09:43.101Z",
+    "config": {
+      "observation": {
+        "messageTokens": 30000,
+        "shareTokenBudget": false,
+        "modelSettings": {
+          "temperature": 0.3
+        },
+        "providerOptions": {
+          "google": {
+            "thinkingConfig": {
+              "thinkingBudget": 215
+            }
+          }
+        },
+        "maxTokensPerBatch": 10000,
+        "bufferTokens": 6000,
+        "bufferActivation": 2000,
+        "blockAfter": 60000
+      },
+      "reflection": {
+        "observationTokens": 40000,
+        "shareTokenBudget": false,
+        "modelSettings": {
+          "temperature": 0
+        },
+        "providerOptions": {
+          "google": {
+            "thinkingConfig": {
+              "thinkingBudget": 1024
+            }
+          }
+        },
+        "bufferActivation": 0.5,
+        "blockAfter": 44000
+      },
+      "scope": "thread"
+    },
+    "observedMessageIds": {},
+    "observedTimezone": "UTC"
+  },
+  "bufferedChunks": [],
+  "contextTokenCount": 259,
+  "messageCount": 2,
+  "messageIds": ["om-continuation", "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427"],
+  "messages": [
+    {
+      "id": "om-continuation",
+      "role": "user",
+      "createdAt": "1970-01-01T00:00:00.000Z",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "text",
+            "text": "[sanitized:text:om-continuation:0]",
+            "providerMetadata": {
+              "mastra": {
+                "tokenEstimate": {
+                  "v": 1,
+                  "source": "v1:o200k_base",
+                  "key": "text:240693abf390b864efd20cbd3fc2e53b7f269b4d",
+                  "tokens": 225
+                }
+              }
+            }
+          }
+        ]
+      },
+      "threadId": "1772672962337-n33sjn0oo",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    {
+      "id": "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427",
+      "role": "assistant",
+      "content": {
+        "format": 2,
+        "parts": [
+          {
+            "type": "data-om-status",
+            "data": {
+              "windows": {
+                "active": {
+                  "messages": {
+                    "tokens": 254,
+                    "threshold": 30000
+                  },
+                  "observations": {
+                    "tokens": 674,
+                    "threshold": 40000
+                  }
+                },
+                "buffered": {
+                  "observations": {
+                    "chunks": 0,
+                    "messageTokens": 0,
+                    "projectedMessageRemoval": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  },
+                  "reflection": {
+                    "inputObservationTokens": 0,
+                    "observationTokens": 0,
+                    "status": "idle"
+                  }
+                }
+              },
+              "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+              "threadId": "1772672962337-n33sjn0oo",
+              "stepNumber": 11,
+              "generationCount": 0
+            }
+          }
+        ]
+      },
+      "createdAt": "2026-03-05T01:09:56.421Z",
+      "threadId": "1772672962337-n33sjn0oo",
+      "resourceId": "mastra-c597b1a88f39"
+    }
+  ],
+  "messageList": {
+    "messages": [
+      {
+        "id": "om-continuation",
+        "role": "user",
+        "createdAt": "Thu, 01 Jan 1970 00:00:00 GMT",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "text",
+              "text": "[sanitized:text:om-continuation:0]",
+              "providerMetadata": {
+                "mastra": {
+                  "tokenEstimate": {
+                    "v": 1,
+                    "source": "v1:o200k_base",
+                    "key": "text:240693abf390b864efd20cbd3fc2e53b7f269b4d",
+                    "tokens": 225
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "threadId": "1772672962337-n33sjn0oo",
+        "resourceId": "mastra-c597b1a88f39"
+      },
+      {
+        "id": "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427",
+        "role": "assistant",
+        "content": {
+          "format": 2,
+          "parts": [
+            {
+              "type": "data-om-status",
+              "data": {
+                "windows": {
+                  "active": {
+                    "messages": {
+                      "tokens": 254,
+                      "threshold": 30000
+                    },
+                    "observations": {
+                      "tokens": 674,
+                      "threshold": 40000
+                    }
+                  },
+                  "buffered": {
+                    "observations": {
+                      "chunks": 0,
+                      "messageTokens": 0,
+                      "projectedMessageRemoval": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    },
+                    "reflection": {
+                      "inputObservationTokens": 0,
+                      "observationTokens": 0,
+                      "status": "idle"
+                    }
+                  }
+                },
+                "recordId": "3cb9496c-73fc-4656-b7c0-7b920ce0abca",
+                "threadId": "1772672962337-n33sjn0oo",
+                "stepNumber": 11,
+                "generationCount": 0
+              }
+            }
+          ]
+        },
+        "createdAt": "Thu, 05 Mar 2026 01:09:56 GMT",
+        "threadId": "1772672962337-n33sjn0oo",
+        "resourceId": "mastra-c597b1a88f39"
+      }
+    ],
+    "systemMessages": [
+      {
+        "role": "system",
+        "content": "[sanitized:message-content:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/post-state.json:messageList:systemMessages:0]",
+        "metadata": {
+          "mastra": {
+            "tokenEstimate": {
+              "v": 1,
+              "source": "v1:o200k_base",
+              "key": "message-content:d8b010723d30b35e1db81be2df6d5670b6dac8d5",
+              "tokens": 3563
+            }
+          }
+        }
+      }
+    ],
+    "taggedSystemMessages": {
+      "observational-memory": [
+        {
+          "role": "system",
+          "content": "[sanitized:message-content:drift-collapse-step11-1772672962337/1772672996421-step-11-e405d0fc-da5e-4657-8fc8-1c910b1db326/post-state.json:messageList:taggedSystemMessages:observational-memory:0]",
+          "metadata": {
+            "mastra": {
+              "tokenEstimate": {
+                "v": 1,
+                "source": "v1:o200k_base",
+                "key": "message-content:268e72a29ad121560daaae972eaa232eebbca391",
+                "tokens": 966
+              }
+            }
+          }
+        }
+      ]
+    },
+    "memoryInfo": {
+      "threadId": "1772672962337-n33sjn0oo",
+      "resourceId": "mastra-c597b1a88f39"
+    },
+    "_agentNetworkAppend": false,
+    "memoryMessages": ["b013d267-4ab3-4a4a-8786-075ded5992b7", "om-continuation"],
+    "newUserMessages": [],
+    "newResponseMessages": ["5a881aeb-5c0a-48d6-a4fa-b2ddf523e427"],
+    "userContextMessages": [],
+    "memoryMessagesPersisted": [
+      "0ede1387-781b-4e5b-9568-5e4270706612",
+      "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427",
+      "333dcc93-6e57-4eaf-983f-121732456080",
+      "b1f3d72f-60b4-4a8f-be34-965822132a87",
+      "b013d267-4ab3-4a4a-8786-075ded5992b7",
+      "om-continuation"
+    ],
+    "newUserMessagesPersisted": ["0ede1387-781b-4e5b-9568-5e4270706612"],
+    "newResponseMessagesPersisted": [
+      "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427",
+      "333dcc93-6e57-4eaf-983f-121732456080",
+      "b1f3d72f-60b4-4a8f-be34-965822132a87",
+      "b013d267-4ab3-4a4a-8786-075ded5992b7",
+      "5a881aeb-5c0a-48d6-a4fa-b2ddf523e427"
+    ],
+    "userContextMessagesPersisted": []
+  }
+}
