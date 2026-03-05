@@ -8,6 +8,7 @@ import {
   EntityType,
   SpanType,
   wrapMastra,
+  executeWithContext,
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../../observability';
@@ -261,7 +262,7 @@ export async function executeStep(
       logger: engine.getLogger(),
     });
 
-    return step.execute(proxiedData);
+    return executeWithContext({ span: stepSpan, fn: () => step.execute(proxiedData) });
   };
 
   let execResults: any;
