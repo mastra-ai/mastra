@@ -3021,10 +3021,8 @@ export class Agent<
                 }
               }
 
-              const messagesForSubAgent: MessageListInput = [
-                ...filteredContextMessages,
-                { role: 'user' as const, content: effectivePrompt },
-              ];
+              // Pass history as context (not messages) so it reaches the LLM but is not persisted to the sub-agent thread.
+              const messagesForSubAgent: MessageListInput = [{ role: 'user' as const, content: effectivePrompt }];
 
               const subAgentPromptCreatedAt = new Date();
 
@@ -3039,6 +3037,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as any,
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3054,6 +3053,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as any,
                       ...(resourceId && threadId && !subAgentHasOwnMemoryConfig
                         ? {
                             memory: {
@@ -3123,10 +3123,13 @@ export class Agent<
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
-                  requestContext,
-                  ...resolveObservabilityContext(context ?? {}),
-                });
+                const generateResult = await agent.generateLegacy(
+                  [...filteredContextMessages, { role: 'user' as const, content: effectivePrompt }],
+                  {
+                    requestContext,
+                    ...resolveObservabilityContext(context ?? {}),
+                  },
+                );
                 result = { text: generateResult.text };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
