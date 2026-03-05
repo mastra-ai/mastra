@@ -33,7 +33,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     });
   });
 
-  describe.only(suiteName, () => {
+  describe(suiteName, () => {
     let context: AdapterTestContext;
     let app: any;
 

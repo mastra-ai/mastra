@@ -58,7 +58,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
     applyMiddleware,
   } = config;
 
-  describe.only(suiteName, () => {
+  describe(suiteName, () => {
     let context: AdapterTestContext;
     let serverInfo: { baseUrl: string; cleanup: () => Promise<void> } | null = null;
 

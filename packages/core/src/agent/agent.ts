@@ -3168,29 +3168,60 @@ export class Agent<
     const workflows = await this.listWorkflows({ requestContext });
     if (Object.keys(workflows).length > 0) {
       for (const [workflowName, workflow] of Object.entries(workflows)) {
-        const extendedInputSchema = z.object({
-          inputData: workflow.inputSchema ?? z.object({}).passthrough(),
-          ...(workflow.stateSchema ? { initialState: workflow.stateSchema } : {}),
-        });
+        // Build input/output schemas as JSONSchema7 to avoid Zod composition issues
+        // when workflow schemas are StandardSchemaWithJSON wrappers (e.g. from storage)
+        const inputDataJsonSchema: JSONSchema7 = workflow.inputSchema
+          ? standardSchemaToJSONSchema(workflow.inputSchema, { io: 'input' })
+          : { type: 'object', additionalProperties: true };
+
+        const inputProperties: Record<string, JSONSchema7> = {
+          inputData: inputDataJsonSchema,
+        };
+        const inputRequired = ['inputData'];
+
+        if (workflow.stateSchema) {
+          inputProperties.initialState = standardSchemaToJSONSchema(workflow.stateSchema, { io: 'input' });
+        }
+
+        const extendedInputSchema: JSONSchema7 = {
+          type: 'object',
+          properties: inputProperties,
+          required: inputRequired,
+        };
+
+        const outputResultProperties: Record<string, JSONSchema7> = {
+          runId: { type: 'string', description: 'Unique identifier for the workflow run' },
+        };
+        if (workflow.outputSchema) {
+          outputResultProperties.result = standardSchemaToJSONSchema(workflow.outputSchema, { io: 'output' });
+        }
+
+        const outputSchema: JSONSchema7 = {
+          anyOf: [
+            {
+              type: 'object',
+              properties: outputResultProperties,
+              required: ['runId'],
+            },
+            {
+              type: 'object',
+              properties: {
+                runId: { type: 'string', description: 'Unique identifier for the workflow run' },
+                error: { type: 'string', description: 'Error message if workflow execution failed' },
+              },
+              required: ['runId', 'error'],
+            },
+          ],
+        };
 
         const toolObj = createTool({
           id: `workflow-${workflowName}`,
           description: workflow.description || `Workflow: ${workflowName}`,
           inputSchema: extendedInputSchema,
-          outputSchema: z.union([
-            z.object({
-              result: workflow.outputSchema,
-              runId: z.string().describe('Unique identifier for the workflow run'),
-            }),
-            z.object({
-              runId: z.string().describe('Unique identifier for the workflow run'),
-              error: z.string().describe('Error message if workflow execution failed'),
-            }),
-          ]),
+          outputSchema,
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
-          // @ts-expect-error - context type mismatch in workflow tool
           execute: async (inputData, context) => {
             const savedMastraMemory = requestContext.get('MastraMemory');
             try {
