@@ -52,7 +52,7 @@ export async function runScorersForItem(
 
   const settled = await Promise.allSettled(
     scorers.map(async scorer => {
-      const result = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
+      const { result, promptMetadata } = await runScorerSafe(scorer, item, output, scorerInput, scorerOutput);
 
       // Persist score if storage available and score was computed
       if (storage && result.score !== null) {
@@ -79,6 +79,7 @@ export async function runScorersForItem(
               id: targetId,
               name: targetId,
             },
+            ...promptMetadata,
           });
         } catch (saveError) {
           // Log but don't fail - score persistence is best-effort
@@ -97,8 +98,19 @@ export async function runScorersForItem(
   );
 }
 
+/** Prompt/step metadata returned by scorer.run() for DB persistence. */
+interface ScorerPromptMetadata {
+  generateScorePrompt?: string;
+  generateReasonPrompt?: string;
+  preprocessStepResult?: Record<string, unknown>;
+  preprocessPrompt?: string;
+  analyzeStepResult?: Record<string, unknown>;
+  analyzePrompt?: string;
+}
+
 /**
  * Run a single scorer safely, catching any errors.
+ * Returns both the ScorerResult and prompt metadata for DB persistence.
  */
 async function runScorerSafe(
   scorer: MastraScorer<any, any, any, any>,
@@ -106,33 +118,67 @@ async function runScorerSafe(
   output: unknown,
   scorerInput?: ScorerRunInputForAgent,
   scorerOutput?: ScorerRunOutputForAgent,
-): Promise<ScorerResult> {
+): Promise<{ result: ScorerResult; promptMetadata: ScorerPromptMetadata }> {
   try {
-    const scoreResult = await scorer.run({
+    const scoreResult: unknown = await scorer.run({
       input: scorerInput ?? item.input,
       output: scorerOutput ?? output,
       groundTruth: item.groundTruth,
     });
 
-    // Extract score and reason with proper null handling
-    // Scorer run result types are complex generics, so we cast through any
-    const score = (scoreResult as any).score;
-    const reason = (scoreResult as any).reason;
+    // Extract fields with typeof guards — scorer run result types use complex
+    // conditional generics that don't resolve cleanly with MastraScorer<any,…>.
+    if (typeof scoreResult !== 'object' || scoreResult === null) {
+      return {
+        result: {
+          scorerId: scorer.id,
+          scorerName: scorer.name,
+          score: null,
+          reason: null,
+          error: `Scorer ${scorer.name} (${scorer.id}) returned invalid result: expected object, got ${scoreResult === null ? 'null' : typeof scoreResult} (${String(scoreResult)})`,
+        },
+        promptMetadata: {},
+      };
+    }
+
+    const fields = scoreResult as Record<string, unknown>;
+    const score = typeof fields.score === 'number' ? fields.score : null;
+    const reason = typeof fields.reason === 'string' ? fields.reason : null;
+
+    const str = (key: string): string | undefined =>
+      typeof fields[key] === 'string' ? (fields[key] as string) : undefined;
+    const obj = (key: string): Record<string, unknown> | undefined => {
+      const val = fields[key];
+      return typeof val === 'object' && val !== null ? (val as Record<string, unknown>) : undefined;
+    };
 
     return {
-      scorerId: scorer.id,
-      scorerName: scorer.name,
-      score: typeof score === 'number' ? score : null,
-      reason: typeof reason === 'string' ? reason : null,
-      error: null,
+      result: {
+        scorerId: scorer.id,
+        scorerName: scorer.name,
+        score,
+        reason,
+        error: null,
+      },
+      promptMetadata: {
+        generateScorePrompt: str('generateScorePrompt'),
+        generateReasonPrompt: str('generateReasonPrompt'),
+        preprocessStepResult: obj('preprocessStepResult'),
+        preprocessPrompt: str('preprocessPrompt'),
+        analyzeStepResult: obj('analyzeStepResult'),
+        analyzePrompt: str('analyzePrompt'),
+      },
     };
   } catch (error) {
     return {
-      scorerId: scorer.id,
-      scorerName: scorer.name,
-      score: null,
-      reason: null,
-      error: error instanceof Error ? error.message : String(error),
+      result: {
+        scorerId: scorer.id,
+        scorerName: scorer.name,
+        score: null,
+        reason: null,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      promptMetadata: {},
     };
   }
 }

@@ -33,18 +33,18 @@ for (const version of versions) {
 
 <PropertiesTable
   content={[
-{
-name: "page",
-type: "number",
-isOptional: true,
-description: "Page number. Defaults to `0`.",
-},
-{
-name: "perPage",
-type: "number",
-isOptional: true,
-description: "Number of versions per page. Defaults to `20`.",
-},
+  {
+    name: 'page',
+    type: 'number',
+    isOptional: true,
+    description: 'Page number. Defaults to `0`.',
+  },
+  {
+    name: 'perPage',
+    type: 'number',
+    isOptional: true,
+    description: 'Number of versions per page. Defaults to `20`.',
+  },
 ]}
 />
 
@@ -52,75 +52,81 @@ description: "Number of versions per page. Defaults to `20`.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<object>",
-description: "Paginated version list.",
-properties: [{
-type: "object",
-parameters: [
-{
-name: "versions",
-type: "DatasetVersion[]",
-description: "Array of version records.",
-properties: [{
-type: "DatasetVersion",
-parameters: [
-{
-name: "id",
-type: "string",
-description: "Unique identifier of the version record.",
-},
-{
-name: "datasetId",
-type: "string",
-description: "ID of the parent dataset.",
-},
-{
-name: "version",
-type: "number",
-description: "Version number.",
-},
-{
-name: "createdAt",
-type: "Date",
-description: "When this version was created.",
-},
-],
-}],
-},
-{
-name: "pagination",
-type: "object",
-description: "Pagination metadata.",
-properties: [{
-type: "object",
-parameters: [
-{
-name: "total",
-type: "number",
-description: "Total number of versions.",
-},
-{
-name: "page",
-type: "number",
-description: "Current page number.",
-},
-{
-name: "perPage",
-type: "number | false",
-description: "Versions per page, or `false` if unpaginated.",
-},
-{
-name: "hasMore",
-type: "boolean",
-description: "Whether more pages are available.",
-},
-],
-}],
-},
-],
-}],
-},
+  {
+    name: 'result',
+    type: 'Promise<object>',
+    description: 'Paginated version list.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'versions',
+            type: 'DatasetVersion[]',
+            description: 'Array of version records.',
+            properties: [
+              {
+                type: 'DatasetVersion',
+                parameters: [
+                  {
+                    name: 'id',
+                    type: 'string',
+                    description: 'Unique identifier of the version record.',
+                  },
+                  {
+                    name: 'datasetId',
+                    type: 'string',
+                    description: 'ID of the parent dataset.',
+                  },
+                  {
+                    name: 'version',
+                    type: 'number',
+                    description: 'Version number.',
+                  },
+                  {
+                    name: 'createdAt',
+                    type: 'Date',
+                    description: 'When this version was created.',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'pagination',
+            type: 'object',
+            description: 'Pagination metadata.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'total',
+                    type: 'number',
+                    description: 'Total number of versions.',
+                  },
+                  {
+                    name: 'page',
+                    type: 'number',
+                    description: 'Current page number.',
+                  },
+                  {
+                    name: 'perPage',
+                    type: 'number | false',
+                    description: 'Versions per page, or `false` if unpaginated.',
+                  },
+                  {
+                    name: 'hasMore',
+                    type: 'boolean',
+                    description: 'Whether more pages are available.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />

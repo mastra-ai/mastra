@@ -20,29 +20,26 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "preprocessStepResult",
-type: "object",
-description:
-"Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }",
-},
-{
-name: "analyzeStepResult",
-type: "object",
-description:
-"Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }",
-},
-{
-name: "score",
-type: "number",
-description:
-"Coverage score (0-1) representing the proportion of matched keywords.",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description: 'Object with extracted keywords: { referenceKeywords: Set<string>, responseKeywords: Set<string> }',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description: 'Object with keyword coverage: { totalKeywords: number, matchedKeywords: number }',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Coverage score (0-1) representing the proportion of matched keywords.',
+  },
 ]}
 />
 

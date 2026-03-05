@@ -84,19 +84,19 @@ In-memory storage resets when the process changes. Only suitable for development
 
 <PropertiesTable
   content={[
-{
-name: "url",
-type: "string",
-description:
-"Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.",
-isOptional: false,
-},
-{
-name: "authToken",
-type: "string",
-description: "Authentication token for remote libSQL databases.",
-isOptional: true,
-},
+  {
+    name: 'url',
+    type: 'string',
+    description:
+      'Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.',
+    isOptional: false,
+  },
+  {
+    name: 'authToken',
+    type: 'string',
+    description: 'Authentication token for remote libSQL databases.',
+    isOptional: true,
+  },
 ]}
 />
 
