@@ -82,7 +82,7 @@ You must provide at least one of `agentId`, `path`, or `agent`.
 
 ## File structure
 
-```
+```text
 src/
   mastra/
     index.ts              # Mastra instance

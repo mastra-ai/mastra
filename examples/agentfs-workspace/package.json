@@ -9,7 +9,6 @@
     "@mastra/agentfs": "latest",
     "@mastra/core": "latest",
     "ai": "^6.0.1",
-    "typescript": "^5.8.3",
     "zod": "^3"
   },
   "pnpm": {
@@ -19,14 +18,15 @@
     }
   },
   "scripts": {
-    "demo": "npx tsx src/demo/index.ts",
-    "demo:filesystem": "npx tsx src/demo/index.ts --type filesystem",
-    "demo:agents": "npx tsx src/demo/index.ts --type agents"
+    "demo": "tsx src/demo/index.ts",
+    "demo:filesystem": "tsx src/demo/index.ts --type filesystem",
+    "demo:agents": "tsx src/demo/index.ts --type agents"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.3"
   }
 }

@@ -132,38 +132,44 @@ async function demoAgents() {
     await agentWorkspace.init();
   }
 
-  // Show available tools
-  section('Agent Tools');
-  const tools = await agent.listTools();
-  const wsTools = Object.keys(tools).filter(t => t.startsWith('mastra_workspace'));
-  console.log(`  Workspace tools: ${wsTools.length}`);
-  for (const tool of wsTools) {
-    console.log(`    - ${tool}`);
-  }
-  console.log();
+  try {
+    // Show available tools
+    section('Agent Tools');
+    const tools = await agent.listTools();
+    const wsTools = Object.keys(tools).filter(t => t.startsWith('mastra_workspace'));
+    console.log(`  Workspace tools: ${wsTools.length}`);
+    for (const tool of wsTools) {
+      console.log(`    - ${tool}`);
+    }
+    console.log();
 
-  // Workspace info
-  section('Workspace Info');
-  if (agentWorkspace) {
-    const info = await agentWorkspace.getInfo();
-    console.log(`  ID: ${info.id}`);
-    console.log(`  Name: ${info.name}`);
-    console.log(`  Filesystem: ${info.filesystem?.provider}`);
-    console.log(`  Status: ${info.status}`);
-  }
-  console.log();
+    // Workspace info
+    section('Workspace Info');
+    if (agentWorkspace) {
+      const info = await agentWorkspace.getInfo();
+      console.log(`  ID: ${info.id}`);
+      console.log(`  Name: ${info.name}`);
+      console.log(`  Filesystem: ${info.filesystem?.provider}`);
+      console.log(`  Status: ${info.status}`);
+    }
+    console.log();
 
-  // Generate with the agent (requires OPENAI_API_KEY)
-  if (process.env.OPENAI_API_KEY) {
-    section('Agent Generation');
-    console.log('  Asking agent to save a note...');
-    const response = await agent.generate(
-      'Save a note about AgentFS: it stores files in SQLite, persists across sessions, and works with the Mastra workspace API.',
-    );
-    console.log(`  Response: ${response.text.slice(0, 200)}...`);
-  } else {
-    section('Agent Generation (skipped)');
-    console.log('  Set OPENAI_API_KEY to run the agent generation demo');
+    // Generate with the agent (requires OPENAI_API_KEY)
+    if (process.env.OPENAI_API_KEY) {
+      section('Agent Generation');
+      console.log('  Asking agent to save a note...');
+      const response = await agent.generate(
+        'Save a note about AgentFS: it stores files in SQLite, persists across sessions, and works with the Mastra workspace API.',
+      );
+      console.log(`  Response: ${response.text.slice(0, 200)}...`);
+    } else {
+      section('Agent Generation (skipped)');
+      console.log('  Set OPENAI_API_KEY to run the agent generation demo');
+    }
+  } finally {
+    if (agentWorkspace) {
+      await agentWorkspace.destroy();
+    }
   }
 }
 
