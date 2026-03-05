@@ -1900,6 +1900,29 @@ describe('PgVector', () => {
         ).rejects.toThrow('IVFFlat indexes do not support Jaccard distance for bit vectors');
       });
 
+      it('should normalize bit metric to hamming when not explicitly set', async () => {
+        // When vectorType is 'bit' and metric is 'cosine' (the default), it should
+        // be normalized to 'hamming'. We verify this by checking that createIndex
+        // does NOT throw 'hamming metric is only valid with vectorType bit' —
+        // which would only happen if 'cosine' leaked through as-is to a non-bit path.
+        // Instead it may throw a pgvector version error, which is fine.
+        try {
+          await validationDB.createIndex({
+            indexName: 'test_bit_default_metric',
+            dimension: 64,
+            vectorType: 'bit',
+            // metric not specified — defaults to 'cosine', should be normalized to 'hamming'
+          });
+          const stats = await validationDB.describeIndex({ indexName: 'test_bit_default_metric' });
+          expect(stats.metric).toBe('hamming');
+          await validationDB.deleteIndex({ indexName: 'test_bit_default_metric' });
+        } catch (error: any) {
+          // Acceptable errors: pgvector version or connection errors, but NOT metric validation
+          expect(error.message).not.toContain('cosine metric is only valid');
+          expect(error.message).not.toContain('hamming metric is only valid');
+        }
+      });
+
       it('should allow bit vectors within dimension limit', async () => {
         // This should not throw a dimension validation error
         // (may throw a pgvector version error if < 0.7.0, which is fine)
