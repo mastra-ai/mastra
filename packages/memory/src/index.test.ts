@@ -1,12 +1,28 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+import { updateWorkingMemoryTool } from './tools/working-memory';
 import { Memory } from './index';
 
 // Expose protected methods for testing
+class TestableMemoryWithWorkingMemory extends Memory {
+  public async testExperimentalUpdateWorkingMemoryVNext(args: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string;
+    searchString?: string;
+    memoryConfig?: MemoryConfig;
+  }): Promise<{ success: boolean; reason: string }> {
+    return this.__experimental_updateWorkingMemoryVNext(args);
+  }
+}
+
+// Expose protected method for testing
 class TestableMemory extends Memory {
   public testUpdateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     return this.updateMessageToHideWorkingMemoryV2(message);
@@ -992,6 +1008,470 @@ describe('Memory', () => {
         const page1Ids = page1.threads.map(t => t.id);
         const page2Ids = page2.threads.map(t => t.id);
         expect(page1Ids).not.toEqual(page2Ids);
+      });
+    });
+  });
+
+  describe('Working Memory - Data Corruption Prevention (Issue #12253)', () => {
+    const resourceId = 'test-resource-wm';
+    const template = `# User Information
+- **First Name**:
+- **Last Name**:
+- **Location**: `;
+
+    describe('resource-scoped working memory should persist across threads', () => {
+      let memory: Memory;
+
+      beforeEach(() => {
+        memory = new Memory({
+          storage: new InMemoryStore(),
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+              template,
+            },
+          },
+        });
+      });
+
+      it('should retrieve working memory from a different thread with the same resourceId', async () => {
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        const thread1 = await memory.saveThread({
+          thread: {
+            id: 'thread-1-resource-scope',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        await memory.updateWorkingMemory({
+          threadId: thread1.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Alice\n- **Interests**: I like dogs',
+          memoryConfig,
+        });
+
+        const savedMemory = await memory.getWorkingMemory({
+          threadId: thread1.id,
+          resourceId,
+          memoryConfig,
+        });
+        expect(savedMemory).toContain('I like dogs');
+
+        const thread2 = await memory.saveThread({
+          thread: {
+            id: 'thread-2-resource-scope',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const retrievedMemory = await memory.getWorkingMemory({
+          threadId: thread2.id,
+          resourceId,
+          memoryConfig,
+        });
+
+        expect(retrievedMemory).not.toBeNull();
+        expect(retrievedMemory).toContain('I like dogs');
+        expect(retrievedMemory).toContain('Alice');
+      });
+
+      it('should not corrupt working memory when reading from different thread', async () => {
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        const thread1 = await memory.saveThread({
+          thread: {
+            id: 'thread-1-no-corrupt',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const originalData = '# User Information\n- **First Name**: Bob\n- **Location**: NYC\n- **Facts**: Loves pizza';
+        await memory.updateWorkingMemory({
+          threadId: thread1.id,
+          resourceId,
+          workingMemory: originalData,
+          memoryConfig,
+        });
+
+        const thread2 = await memory.saveThread({
+          thread: {
+            id: 'thread-2-no-corrupt',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const read1 = await memory.getWorkingMemory({
+          threadId: thread2.id,
+          resourceId,
+          memoryConfig,
+        });
+        const read2 = await memory.getWorkingMemory({
+          threadId: thread2.id,
+          resourceId,
+          memoryConfig,
+        });
+
+        const finalRead = await memory.getWorkingMemory({
+          threadId: thread1.id,
+          resourceId,
+          memoryConfig,
+        });
+
+        expect(read1).toContain('Loves pizza');
+        expect(read2).toContain('Loves pizza');
+        expect(finalRead).toContain('Loves pizza');
+
+        expect(finalRead).toBe(originalData);
+      });
+
+      it('should NOT wipe working memory if updateWorkingMemoryTool is called with empty template from different thread', async () => {
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        const thread1 = await memory.saveThread({
+          thread: {
+            id: 'thread-1-wipe-test',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const meaningfulData = '# User Information\n- **First Name**: Alice\n- **Interests**: I like dogs';
+        await memory.updateWorkingMemory({
+          threadId: thread1.id,
+          resourceId,
+          workingMemory: meaningfulData,
+          memoryConfig,
+        });
+
+        const thread2 = await memory.saveThread({
+          thread: {
+            id: 'thread-2-wipe-test',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const beforeWipeAttempt = await memory.getWorkingMemory({
+          threadId: thread2.id,
+          resourceId,
+          memoryConfig,
+        });
+        expect(beforeWipeAttempt).toContain('I like dogs');
+
+        const tool = updateWorkingMemoryTool(memoryConfig);
+
+        const toolContext = {
+          agent: {
+            threadId: thread2.id,
+            resourceId,
+          },
+          memory,
+        };
+
+        const toolResult = (await tool.execute!({ memory: template }, toolContext as any)) as {
+          success: boolean;
+          message?: string;
+        };
+
+        expect(toolResult.success).toBe(false);
+        expect(toolResult.message).toContain('empty template');
+
+        const afterWipeAttempt = await memory.getWorkingMemory({
+          threadId: thread1.id,
+          resourceId,
+          memoryConfig,
+        });
+
+        expect(afterWipeAttempt).toContain('I like dogs');
+        expect(afterWipeAttempt).toContain('Alice');
+      });
+    });
+
+    describe('updateWorkingMemory with mutex', () => {
+      let memory: Memory;
+
+      beforeEach(() => {
+        memory = new Memory({
+          storage: new InMemoryStore(),
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+              template,
+            },
+          },
+        });
+      });
+
+      it('should handle concurrent updates without data loss', async () => {
+        const thread = await memory.saveThread({
+          thread: {
+            id: 'concurrent-test-thread',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        await memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Alice',
+          memoryConfig: {
+            workingMemory: { enabled: true, scope: 'resource', template },
+          },
+        });
+
+        const update1 = memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Bob',
+          memoryConfig: {
+            workingMemory: { enabled: true, scope: 'resource', template },
+          },
+        });
+
+        const update2 = memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Charlie',
+          memoryConfig: {
+            workingMemory: { enabled: true, scope: 'resource', template },
+          },
+        });
+
+        await Promise.all([update1, update2]);
+
+        const finalMemory = await memory.getWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          memoryConfig: {
+            workingMemory: { enabled: true, scope: 'resource', template },
+          },
+        });
+
+        // The final value should be either Bob or Charlie, not corrupted
+        expect(finalMemory).toBeDefined();
+        expect(finalMemory?.includes('Bob') || finalMemory?.includes('Charlie')).toBe(true);
+      });
+    });
+
+    describe('__experimental_updateWorkingMemoryVNext - template duplication prevention', () => {
+      let memory: TestableMemoryWithWorkingMemory;
+
+      beforeEach(() => {
+        memory = new TestableMemoryWithWorkingMemory({
+          storage: new InMemoryStore(),
+          options: {
+            workingMemory: {
+              enabled: true,
+              scope: 'resource',
+              template,
+            },
+          },
+        });
+      });
+
+      it('should reject empty template insertion when data already exists', async () => {
+        // Create thread
+        const thread = await memory.saveThread({
+          thread: {
+            id: 'vnext-template-test',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        await memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Alice\n- **Last Name**: Smith',
+          memoryConfig,
+        });
+
+        const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: template,
+          memoryConfig,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.reason).toContain('duplicate');
+      });
+
+      it('should reject appending empty template to existing data', async () => {
+        const thread = await memory.saveThread({
+          thread: {
+            id: 'vnext-append-test',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        await memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Alice',
+          memoryConfig,
+        });
+
+        const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: template.trim(),
+          searchString: 'this string does not exist',
+          memoryConfig,
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject template with whitespace variations (requires normalized comparison)', async () => {
+        const thread = await memory.saveThread({
+          thread: {
+            id: 'vnext-whitespace-test',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        await memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Alice',
+          memoryConfig,
+        });
+
+        const templateWithExtraWhitespace = `# User Information
+-  **First Name**:
+-  **Last Name**:
+-  **Location**:  `;
+
+        const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: templateWithExtraWhitespace,
+          memoryConfig,
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should allow valid data updates', async () => {
+        const thread = await memory.saveThread({
+          thread: {
+            id: 'vnext-valid-test',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        await memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Alice',
+          memoryConfig,
+        });
+
+        const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '- **Last Name**: Smith',
+          memoryConfig,
+        });
+
+        expect(result.success).toBe(true);
+
+        const finalMemory = await memory.getWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          memoryConfig,
+        });
+
+        expect(finalMemory).toContain('Alice');
+        expect(finalMemory).toContain('Smith');
+      });
+
+      it('should handle searchString replacement correctly', async () => {
+        const thread = await memory.saveThread({
+          thread: {
+            id: 'vnext-replace-test',
+            resourceId,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        });
+
+        const memoryConfig: MemoryConfig = {
+          workingMemory: { enabled: true, scope: 'resource', template },
+        };
+
+        await memory.updateWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '# User Information\n- **First Name**: Alice\n- **Location**: NYC',
+          memoryConfig,
+        });
+
+        const result = await memory.testExperimentalUpdateWorkingMemoryVNext({
+          threadId: thread.id,
+          resourceId,
+          workingMemory: '- **Location**: Los Angeles',
+          searchString: '- **Location**: NYC',
+          memoryConfig,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.reason).toContain('replaced');
+
+        const finalMemory = await memory.getWorkingMemory({
+          threadId: thread.id,
+          resourceId,
+          memoryConfig,
+        });
+
+        expect(finalMemory).toContain('Alice');
+        expect(finalMemory).toContain('Los Angeles');
+        expect(finalMemory).not.toContain('NYC');
       });
     });
   });
