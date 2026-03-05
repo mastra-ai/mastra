@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, 'utf8'));
@@ -35,7 +35,7 @@ function summarizeStep(stepDir) {
   const drop = typeof preTokens === 'number' && typeof postTokens === 'number' ? preTokens - postTokens : null;
 
   return {
-    step: stepDir.split('/').pop(),
+    step: basename(stepDir),
     preTokens,
     postTokens,
     drop,

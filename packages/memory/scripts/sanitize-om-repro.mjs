@@ -120,6 +120,10 @@ function redactPathLikeSegments(value) {
 
   return value
     .replace(/\/Users\/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._@\-]+)+/g, '<redacted-path>')
+    .replace(/\/home\/[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._@\-]+)+/g, '<redacted-path>')
+    .replace(/~\/(?:[A-Za-z0-9._@\-]+\/)+[A-Za-z0-9._@\-]+/g, '<redacted-path>')
+    .replace(/[A-Za-z]:\\(?:Users|home)\\[A-Za-z0-9._-]+(?:\\[A-Za-z0-9._@\-]+)+/g, '<redacted-path>')
+    .replace(/\\\\[^\\/]+\\[^\\/]+(?:\\[^\\/]+)+/g, '<redacted-path>')
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '<redacted-email>');
 }
 

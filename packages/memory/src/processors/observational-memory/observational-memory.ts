@@ -71,7 +71,7 @@ import {
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
-import { safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
+import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -2742,9 +2742,14 @@ ${suggestedResponse}
 
     // Fetch fresh record
     let record = await this.getOrCreateRecord(threadId, resourceId);
-    const preRecordSnapshot = safeCaptureJson(record) as ObservationalMemoryRecord;
-    const preMessagesSnapshot = safeCaptureJson(messageList.get.all.db()) as MastraDBMessage[];
-    const preSerializedMessageList = safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>;
+    const reproCaptureEnabled = isOmReproCaptureEnabled();
+    const preRecordSnapshot = reproCaptureEnabled ? (safeCaptureJson(record) as ObservationalMemoryRecord) : null;
+    const preMessagesSnapshot = reproCaptureEnabled
+      ? (safeCaptureJson(messageList.get.all.db()) as MastraDBMessage[])
+      : null;
+    const preSerializedMessageList = reproCaptureEnabled
+      ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
+      : null;
     const reproCaptureDetails: Record<string, unknown> = {
       step0Activation: null,
       thresholdCleanup: null,
@@ -3164,31 +3169,33 @@ ${suggestedResponse}
       // Persist the computed token count so the UI can display it on page load
       this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
 
-      writeProcessInputStepReproCapture({
-        threadId,
-        resourceId,
-        stepNumber,
-        args,
-        preRecord: preRecordSnapshot,
-        postRecord: freshRecord,
-        preMessages: preMessagesSnapshot,
-        preBufferedChunks: this.getBufferedChunks(preRecordSnapshot),
-        preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
-        preSerializedMessageList,
-        postBufferedChunks: this.getBufferedChunks(freshRecord),
-        postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
-        messageList,
-        details: {
-          ...reproCaptureDetails,
-          totalPendingTokens,
-          threshold,
-          effectiveObservationTokensThreshold,
-          currentObservationTokens,
-          otherThreadTokens,
-          contextMessageCount: contextMessages.length,
-        },
-        debug: omDebug,
-      });
+      if (reproCaptureEnabled && preRecordSnapshot && preMessagesSnapshot && preSerializedMessageList) {
+        writeProcessInputStepReproCapture({
+          threadId,
+          resourceId,
+          stepNumber,
+          args,
+          preRecord: preRecordSnapshot,
+          postRecord: freshRecord,
+          preMessages: preMessagesSnapshot,
+          preBufferedChunks: this.getBufferedChunks(preRecordSnapshot),
+          preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
+          preSerializedMessageList,
+          postBufferedChunks: this.getBufferedChunks(freshRecord),
+          postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
+          messageList,
+          details: {
+            ...reproCaptureDetails,
+            totalPendingTokens,
+            threshold,
+            effectiveObservationTokensThreshold,
+            currentObservationTokens,
+            otherThreadTokens,
+            contextMessageCount: contextMessages.length,
+          },
+          debug: omDebug,
+        });
+      }
     }
 
     return messageList;
