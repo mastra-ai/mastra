@@ -638,7 +638,7 @@ describe('ToolStream - writer.custom', () => {
     });
 
     // Collect all stream chunks
-    const chunks: ChunkType[] = [];
+    const chunks: ChunkType<any>[] = [];
     for await (const chunk of stream.fullStream) {
       chunks.push(chunk);
     }
