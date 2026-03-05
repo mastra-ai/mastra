@@ -40,33 +40,42 @@ Use this to stop a long-running background process that was started with execute
     const killed = await sandbox.processes.kill(pid);
 
     if (!killed) {
+      const output = `Process ${pid} was not found or had already exited.`;
       await context?.writer?.custom({
         type: 'data-sandbox-exit',
-        data: { exitCode: handle?.exitCode ?? -1, success: false, killed: false, toolCallId },
+        data: { exitCode: handle?.exitCode ?? -1, success: false, killed: false, outputTokensEstimate: 0, toolCallId },
       });
-      return `Process ${pid} was not found or had already exited.`;
+      return output;
     }
 
-    await context?.writer?.custom({
-      type: 'data-sandbox-exit',
-      data: { exitCode: handle?.exitCode ?? 137, success: false, killed: true, toolCallId },
-    });
-
     const parts: string[] = [`Process ${pid} has been killed.`];
+    let outputTokensEstimate = 0;
 
     if (handle) {
       const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS]?.maxOutputTokens;
-      const stdout = handle.stdout ? await truncateOutput(handle.stdout, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
-      const stderr = handle.stderr ? await truncateOutput(handle.stderr, KILL_TAIL_LINES, tokenLimit, 'sandwich') : '';
+      const stdoutResult = handle.stdout
+        ? await truncateOutput(handle.stdout, KILL_TAIL_LINES, tokenLimit, 'sandwich')
+        : { text: '', tokens: 0 };
+      const stderrResult = handle.stderr
+        ? await truncateOutput(handle.stderr, KILL_TAIL_LINES, tokenLimit, 'sandwich')
+        : { text: '', tokens: 0 };
+      outputTokensEstimate = stdoutResult.tokens + stderrResult.tokens;
 
-      if (stdout) {
-        parts.push('', '--- stdout (last output) ---', stdout);
+      if (stdoutResult.text) {
+        parts.push('', '--- stdout (last output) ---', stdoutResult.text);
       }
-      if (stderr) {
-        parts.push('', '--- stderr (last output) ---', stderr);
+      if (stderrResult.text) {
+        parts.push('', '--- stderr (last output) ---', stderrResult.text);
       }
     }
 
-    return parts.join('\n');
+    const output = parts.join('\n');
+
+    await context?.writer?.custom({
+      type: 'data-sandbox-exit',
+      data: { exitCode: handle?.exitCode ?? 137, success: false, killed: true, outputTokensEstimate, toolCallId },
+    });
+
+    return output;
   },
 });

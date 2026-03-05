@@ -198,7 +198,7 @@ export const SandboxExecutionBadge = ({
 
   // Exit chunk scoped to this tool call
   const exitChunk = dataParts.find(chunk => chunk.name === 'sandbox-exit' && chunk.data?.toolCallId === toolCallId) as
-    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs?: number; killed?: boolean } }
+    | { name: string; data: { exitCode: number; success: boolean; executionTimeMs?: number; killed?: boolean; outputTokensEstimate?: number } }
     | undefined;
 
   // Streaming is complete if we have exit chunk or a final result
@@ -213,6 +213,7 @@ export const SandboxExecutionBadge = ({
   const exitSuccess = exitChunk?.data?.success;
   const executionTime = exitChunk?.data?.executionTimeMs;
   const wasKilled = exitChunk?.data?.killed;
+  const outputTokensEstimate = exitChunk?.data?.outputTokensEstimate;
 
   // Combine streaming output into a single string
   const streamingContent = sandboxChunks.map(chunk => chunk.data?.output || '').join('');
@@ -285,6 +286,11 @@ export const SandboxExecutionBadge = ({
                   </span>
                 ))}
               {executionTime !== undefined && <span className="text-neutral6 text-xs">{executionTime}ms</span>}
+              {outputTokensEstimate !== undefined && outputTokensEstimate > 1000 && (
+                <span className="text-neutral6 text-xs">
+                  {(outputTokensEstimate / 1000).toFixed(1)}k tokens
+                </span>
+              )}
             </>
           )}
         </div>
