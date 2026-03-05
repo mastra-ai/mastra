@@ -4,7 +4,7 @@ import { getTiktoken } from '../../utils/tiktoken';
 export const DEFAULT_TAIL_LINES = 200;
 
 /** Default estimated token limit for tool output. Safety net on top of line-based tail. */
-export const DEFAULT_MAX_OUTPUT_TOKENS = 3_000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 2_000;
 
 // ---------------------------------------------------------------------------
 // ANSI stripping
@@ -68,13 +68,14 @@ export function applyTail(output: string, tail: number | null | undefined): stri
 
 /**
  * Token-based output limit. Truncates output to fit within a token budget.
- * Uses tiktoken for accurate token counting.
+ * Uses tiktoken for accurate token counting and truncates at the token level
+ * (not line boundaries) to maximise use of the budget.
  *
  * @param output - The text to truncate
  * @param limit - Maximum tokens (default: DEFAULT_MAX_OUTPUT_TOKENS)
  * @param from - Which end to truncate from:
- *   - `'start'` (default): Remove lines from the start, keep the end
- *   - `'end'`: Remove lines from the end, keep the start
+ *   - `'start'` (default): Remove tokens from the start, keep the end
+ *   - `'end'`: Remove tokens from the end, keep the start
  */
 export async function applyTokenLimit(
   output: string,
@@ -84,39 +85,15 @@ export async function applyTokenLimit(
   if (!output) return output;
 
   const tiktoken = await getTiktoken();
-  const tokens = tiktoken.encode(output).length;
-  if (tokens <= limit) return output;
+  const allTokens = tiktoken.encode(output, 'all');
+  if (allTokens.length <= limit) return output;
 
-  const trailingNewline = output.endsWith('\n');
-  const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
+  const kept = from === 'start' ? tiktoken.decode(allTokens.slice(-limit)) : tiktoken.decode(allTokens.slice(0, limit));
 
-  const kept: string[] = [];
-  let keptTokens = 0;
-
-  if (from === 'start') {
-    // Keep the end — iterate backwards
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const lineTokens = tiktoken.encode(lines[i]!).length;
-      if (keptTokens + lineTokens > limit && kept.length > 0) break;
-      kept.unshift(lines[i]!);
-      keptTokens += lineTokens;
-    }
-  } else {
-    // Keep the start — iterate forwards
-    for (let i = 0; i < lines.length; i++) {
-      const lineTokens = tiktoken.encode(lines[i]!).length;
-      if (keptTokens + lineTokens > limit && kept.length > 0) break;
-      kept.push(lines[i]!);
-      keptTokens += lineTokens;
-    }
-  }
-
-  if (kept.length >= lines.length) return output; // nothing to truncate
-  const body = kept.join('\n') + (trailingNewline && from === 'start' ? '\n' : '');
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
-    ? `[output truncated: showing ${position} ~${keptTokens} of ~${tokens} tokens]\n${body}`
-    : `${body}\n[output truncated: showing ${position} ~${keptTokens} of ~${tokens} tokens]`;
+    ? `[output truncated: showing ${position} ~${limit} of ~${allTokens.length} tokens]\n${kept}`
+    : `${kept}\n[output truncated: showing ${position} ~${limit} of ~${allTokens.length} tokens]`;
 }
 
 /**
@@ -136,41 +113,16 @@ export async function applyTokenLimitSandwich(
   if (!output) return output;
 
   const tiktoken = await getTiktoken();
-  const tokens = tiktoken.encode(output).length;
-  if (tokens <= limit) return output;
-
-  const trailingNewline = output.endsWith('\n');
-  const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
-
+  const allTokens = tiktoken.encode(output, 'all');
+  if (allTokens.length <= limit) return output;
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
-  // Collect head lines (from the start)
-  const headLines: string[] = [];
-  let headTokens = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const lineTokens = tiktoken.encode(lines[i]!).length;
-    if (headTokens + lineTokens > headBudget && headLines.length > 0) break;
-    headLines.push(lines[i]!);
-    headTokens += lineTokens;
-  }
+  const head = headBudget > 0 ? tiktoken.decode(allTokens.slice(0, headBudget)) : '';
+  const tail = tailBudget > 0 ? tiktoken.decode(allTokens.slice(-tailBudget)) : '';
 
-  // Collect tail lines (from the end, not overlapping with head)
-  const tailLines: string[] = [];
-  let tailTokens = 0;
-  for (let i = lines.length - 1; i >= headLines.length; i--) {
-    const lineTokens = tiktoken.encode(lines[i]!).length;
-    if (tailTokens + lineTokens > tailBudget && tailLines.length > 0) break;
-    tailLines.unshift(lines[i]!);
-    tailTokens += lineTokens;
-  }
-
-  if (headLines.length + tailLines.length >= lines.length) return output;
-
-  const omitted = lines.length - headLines.length - tailLines.length;
-  const head = headLines.join('\n');
-  const tail = tailLines.join('\n') + (trailingNewline ? '\n' : '');
-  return `${head}\n[...${omitted} lines truncated — showing first ~${headTokens} + last ~${tailTokens} of ~${tokens} tokens...]\n${tail}`;
+  const notice = `[...output truncated — showing first ~${headBudget} + last ~${tailBudget} of ~${allTokens.length} tokens...]`;
+  return [head, notice, tail].filter(Boolean).join('\n');
 }
 
 /**

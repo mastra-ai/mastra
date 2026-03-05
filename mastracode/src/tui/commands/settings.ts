@@ -1,4 +1,4 @@
-import type { StorageBackend } from '../../onboarding/settings.js';
+import type { StorageBackend, ThinkingLevelSetting } from '../../onboarding/settings.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { SettingsComponent } from '../components/settings.js';
 import type { NotificationMode } from '../notify.js';
@@ -30,6 +30,9 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       },
       onThinkingLevelChange: async level => {
         await ctx.state.harness.setState({ thinkingLevel: level } as any);
+        const current = loadSettings();
+        current.preferences.thinkingLevel = level as ThinkingLevelSetting;
+        saveSettings(current);
       },
       onEscapeAsCancelChange: async enabled => {
         ctx.state.editor.escapeEnabled = enabled;

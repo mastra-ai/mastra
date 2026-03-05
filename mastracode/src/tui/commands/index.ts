@@ -28,3 +28,4 @@ export { handleReviewCommand } from './review.js';
 export { handleReportIssueCommand } from './report-issue.js';
 export { handleSetupCommand } from './setup.js';
 export { handleThemeCommand } from './theme.js';
+export { handleUpdateCommand } from './update.js';

@@ -2267,6 +2267,7 @@ export interface UpdateExperimentInput {
   description?: string;
   metadata?: Record<string, unknown>;
   status?: ExperimentStatus;
+  totalItems?: number;
   succeededCount?: number;
   failedCount?: number;
   skippedCount?: number;

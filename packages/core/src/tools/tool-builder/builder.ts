@@ -479,7 +479,10 @@ export class CoreToolBuilder extends MastraBase {
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = processedSchema || this.getParameters();
         const { data, error } = validateToolInput(parameters, args, options.name);
-        if (error) {
+        //suspendedToolRunId is only required when resumeData is provided
+        const suspendedToolRunIdErrToIgnore =
+          error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
+        if (error && !suspendedToolRunIdErrToIgnore) {
           logger.warn(error.message);
           return error;
         }

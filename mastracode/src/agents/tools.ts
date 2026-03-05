@@ -2,13 +2,55 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
+/** Minimal shape for tools passed to createDynamicTools. */
+interface ToolLike {
+  execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown;
+  [key: string]: unknown;
+}
+
+function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
+  if (!hookManager || typeof tool?.execute !== 'function') {
+    return tool;
+  }
+
+  return {
+    ...tool,
+    async execute(input: unknown, toolContext: unknown) {
+      const preResult = await hookManager.runPreToolUse(toolName, input);
+      if (!preResult.allowed) {
+        return {
+          error: preResult.blockReason ?? `Blocked by PreToolUse hook for tool "${toolName}"`,
+        };
+      }
+
+      let output: unknown;
+      let toolError = false;
+      try {
+        output = await tool.execute(input, toolContext);
+        return output;
+      } catch (error) {
+        toolError = true;
+        output = {
+          error: error instanceof Error ? error.message : String(error),
+        };
+        throw error;
+      } finally {
+        await hookManager.runPostToolUse(toolName, input, output, toolError).catch(() => undefined);
+      }
+    },
+  };
+}
+
 export function createDynamicTools(
   mcpManager?: McpManager,
-  extraTools?: Record<string, any> | ((ctx: { requestContext: RequestContext }) => Record<string, any>),
+  extraTools?: Record<string, ToolLike> | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike>),
+  hookManager?: HookManager,
+  disabledTools?: string[],
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<typeof stateSchema> | undefined;
@@ -21,8 +63,8 @@ export function createDynamicTools(
     // Filesystem, grep, glob, edit, write, execute_command, and process
     // management tools are now provided by the workspace (see workspace.ts).
     // Only tools without a workspace equivalent remain here.
-    const tools: Record<string, any> = {
-      request_sandbox_access: requestSandboxAccessTool,
+    const tools: Record<string, ToolLike> = {
+      request_access: requestSandboxAccessTool,
     };
 
     if (hasTavilyKey()) {
@@ -50,6 +92,13 @@ export function createDynamicTools(
       }
     }
 
+    // Remove tools explicitly disabled via config so the model never sees them.
+    if (disabledTools?.length) {
+      for (const toolName of disabledTools) {
+        delete tools[toolName];
+      }
+    }
+
     // Remove tools that have a per-tool 'deny' policy so the model never sees them.
     const permissionRules = state?.permissionRules;
     if (permissionRules?.tools) {
@@ -58,6 +107,10 @@ export function createDynamicTools(
           delete tools[name];
         }
       }
+    }
+
+    for (const [toolName, tool] of Object.entries(tools)) {
+      tools[toolName] = wrapToolWithHooks(toolName, tool, hookManager);
     }
 
     return tools;
