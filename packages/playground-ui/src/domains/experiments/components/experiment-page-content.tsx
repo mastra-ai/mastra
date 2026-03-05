@@ -160,7 +160,7 @@ export function ExperimentPageContent({
       </TabList>
 
       <TabContent value="summary" className="overflow-y-auto mt-5">
-        <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} />
+        <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
       </TabContent>
 
       <TabContent value="results" className="grid overflow-hidden mt-5">

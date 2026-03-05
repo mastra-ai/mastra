@@ -6,6 +6,7 @@ import { ItemList } from '@/ds/components/ItemList';
 
 export type ExperimentScorerSummaryProps = {
   scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  experimentStatus?: string;
 };
 
 const columns = [
@@ -14,7 +15,7 @@ const columns = [
   { name: 'count', label: 'Items Scored', size: '1fr' },
 ];
 
-export function ExperimentScorerSummary({ scoresByItemId }: ExperimentScorerSummaryProps) {
+export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: ExperimentScorerSummaryProps) {
   const scorerSummaries = useMemo(() => {
     if (!scoresByItemId) return [];
 
@@ -40,12 +41,17 @@ export function ExperimentScorerSummary({ scoresByItemId }: ExperimentScorerSumm
   }, [scoresByItemId]);
 
   if (scorerSummaries.length === 0) {
+    const isRunning = experimentStatus === 'running' || experimentStatus === 'pending';
     return (
       <div className="flex h-full items-center justify-center py-12">
         <EmptyState
           iconSlot={<GaugeIcon className="w-8 h-8 text-neutral3" />}
-          titleSlot="No scorers configured"
-          descriptionSlot="Add scorers when triggering an experiment to evaluate results and see summary metrics here."
+          titleSlot={isRunning ? 'Experiment in progress' : 'No scorers configured'}
+          descriptionSlot={
+            isRunning
+              ? 'Summary metrics will appear here once the experiment completes.'
+              : 'Add scorers when triggering an experiment to evaluate results and see summary metrics here.'
+          }
         />
       </div>
     );
