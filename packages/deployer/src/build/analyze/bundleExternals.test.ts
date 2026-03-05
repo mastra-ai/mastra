@@ -326,7 +326,7 @@ export { default } from 'full-lib';`,
     expect(result.fileNameToDependencyMap.get(compiledDepCachePath)).toBe('@workspace/internal-lib');
     expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
       name: compiledDepCachePath,
-      virtual: "export { internalUtil, default } from '@workspace/internal-lib';",
+      virtual: "export * from '@workspace/internal-lib';\nexport { default } from '@workspace/internal-lib';",
     });
   });
 
@@ -361,7 +361,7 @@ export { default } from 'full-lib';`,
 
     expect(result.optimizedDependencyEntries.get('@workspace/internal-lib')).toEqual({
       name: 'app/.mastra/.build/@workspace__internal-lib',
-      virtual: "export { internalUtil, default } from '@workspace/internal-lib';",
+      virtual: "export * from '@workspace/internal-lib';\nexport { default } from '@workspace/internal-lib';",
     });
   });
 });
