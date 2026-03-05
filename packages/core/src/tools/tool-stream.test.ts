@@ -1,11 +1,10 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import type { ChunkType } from '../stream/types';
-import { delay } from '../utils';
 import { createStep, createWorkflow } from '../workflows/workflow';
 import { createTool } from '.';
 
@@ -535,30 +534,21 @@ describe('ToolStream - writer.custom', () => {
     const dataChunks = chunks.filter(chunk => chunk.type === 'data-progress');
     expect(dataChunks.length).toBe(2);
 
-    // Wait for debounced save to complete
-    await delay(200);
+    // Wait for debounced save to flush to storage
+    await vi.waitFor(async () => {
+      const recalledMessages = await mockMemory.recall({ threadId, resourceId });
+      const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThan(0);
 
-    // Retrieve messages from storage
-    const recalledMessages = await mockMemory.recall({
-      threadId,
-      resourceId,
+      const hasDataParts = assistantMessages.some(m => {
+        const content = m.content;
+        if (typeof content === 'object' && 'parts' in content) {
+          return content.parts.some((p: any) => p.type === 'data-progress');
+        }
+        return false;
+      });
+      expect(hasDataParts).toBe(true);
     });
-
-    // Find assistant messages
-    const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
-    expect(assistantMessages.length).toBeGreaterThan(0);
-
-    // Check if any assistant message contains data parts (stored as { type: 'data-progress', data: ... })
-    const hasDataParts = assistantMessages.some(m => {
-      const content = m.content;
-      if (typeof content === 'object' && 'parts' in content) {
-        return content.parts.some((p: any) => p.type === 'data-progress');
-      }
-      return false;
-    });
-
-    // data-* chunks should now be persisted to storage
-    expect(hasDataParts).toBe(true);
   });
 
   it('should stream transient data-* chunks but not persist them to storage', async () => {
@@ -662,35 +652,29 @@ describe('ToolStream - writer.custom', () => {
     expect(stderrChunks.length).toBe(1);
     expect(exitChunks.length).toBe(1);
 
-    // Wait for debounced save to complete
-    await delay(200);
+    // Wait for debounced save to flush to storage
+    await vi.waitFor(async () => {
+      const recalledMessages = await mockMemory.recall({ threadId, resourceId });
+      const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThan(0);
 
-    // Retrieve messages from storage
-    const recalledMessages = await mockMemory.recall({
-      threadId,
-      resourceId,
+      const allDataParts = assistantMessages.flatMap(m => {
+        const content = m.content;
+        if (typeof content === 'object' && 'parts' in content) {
+          return content.parts.filter((p: any) => typeof p.type === 'string' && p.type.startsWith('data-'));
+        }
+        return [];
+      });
+
+      // Non-transient exit chunk should be persisted
+      const exitParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-exit');
+      expect(exitParts.length).toBe(1);
+
+      // Transient stdout/stderr chunks should NOT be persisted
+      const stdoutParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-stdout');
+      const stderrParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-stderr');
+      expect(stdoutParts.length).toBe(0);
+      expect(stderrParts.length).toBe(0);
     });
-
-    const assistantMessages = recalledMessages.messages.filter(m => m.role === 'assistant');
-    expect(assistantMessages.length).toBeGreaterThan(0);
-
-    // Check which data-* types were persisted
-    const allDataParts = assistantMessages.flatMap(m => {
-      const content = m.content;
-      if (typeof content === 'object' && 'parts' in content) {
-        return content.parts.filter((p: any) => typeof p.type === 'string' && p.type.startsWith('data-'));
-      }
-      return [];
-    });
-
-    // Non-transient exit chunk should be persisted
-    const exitParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-exit');
-    expect(exitParts.length).toBe(1);
-
-    // Transient stdout/stderr chunks should NOT be persisted
-    const stdoutParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-stdout');
-    const stderrParts = allDataParts.filter((p: any) => p.type === 'data-sandbox-stderr');
-    expect(stdoutParts.length).toBe(0);
-    expect(stderrParts.length).toBe(0);
   });
 });
