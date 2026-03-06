@@ -24,6 +24,7 @@
     "vale": "scripts/vale/bin/vale",
     "vale:sync": "scripts/vale/bin/vale sync",
     "lint:vale": "scripts/vale/bin/vale src/content/en/docs src/content/en/guides src/content/en/reference src/learn/content",
+    "lint:vale:ai": "pnpm lint:vale --minAlertLevel=error --output=line",
     "lint:remark": "remark --no-stdout --frail --quiet --ext mdx src/content/en/docs src/content/en/guides src/content/en/reference src/learn/content",
     "lint:prose": "npm-run-all --parallel lint:vale lint:remark",
     "test": "vitest run",
