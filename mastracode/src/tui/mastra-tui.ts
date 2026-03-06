@@ -18,8 +18,16 @@ import {
 } from '../onboarding/index.js';
 import type { OnboardingResult, ProviderAccess, ProviderAccessLevel } from '../onboarding/index.js';
 import { resolveThreadActiveModelPackId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
+import {
+  detectPackageManager,
+  fetchLatestVersion,
+  getInstallCommand,
+  isNewerVersion,
+  runUpdate,
+} from '../utils/update-check.js';
 import { showClaudeMaxOAuthWarning } from './claude-max-warning.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
+
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
@@ -61,13 +69,22 @@ export type { MastraTUIOptions } from './state.js';
 // MastraTUI Class
 // =============================================================================
 
+/** How often to recheck for updates during a long-running session (ms). */
+const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
+
 export class MastraTUI {
   private state: TUIState;
+  private updateCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private hasShownUpdateBanner = false;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
 
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
+
+    // Load user preferences
+    const savedSettings = loadSettings();
+    this.state.quietMode = savedSettings.preferences.quietMode;
 
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
@@ -211,7 +228,8 @@ export class MastraTUI {
    * Errors are handled via harness events.
    */
   private fireMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
-    this.state.harness.sendMessage({ content, images: images ? images : undefined }).catch(error => {
+    const files = images?.map(img => ({ data: img.data, mediaType: img.mimeType }));
+    this.state.harness.sendMessage({ content, files }).catch(error => {
       showError(this.state, error instanceof Error ? error.message : 'Unknown error');
     });
   }
@@ -224,6 +242,11 @@ export class MastraTUI {
     const hookMgr = this.state.hookManager;
     if (hookMgr) {
       hookMgr.runSessionEnd().catch(() => {});
+    }
+
+    if (this.updateCheckTimer) {
+      clearInterval(this.updateCheckTimer);
+      this.updateCheckTimer = null;
     }
 
     if (this.state.unsubscribe) {
@@ -287,14 +310,17 @@ export class MastraTUI {
     // One-time Claude Max OAuth warning at startup
     await this.checkClaudeMaxOAuthWarning();
 
-    // Show deferred thread lock prompt (must happen after TUI is started)
-    if (this.state.pendingLockConflict) {
-      this.showThreadLockPrompt(this.state.pendingLockConflict.threadTitle, this.state.pendingLockConflict.ownerPid);
-      this.state.pendingLockConflict = null;
-      // Skip onboarding when there's a lock conflict — it'll run on next clean startup
-    } else if (this.shouldShowOnboarding()) {
+    if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
+
+    // Check for updates (after onboarding so it doesn't interfere)
+    await this.checkForUpdate();
+
+    // Periodically recheck for updates during long-running sessions (passive only)
+    this.updateCheckTimer = setInterval(() => {
+      void this.checkForUpdate(/* passive */ true);
+    }, UPDATE_RECHECK_INTERVAL_MS);
   }
 
   private async refreshModelAuthStatus(): Promise<void> {
@@ -334,18 +360,28 @@ export class MastraTUI {
   private async buildProviderAccess(): Promise<ProviderAccess> {
     const models = await this.state.harness.listAvailableModels();
     const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-    const accessLevel = (provider: string, oauthId: string): ProviderAccessLevel => {
-      if (this.state.authStorage?.isLoggedIn(oauthId)) return 'oauth';
-      if (hasEnv(provider)) return 'apikey';
+    const accessLevel = (storageProviderId: string): ProviderAccessLevel => {
+      const cred = this.state.authStorage?.get(storageProviderId);
+      if (cred?.type === 'oauth') return 'oauth';
+      if (cred?.type === 'api_key' && cred.key.trim().length > 0) return 'apikey';
       return false;
     };
-    return {
-      anthropic: accessLevel('anthropic', 'anthropic'),
-      openai: accessLevel('openai', 'openai-codex'),
+    const access: ProviderAccess = {
+      anthropic: accessLevel('anthropic'),
+      openai: accessLevel('openai-codex'),
       cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
       google: hasEnv('google') ? ('apikey' as const) : false,
       deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
     };
+    // Include all other providers that have API keys configured
+    const seen = new Set(Object.keys(access));
+    for (const m of models) {
+      if (!seen.has(m.provider) && m.hasApiKey) {
+        access[m.provider] = 'apikey';
+        seen.add(m.provider);
+      }
+    }
+    return access;
   }
 
   private async syncThreadActivePackMetadata(thread?: {
@@ -452,46 +488,6 @@ export class MastraTUI {
         resolve(text);
       };
     });
-  }
-
-  /**
-   * Show an inline prompt when a thread is locked by another process.
-   * User can create a new thread (y) or exit (n).
-   */
-  private showThreadLockPrompt(threadTitle: string, ownerPid: number): void {
-    const questionComponent = new AskQuestionInlineComponent(
-      {
-        question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. Create a new thread?`,
-        options: [
-          { label: 'Yes', description: 'Start a new thread' },
-          { label: 'No', description: 'Exit' },
-        ],
-        formatResult: answer => (answer === 'Yes' ? 'Thread created' : 'Exiting.'),
-        onSubmit: async answer => {
-          this.state.activeInlineQuestion = undefined;
-          if (answer.toLowerCase().startsWith('y')) {
-            // pendingNewThread is already true — thread will be
-            // created lazily on first message
-            if (this.shouldShowOnboarding()) {
-              await this.showOnboarding();
-            }
-          } else {
-            process.exit(0);
-          }
-        },
-        onCancel: () => {
-          this.state.activeInlineQuestion = undefined;
-          process.exit(0);
-        },
-      },
-      this.state.ui,
-    );
-
-    this.state.activeInlineQuestion = questionComponent;
-    this.state.chatContainer.addChild(questionComponent);
-    this.state.chatContainer.addChild(new Spacer(1));
-    this.state.ui.requestRender();
-    this.state.chatContainer.invalidate();
   }
 
   /**
@@ -855,5 +851,114 @@ export class MastraTUI {
       return ob.version < ONBOARDING_VERSION;
     }
     return true;
+  }
+
+  // ===========================================================================
+  // Auto-Update
+  // ===========================================================================
+
+  /**
+   * Check npm for a newer version and prompt the user to update.
+   * - If the user previously dismissed this version, show a passive note instead.
+   * - If the fetch fails or we're already up-to-date, silently return.
+   * @param passive When true, only show an info message (used for periodic rechecks).
+   */
+  private async checkForUpdate(passive = false): Promise<void> {
+    const currentVersion = this.state.options.version;
+    if (!currentVersion) return;
+
+    const latestVersion = await fetchLatestVersion();
+    if (!latestVersion || !isNewerVersion(currentVersion, latestVersion)) return;
+
+    // Passive mode or previously dismissed — show info message only once
+    if (passive) {
+      if (!this.hasShownUpdateBanner) {
+        this.hasShownUpdateBanner = true;
+        showInfo(
+          this.state,
+          `Update available: v${latestVersion} (current: v${currentVersion}). Run /update to update.`,
+        );
+      }
+      return;
+    }
+
+    const settings = loadSettings();
+
+    // User previously dismissed this exact version — show passive banner note only once
+    if (settings.updateDismissedVersion && !isNewerVersion(settings.updateDismissedVersion, latestVersion)) {
+      if (!this.hasShownUpdateBanner) {
+        this.hasShownUpdateBanner = true;
+        showInfo(
+          this.state,
+          `Update available: v${latestVersion} (current: v${currentVersion}). Run /update to update.`,
+        );
+      }
+      return;
+    }
+
+    const pm = await detectPackageManager();
+
+    // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
+    this.hasShownUpdateBanner = true;
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm);
+  }
+
+  /**
+   * Show an inline Y/N prompt offering to auto-update.
+   */
+  private showUpdatePrompt(
+    currentVersion: string,
+    latestVersion: string,
+    pm: Awaited<ReturnType<typeof detectPackageManager>>,
+  ): Promise<void> {
+    return new Promise<void>(resolve => {
+      const questionComponent = new AskQuestionInlineComponent(
+        {
+          question: `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}). Would you like to update now?`,
+          options: [
+            { label: 'Yes', description: 'Update and restart' },
+            { label: 'No', description: 'Skip this version' },
+          ],
+          formatResult: answer => (answer === 'Yes' ? 'Updating…' : 'Update skipped.'),
+          onSubmit: async answer => {
+            this.state.activeInlineQuestion = undefined;
+            if (answer === 'Yes') {
+              showInfo(this.state, `Updating to v${latestVersion}…`);
+              const ok = await runUpdate(pm, latestVersion);
+              if (ok) {
+                showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+                this.stop();
+                process.exit(0);
+              } else {
+                const cmd = getInstallCommand(pm, latestVersion);
+                showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+              }
+            } else {
+              // User declined — save the dismissed version
+              const settings = loadSettings();
+              settings.updateDismissedVersion = latestVersion;
+              saveSettings(settings);
+              showInfo(this.state, `Update skipped. Run /update to update later.`);
+            }
+            resolve();
+          },
+          onCancel: () => {
+            this.state.activeInlineQuestion = undefined;
+            // Treat cancel (Esc / Ctrl+C) the same as "No"
+            const settings = loadSettings();
+            settings.updateDismissedVersion = latestVersion;
+            saveSettings(settings);
+            resolve();
+          },
+        },
+        this.state.ui,
+      );
+
+      this.state.activeInlineQuestion = questionComponent;
+      this.state.chatContainer.addChild(questionComponent);
+      this.state.chatContainer.addChild(new Spacer(1));
+      this.state.ui.requestRender();
+      this.state.chatContainer.invalidate();
+    });
   }
 }

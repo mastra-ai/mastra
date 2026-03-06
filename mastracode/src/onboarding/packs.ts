@@ -37,6 +37,7 @@ export interface ProviderAccess {
   cerebras: ProviderAccessLevel;
   google: ProviderAccessLevel;
   deepseek: ProviderAccessLevel;
+  [provider: string]: ProviderAccessLevel;
 }
 
 // ---------------------------------------------------------------------------

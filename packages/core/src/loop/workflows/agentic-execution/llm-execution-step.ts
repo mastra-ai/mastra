@@ -1,13 +1,14 @@
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { getErrorFromUnknown } from '../../../error/utils.js';
+import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
@@ -23,6 +24,8 @@ import type {
   ChunkType,
   ExecuteStreamModelManager,
   ModelManagerModelConfig,
+  StreamTransport,
+  StreamTransportRef,
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
@@ -47,6 +50,8 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
     rawResponse: any;
   };
   logger?: IMastraLogger;
+  transportRef?: StreamTransportRef;
+  transportResolver?: () => StreamTransport | undefined;
 };
 
 async function processOutputStream<OUTPUT = undefined>({
@@ -60,7 +65,11 @@ async function processOutputStream<OUTPUT = undefined>({
   responseFromModel,
   includeRawChunks,
   logger,
+  transportRef,
+  transportResolver,
 }: ProcessOutputStreamOptions<OUTPUT>) {
+  let transportSet = false;
+
   for await (const chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
@@ -72,6 +81,14 @@ async function processOutputStream<OUTPUT = undefined>({
 
     if (!chunk) {
       continue;
+    }
+
+    if (!transportSet && transportRef && transportResolver) {
+      const transport = transportResolver();
+      if (transport) {
+        transportRef.current = transport;
+        transportSet = true;
+      }
     }
 
     if (chunk.type == 'object' || chunk.type == 'object-result') {
@@ -370,7 +387,7 @@ async function processOutputStream<OUTPUT = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
+            isContinued: !['stop', 'error', 'length'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -529,9 +546,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
 
-      const messageId = inputData.isTaskCompleteCheckFailed
+      let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
-        : messageIdPassed;
+        : inputData.messageId || messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
@@ -566,6 +583,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
 
         const currentStep: {
+          messageId: string;
           model: MastraLanguageModel;
           tools?: TOOLS | undefined;
           toolChoice?: ToolChoice<TOOLS> | undefined;
@@ -575,6 +593,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
           workspace?: Workspace;
         } = {
+          messageId: currentMessageId,
           model,
           tools,
           toolChoice,
@@ -614,6 +633,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               requestContext,
               model,
               steps: inputData.output?.steps || [],
+              messageId: currentStep.messageId,
+              rotateResponseMessageId: () => {
+                currentMessageId = _internal?.generateId?.() ?? generateId();
+                currentStep.messageId = currentMessageId;
+                return currentMessageId;
+              },
               tools,
               toolChoice,
               activeTools: activeTools as string[] | undefined,
@@ -662,7 +687,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     },
                   }),
                   messageList,
-                  messageId,
+                  messageId: currentStep.messageId,
                   options: { runId },
                 }),
                 runState,
@@ -800,7 +825,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     payload: {
                       request: request || {},
                       warnings: warnings || [],
-                      messageId: messageId,
+                      messageId: currentStep.messageId,
                     },
                   });
                 },
@@ -821,7 +846,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
           messageList,
-          messageId,
+          messageId: currentStep.messageId,
           options: {
             runId,
             toolCallStreaming,
@@ -835,12 +860,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
         });
 
+        let transportResolver: (() => StreamTransport | undefined) | undefined;
+        if (currentStep.model instanceof ModelRouterLanguageModel) {
+          const routerModel = currentStep.model;
+          transportResolver = () => routerModel._getStreamTransport();
+        }
+
         try {
           await processOutputStream({
             outputStream,
             includeRawChunks,
             tools: currentStep.tools,
-            messageId,
+            messageId: currentStep.messageId,
             messageList,
             runState,
             options,
@@ -851,6 +882,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               rawResponse,
             },
             logger,
+            transportRef: _internal?.transportRef,
+            transportResolver,
           });
         } catch (error) {
           const provider = model?.provider;
@@ -940,7 +973,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const text = outputStream._getImmediateText();
 
         return bail({
-          messageId,
+          messageId: outputStream.messageId,
           stepResult: {
             reason: 'tripwire',
             warnings,
@@ -987,7 +1020,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       if (toolCalls.length > 0) {
         const message: MastraDBMessage = {
-          id: messageId,
+          id: outputStream.messageId,
           role: 'assistant' as const,
           content: {
             format: 2,
@@ -1141,7 +1174,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Without this, the LLM sees the rejected assistant response in its prompt on retry,
       // which confuses models and often causes empty text responses.
       if (shouldRetry) {
-        messageList.removeByIds([messageId]);
+        messageList.removeByIds([outputStream.messageId]);
       }
 
       // Build retry feedback text if retrying
@@ -1164,13 +1197,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
       // - OR finishReason indicates more work (e.g., tool-use)
-      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error'].includes(finishReason));
+      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error', 'length'].includes(finishReason));
 
       // Increment processor retry count if we're retrying
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;
 
       return {
-        messageId,
+        messageId: outputStream.messageId,
         stepResult: {
           reason: stepReason,
           warnings,

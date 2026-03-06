@@ -496,10 +496,8 @@ if (hasBlaxelCredentials) {
       supportsEnvVars: true,
       supportsWorkingDirectory: true,
       supportsTimeout: true,
+      supportsStdin: false, // Blaxel SDK does not support stdin
       defaultCommandTimeout: 30000,
-    },
-    testDomains: {
-      processManagement: false, // BlaxelSandbox does not implement processes
     },
     testTimeout: 60000,
     createMountableFilesystem: hasS3Credentials

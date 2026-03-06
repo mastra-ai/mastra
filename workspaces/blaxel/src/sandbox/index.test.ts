@@ -1540,6 +1540,13 @@ describe('BlaxelSandbox Internal Methods', () => {
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
     });
 
+    it('returns true for Blaxel 404 JSON response', () => {
+      const sandbox = new BlaxelSandbox();
+      // Blaxel API returns this when a sandbox has expired/been deleted
+      const blaxel404 = { error: 'Not Found', status: 404, statusText: 'Not Found' };
+      expect((sandbox as any).isSandboxDeadError(blaxel404)).toBe(true);
+    });
+
     it('returns false for generic "not found" errors', () => {
       const sandbox = new BlaxelSandbox();
       expect((sandbox as any).isSandboxDeadError(new Error('File not found'))).toBe(false);

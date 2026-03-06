@@ -20,7 +20,9 @@ If you're using a [server adapter](/docs/server/server-adapters) or [web framewo
 
 You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Cloudflare](https://cloudflare.com/) account.
 
+:::warning
 Cloudflare Workers use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
+:::
 
 ## Installation
 

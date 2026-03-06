@@ -50,12 +50,13 @@ export default function Chat() {
 
 <PropertiesTable
   content={[
-{
-name: "messages",
-type: "MessageListInput",
-description: "Messages to convert. Can be a string, array of strings, a single message object, or an array of message objects in any supported format.",
-isOptional: false,
-},
+  {
+    name: 'messages',
+    type: 'MessageListInput',
+    description:
+      'Messages to convert. Can be a string, array of strings, a single message object, or an array of message objects in any supported format.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -65,27 +66,27 @@ Returns an array of AI SDK V5+ `UIMessage` objects with the following structure:
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique message identifier.",
-},
-{
-name: "role",
-type: "'user' | 'assistant' | 'system'",
-description: "The role of the message sender.",
-},
-{
-name: "parts",
-type: "UIMessagePart[]",
-description: "Array of UI parts including text, tool results, files, reasoning, sources, and step markers.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-description: "Optional metadata including createdAt, threadId, resourceId, and custom fields.",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique message identifier.',
+  },
+  {
+    name: 'role',
+    type: "'user' | 'assistant' | 'system'",
+    description: 'The role of the message sender.',
+  },
+  {
+    name: 'parts',
+    type: 'UIMessagePart[]',
+    description: 'Array of UI parts including text, tool results, files, reasoning, sources, and step markers.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Optional metadata including createdAt, threadId, resourceId, and custom fields.',
+    isOptional: true,
+  },
 ]}
 />
 

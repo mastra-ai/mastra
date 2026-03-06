@@ -35,6 +35,8 @@ export interface MountResult {
   mountPath: string;
   /** Error message if mount failed */
   error?: string;
+  /** True when mount failed because a required tool is not installed (not a real error) */
+  unavailable?: boolean;
 }
 
 // =============================================================================

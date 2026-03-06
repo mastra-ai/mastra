@@ -372,7 +372,7 @@ export function TraceDialog({
       <TraceAsItemDialog
         traceDetails={traceDetails}
         traceId={traceId}
-        isOpen={datasetDialogOpen}
+        isOpen={datasetDialogOpen && isOpen}
         onClose={() => setDatasetDialogOpen(false)}
       />
 

@@ -16,6 +16,44 @@ export interface ClipboardImage {
 }
 
 /**
+ * Read plain text from the system clipboard.
+ * Returns null if clipboard is empty or reading fails.
+ */
+export function getClipboardText(): string | null {
+  try {
+    if (process.platform === 'darwin') {
+      const text = execSync('pbpaste', {
+        encoding: 'utf-8',
+        timeout: 3000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return text.length > 0 ? text : null;
+    }
+    if (process.platform === 'linux') {
+      // Try xclip first, then wl-paste
+      try {
+        const text = execSync('xclip -selection clipboard -o', {
+          encoding: 'utf-8',
+          timeout: 3000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        return text.length > 0 ? text : null;
+      } catch {
+        const text = execSync('wl-paste', {
+          encoding: 'utf-8',
+          timeout: 3000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        return text.length > 0 ? text : null;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check the system clipboard for image data and return it as base64.
  * Returns null if no image data is found or extraction fails.
  */
