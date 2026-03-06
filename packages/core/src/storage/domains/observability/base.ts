@@ -1,5 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { StorageDomain } from '../base';
+import type { CreateFeedbackArgs, ListFeedbackArgs, ListFeedbackResponse } from './feedback';
+import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
+import type { BatchRecordMetricsArgs, ListMetricsArgs, ListMetricsResponse } from './metrics';
+import type { CreateScoreArgs, ListScoresArgs, ListScoresResponse } from './scores';
 import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
@@ -152,6 +156,118 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support batch deleting traces',
+    });
+  }
+
+  // ============================================================================
+  // Logs
+  // ============================================================================
+
+  /**
+   * Creates multiple log records in a single batch.
+   */
+  async batchCreateLogs(_args: BatchCreateLogsArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_BATCH_CREATE_LOGS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support creating logs',
+    });
+  }
+
+  /**
+   * Retrieves a list of logs with optional filtering.
+   */
+  async listLogs(_args: ListLogsArgs): Promise<ListLogsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_LOGS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing logs',
+    });
+  }
+
+  // ============================================================================
+  // Metrics
+  // ============================================================================
+
+  /**
+   * Records multiple metric observations in a single batch.
+   */
+  async batchRecordMetrics(_args: BatchRecordMetricsArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_BATCH_RECORD_METRICS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support recording metrics',
+    });
+  }
+
+  /**
+   * Retrieves a list of metrics with optional filtering.
+   */
+  async listMetrics(_args: ListMetricsArgs): Promise<ListMetricsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_METRICS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing metrics',
+    });
+  }
+
+  // ============================================================================
+  // Scores
+  // ============================================================================
+
+  /**
+   * Creates a single score record.
+   */
+  async createScore(_args: CreateScoreArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_CREATE_SCORE_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support creating scores',
+    });
+  }
+
+  /**
+   * Retrieves a list of scores with optional filtering.
+   */
+  async listScores(_args: ListScoresArgs): Promise<ListScoresResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_SCORES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing scores',
+    });
+  }
+
+  // ============================================================================
+  // Feedback
+  // ============================================================================
+
+  /**
+   * Creates a single feedback record.
+   */
+  async createFeedback(_args: CreateFeedbackArgs): Promise<void> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_CREATE_FEEDBACK_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support creating feedback',
+    });
+  }
+
+  /**
+   * Retrieves a list of feedback with optional filtering.
+   */
+  async listFeedback(_args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_LIST_FEEDBACK_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support listing feedback',
     });
   }
 }

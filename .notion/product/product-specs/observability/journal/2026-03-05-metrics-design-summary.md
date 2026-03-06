@@ -97,7 +97,7 @@ This creates a clean separation:
 
 Every metric emission (counter increment, gauge set, histogram observation) is stored as a raw row. Aggregation happens at query time. This is the simplest model and DuckDB/ClickHouse handle it efficiently.
 
-No rollup tables, no background aggregator, no retention management in v1. These become v2 optimizations if/when query-time aggregation becomes too slow at scale.
+No rollup tables or background aggregator in v1 for DuckDB (local/MVP). For production ClickHouse, materialized views are included from day one for standard dashboard queries (see ClickHouse Production Strategy below).
 
 ### Schema Shape
 
@@ -137,6 +137,36 @@ When a score or feedback is recorded, it's written to both:
 Dashboard charts for scores query the metrics table. Detail views query the scores table. Accepted duplication — they serve different query patterns and the storage cost is negligible in columnar OLAP.
 
 **Failure mode**: If one write succeeds and the other fails, the data is inconsistent between tables. This is acceptable for observability data (best-effort) — the same tolerance we apply to metric delivery in general.
+
+### ClickHouse Production Strategy
+
+#### Materialized Views (included in v1)
+
+For production ClickHouse deployments, we include materialized views from day one for the standard dashboard queries. ClickHouse materialized views are triggered on INSERT — they pre-aggregate data as it arrives, with zero query-time cost. This is the standard ClickHouse pattern, not something custom we're building.
+
+**V1 materialized views:**
+- **1-minute aggregations** — pre-computed `sum`, `avg`, `count`, `min`, `max` per metric name per minute, grouped by common low-cardinality dimensions (entityType, entityName, labels). Serves `getMetricTimeSeries` and `getMetricAggregate` for recent time ranges.
+- **1-hour aggregations** — same structure, coarser granularity. Serves wider time ranges (last 7d, 30d, 90d) without scanning billions of raw rows.
+
+The query methods automatically route to the appropriate source: raw table for sub-minute granularity or custom groupBy, minute rollup for recent dashboards, hour rollup for wide time ranges. This routing is internal to the ClickHouse adapter — the query API is unchanged.
+
+**DuckDB (local/MVP) does not use materialized views.** Query-time aggregation on raw data is fast enough at local scale. The DuckDB adapter always queries raw tables.
+
+#### Partition-Based Retention (instead of TTLs)
+
+For ClickHouse, we do **not** use TTL-based retention. Instead, tables are partitioned by `(organizationId, toYYYYMMDD(timestamp))` — organization ID and insertion date. Retention is managed by dropping entire partitions:
+
+```sql
+ALTER TABLE metrics DROP PARTITION ('org_123', '20260101')
+```
+
+**Why partitions over TTLs:**
+- **Predictable** — partition drops are instant, atomic operations. TTLs run as background merges with unpredictable timing.
+- **Per-org control** — different organizations can have different retention periods. TTLs apply globally.
+- **Clean** — no tombstones, no merge overhead. The partition is simply removed.
+- **Auditable** — you can list partitions and see exactly what data exists for which org and date range.
+
+This applies to all 5 observability tables in ClickHouse (span_events, logs, metrics, scores, feedback).
 
 ---
 
@@ -261,14 +291,15 @@ V1 is the first release of the new observability storage architecture. It's focu
 - DefaultExporter writing to DuckDB
 - CloudExporter sending to a JSON API endpoint (protobuf/streaming deferred)
 - ClickHouse adapter (receiving side of CloudExporter)
+- ClickHouse materialized views for standard dashboard queries (1-min and 1-hour rollups)
+- Partition-based retention in ClickHouse (by organizationId + insertion date)
 
 **Not in v1 (but designed for):**
 - Protobuf encoding / streaming transport for CloudExporter
 - BigQuery adapter
 
 **Deferred to v2+:**
-- Rollup tables and background aggregator
-- Retention policies
+- DuckDB rollup tables (not needed at local scale)
 - Async report job system with cached results
 - Per-metric histogram bucket overrides
 - Prometheus push gateway / `/metrics` endpoint
@@ -277,7 +308,38 @@ V1 is the first release of the new observability storage architecture. It's focu
 
 ---
 
-## DuckDB Node.js — Technical Assessment
+## Embedded OLAP Engine: DuckDB vs chDB
+
+We evaluated chDB (embedded ClickHouse) as an alternative to DuckDB for local/MVP deployments. The appeal is obvious: same engine locally and in production means identical SQL dialect, identical query behavior, and no "works locally but not in prod" surprises.
+
+### Comparison
+
+| | DuckDB (`@duckdb/node-api`) | chDB (`chdb`) |
+|---|---|---|
+| **npm weekly downloads** | ~287K | ~187 |
+| **Node.js maturity** | Official package, actively maintained, alpha label | Community bindings, v1.3.0 (June 2025) |
+| **Install size** | ~20-40MB native binary | ~300MB (full ClickHouse engine) |
+| **Platform binaries** | Prebuilt via node-pre-gyp (Linux, macOS, Windows, x64/arm64) | Requires C++ compilation; platform coverage unclear |
+| **Persistence** | File-backed by default, single file on disk | Temporary storage by default — tables disappear when process ends; session-based persistence available |
+| **Memory model** | Can spill to disk for large queries | Process memory only — OOM crash if dataset exceeds RAM |
+| **Streaming ingestion** | Designed for concurrent appends | Designed for batch analytics on static files, not continuous ingestion |
+| **Concurrency** | Single-writer / multi-reader | Not documented for Node.js |
+| **SQL compatibility with ClickHouse** | Different SQL dialect | Identical — queries transfer directly |
+
+### Assessment
+
+**chDB's key advantage** — same SQL as production ClickHouse — is genuinely valuable. It would eliminate the need to maintain two SQL dialects in our query methods.
+
+**chDB's dealbreakers for our use case:**
+1. **Not designed for continuous ingestion.** Our use case is appending observability events in real-time. chDB is designed for batch analytics on static files. This is a fundamental mismatch.
+2. **Temporary storage by default.** Observability data needs to persist across process restarts. chDB requires explicit session management and cleanup.
+3. **~187 npm downloads/week.** The Node.js bindings are barely used in the ecosystem. Risk of encountering undiscovered bugs and getting slow fixes.
+4. **~300MB install.** 7-15x larger than DuckDB. Significant for local dev dependency.
+5. **No disk spill.** OOM crashes on large queries are unacceptable even locally.
+
+**Recommendation: DuckDB for local, ClickHouse server for production.** The SQL dialect difference is manageable — our OLAP query methods abstract it (the adapter translates `time_bucket()` vs `toStartOfMinute()`, `arg_max()` works in both). The fundamental architecture differences (ingestion model, persistence, memory handling) make chDB unsuitable for our always-on observability data collection use case.
+
+### DuckDB Node.js Details
 
 **Package**: `@duckdb/node-api` (official, ~287K weekly npm downloads)
 - Native module with prebuilt binaries via node-pre-gyp
@@ -374,9 +436,11 @@ V1 stores every metric observation as a raw row and aggregates at query time —
 - **ClickHouse projections** — alternative pre-aggregation that lives within the same table.
 - **TTL policies** — automatic retention management built into table config.
 
-**Our recommendation**: Ship v1 without pre-aggregation. Set up ClickHouse tables with proper sorting keys and partitioning. If query latency becomes an issue at scale, add materialized views — they're additive, require no schema migration, and no application code changes (the query methods just read from the rollup table instead of raw).
+**Decision (updated after team review)**: Include ClickHouse materialized views from day one for standard dashboard queries. 1-minute and 1-hour rollup tables are created as materialized views that aggregate on INSERT. The query methods automatically route to the right source (raw vs rollup) based on the requested time range and granularity. This adds modest implementation complexity to the ClickHouse adapter but ensures production dashboards are fast from the start.
 
-The question for discussion: does this "ship simple, add materialized views when needed" approach feel acceptable, or should we include ClickHouse materialized views from day one for the most common dashboard queries (time-bucketed aggregations)?
+DuckDB (local/MVP) does not use materialized views — query-time aggregation on raw data is sufficient at that scale.
+
+The question for discussion: are the two rollup intervals (1-minute, 1-hour) sufficient for v1, or should we also include a 1-day rollup for very wide time ranges (90d+)?
 
 ### 7. Does the shift from mutable span records to immutable span events make sense?
 
@@ -407,3 +471,24 @@ We researched the entire codebase for dependencies on mutable span rows. **The a
 **Key insight**: The reconstruction from events to `SpanRecord` happens entirely inside the DuckDB storage adapter's query methods. Everything above the storage layer — API routes, UI components, client SDKs — sees the exact same `SpanRecord` type as before. This is a storage-internal change, not an API change.
 
 The existing `insert-only` strategy is a halfway version of this pattern — it waits for `SPAN_ENDED` and creates one complete row, discarding intermediate events. The full span events model is strictly better: you capture `span_start` (running spans visibility), `span_update`, and `span_end`, while still reconstructing the same final `SpanRecord` shape for consumers.
+
+### 8. Future direction: Single unified `observability_events` table?
+
+V1 uses 5 separate tables (span_events, metrics, logs, scores, feedback), but most fields are shared across all signal types (~25+ context fields). An alternative design would combine everything into a single `observability_events` table with an `eventKind` discriminator column (`'span_start' | 'span_update' | 'span_end' | 'metric' | 'log' | 'score' | 'feedback'`).
+
+**Advantages of a single table:**
+- One DDL, one filter builder, one INSERT path — significantly simpler adapter code
+- Cross-signal queries become trivial (no UNIONs)
+- Discovery endpoints scan one table
+- NULL columns are essentially free in columnar storage (just a validity bitmap)
+- Aligns with the Honeycomb "wide events" model which has proven successful at scale
+
+**Advantages of separate tables (current V1 approach):**
+- Each table is self-contained with clear required fields
+- Simpler type safety — no discriminated union needed at the schema level
+- More conventional — easier to reason about for new contributors
+- Each table can have independent indexes/sort keys optimized for its query patterns
+
+**ClickHouse consideration:** With a single table, the partition scheme becomes `(organizationId, eventKind, toYYYYMMDD(timestamp))`, enabling per-signal retention policies (e.g., keep metrics 90 days but spans only 30 days). This works because each `(org, kind, day)` tuple is a separate physical partition — `DROP PARTITION` is instant.
+
+**Decision**: V1 proceeds with 5 separate tables for simplicity and convention. The single-table approach is a strong candidate for V2 if adapter code complexity or cross-signal query needs justify it. The API surface (typed methods per signal) wouldn't change either way — only the physical storage layout.
