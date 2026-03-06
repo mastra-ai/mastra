@@ -2656,6 +2656,18 @@ export class Agent<
           text: z.string().describe('The response from the agent'),
           subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
           subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
+          subAgentToolResults: z
+            .array(
+              z.object({
+                toolName: z.string().describe('The name of the tool'),
+                toolCallId: z.string().describe('The ID of the tool call'),
+                result: z.any().describe('The result of the tool call'),
+                args: z.any().describe('The arguments of the tool call').optional(),
+                isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
+              }),
+            )
+            .describe("The results from the agent's tool calls")
+            .optional(),
         });
 
         const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
@@ -2946,6 +2958,13 @@ export class Agent<
                     });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
+                const subAgentToolResults = generateResult.toolResults?.map(toolResult => ({
+                  toolName: toolResult.payload.toolName,
+                  toolCallId: toolResult.payload.toolCallId,
+                  result: toolResult.payload.result,
+                  args: toolResult.payload.args,
+                  isError: toolResult.payload.isError,
+                }));
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
                   id: this.#mastra?.generateId() || randomUUID(),
@@ -2994,7 +3013,7 @@ export class Agent<
                   });
                 }
 
-                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
+                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
@@ -3080,6 +3099,13 @@ export class Agent<
                   }
                 }
 
+                const subAgentToolResults = (await streamResult.toolResults)?.map(toolResult => ({
+                  toolName: toolResult.payload.toolName,
+                  toolCallId: toolResult.payload.toolCallId,
+                  result: toolResult.payload.result,
+                  args: toolResult.payload.args,
+                  isError: toolResult.payload.isError,
+                }));
                 const agentResponseMessages = streamResult.messageList.get.response.db();
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
@@ -3130,7 +3156,7 @@ export class Agent<
                   });
                 }
 
-                result = { text: fullText, subAgentThreadId, subAgentResourceId };
+                result = { text: fullText, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else {
                 const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
