@@ -1701,7 +1701,7 @@ describe('ObservationalMemory Integration', () => {
       expect(counter).toBeInstanceOf(TokenCounter);
     });
 
-    it('should resolve observer model context from requestContext before counting images', async () => {
+    it('should use the actor model context before counting images', async () => {
       const { MessageList } = await import('@mastra/core/agent');
       const { RequestContext } = await import('@mastra/core/di');
 
@@ -1718,23 +1718,25 @@ describe('ObservationalMemory Integration', () => {
         scope: 'thread',
       });
 
-      const makeContext = (observerModel: string) => {
+      const makeContext = () => {
         const requestContext = new RequestContext();
         requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
-        requestContext.set('observerModel', observerModel);
+        requestContext.set('observerModel', 'openai/gpt-4o');
         return requestContext;
       };
 
-      const countImageForModel = async (observerModel: string) => {
+      const countImageForModel = async (actorModel: string) => {
+        const [provider, modelId] = actorModel.split('/');
+
         await omWithDynamicObserverModel.processInputStep({
           messageList: new MessageList({ threadId, resourceId }),
           messages: [],
-          requestContext: makeContext(observerModel),
+          requestContext: makeContext(),
           stepNumber: 0,
           state: {},
           steps: [],
           systemMessages: [],
-          model: 'test-model' as any,
+          model: { provider, modelId } as any,
           retryCount: 0,
           abort: (() => {
             throw new Error('aborted');

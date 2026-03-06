@@ -953,13 +953,21 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     };
   }
 
-  private async syncTokenCounterModelContext(requestContext?: RequestContext): Promise<void> {
-    try {
-      this.tokenCounter.setModelContext(await this.resolveModelContext(this.observationConfig.model, requestContext));
-    } catch (error) {
-      omError('[OM] Failed to resolve observer model config for token counting', error);
-      this.tokenCounter.setModelContext(undefined);
+  private getRuntimeModelContext(
+    model: { provider: string; modelId: string } | undefined,
+  ): TokenCounterModelContext | undefined {
+    if (!model?.modelId) {
+      return undefined;
     }
+
+    return {
+      provider: model.provider,
+      modelId: model.modelId,
+    };
+  }
+
+  private syncTokenCounterModelContext(modelContext?: TokenCounterModelContext): void {
+    this.tokenCounter.setModelContext(modelContext);
   }
 
   /**
@@ -2760,7 +2768,7 @@ ${suggestedResponse}
    * 5. Filter out already-observed messages
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
-    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort } = args;
+    const { messageList, requestContext, stepNumber, state: _state, writer, abortSignal, abort, model } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
     omDebug(
@@ -2776,8 +2784,10 @@ ${suggestedResponse}
     const { threadId, resourceId } = context;
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
+    const actorModelContext = this.getRuntimeModelContext(model);
+    state.__omActorModelContext = actorModelContext;
 
-    await this.syncTokenCounterModelContext(requestContext);
+    this.syncTokenCounterModelContext(actorModelContext);
 
     // Fetch fresh record
     let record = await this.getOrCreateRecord(threadId, resourceId);
@@ -3202,7 +3212,7 @@ ${suggestedResponse}
 
     const { threadId, resourceId } = context;
 
-    await this.syncTokenCounterModelContext(requestContext);
+    this.syncTokenCounterModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined);
 
     // Check if readOnly
     const memoryContext = parseMemoryRequestContext(requestContext);
