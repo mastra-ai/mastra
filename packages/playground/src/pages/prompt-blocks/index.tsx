@@ -5,13 +5,12 @@ import {
   Icon,
   MainContentContent,
   useLinkComponent,
-  useIsCmsAvailable,
-  useStoredPromptBlocks,
   Header,
   HeaderTitle,
   MainContentLayout,
-  PromptBlocksTable,
 } from '@mastra/playground-ui';
+import { useIsCmsAvailable } from '@mastra/playground-ui/cms';
+import { useStoredPromptBlocks, PromptBlocksTable } from '@mastra/playground-ui/prompt-blocks';
 import { FileTextIcon, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 

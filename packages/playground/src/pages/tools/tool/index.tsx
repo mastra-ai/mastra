@@ -7,9 +7,8 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  ToolPanel,
-  ToolCombobox,
 } from '@mastra/playground-ui';
+import { ToolPanel, ToolCombobox } from '@mastra/playground-ui/tools';
 import { Link, useParams } from 'react-router';
 
 const Tool = () => {

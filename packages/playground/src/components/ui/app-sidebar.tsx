@@ -1,6 +1,5 @@
 import {
   AgentIcon,
-  AuthStatus,
   GithubIcon,
   McpServerIcon,
   ToolsIcon,
@@ -9,12 +8,11 @@ import {
   useMainSidebar,
   LogoWithoutText,
   SettingsIcon,
-  MastraVersionFooter,
   useMastraPlatform,
-  useIsCmsAvailable,
-  useAuthCapabilities,
-  isAuthenticated,
 } from '@mastra/playground-ui';
+import { AuthStatus, useAuthCapabilities, isAuthenticated } from '@mastra/playground-ui/auth';
+import { MastraVersionFooter } from '@mastra/playground-ui/configuration';
+import { useIsCmsAvailable } from '@mastra/playground-ui/cms';
 import type { NavLink, NavSection } from '@mastra/playground-ui';
 import {
   GaugeIcon,

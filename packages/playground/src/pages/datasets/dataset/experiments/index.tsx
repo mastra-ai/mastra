@@ -7,9 +7,8 @@ import {
   Breadcrumb,
   Crumb,
   MainHeader,
-  DatasetExperimentsComparison,
-  useDataset,
 } from '@mastra/playground-ui';
+import { DatasetExperimentsComparison, useDataset } from '@mastra/playground-ui/datasets';
 import { Database, GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
 

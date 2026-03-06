@@ -1,4 +1,10 @@
-import { AuthRequired, MainSidebarProvider, NavigationCommand, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import {
+  MainSidebarProvider,
+  NavigationCommand,
+  Toaster,
+  TooltipProvider,
+} from '@mastra/playground-ui';
+import { AuthRequired } from '@mastra/playground-ui/auth';
 import { AppSidebar } from './ui/app-sidebar';
 import { ThemeProvider } from './ui/theme-provider';
 

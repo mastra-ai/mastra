@@ -8,13 +8,15 @@ import {
   MainHeader,
   TextAndIcon,
   Button,
-  useDataset,
-  useDatasetItems,
   Columns,
   Column,
+} from '@mastra/playground-ui';
+import {
+  useDataset,
+  useDatasetItems,
   DatasetCompareVersionToolbar,
   DatasetCompareVersionsList,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/datasets';
 import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';

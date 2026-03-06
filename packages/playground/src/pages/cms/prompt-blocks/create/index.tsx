@@ -1,11 +1,11 @@
 import {
   useLinkComponent,
-  PromptBlockCreateContent,
   MainContentLayout,
   Header,
   HeaderTitle,
   Icon,
 } from '@mastra/playground-ui';
+import { PromptBlockCreateContent } from '@mastra/playground-ui/prompt-blocks';
 import { BookIcon } from 'lucide-react';
 
 function CmsPromptBlocksCreatePage() {

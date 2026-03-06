@@ -4,14 +4,13 @@ import {
   HeaderAction,
   Icon,
   MainContentContent,
-  useScorers,
   useLinkComponent,
-  useIsCmsAvailable,
   Header,
   HeaderTitle,
   MainContentLayout,
-  ScorersTable,
 } from '@mastra/playground-ui';
+import { useScorers, ScorersTable } from '@mastra/playground-ui/scores';
+import { useIsCmsAvailable } from '@mastra/playground-ui/cms';
 import { GaugeIcon, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 

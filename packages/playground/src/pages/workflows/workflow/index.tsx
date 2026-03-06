@@ -1,4 +1,5 @@
-import { WorkflowGraph, useWorkflow, PermissionDenied, is403ForbiddenError } from '@mastra/playground-ui';
+import { useWorkflow, PermissionDenied, is403ForbiddenError } from '@mastra/playground-ui';
+import { WorkflowGraph } from '@mastra/playground-ui/workflows';
 import { useParams } from 'react-router';
 
 export const Workflow = () => {
