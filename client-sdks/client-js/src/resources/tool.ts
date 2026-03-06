@@ -17,7 +17,7 @@ export class Tool extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing tool details including description and schemas
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
+  details(requestContext?: RequestContext | Record<string, unknown>): Promise<GetToolResponse> {
     return this.request(`/tools/${this.toolId}${requestContextQueryString(requestContext)}`);
   }
 
@@ -26,7 +26,11 @@ export class Tool extends BaseResource {
    * @param params - Parameters required for tool execution
    * @returns Promise containing the tool execution results
    */
-  execute(params: { data: any; runId?: string; requestContext?: RequestContext | Record<string, any> }): Promise<any> {
+  execute(params: {
+    data: any;
+    runId?: string;
+    requestContext?: RequestContext | Record<string, unknown>;
+  }): Promise<any> {
     const url = new URLSearchParams();
 
     if (params.runId) {

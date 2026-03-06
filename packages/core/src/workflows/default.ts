@@ -614,7 +614,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Serialize a RequestContext Map to a plain object for JSON serialization.
    * Used by durable execution engines to persist context across step replays.
    */
-  serializeRequestContext(requestContext: RequestContext): Record<string, any> {
+  serializeRequestContext(requestContext: RequestContext): Record<string, unknown> {
     const obj: Record<string, any> = {};
     requestContext.forEach((value, key) => {
       obj[key] = value;

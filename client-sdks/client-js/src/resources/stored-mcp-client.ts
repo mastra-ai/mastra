@@ -26,7 +26,7 @@ export class StoredMCPClient extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing stored MCP client details
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<StoredMCPClientResponse> {
+  details(requestContext?: RequestContext | Record<string, unknown>): Promise<StoredMCPClientResponse> {
     return this.request(
       `/stored/mcp-clients/${encodeURIComponent(this.storedMCPClientId)}${requestContextQueryString(requestContext)}`,
     );
@@ -40,7 +40,7 @@ export class StoredMCPClient extends BaseResource {
    */
   update(
     params: UpdateStoredMCPClientParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<StoredMCPClientResponse> {
     return this.request(
       `/stored/mcp-clients/${encodeURIComponent(this.storedMCPClientId)}${requestContextQueryString(requestContext)}`,
@@ -56,7 +56,7 @@ export class StoredMCPClient extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion confirmation
    */
-  delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredMCPClientResponse> {
+  delete(requestContext?: RequestContext | Record<string, unknown>): Promise<DeleteStoredMCPClientResponse> {
     return this.request(
       `/stored/mcp-clients/${encodeURIComponent(this.storedMCPClientId)}${requestContextQueryString(requestContext)}`,
       {

@@ -167,7 +167,7 @@ export class AgentVoice extends BaseResource {
    * @returns Promise containing list of available speakers
    */
   getSpeakers(
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<Array<{ voiceId: string; [key: string]: any }>> {
     return this.request(`/agents/${this.agentId}/voice/speakers${requestContextQueryString(requestContext)}`);
   }
@@ -178,7 +178,7 @@ export class AgentVoice extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing a check if the agent has listening capabilities
    */
-  getListener(requestContext?: RequestContext | Record<string, any>): Promise<{ enabled: boolean }> {
+  getListener(requestContext?: RequestContext | Record<string, unknown>): Promise<{ enabled: boolean }> {
     return this.request(`/agents/${this.agentId}/voice/listener${requestContextQueryString(requestContext)}`);
   }
 }
@@ -199,7 +199,7 @@ export class Agent extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing agent details including model and instructions
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<GetAgentResponse> {
+  details(requestContext?: RequestContext | Record<string, unknown>): Promise<GetAgentResponse> {
     return this.request(`/agents/${this.agentId}${requestContextQueryString(requestContext)}`);
   }
 
@@ -1843,7 +1843,7 @@ export class Agent extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing tool details
    */
-  getTool(toolId: string, requestContext?: RequestContext | Record<string, any>): Promise<GetToolResponse> {
+  getTool(toolId: string, requestContext?: RequestContext | Record<string, unknown>): Promise<GetToolResponse> {
     return this.request(`/agents/${this.agentId}/tools/${toolId}${requestContextQueryString(requestContext)}`);
   }
 
@@ -1855,7 +1855,7 @@ export class Agent extends BaseResource {
    */
   executeTool(
     toolId: string,
-    params: { data: any; requestContext?: RequestContext | Record<string, any> },
+    params: { data: any; requestContext?: RequestContext | Record<string, unknown> },
   ): Promise<any> {
     const body = {
       data: params.data,

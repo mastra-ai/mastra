@@ -128,7 +128,7 @@ export function parseSuperJsonString(value: string): unknown {
   return parsed;
 }
 
-export function parseClientRequestContext(requestContext?: RequestContext | Record<string, any>) {
+export function parseClientRequestContext(requestContext?: RequestContext | Record<string, unknown>) {
   if (requestContext) {
     if (requestContext instanceof RequestContext) {
       return Object.fromEntries(requestContext.entries());
@@ -138,7 +138,7 @@ export function parseClientRequestContext(requestContext?: RequestContext | Reco
   return undefined;
 }
 
-export function base64RequestContext(requestContext?: Record<string, any>): string | undefined {
+export function base64RequestContext(requestContext?: Record<string, unknown>): string | undefined {
   if (requestContext) {
     // Encode as UTF-8 bytes first so non-Latin1 characters (e.g. CJK, em-dashes)
     // don't cause btoa() to throw InvalidCharacterError.
@@ -156,7 +156,7 @@ export function base64RequestContext(requestContext?: Record<string, any>): stri
  * @returns The query string
  */
 export function requestContextQueryString(
-  requestContext?: RequestContext | Record<string, any>,
+  requestContext?: RequestContext | Record<string, unknown>,
   delimiter: string = '?',
 ): string {
   const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));

@@ -31,7 +31,7 @@ export class Workflow extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing workflow details including steps and graphs
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<GetWorkflowResponse> {
+  details(requestContext?: RequestContext | Record<string, unknown>): Promise<GetWorkflowResponse> {
     return this.request(`/workflows/${this.workflowId}${requestContextQueryString(requestContext)}`);
   }
 
@@ -43,7 +43,7 @@ export class Workflow extends BaseResource {
    */
   runs(
     params?: ListWorkflowRunsParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<ListWorkflowRunsResponse> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
@@ -100,7 +100,7 @@ export class Workflow extends BaseResource {
   runById(
     runId: string,
     options?: {
-      requestContext?: RequestContext | Record<string, any>;
+      requestContext?: RequestContext | Record<string, unknown>;
       fields?: string[];
       withNestedWorkflows?: boolean;
     },

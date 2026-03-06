@@ -35,7 +35,7 @@ export class StoredScorer extends BaseResource {
    * @returns Promise containing stored scorer definition details
    */
   details(
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
     options?: { status?: 'draft' | 'published' | 'archived' },
   ): Promise<StoredScorerResponse> {
     const contextString = requestContextQueryString(requestContext);
@@ -53,7 +53,7 @@ export class StoredScorer extends BaseResource {
    */
   update(
     params: UpdateStoredScorerParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<StoredScorerResponse> {
     return this.request(
       `/stored/scorers/${encodeURIComponent(this.storedScorerId)}${requestContextQueryString(requestContext)}`,
@@ -69,7 +69,7 @@ export class StoredScorer extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion confirmation
    */
-  delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredScorerResponse> {
+  delete(requestContext?: RequestContext | Record<string, unknown>): Promise<DeleteStoredScorerResponse> {
     return this.request(
       `/stored/scorers/${encodeURIComponent(this.storedScorerId)}${requestContextQueryString(requestContext)}`,
       {
@@ -90,7 +90,7 @@ export class StoredScorer extends BaseResource {
    */
   listVersions(
     params?: ListScorerVersionsParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<ListScorerVersionsResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
@@ -113,7 +113,7 @@ export class StoredScorer extends BaseResource {
    */
   createVersion(
     params?: CreateScorerVersionParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<ScorerVersionResponse> {
     return this.request(
       `/stored/scorers/${encodeURIComponent(this.storedScorerId)}/versions${requestContextQueryString(requestContext)}`,
@@ -130,7 +130,10 @@ export class StoredScorer extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing the version details
    */
-  getVersion(versionId: string, requestContext?: RequestContext | Record<string, any>): Promise<ScorerVersionResponse> {
+  getVersion(
+    versionId: string,
+    requestContext?: RequestContext | Record<string, unknown>,
+  ): Promise<ScorerVersionResponse> {
     return this.request(
       `/stored/scorers/${encodeURIComponent(this.storedScorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
     );
@@ -144,7 +147,7 @@ export class StoredScorer extends BaseResource {
    */
   activateVersion(
     versionId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<ActivateScorerVersionResponse> {
     return this.request(
       `/stored/scorers/${encodeURIComponent(this.storedScorerId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
@@ -162,7 +165,7 @@ export class StoredScorer extends BaseResource {
    */
   restoreVersion(
     versionId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<ScorerVersionResponse> {
     return this.request(
       `/stored/scorers/${encodeURIComponent(this.storedScorerId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
@@ -180,7 +183,7 @@ export class StoredScorer extends BaseResource {
    */
   deleteVersion(
     versionId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<DeleteScorerVersionResponse> {
     return this.request(
       `/stored/scorers/${encodeURIComponent(this.storedScorerId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
@@ -200,7 +203,7 @@ export class StoredScorer extends BaseResource {
   compareVersions(
     fromId: string,
     toId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<CompareScorerVersionsResponse> {
     const queryParams = new URLSearchParams();
     queryParams.set('from', fromId);

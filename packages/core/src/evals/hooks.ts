@@ -1,5 +1,6 @@
 import { AvailableHooks, executeHook } from '../hooks';
 import type { ObservabilityContext } from '../observability';
+import type { RequestContext } from '../request-context';
 import type { MastraScorerEntry } from './base';
 import type { ScoringEntityType, ScoringHookInput, ScoringSource } from './types';
 
@@ -23,7 +24,7 @@ export function runScorer({
   runId: string;
   input: any;
   output: any;
-  requestContext: Record<string, any>;
+  requestContext: RequestContext;
   entity: Record<string, any>;
   structuredOutput: boolean;
   source: ScoringSource;

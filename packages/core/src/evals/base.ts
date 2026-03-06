@@ -52,7 +52,7 @@ interface ScorerRun<TInput = any, TOutput = any> extends Partial<ObservabilityCo
   input?: TInput;
   output: TOutput;
   groundTruth?: any;
-  requestContext?: Record<string, any>;
+  requestContext?: Record<string, unknown>;
 }
 
 // Prompt object definition with conditional typing

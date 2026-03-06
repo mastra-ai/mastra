@@ -120,7 +120,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of agent IDs to agent details
    */
   public listAgents(
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
     partial?: boolean,
   ): Promise<Record<string, GetAgentResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
@@ -239,7 +239,7 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, unknown> } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
     let url = '';
     if (opts.networkId) {
@@ -254,7 +254,7 @@ export class MastraClient extends BaseResource {
 
   public deleteThread(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, unknown> } = {},
   ): Promise<{ success: boolean; message: string }> {
     let url = '';
 
@@ -289,7 +289,7 @@ export class MastraClient extends BaseResource {
    */
   public getMemoryStatus(
     agentId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
     opts?: {
       resourceId?: string;
       threadId?: string;
@@ -341,7 +341,9 @@ export class MastraClient extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing map of tool IDs to tool details
    */
-  public listTools(requestContext?: RequestContext | Record<string, any>): Promise<Record<string, GetToolResponse>> {
+  public listTools(
+    requestContext?: RequestContext | Record<string, unknown>,
+  ): Promise<Record<string, GetToolResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
     const searchParams = new URLSearchParams();
@@ -369,7 +371,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of processor IDs to processor details
    */
   public listProcessors(
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<Record<string, GetProcessorResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
 
@@ -398,7 +400,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of workflow IDs to workflow details
    */
   public listWorkflows(
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
     partial?: boolean,
   ): Promise<Record<string, GetWorkflowResponse>> {
     const requestContextParam = base64RequestContext(parseClientRequestContext(requestContext));
@@ -644,7 +646,7 @@ export class MastraClient extends BaseResource {
     agentId: string;
     threadId: string;
     resourceId?: string;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
   }) {
     return this.request(
       `/memory/threads/${threadId}/working-memory?agentId=${agentId}&resourceId=${resourceId}${requestContextQueryString(requestContext, '&')}`,
@@ -664,7 +666,7 @@ export class MastraClient extends BaseResource {
     threadId?: string;
     searchQuery: string;
     memoryConfig?: any;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
   }): Promise<MemorySearchResponse> {
     const params = new URLSearchParams({
       searchQuery,
@@ -701,7 +703,7 @@ export class MastraClient extends BaseResource {
     threadId: string;
     workingMemory: string;
     resourceId?: string;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
   }) {
     return this.request(
       `/memory/threads/${threadId}/working-memory?agentId=${agentId}${requestContextQueryString(requestContext, '&')}`,
@@ -721,7 +723,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing list of available scorers
    */
   public listScorers(
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<Record<string, GetScorerResponse>> {
     return this.request(`/scores/scorers${requestContextQueryString(requestContext)}`);
   }

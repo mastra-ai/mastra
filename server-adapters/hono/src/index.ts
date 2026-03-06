@@ -97,7 +97,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Only parse if content-type is JSON and body is not empty
         if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
-            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
+            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, unknown> };
             if (body.requestContext) {
               bodyRequestContext = body.requestContext;
             }

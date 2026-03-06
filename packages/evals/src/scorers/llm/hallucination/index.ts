@@ -16,7 +16,7 @@ export interface GetContextRun {
   input?: ScorerRunInputForAgent;
   output: ScorerRunOutputForAgent;
   runId?: string;
-  requestContext?: Record<string, any>;
+  requestContext?: Record<string, unknown>;
   tracingContext?: TracingContext;
 }
 

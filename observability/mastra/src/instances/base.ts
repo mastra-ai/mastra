@@ -579,7 +579,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   /**
    * Extract specific keys from RequestContext
    */
-  protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, any> {
+  protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, unknown> {
     const result: Record<string, any> = {};
 
     for (const key of keys) {

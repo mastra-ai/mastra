@@ -127,7 +127,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
+    requestContext: Record<string, unknown>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const transaction = this.pool.transaction();

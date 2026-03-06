@@ -161,7 +161,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
+    requestContext: Record<string, unknown>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       // Use a transaction with row-level locking to ensure atomicity

@@ -331,7 +331,7 @@ export interface WorkflowRunState {
   status: WorkflowRunStatus;
   result?: Record<string, any>;
   error?: SerializedError;
-  requestContext?: Record<string, any>;
+  requestContext?: Record<string, unknown>;
   value: Record<string, string>;
   context: { input?: Record<string, any> } & Record<string, SerializedStepResult<any, any, any, any>>;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -861,7 +861,7 @@ export type StepExecutionResult = {
   result: StepResult<any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   mutableContext: MutableContext;
-  requestContext: Record<string, any>;
+  requestContext: Record<string, unknown>;
 };
 
 /**
@@ -872,7 +872,7 @@ export type EntryExecutionResult = {
   result: StepResult<any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   mutableContext: MutableContext;
-  requestContext: Record<string, any>;
+  requestContext: Record<string, unknown>;
 };
 
 // =============================================================================

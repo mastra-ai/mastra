@@ -154,7 +154,7 @@ export class Run extends BaseResource {
   start(params: {
     inputData: Record<string, any>;
     initialState?: Record<string, any>;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
   }): Promise<{ message: string }> {
@@ -185,7 +185,7 @@ export class Run extends BaseResource {
   }: {
     step?: string | string[];
     resumeData?: Record<string, any>;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
   }): Promise<{ message: string }> {
@@ -210,7 +210,7 @@ export class Run extends BaseResource {
   startAsync(params: {
     inputData: Record<string, any>;
     initialState?: Record<string, any>;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
     resourceId?: string;
     perStep?: boolean;
@@ -242,7 +242,7 @@ export class Run extends BaseResource {
   async stream(params: {
     inputData: Record<string, any>;
     initialState?: Record<string, any>;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
     resourceId?: string;
     perStep?: boolean;
@@ -314,7 +314,7 @@ export class Run extends BaseResource {
   resumeAsync(params: {
     step?: string | string[];
     resumeData?: Record<string, any>;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
   }): Promise<WorkflowRunResult> {
@@ -339,7 +339,7 @@ export class Run extends BaseResource {
   async resumeStream(params: {
     step?: string | string[];
     resumeData?: Record<string, any>;
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
     perStep?: boolean;
   }) {
@@ -379,7 +379,7 @@ export class Run extends BaseResource {
    * @returns Promise containing success message
    */
   restart(params: {
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
   }): Promise<{ message: string }> {
     const requestContext = parseClientRequestContext(params.requestContext);
@@ -398,7 +398,7 @@ export class Run extends BaseResource {
    * @returns Promise containing the workflow restart results
    */
   restartAsync(params?: {
-    requestContext?: RequestContext | Record<string, any>;
+    requestContext?: RequestContext | Record<string, unknown>;
     tracingOptions?: TracingOptions;
   }): Promise<WorkflowRunResult> {
     const requestContext = parseClientRequestContext(params?.requestContext);

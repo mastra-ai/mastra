@@ -114,7 +114,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
+    requestContext: Record<string, unknown>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     // Use optimistic locking with retry for atomic updates
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {

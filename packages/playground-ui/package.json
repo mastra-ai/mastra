@@ -132,7 +132,7 @@
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.7.1-0 <2.0.0-0",
+    "@mastra/core": ">=1.10.1-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
     "@tanstack/react-query": "^5.81.5",

@@ -55,7 +55,7 @@ interface BaseSpan<TType extends SpanType> {
   }
 
   /** Serialized snapshot of the RequestContext at span creation time */
-  requestContext?: Record<string, any>
+  requestContext?: Record<string, unknown>
   /** Is an event span? (occurs at startTime, has no endTime) */
   isEvent: boolean
 }

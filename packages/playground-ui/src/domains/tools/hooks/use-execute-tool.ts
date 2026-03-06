@@ -14,7 +14,7 @@ export const useExecuteTool = () => {
     }: {
       toolId: string;
       input: any;
-      requestContext?: Record<string, any>;
+      requestContext?: Record<string, unknown>;
     }) => {
       const requestContext = new RequestContext();
       Object.entries(playgroundRequestContext ?? {}).forEach(([key, value]) => {

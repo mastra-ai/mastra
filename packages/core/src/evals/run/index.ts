@@ -306,7 +306,7 @@ async function runScorers(
           input: targetResult.scoringData?.input,
           output: targetResult.scoringData?.output,
           groundTruth: item.groundTruth,
-          requestContext: item.requestContext,
+          requestContext: item.requestContext ? Object.fromEntries(item.requestContext.entries()) : undefined,
           ...resolveObservabilityContext(item),
         });
 
@@ -336,7 +336,7 @@ async function runScorers(
           input: targetResult.scoringData.input,
           output: targetResult.scoringData.output,
           groundTruth: item.groundTruth,
-          requestContext: item.requestContext,
+          requestContext: item.requestContext ? Object.fromEntries(item.requestContext.entries()) : undefined,
           ...resolveObservabilityContext(item),
         });
         workflowScorerResults[scorer.id] = score;
@@ -358,7 +358,7 @@ async function runScorers(
                 input: stepResult.payload !== undefined ? stepResult.payload : targetResult.scoringData.input,
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
-                requestContext: item.requestContext,
+                requestContext: item.requestContext ? Object.fromEntries(item.requestContext.entries()) : undefined,
                 ...resolveObservabilityContext(item),
               });
               stepResults[scorer.id] = score;

@@ -22,7 +22,7 @@ export class Processor extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing processor details including phases and configurations
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<GetProcessorDetailResponse> {
+  details(requestContext?: RequestContext | Record<string, unknown>): Promise<GetProcessorDetailResponse> {
     return this.request(`/processors/${this.processorId}${requestContextQueryString(requestContext)}`);
   }
 

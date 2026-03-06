@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface PlaygroundStore {
-  requestContext: Record<string, any>;
-  setRequestContext: (requestContext: Record<string, any>) => void;
+  requestContext: Record<string, unknown>;
+  setRequestContext: (requestContext: Record<string, unknown>) => void;
 }
 
 export const usePlaygroundStore = create<PlaygroundStore>()(

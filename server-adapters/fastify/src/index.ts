@@ -78,7 +78,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       if (request.method === 'POST' || request.method === 'PUT') {
         const contentType = request.headers['content-type'];
         if (contentType?.includes('application/json') && request.body) {
-          const body = request.body as { requestContext?: Record<string, any> };
+          const body = request.body as { requestContext?: Record<string, unknown> };
           if (body.requestContext) {
             bodyRequestContext = body.requestContext;
           }

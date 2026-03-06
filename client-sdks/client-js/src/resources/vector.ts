@@ -25,7 +25,10 @@ export class Vector extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing vector index details
    */
-  details(indexName: string, requestContext?: RequestContext | Record<string, any>): Promise<GetVectorIndexResponse> {
+  details(
+    indexName: string,
+    requestContext?: RequestContext | Record<string, unknown>,
+  ): Promise<GetVectorIndexResponse> {
     return this.request(
       `/vector/${encodeURIComponent(this.vectorName)}/indexes/${encodeURIComponent(indexName)}${requestContextQueryString(requestContext)}`,
     );
@@ -47,7 +50,7 @@ export class Vector extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing array of index names
    */
-  getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<{ indexes: string[] }> {
+  getIndexes(requestContext?: RequestContext | Record<string, unknown>): Promise<{ indexes: string[] }> {
     return this.request(
       `/vector/${encodeURIComponent(this.vectorName)}/indexes${requestContextQueryString(requestContext)}`,
     );

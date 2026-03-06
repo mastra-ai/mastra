@@ -421,7 +421,7 @@ interface BaseSpan<TType extends SpanType> {
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
   /** Serialized snapshot of the RequestContext at span creation time */
-  requestContext?: Record<string, any>;
+  requestContext?: Record<string, unknown>;
   /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
 }

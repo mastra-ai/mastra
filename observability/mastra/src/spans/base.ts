@@ -130,7 +130,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     details?: Record<string, any>;
   };
   public metadata?: Record<string, any>;
-  public requestContext?: Record<string, any>;
+  public requestContext?: Record<string, unknown>;
   public tags?: string[];
   public traceState?: TraceState;
   /** Entity type that created the span (e.g., agent, workflow) */

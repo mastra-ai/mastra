@@ -79,7 +79,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
-    requestContext: Record<string, any>;
+    requestContext: Record<string, unknown>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     throw new Error(
       'updateWorkflowResults is not implemented for LanceDB storage. LanceDB does not support atomic read-modify-write operations needed for concurrent workflow updates.',

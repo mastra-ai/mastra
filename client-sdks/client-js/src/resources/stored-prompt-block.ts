@@ -35,7 +35,7 @@ export class StoredPromptBlock extends BaseResource {
    * @returns Promise containing stored prompt block details
    */
   details(
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
     options?: { status?: 'draft' | 'published' | 'archived' },
   ): Promise<StoredPromptBlockResponse> {
     const contextString = requestContextQueryString(requestContext);
@@ -52,7 +52,7 @@ export class StoredPromptBlock extends BaseResource {
    */
   update(
     params: UpdateStoredPromptBlockParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<StoredPromptBlockResponse> {
     return this.request(
       `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}${requestContextQueryString(requestContext)}`,
@@ -68,7 +68,7 @@ export class StoredPromptBlock extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion confirmation
    */
-  delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredPromptBlockResponse> {
+  delete(requestContext?: RequestContext | Record<string, unknown>): Promise<DeleteStoredPromptBlockResponse> {
     return this.request(
       `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}${requestContextQueryString(requestContext)}`,
       {
@@ -89,7 +89,7 @@ export class StoredPromptBlock extends BaseResource {
    */
   listVersions(
     params?: ListPromptBlockVersionsParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<ListPromptBlockVersionsResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
@@ -112,7 +112,7 @@ export class StoredPromptBlock extends BaseResource {
    */
   createVersion(
     params?: CreatePromptBlockVersionParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<PromptBlockVersionResponse> {
     return this.request(
       `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions${requestContextQueryString(requestContext)}`,
@@ -131,7 +131,7 @@ export class StoredPromptBlock extends BaseResource {
    */
   getVersion(
     versionId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<PromptBlockVersionResponse> {
     return this.request(
       `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
@@ -146,7 +146,7 @@ export class StoredPromptBlock extends BaseResource {
    */
   activateVersion(
     versionId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<ActivatePromptBlockVersionResponse> {
     return this.request(
       `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions/${encodeURIComponent(versionId)}/activate${requestContextQueryString(requestContext)}`,
@@ -164,7 +164,7 @@ export class StoredPromptBlock extends BaseResource {
    */
   restoreVersion(
     versionId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<PromptBlockVersionResponse> {
     return this.request(
       `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions/${encodeURIComponent(versionId)}/restore${requestContextQueryString(requestContext)}`,
@@ -182,7 +182,7 @@ export class StoredPromptBlock extends BaseResource {
    */
   deleteVersion(
     versionId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<DeletePromptBlockVersionResponse> {
     return this.request(
       `/stored/prompt-blocks/${encodeURIComponent(this.storedPromptBlockId)}/versions/${encodeURIComponent(versionId)}${requestContextQueryString(requestContext)}`,
@@ -202,7 +202,7 @@ export class StoredPromptBlock extends BaseResource {
   compareVersions(
     fromId: string,
     toId: string,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<CompareVersionsResponse> {
     const queryParams = new URLSearchParams();
     queryParams.set('from', fromId);

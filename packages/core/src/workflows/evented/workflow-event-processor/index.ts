@@ -31,7 +31,7 @@ export type ProcessorArgs = {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   resumeSteps: string[];
   prevResult: StepResult<any, any, any, any>;
-  requestContext: Record<string, any>;
+  requestContext: Record<string, unknown>;
   timeTravel?: TimeTravelExecutionParams;
   resumeData?: any;
   parentWorkflow?: ParentWorkflow;

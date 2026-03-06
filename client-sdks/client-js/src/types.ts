@@ -137,7 +137,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentGenerateOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
@@ -147,7 +147,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   output?: T;
   experimental_output?: T;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   Omit<AgentStreamOptions<T>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
@@ -283,7 +283,7 @@ export interface GetVectorIndexResponse {
 export interface SaveMessageToMemoryParams {
   messages: (MastraMessageV1 | MastraDBMessage)[];
   agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export interface SaveNetworkMessageToMemoryParams {
@@ -301,7 +301,7 @@ export interface CreateMemoryThreadParams {
   resourceId: string;
   threadId?: string;
   agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export type CreateMemoryThreadResponse = StorageThreadType;
@@ -324,7 +324,7 @@ export interface ListMemoryThreadsParams {
   perPage?: number;
   orderBy?: 'createdAt' | 'updatedAt';
   sortDirection?: 'ASC' | 'DESC';
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export type ListMemoryThreadsResponse = PaginationInfo & {
@@ -333,7 +333,7 @@ export type ListMemoryThreadsResponse = PaginationInfo & {
 
 export interface GetMemoryConfigParams {
   agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export type GetMemoryConfigResponse = {
@@ -354,7 +354,7 @@ export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
@@ -376,7 +376,7 @@ export interface CloneMemoryThreadParams {
       messageIds?: string[];
     };
   };
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export type CloneMemoryThreadResponse = {
@@ -450,7 +450,7 @@ export interface GenerateOrStreamVNextNetworkParams {
   message: string;
   threadId?: string;
   resourceId?: string;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export interface LoopStreamVNextNetworkParams {
@@ -458,7 +458,7 @@ export interface LoopStreamVNextNetworkParams {
   threadId?: string;
   resourceId?: string;
   maxIterations?: number;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 export interface LoopVNextNetworkResponse {
@@ -612,7 +612,7 @@ export interface TimeTravelParams {
   initialState?: Record<string, any>;
   context?: TimeTravelContext<any, any, any, any>;
   nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
   tracingOptions?: TracingOptions;
   perStep?: boolean;
 }
@@ -878,7 +878,7 @@ export interface CloneAgentParams {
   /** Author identifier for the cloned agent. */
   authorId?: string;
   /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 /**
@@ -1763,7 +1763,7 @@ export interface ExecuteProcessorParams {
   phase: ProcessorPhase;
   messages: MastraDBMessage[];
   agentId?: string;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 /**
@@ -1800,7 +1800,7 @@ export interface GetObservationalMemoryParams {
   agentId: string;
   resourceId?: string;
   threadId?: string;
-  requestContext?: RequestContext | Record<string, any>;
+  requestContext?: RequestContext | Record<string, unknown>;
 }
 
 /**

@@ -21,7 +21,7 @@ export class StoredSkill extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing stored skill details
    */
-  details(requestContext?: RequestContext | Record<string, any>): Promise<StoredSkillResponse> {
+  details(requestContext?: RequestContext | Record<string, unknown>): Promise<StoredSkillResponse> {
     return this.request(
       `/stored/skills/${encodeURIComponent(this.storedSkillId)}${requestContextQueryString(requestContext)}`,
     );
@@ -35,7 +35,7 @@ export class StoredSkill extends BaseResource {
    */
   update(
     params: UpdateStoredSkillParams,
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<StoredSkillResponse> {
     return this.request(
       `/stored/skills/${encodeURIComponent(this.storedSkillId)}${requestContextQueryString(requestContext)}`,
@@ -51,7 +51,7 @@ export class StoredSkill extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion confirmation
    */
-  delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredSkillResponse> {
+  delete(requestContext?: RequestContext | Record<string, unknown>): Promise<DeleteStoredSkillResponse> {
     return this.request(
       `/stored/skills/${encodeURIComponent(this.storedSkillId)}${requestContextQueryString(requestContext)}`,
       {

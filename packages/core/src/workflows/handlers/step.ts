@@ -293,7 +293,7 @@ export async function executeStep(
         suspendedPaths: Record<string, number[]>;
         resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
         stateUpdate: any;
-        requestContextUpdate: Record<string, any> | null;
+        requestContextUpdate: Record<string, unknown> | null;
       } = {
         suspendedPaths: {},
         resumeLabels: {},

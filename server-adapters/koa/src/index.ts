@@ -190,7 +190,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       if (ctx.method === 'POST' || ctx.method === 'PUT') {
         const contentType = ctx.headers['content-type'];
         if (contentType?.includes('application/json') && ctx.request.body) {
-          const body = ctx.request.body as { requestContext?: Record<string, any> };
+          const body = ctx.request.body as { requestContext?: Record<string, unknown> };
           if (body.requestContext) {
             bodyRequestContext = body.requestContext;
           }

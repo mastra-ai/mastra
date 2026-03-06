@@ -118,7 +118,7 @@ export const createTestRun = (
   input: string,
   output: string,
   additionalContext?: Record<string, any>,
-  requestContext?: Record<string, any>,
+  requestContext?: Record<string, unknown>,
 ): ScoringInput => {
   return {
     input: [{ role: 'user', content: input }],

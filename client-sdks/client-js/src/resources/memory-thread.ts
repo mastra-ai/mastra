@@ -39,7 +39,7 @@ export class MemoryThread extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing thread details including title and metadata
    */
-  get(requestContext?: RequestContext | Record<string, any>): Promise<StorageThreadType> {
+  get(requestContext?: RequestContext | Record<string, unknown>): Promise<StorageThreadType> {
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
     return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`);
@@ -64,7 +64,7 @@ export class MemoryThread extends BaseResource {
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion result
    */
-  delete(requestContext?: RequestContext | Record<string, any>): Promise<{ result: string }> {
+  delete(requestContext?: RequestContext | Record<string, unknown>): Promise<{ result: string }> {
     const agentIdParam = this.getAgentIdQueryParam('?');
     const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
     return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
@@ -79,7 +79,7 @@ export class MemoryThread extends BaseResource {
    */
   listMessages(
     params: ListMemoryThreadMessagesParams & {
-      requestContext?: RequestContext | Record<string, any>;
+      requestContext?: RequestContext | Record<string, unknown>;
     } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
     const { page, perPage, orderBy, filter, include, resourceId, requestContext } = params;
@@ -108,7 +108,7 @@ export class MemoryThread extends BaseResource {
    */
   deleteMessages(
     messageIds: string | string[] | { id: string } | { id: string }[],
-    requestContext?: RequestContext | Record<string, any>,
+    requestContext?: RequestContext | Record<string, unknown>,
   ): Promise<{ success: boolean; message: string }> {
     const queryParams: Record<string, string> = {};
     if (this.agentId) queryParams.agentId = this.agentId;

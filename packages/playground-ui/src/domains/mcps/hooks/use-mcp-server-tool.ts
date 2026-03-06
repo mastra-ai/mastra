@@ -23,7 +23,11 @@ export const useExecuteMCPTool = (serverId: string, toolId: string) => {
   return useMutation({
     mutationFn: (data: any) => {
       const instance = client.getMcpServerTool(serverId, toolId);
-      return instance.execute({ data, requestContext: requestContext as RequestContext });
+      const rc = new RequestContext();
+      Object.entries(requestContext ?? {}).forEach(([key, value]) => {
+        rc.set(key, value);
+      });
+      return instance.execute({ data, requestContext: rc });
     },
   });
 };
