@@ -1,4 +1,4 @@
-import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provider-v6';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { prepareToolsAndToolChoice } from '../../stream/aisdk/v5/compat/prepare-tools';
 import type { ModelSpecVersion } from '../../stream/aisdk/v5/compat/prepare-tools';
@@ -102,7 +102,6 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
   it('router specificationVersion remains v2 (tools are remapped in doGenerate/doStream instead)', () => {
     const router = new ModelRouterLanguageModel({ id: 'v3-gateway/openai/gpt-4o' as `${string}/${string}` }, [gateway]);
 
-    // The router still reports v2 — the fix remaps tools inside doGenerate/doStream
     expect(router.specificationVersion).toBe('v2');
   });
 
@@ -135,52 +134,49 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
   it('should remap provider tools from provider-defined to provider when routing to V3 model via doStream', async () => {
     const router = new ModelRouterLanguageModel({ id: 'v3-gateway/openai/gpt-4o' as `${string}/${string}` }, [gateway]);
 
-    // Simulate what execute.ts does: prepare tools with v2 format
-    const providerTool = {
-      id: 'openai.web_search',
-      type: 'provider-defined',
-      args: { search_context_size: 'medium' },
-    };
-
     const preparedTools = prepareToolsAndToolChoice({
-      tools: { web_search: providerTool as any },
+      tools: {
+        web_search: {
+          id: 'openai.web_search',
+          type: 'provider-defined',
+          args: { search_context_size: 'medium' },
+        } as any,
+      },
       toolChoice: undefined,
       activeTools: undefined,
       targetVersion: 'v2',
     });
 
-    // Call doStream which resolves to V3 model internally
+    // Call doStream — tools and toolChoice are spread at the top level of options
     await router.doStream({
       inputFormat: 'messages',
-      mode: { type: 'regular', tools: preparedTools.tools, toolChoice: preparedTools.toolChoice },
+      ...preparedTools,
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Search the web' }] }],
-    });
+    } as any);
 
-    // Verify the tools passed to the underlying V3 model have been remapped
+    // Check what tools were actually passed to the underlying V3 model
     const doStreamCall = (mockV3Model.doStream as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(doStreamCall).toBeDefined();
 
-    const passedOptions = doStreamCall[0] as LanguageModelV3CallOptions;
-    const passedTools = passedOptions.mode?.type === 'regular' ? passedOptions.mode.tools : undefined;
-
-    expect(passedTools).toBeDefined();
-    expect(passedTools).toHaveLength(1);
-    expect(passedTools![0].type).toBe('provider');
-    expect((passedTools![0] as any).id).toBe('openai.web_search');
-    expect((passedTools![0] as any).args).toEqual({ search_context_size: 'medium' });
+    const passedOptions = doStreamCall[0];
+    expect(passedOptions.tools).toBeDefined();
+    expect(passedOptions.tools).toHaveLength(1);
+    expect(passedOptions.tools[0].type).toBe('provider');
+    expect(passedOptions.tools[0].id).toBe('openai.web_search');
+    expect(passedOptions.tools[0].args).toEqual({ search_context_size: 'medium' });
   });
 
   it('should remap provider tools from provider-defined to provider when routing to V3 model via doGenerate', async () => {
     const router = new ModelRouterLanguageModel({ id: 'v3-gateway/openai/gpt-4o' as `${string}/${string}` }, [gateway]);
 
-    const providerTool = {
-      id: 'openai.web_search',
-      type: 'provider-defined',
-      args: {},
-    };
-
     const preparedTools = prepareToolsAndToolChoice({
-      tools: { web_search: providerTool as any },
+      tools: {
+        web_search: {
+          id: 'openai.web_search',
+          type: 'provider-defined',
+          args: {},
+        } as any,
+      },
       toolChoice: undefined,
       activeTools: undefined,
       targetVersion: 'v2',
@@ -188,77 +184,71 @@ describe('ModelRouterLanguageModel with V3 gateway and provider tools (#13667)',
 
     await router.doGenerate({
       inputFormat: 'messages',
-      mode: { type: 'regular', tools: preparedTools.tools, toolChoice: preparedTools.toolChoice },
+      ...preparedTools,
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Search the web' }] }],
-    });
+    } as any);
 
-    // Verify the tools passed to the underlying V3 model have been remapped
     const doGenerateCall = (mockV3Model.doGenerate as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(doGenerateCall).toBeDefined();
 
-    const passedOptions = doGenerateCall[0] as LanguageModelV3CallOptions;
-    const passedTools = passedOptions.mode?.type === 'regular' ? passedOptions.mode.tools : undefined;
-
-    expect(passedTools).toBeDefined();
-    expect(passedTools).toHaveLength(1);
-    expect(passedTools![0].type).toBe('provider');
+    const passedOptions = doGenerateCall[0];
+    expect(passedOptions.tools).toBeDefined();
+    expect(passedOptions.tools).toHaveLength(1);
+    expect(passedOptions.tools[0].type).toBe('provider');
   });
 
   it('should not remap function tools when routing to V3 model', async () => {
     const router = new ModelRouterLanguageModel({ id: 'v3-gateway/openai/gpt-4o' as `${string}/${string}` }, [gateway]);
 
-    // Regular function tools should pass through unchanged
-    const functionTool = {
-      type: 'function' as const,
-      name: 'calculator',
-      description: 'A calculator',
-      inputSchema: { type: 'object', properties: {} },
-    };
-
     await router.doStream({
       inputFormat: 'messages',
-      mode: { type: 'regular', tools: [functionTool], toolChoice: { type: 'auto' } },
+      tools: [
+        {
+          type: 'function' as const,
+          name: 'calculator',
+          description: 'A calculator',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+      toolChoice: { type: 'auto' as const },
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Calculate something' }] }],
     });
 
     const doStreamCall = (mockV3Model.doStream as ReturnType<typeof vi.fn>).mock.calls[0];
-    const passedOptions = doStreamCall[0] as LanguageModelV3CallOptions;
-    const passedTools = passedOptions.mode?.type === 'regular' ? passedOptions.mode.tools : undefined;
+    const passedOptions = doStreamCall[0];
 
-    expect(passedTools).toHaveLength(1);
-    expect(passedTools![0].type).toBe('function');
+    expect(passedOptions.tools).toHaveLength(1);
+    expect(passedOptions.tools[0].type).toBe('function');
   });
 
   it('should handle mixed provider and function tools when routing to V3 model', async () => {
     const router = new ModelRouterLanguageModel({ id: 'v3-gateway/openai/gpt-4o' as `${string}/${string}` }, [gateway]);
 
-    const tools = [
-      {
-        type: 'provider-defined' as const,
-        name: 'web_search',
-        id: 'openai.web_search',
-        args: {},
-      },
-      {
-        type: 'function' as const,
-        name: 'calculator',
-        description: 'A calculator',
-        inputSchema: { type: 'object', properties: {} },
-      },
-    ];
-
     await router.doStream({
       inputFormat: 'messages',
-      mode: { type: 'regular', tools: tools as any, toolChoice: { type: 'auto' } },
+      tools: [
+        {
+          type: 'provider-defined' as const,
+          name: 'web_search',
+          id: 'openai.web_search',
+          args: {},
+        },
+        {
+          type: 'function' as const,
+          name: 'calculator',
+          description: 'A calculator',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ] as any,
+      toolChoice: { type: 'auto' as const },
       prompt: [{ role: 'user', content: [{ type: 'text', text: 'Search and calculate' }] }],
     });
 
     const doStreamCall = (mockV3Model.doStream as ReturnType<typeof vi.fn>).mock.calls[0];
-    const passedOptions = doStreamCall[0] as LanguageModelV3CallOptions;
-    const passedTools = passedOptions.mode?.type === 'regular' ? passedOptions.mode.tools : undefined;
+    const passedOptions = doStreamCall[0];
 
-    expect(passedTools).toHaveLength(2);
-    expect(passedTools![0].type).toBe('provider'); // remapped from 'provider-defined'
-    expect(passedTools![1].type).toBe('function'); // unchanged
+    expect(passedOptions.tools).toHaveLength(2);
+    expect(passedOptions.tools[0].type).toBe('provider'); // remapped from 'provider-defined'
+    expect(passedOptions.tools[1].type).toBe('function'); // unchanged
   });
 });

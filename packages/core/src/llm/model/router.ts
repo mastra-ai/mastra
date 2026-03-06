@@ -74,11 +74,11 @@ type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
  * @see https://github.com/mastra-ai/mastra/issues/13667
  */
 function remapToolsToV3(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
-  if (options.mode?.type !== 'regular' || !options.mode.tools?.length) {
+  if (!options.tools?.length) {
     return options;
   }
 
-  const remappedTools = options.mode.tools.map(tool => {
+  const remappedTools = options.tools.map((tool: Record<string, unknown>) => {
     if (tool.type === 'provider-defined') {
       return { ...tool, type: 'provider' as const };
     }
@@ -87,10 +87,7 @@ function remapToolsToV3(options: LanguageModelV2CallOptions): LanguageModelV2Cal
 
   return {
     ...options,
-    mode: {
-      ...options.mode,
-      tools: remappedTools as typeof options.mode.tools,
-    },
+    tools: remappedTools as typeof options.tools,
   };
 }
 
