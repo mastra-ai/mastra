@@ -5,12 +5,14 @@ import {
   Breadcrumb,
   Crumb,
   Spinner,
+} from '@mastra/playground-ui';
+import {
   useDataset,
   useDatasetExperiment,
   useDatasetExperimentResults,
   ExperimentPageContent,
   ExperimentPageHeader,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/datasets';
 import { Database } from 'lucide-react';
 import { useParams, Link } from 'react-router';
 

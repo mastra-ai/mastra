@@ -1,21 +1,23 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import {
+  ThreadInputProvider,
+  useMemory,
+  useThreads,
+  PermissionDenied,
+  is403ForbiddenError,
+} from '@mastra/playground-ui';
+import {
   AgentChat,
   AgentLayout,
   AgentSettingsProvider,
   WorkingMemoryProvider,
-  ThreadInputProvider,
   useAgent,
-  useMemory,
-  useThreads,
   AgentInformation,
-  TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
-  SchemaRequestContextProvider,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/agents';
+import { TracingSettingsProvider } from '@mastra/playground-ui/observability';
+import { SchemaRequestContextProvider } from '@mastra/playground-ui/request-context';
 import type { AgentSettingsType } from '@mastra/playground-ui';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';

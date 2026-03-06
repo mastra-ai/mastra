@@ -1,5 +1,5 @@
 import { useSearchParams, useNavigate } from 'react-router';
-import { LoginPage } from '@mastra/playground-ui';
+import { LoginPage } from '@mastra/playground-ui/auth';
 
 export function SignUp() {
   const [searchParams] = useSearchParams();

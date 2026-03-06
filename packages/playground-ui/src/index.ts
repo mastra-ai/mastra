@@ -1,15 +1,5 @@
 import './index.css';
 
-export * from './domains/agents/index';
-export * from './domains/llm/index';
-export * from './domains/processors/index';
-export * from './domains/scores/index';
-export * from './domains/prompt-blocks/index';
-export * from './domains/tools/index';
-export * from './domains/workflows/index';
-export * from './domains/templates/index';
-export * from './domains/observability/index';
-export * from './domains/datasets/index';
 export * from './ds/components/Threads';
 export * from './types';
 
@@ -94,7 +84,7 @@ export * from './lib/form';
 // DS Icons
 export * from './ds/icons/index';
 
-// Other exports
+// Shared hooks, utilities, and infrastructure
 export * from './domains/voice/hooks/use-speech-recognition';
 export * from './hooks';
 export * from './lib/tanstack-query';
@@ -107,15 +97,7 @@ export * from './domains/conversation/index';
 export * from './lib/errors';
 export { cn } from './lib/utils';
 export * from './lib/ai-ui/tools/tool-fallback';
-export * from './domains/workflows/runs/workflow-run-list';
-export * from './domains/mcps/index';
-export * from './domains/tool-providers/index';
 export * from './lib/toast';
-export * from './domains/configuration/index';
-export * from './domains/workspace/index';
-export * from './domains/request-context/index';
 export * from './lib/mastra-platform';
-export * from './domains/auth/index';
-export * from './domains/cms/index';
 export * from './lib/experimental-features';
 export * from './lib/command';

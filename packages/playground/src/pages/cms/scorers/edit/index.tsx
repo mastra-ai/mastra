@@ -2,15 +2,6 @@ import type { UpdateStoredScorerParams } from '@mastra/client-js';
 import {
   toast,
   useLinkComponent,
-  useStoredScorer,
-  useStoredScorerMutations,
-  useScorerVersions,
-  useScorerVersion,
-  ScorerEditMain,
-  ScorerEditSidebar,
-  ScorerVersionCombobox,
-  AgentEditLayout,
-  useScorerEditForm,
   Header,
   HeaderTitle,
   HeaderAction,
@@ -23,7 +14,18 @@ import {
   AlertTitle,
   AlertDescription,
 } from '@mastra/playground-ui';
-import type { ScorerFormValues } from '@mastra/playground-ui';
+import {
+  useStoredScorer,
+  useStoredScorerMutations,
+  useScorerVersions,
+  useScorerVersion,
+  ScorerEditMain,
+  ScorerEditSidebar,
+  ScorerVersionCombobox,
+  useScorerEditForm,
+} from '@mastra/playground-ui/scores';
+import { AgentEditLayout } from '@mastra/playground-ui/agents';
+import type { ScorerFormValues } from '@mastra/playground-ui/scores';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { GaugeIcon } from 'lucide-react';

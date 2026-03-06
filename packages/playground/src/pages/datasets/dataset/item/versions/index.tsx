@@ -9,10 +9,6 @@ import {
   Crumb,
   MainHeader,
   TextAndIcon,
-  useDataset,
-  useDatasetItemVersion,
-  useDatasetItemVersions,
-  DatasetItemContent,
   CodeDiff,
   SelectField,
   useLinkComponent,
@@ -21,7 +17,13 @@ import {
   ButtonsGroup,
   Chip,
 } from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
+import {
+  useDataset,
+  useDatasetItemVersion,
+  useDatasetItemVersions,
+  DatasetItemContent,
+} from '@mastra/playground-ui/datasets';
+import type { DatasetItemVersion } from '@mastra/playground-ui/datasets';
 import { format } from 'date-fns';
 import {
   Database,

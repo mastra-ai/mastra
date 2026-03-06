@@ -3,14 +3,13 @@ import {
   HeaderTitle,
   MainContentLayout,
   MainContentContent,
-  WorkflowTable,
   Icon,
   HeaderAction,
   Button,
   DocsIcon,
   WorkflowIcon,
-  useWorkflows,
 } from '@mastra/playground-ui';
+import { WorkflowTable, useWorkflows } from '@mastra/playground-ui/workflows';
 
 import { Link } from 'react-router';
 

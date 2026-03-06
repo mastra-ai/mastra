@@ -1,7 +1,5 @@
 import {
   useLinkComponent,
-  useAgentCmsForm,
-  AgentCmsFormShell,
   Header,
   HeaderTitle,
   Icon,
@@ -11,6 +9,7 @@ import {
   Button,
   Spinner,
 } from '@mastra/playground-ui';
+import { useAgentCmsForm, AgentCmsFormShell } from '@mastra/playground-ui/agents';
 import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
 

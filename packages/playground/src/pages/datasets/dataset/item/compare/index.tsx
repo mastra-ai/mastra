@@ -10,18 +10,20 @@ import {
   Crumb,
   MainHeader,
   TextAndIcon,
-  useDataset,
-  useDatasetItem,
-  useDatasetItems,
   SelectField,
-  DatasetItemHeader,
-  DatasetItemContent,
   CodeDiff,
   useLinkComponent,
   Columns,
   Column,
   ButtonsGroup,
 } from '@mastra/playground-ui';
+import {
+  useDataset,
+  useDatasetItem,
+  useDatasetItems,
+  DatasetItemHeader,
+  DatasetItemContent,
+} from '@mastra/playground-ui/datasets';
 import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
