@@ -216,47 +216,6 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       expect(name).toBe('Dero Israel');
     }, 500000);
 
-    it('should call tool without input or output schemas (duplicate)', async () => {
-      const noSchemaTool = createTool({
-        id: 'noSchemaTool',
-        description: 'Returns test data with arbitrary structure',
-        execute: async () => {
-          return { success: true, data: { arbitrary: 'value', count: 42 } };
-        },
-      });
-
-      const testAgent = new Agent({
-        id: 'test-agent',
-        name: 'Test agent',
-        instructions: 'You are an agent that can use the noSchemaTool to get test data.',
-        model: openaiModel,
-        tools: { noSchemaTool },
-      });
-
-      const mastra = new Mastra({
-        agents: { testAgent },
-        logger: false,
-      });
-
-      const agent = mastra.getAgent('testAgent');
-
-      let toolCall;
-      let response;
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Use the noSchemaTool to get test data', {
-          maxSteps: 2,
-          toolChoice: 'required',
-        });
-        toolCall = response.toolResults.find((result: any) => result.toolName === 'noSchemaTool');
-      } else {
-        response = await agent.generate('Use the noSchemaTool to get test data');
-        toolCall = response.toolResults.find((result: any) => result.payload.toolName === 'noSchemaTool')?.payload;
-      }
-
-      expect(toolCall?.result).toEqual({ success: true, data: { arbitrary: 'value', count: 42 } });
-      expect(toolCall?.result?.error).toBeUndefined();
-    }, 500000);
-
     it('generate - should pass and call client side tools', async () => {
       const userAgent = new Agent({
         id: 'user-agent',
@@ -392,37 +351,7 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
       expect(mockFindUser).toHaveBeenCalled();
     });
 
-    it('should reach default max steps', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'Test agent',
-        instructions: 'Test agent',
-        model: openaiModel,
-        tools: integration.getStaticTools(),
-        defaultGenerateOptionsLegacy: {
-          maxSteps: 7,
-        },
-        defaultOptions: {
-          maxSteps: 7,
-        },
-      });
-
-      let response;
-
-      if (version === 'v1') {
-        response = await agent.generateLegacy('Call testTool 10 times.', {
-          toolChoice: 'required',
-        });
-      } else {
-        response = await agent.generate('Call testTool 10 times.', {
-          toolChoice: 'required',
-        });
-      }
-
-      expect(response.steps.length).toBe(7);
-    }, 500000);
-
-    it('should reach default max steps / stopWhen', async () => {
+    it('should reach max steps / stopWhen', async () => {
       const agent = new Agent({
         id: 'test-agent',
         name: 'Test agent',

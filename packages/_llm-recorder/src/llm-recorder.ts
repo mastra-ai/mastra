@@ -758,11 +758,23 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         ...(existingMeta?.createdAt ? { updatedAt: now } : {}),
       };
 
-      const file: RecordingFile = { meta, recordings };
+      // Deduplicate recordings by hash — identical requests across tests share one entry
+      const seen = new Set<string>();
+      const dedupedRecordings = recordings.filter(r => {
+        if (seen.has(r.hash)) return false;
+        seen.add(r.hash);
+        return true;
+      });
+
+      const file: RecordingFile = { meta, recordings: dedupedRecordings };
 
       fs.mkdirSync(path.dirname(recordingPath), { recursive: true });
       fs.writeFileSync(recordingPath, JSON.stringify(file, null, 2));
-      console.log(`[llm-recorder] Saved ${recordings.length} recordings to: ${recordingPath}`);
+      const deduped = recordings.length - dedupedRecordings.length;
+      console.log(
+        `[llm-recorder] Saved ${dedupedRecordings.length} recordings to: ${recordingPath}` +
+          (deduped > 0 ? ` (${deduped} duplicates removed)` : ''),
+      );
     },
   };
 
