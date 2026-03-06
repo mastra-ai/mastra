@@ -227,9 +227,9 @@ function sanitizeToolPayload(value, label) {
 function isToolRecordLike(value) {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      typeof value.toolName === 'string' &&
-      (Object.prototype.hasOwnProperty.call(value, 'args') || Object.prototype.hasOwnProperty.call(value, 'result')),
+    typeof value === 'object' &&
+    typeof value.toolName === 'string' &&
+    (Object.prototype.hasOwnProperty.call(value, 'args') || Object.prototype.hasOwnProperty.call(value, 'result')),
   );
 }
 
@@ -296,7 +296,10 @@ function sanitizePart(part, label) {
 
     if (invocation.state === 'result') {
       const entry = getExistingTokenEstimate(part);
-      const hasStoredModelOutput = Object.prototype.hasOwnProperty.call(part.providerMetadata?.mastra ?? {}, 'modelOutput');
+      const hasStoredModelOutput = Object.prototype.hasOwnProperty.call(
+        part.providerMetadata?.mastra ?? {},
+        'modelOutput',
+      );
       const sanitizedResult = sanitizeToolPayload(invocation.result, `tool-result:${label}`);
       invocation.result = sanitizedResult;
 
@@ -396,7 +399,9 @@ function sanitizeMessage(message, label) {
 
   if (message.content && typeof message.content === 'object') {
     if (Array.isArray(message.content.parts)) {
-      message.content.parts = message.content.parts.map((part, index) => sanitizePart(part, `${message.id ?? label}:${index}`));
+      message.content.parts = message.content.parts.map((part, index) =>
+        sanitizePart(part, `${message.id ?? label}:${index}`),
+      );
       if (typeof message.content.content === 'string') {
         message.content.content = `[sanitized:content:${label}]`;
       }
@@ -434,9 +439,9 @@ function sanitizeMessage(message, label) {
 function isMessageLike(value) {
   return Boolean(
     value &&
-      typeof value === 'object' &&
-      typeof value.role === 'string' &&
-      Object.prototype.hasOwnProperty.call(value, 'content'),
+    typeof value === 'object' &&
+    typeof value.role === 'string' &&
+    Object.prototype.hasOwnProperty.call(value, 'content'),
   );
 }
 
