@@ -346,28 +346,40 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 14
   },
   {
-    "model": "opencode/kimi-k2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.4,
-    "outputCost": 2.5
-  },
-  {
-    "model": "opencode/kimi-k2-thinking",
+    "model": "opencode/gpt-5.3-codex-spark",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.4,
-    "outputCost": 2.5
+    "contextWindow": 128000,
+    "maxOutput": 128000,
+    "inputCost": 1.75,
+    "outputCost": 14
+  },
+  {
+    "model": "opencode/gpt-5.4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2.5,
+    "outputCost": 15
+  },
+  {
+    "model": "opencode/gpt-5.4-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 30,
+    "outputCost": 180
   },
   {
     "model": "opencode/kimi-k2.5",
@@ -416,18 +428,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
-  },
-  {
-    "model": "opencode/trinity-large-preview-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />
@@ -460,7 +460,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "opencode/trinity-large-preview-free"
+      ? "opencode/minimax-m2.5-free"
       : "opencode/big-pickle";
   }
 });

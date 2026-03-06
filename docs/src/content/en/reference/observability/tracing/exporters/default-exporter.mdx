@@ -19,12 +19,12 @@ new DefaultExporter(config?: DefaultExporterConfig)
 
 <PropertiesTable
   props={[
-{
-name: "config",
-type: "DefaultExporterConfig",
-description: "Batching and configuration options",
-required: false,
-},
+  {
+    name: 'config',
+    type: 'DefaultExporterConfig',
+    description: 'Batching and configuration options',
+    required: false,
+  },
 ]}
 />
 
@@ -87,12 +87,12 @@ Initializes the exporter after dependencies are ready. Resolves tracing strategy
 
 <PropertiesTable
   props={[
-{
-name: "options",
-type: "InitExporterOptions",
-description: "Initialization options containing Mastra instance and config",
-required: true,
-},
+  {
+    name: 'options',
+    type: 'InitExporterOptions',
+    description: 'Initialization options containing Mastra instance and config',
+    required: true,
+  },
 ]}
 />
 
@@ -106,12 +106,12 @@ Processes a tracing event according to the resolved strategy.
 
 <PropertiesTable
   props={[
-{
-name: "event",
-type: "TracingEvent",
-description: "The tracing event to export",
-required: true,
-},
+  {
+    name: 'event',
+    type: 'TracingEvent',
+    description: 'The tracing event to export',
+    required: true,
+  },
 ]}
 />
 

@@ -1,10 +1,9 @@
 import { Header, HeaderTitle, MainContentLayout, TemplatesTools, TemplatesList, Icon } from '@mastra/playground-ui';
+import { PackageIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Link } from 'react-router';
 import { useMastraTemplates } from '@/hooks/use-templates';
 import { cn } from '@/lib/utils';
-import { Link } from 'react-router';
-
-import { useState } from 'react';
-import { PackageIcon } from 'lucide-react';
 
 export default function Templates() {
   const { data, isLoading } = useMastraTemplates();

@@ -36,6 +36,21 @@ export const useMemoryConfig = (agentId?: string) => {
   });
 };
 
+export const useThread = ({ threadId, agentId }: { threadId?: string; agentId?: string }) => {
+  const client = useMastraClient();
+  const requestContext = useMergedRequestContext();
+
+  return useQuery({
+    queryKey: ['memory', 'thread', threadId, agentId, requestContext],
+    queryFn: () => client.getMemoryThread({ threadId: threadId!, agentId }).get({ requestContext }),
+    enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+};
+
 export const useThreads = ({
   resourceId,
   agentId,
