@@ -28,6 +28,7 @@ import type {
   HarnessSession,
   HarnessStateSchema,
   HarnessThread,
+  MessageDeliveryMode,
   ModelAuthStatus,
   PermissionPolicy,
   PermissionRules,
@@ -97,6 +98,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   };
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
+  private messageDelivery: MessageDeliveryMode = 'interrupt';
   private displayState: HarnessDisplayState = defaultDisplayState();
   #internalMastra: Mastra | undefined = undefined;
 
@@ -2006,6 +2008,48 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
+  /**
+   * Send a user message, automatically choosing the right delivery strategy
+   * based on the current `messageDeliveryMode`:
+   *
+   * - If the agent is **not** running, sends the message immediately.
+   * - If the agent **is** running and mode is `'interrupt'`, aborts the
+   *   current generation and sends the new message (same as `steer()`).
+   * - If the agent **is** running and mode is `'queue'`, appends the message
+   *   to the follow-up queue (same as `followUp()`).
+   */
+  async send({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+    if (!this.isRunning()) {
+      await this.sendMessage({ content, requestContext });
+      return;
+    }
+    if (this.messageDelivery === 'queue') {
+      await this.followUp({ content, requestContext });
+    } else {
+      await this.steer({ content, requestContext });
+    }
+  }
+
+  /**
+   * Return the current message delivery mode.
+   */
+  getMessageDeliveryMode(): MessageDeliveryMode {
+    return this.messageDelivery;
+  }
+
+  /**
+   * Set how new messages are handled while the agent is running.
+   *
+   * - `'interrupt'` — abort the current generation and send immediately (default).
+   * - `'queue'` — queue the message for processing after the current generation.
+   */
+  setMessageDeliveryMode({ mode }: { mode: MessageDeliveryMode }): void {
+    if (mode === this.messageDelivery) return;
+    this.messageDelivery = mode;
+    this.displayState.messageDeliveryMode = mode;
+    this.emit({ type: 'message_delivery_mode_changed', mode });
+  }
+
   getFollowUpCount(): number {
     return this.followUpQueue.length;
   }
@@ -2568,6 +2612,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         } else {
           ds.bufferingObservations = false;
         }
+        break;
+
+      // ── Message delivery ─────────────────────────────────────────────
+      case 'message_delivery_mode_changed':
+        ds.messageDeliveryMode = event.mode;
         break;
 
       // ── Token usage ────────────────────────────────────────────────────

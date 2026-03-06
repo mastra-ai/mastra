@@ -595,12 +595,21 @@ Abort any in-progress generation.
 harness.abort()
 ```
 
-#### `steer({ content, requestContext? })`
+#### `send({ content, requestContext? })`
 
-Steer the agent mid-stream by injecting an instruction into the current generation.
+Send a message using the current message delivery mode. When the agent is idle, sends immediately. When the agent is running, either interrupts or queues based on `getMessageDeliveryMode()`.
 
 ```typescript
-harness.steer({ content: 'Focus on security implications' })
+// Sends immediately (agent idle), interrupts (interrupt mode), or queues (queue mode)
+await harness.send({ content: 'Do this next' })
+```
+
+#### `steer({ content, requestContext? })`
+
+Steer the agent mid-stream: aborts the current generation and sends a new message. Clears any queued follow-ups.
+
+```typescript
+await harness.steer({ content: 'Focus on security implications' })
 ```
 
 #### `followUp({ content, requestContext? })`
@@ -608,7 +617,31 @@ harness.steer({ content: 'Focus on security implications' })
 Queue a follow-up message to be sent after the current generation completes. If no operation is running, sends the message immediately.
 
 ```typescript
-harness.followUp({ content: 'Now apply those changes' })
+await harness.followUp({ content: 'Now apply those changes' })
+```
+
+#### `getMessageDeliveryMode()`
+
+Return the current message delivery mode.
+
+```typescript
+const mode = harness.getMessageDeliveryMode()
+// 'interrupt' | 'queue'
+```
+
+#### `setMessageDeliveryMode({ mode })`
+
+Set how new messages are handled while the agent is running. The mode controls the behavior of `send()`:
+
+- `'interrupt'` — abort the current generation and send immediately (default).
+- `'queue'` — queue the message for processing after the current generation completes.
+
+```typescript
+// Switch to queue mode
+harness.setMessageDeliveryMode({ mode: 'queue' })
+
+// Switch back to interrupt mode
+harness.setMessageDeliveryMode({ mode: 'interrupt' })
 ```
 
 ### Tool approvals
@@ -898,6 +931,7 @@ The harness emits events through registered listeners. The following table lists
 | `error` | An error occurred. |
 | `info` | An informational message was emitted. |
 | `follow_up_queued` | A follow-up message was queued. |
+| `message_delivery_mode_changed` | The message delivery mode changed (`'interrupt'` or `'queue'`). |
 | `workspace_status_changed` | The workspace status changed. |
 | `workspace_ready` | The workspace finished initializing. |
 | `workspace_error` | The workspace encountered an error. |

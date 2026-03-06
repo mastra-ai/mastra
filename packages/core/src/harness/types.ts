@@ -247,6 +247,18 @@ export interface HarnessOMConfig {
 }
 
 // =============================================================================
+// Message Delivery
+// =============================================================================
+
+/**
+ * Controls how the Harness handles a new message while the agent is already running.
+ *
+ * - `'interrupt'` — abort the current generation and send the new message immediately (default).
+ * - `'queue'` — queue the message to be processed after the current generation completes.
+ */
+export type MessageDeliveryMode = 'interrupt' | 'queue';
+
+// =============================================================================
 // Permissions
 // =============================================================================
 
@@ -468,6 +480,10 @@ export interface HarnessDisplayState {
   /** Whether an agent operation is currently in progress */
   isRunning: boolean;
 
+  // ── Message delivery ────────────────────────────────────────────────
+  /** How new messages are handled while the agent is running */
+  messageDeliveryMode: MessageDeliveryMode;
+
   // ── Current streaming message ────────────────────────────────────────
   /** The message currently being streamed (null when idle) */
   currentMessage: HarnessMessage | null;
@@ -547,6 +563,7 @@ export interface HarnessDisplayState {
 export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
+    messageDeliveryMode: 'interrupt',
     currentMessage: null,
     tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     activeTools: new Map(),
@@ -627,6 +644,7 @@ export type HarnessEvent =
   | { type: 'info'; message: string }
   | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
   | { type: 'follow_up_queued'; count: number }
+  | { type: 'message_delivery_mode_changed'; mode: MessageDeliveryMode }
   | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }
   | { type: 'workspace_error'; error: Error }

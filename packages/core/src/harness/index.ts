@@ -22,6 +22,7 @@ export type {
   HarnessSubagent,
   HarnessThread,
   HeartbeatHandler,
+  MessageDeliveryMode,
   ModelAuthChecker,
   ModelAuthStatus,
   ModelUseCountProvider,
