@@ -732,6 +732,7 @@ export type HarnessEvent =
       messagesActivated: number;
       generationCount: number;
     }
+  | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
   | {
       type: 'ask_question';
       questionId: string;
