@@ -215,6 +215,44 @@ const writerStep = createStep({
 })
 ```
 
+### Using `allowFailure`
+
+Alternatively, you can pass `{ allowFailure: true }` to `.parallel()`. When enabled, individual step failures no longer cause the entire parallel block to fail. Failed steps produce `null` in the downstream step's input, while error details remain available in the workflow result's `steps` object:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const workflow = createWorkflow({
+  id: 'resilient-parallel',
+  inputSchema: z.object({ query: z.string() }),
+  outputSchema: z.object({ synthesis: z.string() }),
+})
+  .parallel([researcherA, researcherB], { allowFailure: true })
+  .then(writerStep)
+  .commit()
+```
+
+The downstream step receives `null` for any step that failed:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const writerStep = createStep({
+  id: 'writer',
+  inputSchema: z.object({
+    'researcher-a': z.object({ brief: z.string() }).nullable(),
+    'researcher-b': z.object({ brief: z.string() }).nullable(),
+  }),
+  outputSchema: z.object({ synthesis: z.string() }),
+  execute: async ({ inputData }) => {
+    const briefs = Object.values(inputData)
+      .filter((v): v is { brief: string } => v !== null)
+      .map(v => v.brief)
+    return { synthesis: briefs.join('; ') }
+  },
+})
+```
+
+:::note
+Tripwire failures (processor hard limits like token budgets) always cause the parallel block to fail, even with `allowFailure: true`.
+:::
+
 :::info
 
 Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.

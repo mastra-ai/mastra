@@ -35,6 +35,9 @@ export interface ExecuteParallelParams extends ObservabilityContext {
       type: 'step';
       step: Step;
     }[];
+    opts?: {
+      allowFailure?: boolean;
+    };
   };
   serializedStepGraph: SerializedStepFlowEntry[];
   prevStep: StepFlowEntry;
@@ -177,10 +180,12 @@ export async function executeParallel(
       return stepExecResult.result;
     }),
   );
+  const allowFailure = entry.opts?.allowFailure ?? false;
   const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
+  const hasTripwireFailure = hasFailed && (hasFailed as any).tripwire;
 
   const hasSuspended = results.find(result => result.status === 'suspended');
-  if (hasFailed) {
+  if (hasFailed && (!allowFailure || hasTripwireFailure)) {
     // Preserve tripwire property for proper status conversion in fmtReturnValue
     execResults = {
       status: 'failed',
@@ -199,8 +204,11 @@ export async function executeParallel(
     execResults = {
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
+        const stepId = entry.steps[index]!.step.id;
         if (result.status === 'success') {
-          acc[entry.steps[index]!.step.id] = result.output;
+          acc[stepId] = result.output;
+        } else if (result.status === 'failed' && allowFailure) {
+          acc[stepId] = null;
         }
 
         return acc;

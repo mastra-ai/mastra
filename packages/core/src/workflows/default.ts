@@ -980,9 +980,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
     } else if (step.type === 'parallel' || step.type === 'conditional') {
+      const allowFailure = step.type === 'parallel' && step.opts?.allowFailure;
       return step.steps.reduce(
         (acc, entry) => {
-          acc[entry.step.id] = stepResults[entry.step.id]?.output;
+          const stepResult = stepResults[entry.step.id];
+          if (stepResult?.status === 'failed' && allowFailure) {
+            acc[entry.step.id] = null;
+          } else {
+            acc[entry.step.id] = stepResult?.output;
+          }
           return acc;
         },
         {} as Record<string, any>,

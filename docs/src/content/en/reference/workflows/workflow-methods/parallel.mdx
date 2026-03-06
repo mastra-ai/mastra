@@ -13,6 +13,9 @@ The `.parallel()` method executes multiple steps in parallel.
 
 ```typescript
 workflow.parallel([step1, step2])
+
+// With allowFailure
+workflow.parallel([step1, step2], { allowFailure: true })
 ```
 
 ## Parameters
@@ -24,6 +27,13 @@ workflow.parallel([step1, step2])
     type: 'Step[]',
     description: 'The step instances to execute in parallel',
     isOptional: false,
+  },
+  {
+    name: 'opts',
+    type: '{ allowFailure?: boolean }',
+    description:
+      'Optional configuration. Set `allowFailure: true` to allow the parallel block to succeed even when individual steps fail. Failed step outputs are `null` in the downstream step input. Error details remain available in `result.steps`.',
+    isOptional: true,
   },
 ]}
 />

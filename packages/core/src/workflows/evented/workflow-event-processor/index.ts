@@ -1750,6 +1750,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
       }
     } else if ((step?.type === 'parallel' || step?.type === 'conditional') && executionPath.length > 1) {
+      const allowFailure = step?.type === 'parallel' && step.opts?.allowFailure;
       let skippedCount = 0;
       const allResults: Record<string, any> = step.steps.reduce(
         (acc, step) => {
@@ -1760,6 +1761,8 @@ export class WorkflowEventProcessor extends EventProcessor {
               // @ts-expect-error - skipped status not in type
             } else if (res?.status === 'skipped') {
               skippedCount++;
+            } else if (res && res.status === 'failed' && allowFailure && !(res as any).tripwire) {
+              acc[step.step.id] = null as any;
             }
           }
 
