@@ -4062,9 +4062,9 @@ export class Agent<
             supportsStructuredOutputs: false, // Set to false to enable transform
           };
 
-          const isReasoningModel = /^o[1-5]/.test(targetModelId ?? '');
-          const compatLayer = isReasoningModel
-            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+          const reasoningLayer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+          const compatLayer = reasoningLayer.isReasoningModel()
+            ? reasoningLayer
             : new OpenAISchemaCompatLayer(modelInfo);
 
           if (compatLayer.shouldApply() && options.structuredOutput.schema) {

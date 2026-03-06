@@ -134,7 +134,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     } else if (isStringSchema(schema)) {
       const model = this.getModel();
       // gpt-4o-mini doesn't respect emoji and regex constraints
-      if (model.modelId.includes('gpt-4o-mini')) {
+      if (model.modelId?.includes('gpt-4o-mini')) {
         // Remove emoji format if present
         if (schema.format === 'emoji') {
           delete schema.format;
