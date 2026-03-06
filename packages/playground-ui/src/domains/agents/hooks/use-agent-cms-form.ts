@@ -27,6 +27,10 @@ type EditOptions = {
   mode: 'edit';
   agentId: string;
   dataSource: AgentDataSource;
+  /** True when editing a code-defined agent — only instructions, tools, and variables are editable */
+  isCodeAgentOverride?: boolean;
+  /** True when a stored override record already exists for this code agent */
+  hasStoredOverride?: boolean;
   onSuccess: (agentId: string) => void;
 };
 
@@ -40,6 +44,12 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   const isEdit = options.mode === 'edit';
   const agentId = isEdit ? options.agentId : undefined;
+  const isCodeAgentOverride = isEdit && !!options.isCodeAgentOverride;
+  const hasStoredOverride = isEdit && !!options.hasStoredOverride;
+
+  // Track whether we've already created a stored override for a code agent in this session
+  const [overrideCreated, setOverrideCreated] = useState(false);
+  const needsCreate = isCodeAgentOverride && !hasStoredOverride && !overrideCreated;
 
   const { createStoredAgent } = useStoredAgentMutations();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
@@ -49,7 +59,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     [isEdit, isEdit ? options.dataSource : undefined],
   );
 
-  const { form } = useAgentEditForm({ initialValues });
+  const { form } = useAgentEditForm({ initialValues, isCodeAgentOverride });
 
   // Edit mode: reset form + resolve MCP client IDs when data source changes
   // Wrapped in useEffectEvent to avoid form/client/initialValues in the dependency array,
@@ -98,6 +108,46 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   const buildSharedParams = useCallback(
     async (values: AgentFormValues) => {
+      // Code agent overrides: only send fields that are editable (instructions, tools, variables)
+      if (isCodeAgentOverride) {
+        // Collect all MCP tool names
+        const mcpToolNames = new Set<string>();
+        for (const c of values.mcpClients ?? []) {
+          for (const name of Object.keys(c.selectedTools ?? {})) {
+            mcpToolNames.add(name);
+          }
+        }
+
+        // Registry tools = form.tools minus MCP tools
+        const registryTools: Record<string, EntityConfig> = {};
+        for (const [name, config] of Object.entries(values.tools ?? {})) {
+          if (!mcpToolNames.has(name)) {
+            registryTools[name] = config;
+          }
+        }
+
+        // Create pending MCP clients in parallel and collect IDs
+        const mcpClientIds = await collectMCPClientIds(values.mcpClients ?? [], client);
+        const mcpClientsParam = Object.fromEntries(
+          mcpClientIds.map((id, index) => {
+            const selectedTools = values.mcpClients?.[index]?.selectedTools ?? {};
+            return [id, { tools: selectedTools }];
+          }),
+        );
+
+        return {
+          // name and model are required by the create schema — pass the code agent's values through.
+          // applyStoredOverrides will NOT apply these fields for code agent overrides.
+          name: values.name,
+          model: values.model,
+          // Only send editable fields: instructions, tools, and variables (requestContextSchema)
+          instructions: mapInstructionBlocksToApi(values.instructionBlocks),
+          tools: Object.keys(registryTools).length > 0 ? registryTools : undefined,
+          mcpClients: mcpClientsParam,
+          requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
+        };
+      }
+
       // Edit mode: delete MCP clients marked for removal
       if (isEdit) {
         const mcpClientsToDelete = values.mcpClientsToDelete ?? [];
@@ -140,10 +190,12 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         agents: values.agents && Object.keys(values.agents).length > 0 ? values.agents : undefined,
         mcpClients: mcpClientsParam,
         scorers: mapScorersToApi(values.scorers),
+        skills: values.skills,
+        workspace: values.workspace,
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
       };
     },
-    [isEdit, client],
+    [isEdit, isCodeAgentOverride, client],
   );
 
   const buildMemoryParams = useCallback((values: AgentFormValues) => {
@@ -181,23 +233,47 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
     try {
       const sharedParams = await buildSharedParams(values);
-      const editMemory = buildMemoryParams(values);
+      const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
 
-      await updateStoredAgent.mutateAsync({
-        ...sharedParams,
-        memory: editMemory,
-      });
+      if (needsCreate) {
+        // First save for a code agent — create the stored override
+        const createParams: CreateStoredAgentParams = {
+          id: options.agentId,
+          ...sharedParams,
+          memory: editMemory,
+        };
+        await createStoredAgent.mutateAsync(createParams);
+        setOverrideCreated(true);
+      } else {
+        await updateStoredAgent.mutateAsync({
+          ...sharedParams,
+          memory: editMemory,
+        });
+      }
 
       // Reset form dirty state so publish can detect unsaved changes
       form.reset(values);
       queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
       toast.success('Draft saved');
     } catch (error) {
       toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSavingDraft(false);
     }
-  }, [form, isEdit, agentId, buildSharedParams, buildMemoryParams, updateStoredAgent, queryClient]);
+  }, [
+    form,
+    isEdit,
+    agentId,
+    needsCreate,
+    options,
+    buildSharedParams,
+    buildMemoryParams,
+    createStoredAgent,
+    updateStoredAgent,
+    queryClient,
+  ]);
 
   const handlePublish = useCallback(async () => {
     const isValid = await form.trigger();
@@ -211,23 +287,46 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
     try {
       if (isEdit) {
-        // Check if there's an unpublished draft version to activate
-        const [agentDetails, versionsResponse] = await Promise.all([
-          client.getStoredAgent(options.agentId).details(),
-          client.getStoredAgent(options.agentId).listVersions({ sortDirection: 'DESC', perPage: 1 }),
-        ]);
+        if (needsCreate) {
+          // First publish for a code agent — create and immediately publish
+          const sharedParams = await buildSharedParams(values);
+          const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
+          const createParams: CreateStoredAgentParams = {
+            id: options.agentId,
+            ...sharedParams,
+            memory: editMemory,
+          };
+          await createStoredAgent.mutateAsync(createParams);
+          setOverrideCreated(true);
 
-        const latestVersion = versionsResponse.versions[0];
-        if (!latestVersion || latestVersion.id === agentDetails.activeVersionId) {
-          toast.error('No draft changes to publish. Save a draft first.');
-          return;
+          // Now activate the first version
+          const versionsResponse = await client
+            .getStoredAgent(options.agentId)
+            .listVersions({ sortDirection: 'DESC', perPage: 1 });
+          const latestVersion = versionsResponse.versions[0];
+          if (latestVersion) {
+            await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
+          }
+        } else {
+          // Check if there's an unpublished draft version to activate
+          const [agentDetails, versionsResponse] = await Promise.all([
+            client.getStoredAgent(options.agentId).details(),
+            client.getStoredAgent(options.agentId).listVersions({ sortDirection: 'DESC', perPage: 1 }),
+          ]);
+
+          const latestVersion = versionsResponse.versions[0];
+          if (!latestVersion || latestVersion.id === agentDetails.activeVersionId) {
+            toast.error('No draft changes to publish. Save a draft first.');
+            return;
+          }
+
+          await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
         }
-
-        await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
 
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] }),
           queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] }),
+          queryClient.invalidateQueries({ queryKey: ['agent', agentId] }),
           queryClient.invalidateQueries({ queryKey: ['agents'] }),
           queryClient.invalidateQueries({ queryKey: ['stored-agents'] }),
         ]);
@@ -261,15 +360,35 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, isEdit, client, createStoredAgent, options, agentId, buildSharedParams, queryClient]);
+  }, [
+    form,
+    isEdit,
+    needsCreate,
+    client,
+    createStoredAgent,
+    options,
+    agentId,
+    buildSharedParams,
+    buildMemoryParams,
+    queryClient,
+  ]);
 
   const watched = useWatch({ control: form.control });
 
   const canPublish = useMemo(() => {
+    if (isCodeAgentOverride) {
+      // Code agent overrides only need instructions to be filled
+      const instructionsDone = (watched.instructionBlocks ?? []).some(
+        b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content?.trim()),
+      );
+      return instructionsDone;
+    }
     const identityDone = !!watched.name && !!watched.model?.provider && !!watched.model?.name;
-    const instructionsDone = (watched.instructionBlocks ?? []).some(b => b.content?.trim());
+    const instructionsDone = (watched.instructionBlocks ?? []).some(
+      b => b.type === 'prompt_block_ref' || (b.type === 'prompt_block' && b.content?.trim()),
+    );
     return identityDone && instructionsDone;
-  }, [watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);
+  }, [isCodeAgentOverride, watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);
 
   const isDirty = form.formState.isDirty;
 

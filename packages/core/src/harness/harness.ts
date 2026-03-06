@@ -2,17 +2,23 @@ import type { z } from 'zod';
 
 import type { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
+import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { askUserTool, createSubagentTool, submitPlanTool } from './tools';
+import { askUserTool, createSubagentTool, submitPlanTool, taskCheckTool, taskWriteTool } from './tools';
+import { defaultDisplayState, defaultOMProgressState } from './types';
 import type {
   AvailableModel,
   HeartbeatHandler,
   HarnessConfig,
+  HarnessDisplayState,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -51,7 +57,7 @@ import type {
  * })
  *
  * await harness.init()
- * await harness.sendMessage("Hello!")
+ * await harness.sendMessage({ content: "Hello!" })
  * ```
  */
 export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
@@ -62,13 +68,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   private currentModeId: string;
   private currentThreadId: string | null = null;
   private resourceId: string;
+  private defaultResourceId: string;
   private listeners: HarnessEventListener[] = [];
   private abortController: AbortController | null = null;
   private abortRequested: boolean = false;
   private currentRunId: string | null = null;
   private currentOperationId: number = 0;
-  private followUpQueue: string[] = [];
-  private pendingApprovalResolve: ((decision: 'approve' | 'decline') => void) | null = null;
+  private followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
+  private pendingApprovalResolve:
+    | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
+    | null = null;
   private pendingApprovalToolName: string | null = null;
   private pendingQuestions = new Map<string, (answer: string) => void>();
   private pendingPlanApprovals = new Map<
@@ -88,11 +97,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   };
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
+  private displayState: HarnessDisplayState = defaultDisplayState();
+  #internalMastra: Mastra | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
+    this.defaultResourceId = this.resourceId;
 
     // Initialize state from schema defaults + initial state
     this.state = {
@@ -130,8 +142,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Must be called before using the harness.
    */
   async init(): Promise<void> {
+    // Create an internal Mastra instance so agents have access to storage
+    // (required for tool approval snapshot persistence/resume).
+    // We init storage through Mastra's proxied storage so augmentWithInit
+    // tracks it and won't double-init.
     if (this.config.storage) {
-      await this.config.storage.init();
+      this.#internalMastra = new Mastra({ logger: false, storage: this.config.storage });
+      await this.#internalMastra.getStorage()!.init();
     }
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
@@ -161,17 +178,23 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
-    // Propagate harness-level memory and workspace to mode agents (after workspace init)
+    // Propagate harness-level Mastra, memory, and workspace to mode agents (after workspace init)
     const workspaceForAgents = this.workspaceFn ?? this.workspace;
     for (const mode of this.config.modes) {
       const agent = typeof mode.agent === 'function' ? null : mode.agent;
       if (!agent) continue;
+
+      const alreadyHasMastra = !!agent.getMastraInstance();
 
       if (this.config.memory && !agent.hasOwnMemory()) {
         agent.__setMemory(this.config.memory);
       }
       if (workspaceForAgents && !agent.hasOwnWorkspace()) {
         agent.__setWorkspace(workspaceForAgents);
+      }
+
+      if (this.#internalMastra && !alreadyHasMastra) {
+        this.#internalMastra.addAgent(agent);
       }
     }
 
@@ -190,6 +213,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
     const mostRecent = sortedThreads[0]!;
+    await this.config.threadLock?.acquire(mostRecent.id);
     this.currentThreadId = mostRecent.id;
     await this.loadThreadMetadata();
 
@@ -263,7 +287,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // Mode Management
   // ===========================================================================
 
-  getModes(): HarnessMode<TState>[] {
+  listModes(): HarnessMode<TState>[] {
     return this.config.modes;
   }
 
@@ -283,7 +307,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Switch to a different mode.
    * Aborts any in-progress generation and switches to the mode's default model.
    */
-  async switchMode(modeId: string): Promise<void> {
+  async switchMode({ modeId }: { modeId: string }): Promise<void> {
     const mode = this.config.modes.find(m => m.id === modeId);
     if (!mode) {
       throw new Error(`Mode not found: ${modeId}`);
@@ -294,13 +318,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     // Save current model to the outgoing mode before switching
     const currentModelId = this.getCurrentModelId();
     if (currentModelId) {
-      await this.persistThreadSetting(`modeModelId_${this.currentModeId}`, currentModelId);
+      await this.setThreadSetting({ key: `modeModelId_${this.currentModeId}`, value: currentModelId });
     }
 
     const previousModeId = this.currentModeId;
     this.currentModeId = modeId;
 
-    await this.persistThreadSetting('currentModeId', modeId);
+    await this.setThreadSetting({ key: 'currentModeId', value: modeId });
 
     // Load the incoming mode's model
     const modeModelId = await this.loadModeModelId(modeId);
@@ -366,7 +390,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Switch to a different model at runtime.
    */
-  async switchModel(modelId: string, scope: 'global' | 'thread' = 'thread', modeId?: string): Promise<void> {
+  async switchModel({
+    modelId,
+    scope = 'thread',
+    modeId,
+  }: {
+    modelId: string;
+    scope?: 'global' | 'thread';
+    modeId?: string;
+  }): Promise<void> {
     const targetModeId = modeId ?? this.currentModeId;
 
     if (targetModeId === this.currentModeId) {
@@ -374,7 +406,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
 
     if (scope === 'thread') {
-      await this.persistThreadSetting(`modeModelId_${targetModeId}`, modelId);
+      await this.setThreadSetting({ key: `modeModelId_${targetModeId}`, value: modelId });
+    }
+
+    try {
+      await Promise.resolve(this.config.modelUseCountTracker?.(modelId));
+    } catch (error) {
+      console.error('Failed to track model usage count', error);
     }
 
     this.emit({ type: 'model_changed', modelId, scope, modeId: targetModeId } as HarnessEvent);
@@ -395,6 +433,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
+
+    try {
+      const availableModels = await this.listAvailableModels();
+      const currentModel = availableModels.find(model => model.id === modelId);
+      if (currentModel) {
+        if (currentModel.hasApiKey) {
+          return { hasAuth: true };
+        }
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
+      }
+    } catch {
+      // Ignore catalog lookup errors and fall through to provider-based checks.
+    }
+
     const provider = modelId.split('/')[0];
     if (!provider) return { hasAuth: true };
 
@@ -424,9 +476,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   /**
    * Get all available models from the provider registry with auth status.
-   * Uses the optional `modelAuthChecker` and `modelUseCountProvider` hooks.
+   * Uses the optional `modelAuthChecker`, `modelUseCountProvider`, and
+   * `customModelCatalogProvider` hooks.
    */
-  async getAvailableModels(): Promise<AvailableModel[]> {
+  async listAvailableModels(): Promise<AvailableModel[]> {
     try {
       const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
 
@@ -438,7 +491,15 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       >;
       const providers = Object.keys(registry);
       const useCounts = this.config.modelUseCountProvider?.() ?? {};
-      const models: AvailableModel[] = [];
+      const modelsById = new Map<string, AvailableModel>();
+
+      const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
+        if (!model.id || !model.provider || !model.modelName) return;
+        modelsById.set(model.id, {
+          ...model,
+          useCount: useCounts[model.id] ?? 0,
+        });
+      };
 
       for (const provider of providers) {
         const providerConfig = registry[provider];
@@ -454,20 +515,35 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
         if (providerConfig?.models && Array.isArray(providerConfig.models)) {
           for (const modelName of providerConfig.models) {
-            const id = `${provider}/${modelName}`;
-            models.push({
-              id,
+            upsertModel({
+              id: `${provider}/${modelName}`,
               provider,
               modelName,
               hasApiKey,
               apiKeyEnvVar: apiKeyEnvVar || undefined,
-              useCount: useCounts[id] ?? 0,
             });
           }
         }
       }
 
-      return models;
+      if (this.config.customModelCatalogProvider) {
+        try {
+          const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
+          for (const model of customModels) {
+            upsertModel({
+              id: model.id,
+              provider: model.provider,
+              modelName: model.modelName,
+              hasApiKey: model.hasApiKey,
+              apiKeyEnvVar: model.apiKeyEnvVar,
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to load custom available models:', error);
+        }
+      }
+
+      return [...modelsById.values()];
     } catch (error) {
       console.warn('Failed to load available models:', error);
       return [];
@@ -497,17 +573,27 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.resourceId;
   }
 
-  setResourceId(resourceId: string): void {
+  setResourceId({ resourceId }: { resourceId: string }): void {
     this.resourceId = resourceId;
     this.currentThreadId = null;
   }
 
-  async createThread(title?: string): Promise<HarnessThread> {
+  getDefaultResourceId(): string {
+    return this.defaultResourceId;
+  }
+
+  async getKnownResourceIds(): Promise<string[]> {
+    const threads = await this.listThreads({ allResources: true });
+    const ids = new Set(threads.map(t => t.resourceId));
+    return [...ids].sort();
+  }
+
+  async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
     const now = new Date();
     const thread: HarnessThread = {
       id: this.generateId(),
       resourceId: this.resourceId,
-      title: title || 'New Thread',
+      title: title || '',
       createdAt: now,
       updatedAt: now,
     };
@@ -522,18 +608,67 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       metadata[`modeModelId_${this.currentModeId}`] = modelId;
     }
 
+    // Auto-tag with projectPath from state so threads are scoped to the working directory
+    const projectPath = (this.state as any).projectPath;
+    if (projectPath) {
+      metadata.projectPath = projectPath;
+    }
+
+    // Acquire lock on new thread before releasing old one.
+    // If acquire fails, attempt to re-acquire the old lock before rethrowing.
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        await this.config.threadLock.acquire(thread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            await this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        await this.config.threadLock.release(oldThreadId);
+      }
+    }
+
     if (this.config.storage) {
       const memoryStorage = await this.getMemoryStorage();
-      await memoryStorage.saveThread({
-        thread: {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title!,
-          createdAt: thread.createdAt,
-          updatedAt: thread.updatedAt,
-          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-        },
-      });
+      try {
+        await memoryStorage.saveThread({
+          thread: {
+            id: thread.id,
+            resourceId: thread.resourceId,
+            title: thread.title!,
+            createdAt: thread.createdAt,
+            updatedAt: thread.updatedAt,
+            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+          },
+        });
+      } catch (err) {
+        // saveThread failed after lock was swapped; restore previous lock state
+        let reacquired = false;
+        if (this.config.threadLock) {
+          try {
+            await this.config.threadLock.release(thread.id);
+          } catch {
+            // Best-effort release of new thread lock
+          }
+          if (oldThreadId) {
+            try {
+              await this.config.threadLock.acquire(oldThreadId);
+              reacquired = true;
+            } catch {
+              // Re-acquire failed; no lock is held
+            }
+          }
+        }
+        this.currentThreadId = reacquired ? oldThreadId : null;
+        throw err;
+      }
     }
 
     this.currentThreadId = thread.id;
@@ -548,7 +683,46 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return thread;
   }
 
-  async renameThread(title: string): Promise<void> {
+  /**
+   * Returns a memory accessor with thread and message management methods.
+   */
+  get memory() {
+    return {
+      createThread: this.createThread.bind(this),
+      switchThread: this.switchThread.bind(this),
+      listThreads: this.listThreads.bind(this),
+      renameThread: this.renameThread.bind(this),
+      deleteThread: this.deleteThread.bind(this),
+    };
+  }
+
+  private async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    if (!this.config.storage) return;
+
+    const memoryStorage = await this.getMemoryStorage();
+    const thread = await memoryStorage.getThreadById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+
+    const isDeletingCurrentThread = this.currentThreadId === threadId;
+
+    await memoryStorage.deleteThread({ threadId });
+
+    if (isDeletingCurrentThread) {
+      try {
+        await this.config.threadLock?.release(threadId);
+      } catch {
+        // Lock release failed; proceed with state cleanup regardless
+      }
+      this.currentThreadId = null;
+      this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    }
+
+    this.emit({ type: 'thread_deleted', threadId });
+  }
+
+  async renameThread({ title }: { title: string }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     const memoryStorage = await this.getMemoryStorage();
@@ -560,8 +734,79 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
-  async switchThread(threadId: string): Promise<void> {
+  async cloneThread({
+    sourceThreadId,
+    title,
+    resourceId,
+  }: {
+    sourceThreadId?: string;
+    title?: string;
+    resourceId?: string;
+  } = {}): Promise<HarnessThread> {
+    const sourceId = sourceThreadId ?? this.currentThreadId;
+    if (!sourceId) {
+      throw new Error('No source thread to clone');
+    }
+    if (!this.config.memory) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+
+    const memory = await this.resolveMemory();
+
+    const result = await memory.cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.resourceId,
+      title,
+    });
+
+    const clonedThread: HarnessThread = {
+      id: result.thread.id,
+      resourceId: result.thread.resourceId,
+      title: result.thread.title ?? 'Cloned Thread',
+      createdAt: result.thread.createdAt,
+      updatedAt: result.thread.updatedAt,
+      metadata: result.thread.metadata,
+    };
+
+    // Acquire lock on new thread before releasing old one
+    const oldThreadId = this.currentThreadId;
+    if (this.config.threadLock) {
+      try {
+        await this.config.threadLock.acquire(clonedThread.id);
+      } catch (err) {
+        if (oldThreadId) {
+          try {
+            await this.config.threadLock.acquire(oldThreadId);
+          } catch {
+            // Best-effort re-acquire; original error is more important
+          }
+        }
+        throw err;
+      }
+      if (oldThreadId) {
+        await this.config.threadLock.release(oldThreadId);
+      }
+    }
+
+    this.currentThreadId = clonedThread.id;
+    await this.loadThreadMetadata();
+    this.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    this.emit({ type: 'thread_created', thread: clonedThread });
+
+    return clonedThread;
+  }
+
+  async switchThread({ threadId }: { threadId: string }): Promise<void> {
     this.abort();
+
+    // Acquire lock on new thread before releasing old one.
+    // Lock operations must be adjacent (no intermediate awaits) so callers
+    // can rely on a single microtask tick to observe both acquire and release.
+    await this.config.threadLock?.acquire(threadId);
+    const previousThreadId = this.currentThreadId;
+    if (previousThreadId) {
+      await this.config.threadLock?.release(previousThreadId);
+    }
 
     if (this.config.storage) {
       const memoryStorage = await this.getMemoryStorage();
@@ -571,7 +816,6 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       }
     }
 
-    const previousThreadId = this.currentThreadId;
     this.currentThreadId = threadId;
 
     await this.loadThreadMetadata();
@@ -599,7 +843,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }));
   }
 
-  async persistThreadSetting(key: string, value: unknown): Promise<void> {
+  async setThreadSetting({ key, value }: { key: string; value: unknown }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     try {
@@ -619,7 +863,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
-  private async removeThreadSetting(key: string): Promise<void> {
+  private async deleteThreadSetting({ key }: { key: string }): Promise<void> {
     if (!this.currentThreadId || !this.config.storage) return;
 
     try {
@@ -690,6 +934,14 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             previousModeId: this.config.modes.find(m => m.default)?.id || this.config.modes[0]!.id,
           });
         }
+      }
+
+      // Restore observer/reflector model IDs
+      if (meta?.observerModelId) {
+        updates.observerModelId = meta.observerModelId;
+      }
+      if (meta?.reflectorModelId) {
+        updates.reflectorModelId = meta.reflectorModelId;
       }
 
       if (Object.keys(updates).length > 0) {
@@ -820,6 +1072,17 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     }
   }
 
+  async getObservationalMemoryRecord(): Promise<ObservationalMemoryRecord | null> {
+    if (!this.currentThreadId) return null;
+
+    try {
+      const memoryStorage = await this.getMemoryStorage();
+      return await memoryStorage.getObservationalMemory(this.currentThreadId, this.resourceId);
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Returns the observer model ID from state, falling back to omConfig defaults.
    */
@@ -866,11 +1129,29 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.config.resolveModel(modelId);
   }
 
+  /**
+   * Switch the Observer model.
+   */
+  async switchObserverModel({ modelId }: { modelId: string }): Promise<void> {
+    void this.setState({ observerModelId: modelId } as Partial<z.infer<TState>>);
+    await this.setThreadSetting({ key: 'observerModelId', value: modelId });
+    this.emit({ type: 'om_model_changed', role: 'observer', modelId } as HarnessEvent);
+  }
+
+  /**
+   * Switch the Reflector model.
+   */
+  async switchReflectorModel({ modelId }: { modelId: string }): Promise<void> {
+    void this.setState({ reflectorModelId: modelId } as Partial<z.infer<TState>>);
+    await this.setThreadSetting({ key: 'reflectorModelId', value: modelId });
+    this.emit({ type: 'om_model_changed', role: 'reflector', modelId } as HarnessEvent);
+  }
+
   // ===========================================================================
   // Subagent Model Management
   // ===========================================================================
 
-  getSubagentModelId(agentType?: string): string | null {
+  getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
     const state = this.state as Record<string, unknown>;
     if (agentType) {
       const perType = state[`subagentModelId_${agentType}`];
@@ -880,10 +1161,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return typeof global === 'string' ? global : null;
   }
 
-  async setSubagentModelId(modelId: string, agentType?: string): Promise<void> {
+  async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
     const key = agentType ? `subagentModelId_${agentType}` : 'subagentModelId';
     void this.setState({ [key]: modelId } as Partial<z.infer<TState>>);
-    await this.persistThreadSetting(key, modelId);
+    await this.setThreadSetting({ key, value: modelId });
     this.emit({ type: 'subagent_model_changed', modelId, scope: 'thread', agentType } as HarnessEvent);
   }
 
@@ -891,11 +1172,11 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   // Permissions
   // ===========================================================================
 
-  grantSessionCategory(category: ToolCategory): void {
+  grantSessionCategory({ category }: { category: ToolCategory }): void {
     this.sessionGrantedCategories.add(category);
   }
 
-  grantSessionTool(toolName: string): void {
+  grantSessionTool({ toolName }: { toolName: string }): void {
     this.sessionGrantedTools.add(toolName);
   }
 
@@ -906,17 +1187,17 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     };
   }
 
-  getToolCategory(toolName: string): ToolCategory | null {
+  getToolCategory({ toolName }: { toolName: string }): ToolCategory | null {
     return this.config.toolCategoryResolver?.(toolName) ?? null;
   }
 
-  setPermissionCategory(category: ToolCategory, policy: PermissionPolicy): void {
+  setPermissionForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.categories[category] = policy;
     void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
   }
 
-  setPermissionTool(toolName: string, policy: PermissionPolicy): void {
+  setPermissionForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): void {
     const rules = this.getPermissionRules();
     rules.tools[toolName] = policy;
     void this.setState({ permissionRules: rules } as Partial<z.infer<TState>>);
@@ -944,7 +1225,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     if (this.sessionGrantedTools.has(toolName)) return 'allow';
 
-    const category = this.getToolCategory(toolName);
+    const category = this.getToolCategory({ toolName });
     if (category) {
       if (this.sessionGrantedCategories.has(category)) return 'allow';
       const categoryPolicy = rules.categories[category];
@@ -962,7 +1243,19 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Send a message to the current agent.
    * Streams the response and emits events.
    */
-  async sendMessage(content: string, options?: { images?: Array<{ data: string; mimeType: string }> }): Promise<void> {
+  async sendMessage({
+    content,
+    files,
+    tracingContext,
+    tracingOptions,
+    requestContext: requestContextInput,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+  }): Promise<void> {
     if (!this.currentThreadId) {
       const thread = await this.createThread();
       this.currentThreadId = thread.id;
@@ -971,11 +1264,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const operationId = ++this.currentOperationId;
     this.abortController = new AbortController();
     const agent = this.getCurrentAgent();
-
     this.emit({ type: 'agent_start' });
 
     try {
-      const requestContext = await this.buildRequestContext();
+      const requestContext = await this.buildRequestContext(requestContextInput);
 
       const isYolo = (this.state as Record<string, unknown>).yolo === true;
 
@@ -986,23 +1278,45 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         maxSteps: 1000,
         requireToolApproval: !isYolo,
         modelSettings: { temperature: 1 },
+        ...(tracingContext && { tracingContext }),
+        ...(tracingOptions && { tracingOptions }),
       };
 
       streamOptions.toolsets = await this.buildToolsets(requestContext);
 
       let messageInput: string | Record<string, unknown> = content;
-      if (options?.images?.length) {
+      if (files?.length) {
+        const fileParts = files.map(f => {
+          const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+          if (isText) {
+            let textContent = f.data;
+            // Decode data URI to plain text
+            const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+            if (base64Match) {
+              try {
+                textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+              } catch {
+                // Fall through with raw data
+              }
+            }
+            const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+            return { type: 'text' as const, text: `${label}\n\`\`\`\n${textContent}\n\`\`\`` };
+          }
+          return {
+            type: 'file' as const,
+            data: f.data,
+            mediaType: f.mediaType,
+            filename: f.filename,
+          };
+        });
         messageInput = {
           role: 'user',
-          content: [
-            { type: 'text', text: content },
-            ...options.images.map(img => ({ type: 'file', data: img.data, mediaType: img.mimeType })),
-          ],
+          content: [{ type: 'text', text: content }, ...fileParts],
         };
       }
 
       const response = await agent.stream(messageInput as any, streamOptions as any);
-      await this.processStream(response);
+      await this.processStream(response, requestContext);
 
       if (this.currentOperationId === operationId) {
         const reason = this.abortRequested ? 'aborted' : 'complete';
@@ -1020,9 +1334,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           error: new Error(`Unknown tool "${badTool}".`),
           retryable: true,
         });
-        this.followUpQueue.push(
-          `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
-        );
+        this.followUpQueue.push({
+          content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
+          requestContext: requestContextInput,
+        });
         this.emit({ type: 'agent_end', reason: 'error' });
       } else {
         const err = error instanceof Error ? error : new Error(String(error));
@@ -1037,21 +1352,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
       if (this.currentOperationId === operationId && this.followUpQueue.length > 0) {
         const next = this.followUpQueue.shift()!;
-        await this.sendMessage(next);
+        await this.sendMessage({
+          content: next.content,
+          requestContext: next.requestContext,
+          tracingContext,
+          tracingOptions,
+        });
       }
     }
   }
 
-  async getMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
+  async listMessages(options?: { limit?: number }): Promise<HarnessMessage[]> {
     if (!this.currentThreadId) return [];
-    return this.getMessagesForThread(this.currentThreadId, options);
+    return this.listMessagesForThread({ threadId: this.currentThreadId, limit: options?.limit });
   }
 
-  async getMessagesForThread(threadId: string, options?: { limit?: number }): Promise<HarnessMessage[]> {
+  async listMessagesForThread({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.config.storage) return [];
 
     const memoryStorage = await this.getMemoryStorage();
-    const limit = options?.limit;
 
     if (limit) {
       const result = await memoryStorage.listMessages({
@@ -1067,7 +1386,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return result.messages.map(msg => this.convertToHarnessMessage(msg));
   }
 
-  async getFirstUserMessageForThread(threadId: string): Promise<HarnessMessage | null> {
+  async getFirstUserMessageForThread({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
     if (!this.config.storage) return null;
 
     const memoryStorage = await this.getMemoryStorage();
@@ -1154,6 +1473,70 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             });
           }
           break;
+        case 'data-om-observation-start': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_observation_start',
+            tokensToObserve: (data.tokensToObserve as number) ?? 0,
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
+        case 'data-om-observation-end': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_observation_end',
+            tokensObserved: (data.tokensObserved as number) ?? 0,
+            observationTokens: (data.observationTokens as number) ?? 0,
+            durationMs: (data.durationMs as number) ?? 0,
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+            observations: (data.observations as string) ?? undefined,
+            currentTask: (data.currentTask as string) ?? undefined,
+            suggestedResponse: (data.suggestedResponse as string) ?? undefined,
+          });
+          break;
+        }
+        case 'data-om-observation-failed': {
+          const data = (part as { data?: Record<string, unknown> }).data ?? {};
+          content.push({
+            type: 'om_observation_failed',
+            error: (data.error as string) ?? 'Unknown error',
+            tokensAttempted: (data.tokensAttempted as number) ?? 0,
+            operationType: (data.operationType as 'observation' | 'reflection') ?? 'observation',
+          });
+          break;
+        }
+        case 'file':
+          if (typeof part.data !== 'string') {
+            console.warn('[Harness] Skipping file part with non-string data:', typeof part.data);
+            break;
+          }
+          content.push({
+            type: 'file',
+            data: part.data,
+            mediaType:
+              (part as { mediaType?: string }).mediaType ??
+              (part as { mimeType?: string }).mimeType ??
+              'application/octet-stream',
+            ...((part as { filename?: string }).filename ? { filename: (part as { filename?: string }).filename } : {}),
+          });
+          break;
+        case 'image': {
+          const imgData =
+            typeof part.data === 'string'
+              ? part.data
+              : typeof (part as { image?: string }).image === 'string'
+                ? (part as { image?: string }).image!
+                : '';
+          content.push({
+            type: 'file',
+            data: imgData,
+            mediaType:
+              (part as { mimeType?: string }).mimeType ?? (part as { mediaType?: string }).mediaType ?? 'image/png',
+          });
+          break;
+        }
+        // Skip other part types (step-start, data-om-status, etc.)
       }
     }
 
@@ -1163,7 +1546,10 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Process a stream response (shared between sendMessage and tool approval).
    */
-  private async processStream(response: { fullStream: AsyncIterable<any> }): Promise<{ message: HarnessMessage }> {
+  private async processStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContext: RequestContext,
+  ): Promise<{ message: HarnessMessage }> {
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -1173,6 +1559,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
     const textContentById = new Map<string, { index: number; text: string }>();
     const thinkingContentById = new Map<string, { index: number; text: string }>();
+    const abortForOmFailure = ({
+      operationType,
+      stage,
+      error,
+    }: {
+      operationType: string;
+      stage: string;
+      error: string;
+    }) => {
+      this.emit({
+        type: 'error',
+        error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
+      });
+      this.abort();
+    };
 
     for await (const chunk of response.fullStream) {
       if ('runId' in chunk && chunk.runId) {
@@ -1219,6 +1620,24 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             }
             this.emit({ type: 'message_update', message: { ...currentMessage } });
           }
+          break;
+        }
+
+        case 'tool-call-input-streaming-start': {
+          const { toolCallId, toolName } = chunk.payload;
+          this.emit({ type: 'tool_input_start', toolCallId, toolName });
+          break;
+        }
+
+        case 'tool-call-delta': {
+          const { toolCallId, argsTextDelta, toolName } = chunk.payload;
+          this.emit({ type: 'tool_input_delta', toolCallId, argsTextDelta, toolName });
+          break;
+        }
+
+        case 'tool-call-input-streaming-end': {
+          const { toolCallId } = chunk.payload;
+          this.emit({ type: 'tool_input_end', toolCallId });
           break;
         }
 
@@ -1273,13 +1692,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           const policy = this.resolveToolApproval(toolName);
 
           if (policy === 'allow') {
-            const result = await this.handleToolApprove(toolCallId);
+            const result = await this.handleToolApprove({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
 
           if (policy === 'deny') {
-            const result = await this.handleToolDecline(toolCallId);
+            const result = await this.handleToolDecline({ toolCallId, requestContext });
             currentMessage = result.message;
             return { message: currentMessage };
           }
@@ -1287,17 +1706,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           this.pendingApprovalToolName = toolName;
           this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
-          const decision = await new Promise<'approve' | 'decline'>(resolve => {
-            this.pendingApprovalResolve = resolve;
-          });
+          const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+            resolve => {
+              this.pendingApprovalResolve = resolve;
+            },
+          );
           this.pendingApprovalToolName = null;
 
-          if (decision === 'approve') {
-            const result = await this.handleToolApprove(toolCallId);
+          if (approval.decision === 'approve') {
+            const result = await this.handleToolApprove({
+              toolCallId,
+              requestContext: approval.requestContext ?? requestContext,
+            });
             currentMessage = result.message;
             return { message: currentMessage };
           } else {
-            const result = await this.handleToolDecline(toolCallId);
+            const result = await this.handleToolDecline({
+              toolCallId,
+              requestContext: approval.requestContext ?? requestContext,
+            });
             currentMessage = result.message;
             return { message: currentMessage };
           }
@@ -1313,8 +1740,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         case 'step-finish': {
           const usage = chunk.payload?.output?.usage;
           if (usage) {
-            const promptTokens = usage.promptTokens ?? 0;
-            const completionTokens = usage.completionTokens ?? 0;
+            const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
+            const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
             const totalTokens = promptTokens + completionTokens;
 
             this.tokenUsage.promptTokens += promptTokens;
@@ -1335,6 +1762,199 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
             currentMessage.stopReason = 'tool_use';
           } else {
             currentMessage.stopReason = 'complete';
+          }
+          break;
+        }
+
+        // Observational Memory data parts
+        // NOTE: OM data parts arrive as { type, data: { ... } } — NOT { type, payload }
+        case 'data-om-status': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.windows) {
+            const w = d.windows;
+            const active = w.active ?? {};
+            const msgs = active.messages ?? {};
+            const obs = active.observations ?? {};
+            const buffObs = w.buffered?.observations ?? {};
+            const buffRef = w.buffered?.reflection ?? {};
+
+            this.emit({
+              type: 'om_status',
+              windows: {
+                active: {
+                  messages: { tokens: msgs.tokens ?? 0, threshold: msgs.threshold ?? 0 },
+                  observations: { tokens: obs.tokens ?? 0, threshold: obs.threshold ?? 0 },
+                },
+                buffered: {
+                  observations: {
+                    status: buffObs.status ?? 'idle',
+                    chunks: buffObs.chunks ?? 0,
+                    messageTokens: buffObs.messageTokens ?? 0,
+                    projectedMessageRemoval: buffObs.projectedMessageRemoval ?? 0,
+                    observationTokens: buffObs.observationTokens ?? 0,
+                  },
+                  reflection: {
+                    status: buffRef.status ?? 'idle',
+                    inputObservationTokens: buffRef.inputObservationTokens ?? 0,
+                    observationTokens: buffRef.observationTokens ?? 0,
+                  },
+                },
+              },
+              recordId: d.recordId ?? '',
+              threadId: d.threadId ?? '',
+              stepNumber: d.stepNumber ?? 0,
+              generationCount: d.generationCount ?? 0,
+            });
+          }
+          break;
+        }
+        case 'data-om-observation-start': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            if (payload.operationType === 'observation') {
+              this.emit({
+                type: 'om_observation_start',
+                cycleId: payload.cycleId,
+                operationType: payload.operationType,
+                tokensToObserve: payload.tokensToObserve ?? 0,
+              });
+            } else if (payload.operationType === 'reflection') {
+              this.emit({
+                type: 'om_reflection_start',
+                cycleId: payload.cycleId,
+                tokensToReflect: payload.tokensToObserve ?? 0,
+              });
+            }
+          }
+          break;
+        }
+        case 'data-om-observation-end': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            if (payload.operationType === 'reflection') {
+              this.emit({
+                type: 'om_reflection_end',
+                cycleId: payload.cycleId,
+                durationMs: payload.durationMs ?? 0,
+                compressedTokens: payload.observationTokens ?? 0,
+                observations: payload.observations,
+              });
+            } else {
+              this.emit({
+                type: 'om_observation_end',
+                cycleId: payload.cycleId,
+                durationMs: payload.durationMs ?? 0,
+                tokensObserved: payload.tokensObserved ?? 0,
+                observationTokens: payload.observationTokens ?? 0,
+                observations: payload.observations,
+                currentTask: payload.currentTask,
+                suggestedResponse: payload.suggestedResponse,
+              });
+            }
+          }
+          break;
+        }
+        case 'data-om-observation-failed': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload) {
+            const operationType = payload.operationType === 'reflection' ? 'reflection' : 'observation';
+            const error = payload.error ?? 'Unknown error';
+
+            if (operationType === 'reflection') {
+              this.emit({
+                type: 'om_reflection_failed',
+                cycleId: payload.cycleId ?? 'unknown',
+                error,
+                durationMs: payload.durationMs ?? 0,
+              });
+            } else {
+              this.emit({
+                type: 'om_observation_failed',
+                cycleId: payload.cycleId ?? 'unknown',
+                error,
+                durationMs: payload.durationMs ?? 0,
+              });
+            }
+
+            abortForOmFailure({ operationType, stage: 'run', error });
+            return { message: currentMessage };
+          }
+          break;
+        }
+        // Async buffering lifecycle
+        case 'data-om-buffering-start': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            this.emit({
+              type: 'om_buffering_start',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              tokensToBuffer: payload.tokensToBuffer ?? 0,
+            });
+          }
+          break;
+        }
+        case 'data-om-buffering-end': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            this.emit({
+              type: 'om_buffering_end',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              tokensBuffered: payload.tokensBuffered ?? 0,
+              bufferedTokens: payload.bufferedTokens ?? 0,
+              observations: payload.observations,
+            });
+          }
+          break;
+        }
+        case 'data-om-buffering-failed': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload) {
+            const operationType = payload.operationType ?? 'observation';
+            const error = payload.error ?? 'Unknown error';
+
+            this.emit({
+              type: 'om_buffering_failed',
+              cycleId: payload.cycleId,
+              operationType,
+              error,
+            });
+
+            abortForOmFailure({ operationType, stage: 'buffering', error });
+            return { message: currentMessage };
+          }
+          break;
+        }
+        case 'data-om-activation': {
+          const payload = (chunk as any).data as Record<string, any> | undefined;
+          if (payload && payload.cycleId) {
+            this.emit({
+              type: 'om_activation',
+              cycleId: payload.cycleId,
+              operationType: payload.operationType ?? 'observation',
+              chunksActivated: payload.chunksActivated ?? 0,
+              tokensActivated: payload.tokensActivated ?? 0,
+              observationTokens: payload.observationTokens ?? 0,
+              messagesActivated: payload.messagesActivated ?? 0,
+              generationCount: payload.generationCount ?? 0,
+            });
+          }
+          break;
+        }
+
+        // Sandbox streaming data chunks (from workspace execute_command tool)
+        case 'data-sandbox-stdout': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stdout' });
+          }
+          break;
+        }
+        case 'data-sandbox-stderr': {
+          const d = (chunk as any).data as Record<string, any> | undefined;
+          if (d?.output && d?.toolCallId) {
+            this.emit({ type: 'shell_output', toolCallId: d.toolCallId, output: d.output, stream: 'stderr' });
           }
           break;
         }
@@ -1368,21 +1988,21 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
-  async steer(content: string): Promise<void> {
+  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     this.abort();
     this.followUpQueue = [];
-    await this.sendMessage(content);
+    await this.sendMessage({ content, requestContext });
   }
 
   /**
    * Queue a follow-up message to be processed after the current operation completes.
    */
-  async followUp(content: string): Promise<void> {
+  async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (this.isRunning()) {
-      this.followUpQueue.push(content);
+      this.followUpQueue.push({ content, requestContext });
       this.emit({ type: 'follow_up_queued', count: this.followUpQueue.length });
     } else {
-      await this.sendMessage(content);
+      await this.sendMessage({ content, requestContext });
     }
   }
 
@@ -1398,24 +2018,62 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     return this.currentRunId;
   }
 
+  // ===========================================================================
+  // Display State
+  // ===========================================================================
+
+  /**
+   * Returns a read-only snapshot of the canonical display state.
+   * UIs should use this to render instead of building up state from raw events.
+   */
+  getDisplayState(): Readonly<HarnessDisplayState> {
+    return this.displayState;
+  }
+
+  /**
+   * Reset display state fields that are scoped to a thread.
+   * Called on thread switch/creation.
+   */
+  private resetThreadDisplayState(): void {
+    this.displayState.activeTools = new Map();
+    this.displayState.toolInputBuffers = new Map();
+    this.displayState.pendingApproval = null;
+    this.displayState.pendingQuestion = null;
+    this.displayState.pendingPlanApproval = null;
+    this.displayState.activeSubagents = new Map();
+    this.displayState.currentMessage = null;
+    this.displayState.modifiedFiles = new Map();
+    this.displayState.tasks = [];
+    this.displayState.previousTasks = [];
+    this.displayState.omProgress = defaultOMProgressState();
+    this.displayState.bufferingMessages = false;
+    this.displayState.bufferingObservations = false;
+  }
+
   /**
    * Respond to a pending tool approval from the UI.
    * "always_allow_category" grants the tool's category for the rest of the session, then approves.
    */
-  resolveToolApprovalDecision(decision: 'approve' | 'decline' | 'always_allow_category'): void {
+  respondToToolApproval({
+    decision,
+    requestContext,
+  }: {
+    decision: 'approve' | 'decline' | 'always_allow_category';
+    requestContext?: RequestContext;
+  }): void {
     if (!this.pendingApprovalResolve) return;
 
     if (decision === 'always_allow_category') {
       const tn = this.pendingApprovalToolName;
       if (tn) {
-        const category = this.getToolCategory(tn);
+        const category = this.getToolCategory({ toolName: tn });
         if (category) {
-          this.grantSessionCategory(category);
+          this.grantSessionCategory({ category });
         }
       }
-      this.pendingApprovalResolve('approve');
+      this.pendingApprovalResolve({ decision: 'approve', requestContext });
     } else {
-      this.pendingApprovalResolve(decision);
+      this.pendingApprovalResolve({ decision, requestContext });
     }
     this.pendingApprovalResolve = null;
   }
@@ -1428,7 +2086,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Register a pending question resolver.
    * Called by agent tools (e.g., ask_user) to pause execution until the UI responds.
    */
-  registerQuestion(questionId: string, resolve: (answer: string) => void): void {
+  registerQuestion({ questionId, resolve }: { questionId: string; resolve: (answer: string) => void }): void {
     this.pendingQuestions.set(questionId, resolve);
   }
 
@@ -1436,7 +2094,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Resolve a pending question with the user's answer.
    * Called by the UI when the user responds to a question dialog.
    */
-  respondToQuestion(questionId: string, answer: string): void {
+  respondToQuestion({ questionId, answer }: { questionId: string; answer: string }): void {
     const resolve = this.pendingQuestions.get(questionId);
     if (resolve) {
       this.pendingQuestions.delete(questionId);
@@ -1448,10 +2106,13 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Register a pending plan approval resolver.
    * Called by agent tools (e.g., submit_plan) to pause execution until approval.
    */
-  registerPlanApproval(
-    planId: string,
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void,
-  ): void {
+  registerPlanApproval({
+    planId,
+    resolve,
+  }: {
+    planId: string;
+    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
+  }): void {
     this.pendingPlanApprovals.set(planId, resolve);
   }
 
@@ -1460,17 +2121,20 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * On approval: switches to the default mode, then resolves the promise.
    * On rejection: resolves with feedback (stays in current mode).
    */
-  async respondToPlanApproval(
-    planId: string,
-    response: { action: 'approved' | 'rejected'; feedback?: string },
-  ): Promise<void> {
+  async respondToPlanApproval({
+    planId,
+    response,
+  }: {
+    planId: string;
+    response: { action: 'approved' | 'rejected'; feedback?: string };
+  }): Promise<void> {
     const resolve = this.pendingPlanApprovals.get(planId);
     if (!resolve) return;
 
     if (response.action === 'approved') {
       const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
       if (defaultMode && defaultMode.id !== this.currentModeId) {
-        await this.switchMode(defaultMode.id);
+        await this.switchMode({ modeId: defaultMode.id });
       }
     }
 
@@ -1478,17 +2142,24 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     resolve(response);
   }
 
-  private async handleToolApprove(toolCallId?: string): Promise<{ message: HarnessMessage }> {
+  private async handleToolApprove({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to approve tool call for');
     }
 
     const agent = this.getCurrentAgent();
+
     if (!this.abortController) {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.approveToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -1499,10 +2170,16 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
-  private async handleToolDecline(toolCallId?: string): Promise<{ message: HarnessMessage }> {
+  private async handleToolDecline({
+    toolCallId,
+    requestContext: requestContextInput,
+  }: {
+    toolCallId?: string;
+    requestContext?: RequestContext;
+  }): Promise<{ message: HarnessMessage }> {
     if (!this.currentRunId) {
       throw new Error('No active run to decline tool call for');
     }
@@ -1512,7 +2189,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       this.abortController = new AbortController();
     }
 
-    const requestContext = await this.buildRequestContext();
+    const requestContext = await this.buildRequestContext(requestContextInput);
     const response = await agent.declineToolCall({
       runId: this.currentRunId,
       toolCallId,
@@ -1523,7 +2200,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       toolsets: await this.buildToolsets(requestContext),
     });
 
-    return await this.processStream(response);
+    return await this.processStream(response, requestContext);
   }
 
   // ===========================================================================
@@ -1544,6 +2221,23 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   private emit(event: HarnessEvent): void {
+    // Update display state based on the event (before dispatching to listeners)
+    this.applyDisplayStateUpdate(event);
+
+    this.dispatchToListeners(event);
+
+    // After every event, emit display_state_changed so UIs that prefer a single
+    // subscribe-and-render pattern can do so. We dispatch directly to listeners
+    // (not through emit()) to avoid infinite recursion.
+    if (event.type !== 'display_state_changed') {
+      this.dispatchToListeners({
+        type: 'display_state_changed',
+        displayState: this.displayState,
+      });
+    }
+  }
+
+  private dispatchToListeners(event: HarnessEvent): void {
     for (const listener of this.listeners) {
       try {
         const result = listener(event);
@@ -1553,6 +2247,384 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       } catch (err) {
         console.error('Error in harness event listener:', err);
       }
+    }
+  }
+
+  /**
+   * Apply a display state update based on an incoming event.
+   * This is the centralized state machine that keeps HarnessDisplayState in sync
+   * with every event the Harness emits.
+   */
+  private applyDisplayStateUpdate(event: HarnessEvent): void {
+    const ds = this.displayState;
+
+    switch (event.type) {
+      // ── Agent lifecycle ────────────────────────────────────────────────
+      case 'agent_start':
+        ds.isRunning = true;
+        ds.activeTools = new Map();
+        ds.toolInputBuffers = new Map();
+        ds.currentMessage = null;
+        ds.pendingApproval = null;
+        break;
+
+      case 'agent_end':
+        ds.isRunning = false;
+        ds.pendingApproval = null;
+        ds.pendingQuestion = null;
+        ds.pendingPlanApproval = null;
+        // Mark any still-running tools as errored (handles abort mid-run)
+        for (const [, tool] of ds.activeTools) {
+          if (tool.status === 'running' || tool.status === 'streaming_input') {
+            tool.status = 'error';
+          }
+        }
+        ds.activeSubagents = new Map();
+        break;
+
+      // ── Message streaming ──────────────────────────────────────────────
+      case 'message_start':
+        ds.currentMessage = event.message;
+        break;
+
+      case 'message_update':
+        ds.currentMessage = event.message;
+        break;
+
+      case 'message_end':
+        ds.currentMessage = event.message;
+        break;
+
+      // ── Tool lifecycle ─────────────────────────────────────────────────
+      case 'tool_input_start': {
+        ds.toolInputBuffers.set(event.toolCallId, { text: '', toolName: event.toolName });
+        const existing = ds.activeTools.get(event.toolCallId);
+        if (existing) {
+          existing.status = 'streaming_input';
+        } else {
+          ds.activeTools.set(event.toolCallId, {
+            name: event.toolName,
+            args: {},
+            status: 'streaming_input',
+          });
+        }
+        break;
+      }
+
+      case 'tool_input_delta': {
+        const buf = ds.toolInputBuffers.get(event.toolCallId);
+        if (buf) {
+          buf.text += event.argsTextDelta;
+        }
+        break;
+      }
+
+      case 'tool_input_end':
+        ds.toolInputBuffers.delete(event.toolCallId);
+        break;
+
+      case 'tool_start': {
+        const existingTool = ds.activeTools.get(event.toolCallId);
+        if (existingTool) {
+          existingTool.name = event.toolName;
+          existingTool.args = event.args;
+          existingTool.status = 'running';
+        } else {
+          ds.activeTools.set(event.toolCallId, {
+            name: event.toolName,
+            args: event.args,
+            status: 'running',
+          });
+        }
+        break;
+      }
+
+      case 'tool_update': {
+        const tool = ds.activeTools.get(event.toolCallId);
+        if (tool) {
+          tool.partialResult =
+            typeof event.partialResult === 'string' ? event.partialResult : JSON.stringify(event.partialResult);
+        }
+        break;
+      }
+
+      case 'tool_end': {
+        const endedTool = ds.activeTools.get(event.toolCallId);
+        if (endedTool) {
+          endedTool.status = event.isError ? 'error' : 'completed';
+          endedTool.result = event.result;
+          endedTool.isError = event.isError;
+        }
+        // Track file modifications
+        if (!event.isError) {
+          const FILE_TOOLS = ['string_replace_lsp', 'write_file', 'ast_smart_edit'];
+          const toolState = ds.activeTools.get(event.toolCallId);
+          if (toolState && FILE_TOOLS.includes(toolState.name)) {
+            const toolArgs = toolState.args as Record<string, unknown>;
+            const filePath = toolArgs?.path as string;
+            if (filePath) {
+              const existing = ds.modifiedFiles.get(filePath);
+              if (existing) {
+                existing.operations.push(toolState.name);
+              } else {
+                ds.modifiedFiles.set(filePath, {
+                  operations: [toolState.name],
+                  firstModified: new Date(),
+                });
+              }
+            }
+          }
+        }
+        break;
+      }
+
+      case 'shell_output': {
+        const shellTool = ds.activeTools.get(event.toolCallId);
+        if (shellTool) {
+          shellTool.shellOutput = (shellTool.shellOutput ?? '') + event.output;
+        }
+        break;
+      }
+
+      case 'tool_approval_required':
+        ds.pendingApproval = {
+          toolCallId: event.toolCallId,
+          toolName: event.toolName,
+          args: event.args,
+        };
+        break;
+
+      // ── Interactive prompts ────────────────────────────────────────────
+      case 'ask_question':
+        ds.pendingQuestion = {
+          questionId: event.questionId,
+          question: event.question,
+          options: event.options,
+        };
+        break;
+
+      case 'plan_approval_required':
+        ds.pendingPlanApproval = {
+          planId: event.planId,
+          title: event.title,
+          plan: event.plan,
+        };
+        break;
+
+      case 'plan_approved':
+        ds.pendingPlanApproval = null;
+        break;
+
+      // ── Subagent tracking ──────────────────────────────────────────────
+      case 'subagent_start':
+        ds.activeSubagents.set(event.toolCallId, {
+          agentType: event.agentType,
+          task: event.task,
+          modelId: event.modelId,
+          toolCalls: [],
+          textDelta: '',
+          status: 'running',
+        });
+        break;
+
+      case 'subagent_text_delta': {
+        const sub = ds.activeSubagents.get(event.toolCallId);
+        if (sub) {
+          sub.textDelta += event.textDelta;
+        }
+        break;
+      }
+
+      case 'subagent_tool_start': {
+        const subAgent = ds.activeSubagents.get(event.toolCallId);
+        if (subAgent) {
+          subAgent.toolCalls.push({ name: event.subToolName, isError: false });
+        }
+        break;
+      }
+
+      case 'subagent_tool_end': {
+        const subTool = ds.activeSubagents.get(event.toolCallId);
+        if (subTool) {
+          const tc = subTool.toolCalls.find(t => t.name === event.subToolName && !t.isError);
+          if (tc) {
+            tc.isError = event.isError;
+          }
+        }
+        break;
+      }
+
+      case 'subagent_end': {
+        const endedSub = ds.activeSubagents.get(event.toolCallId);
+        if (endedSub) {
+          endedSub.status = event.isError ? 'error' : 'completed';
+          endedSub.durationMs = event.durationMs;
+          endedSub.result = event.result;
+        }
+        break;
+      }
+
+      // ── Observational Memory ───────────────────────────────────────────
+      case 'om_status': {
+        const w = event.windows;
+        ds.omProgress.pendingTokens = w.active.messages.tokens;
+        ds.omProgress.threshold = w.active.messages.threshold;
+        ds.omProgress.thresholdPercent =
+          w.active.messages.threshold > 0 ? (w.active.messages.tokens / w.active.messages.threshold) * 100 : 0;
+        ds.omProgress.observationTokens = w.active.observations.tokens;
+        ds.omProgress.reflectionThreshold = w.active.observations.threshold;
+        ds.omProgress.reflectionThresholdPercent =
+          w.active.observations.threshold > 0
+            ? (w.active.observations.tokens / w.active.observations.threshold) * 100
+            : 0;
+        ds.omProgress.buffered = {
+          observations: { ...w.buffered.observations },
+          reflection: { ...w.buffered.reflection },
+        };
+        ds.omProgress.generationCount = event.generationCount;
+        ds.omProgress.stepNumber = event.stepNumber;
+        // Drive buffering animation flags from status fields
+        ds.bufferingMessages = w.buffered.observations.status === 'running';
+        ds.bufferingObservations = w.buffered.reflection.status === 'running';
+        break;
+      }
+
+      case 'om_observation_start':
+        ds.omProgress.status = 'observing';
+        ds.omProgress.cycleId = event.cycleId;
+        ds.omProgress.startTime = Date.now();
+        break;
+
+      case 'om_observation_end':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.observationTokens;
+        // Messages have been observed — reset pending tokens
+        ds.omProgress.pendingTokens = 0;
+        ds.omProgress.thresholdPercent = 0;
+        break;
+
+      case 'om_observation_failed':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        break;
+
+      case 'om_reflection_start':
+        ds.omProgress.status = 'reflecting';
+        ds.omProgress.cycleId = event.cycleId;
+        ds.omProgress.startTime = Date.now();
+        ds.omProgress.preReflectionTokens = ds.omProgress.observationTokens;
+        ds.omProgress.observationTokens = event.tokensToReflect;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0 ? (event.tokensToReflect / ds.omProgress.reflectionThreshold) * 100 : 0;
+        break;
+
+      case 'om_reflection_end':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        ds.omProgress.observationTokens = event.compressedTokens;
+        ds.omProgress.reflectionThresholdPercent =
+          ds.omProgress.reflectionThreshold > 0
+            ? (event.compressedTokens / ds.omProgress.reflectionThreshold) * 100
+            : 0;
+        break;
+
+      case 'om_reflection_failed':
+        ds.omProgress.status = 'idle';
+        ds.omProgress.cycleId = undefined;
+        ds.omProgress.startTime = undefined;
+        break;
+
+      case 'om_buffering_start':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = true;
+        } else {
+          ds.bufferingObservations = true;
+        }
+        break;
+
+      case 'om_buffering_end':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_buffering_failed':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      case 'om_activation':
+        if (event.operationType === 'observation') {
+          ds.bufferingMessages = false;
+        } else {
+          ds.bufferingObservations = false;
+        }
+        break;
+
+      // ── Token usage ────────────────────────────────────────────────────
+      case 'usage_update':
+        ds.tokenUsage = {
+          promptTokens: this.tokenUsage.promptTokens,
+          completionTokens: this.tokenUsage.completionTokens,
+          totalTokens: this.tokenUsage.totalTokens,
+        };
+        break;
+
+      // ── Tasks ──────────────────────────────────────────────────────────
+      case 'task_updated':
+        ds.previousTasks = [...ds.tasks];
+        ds.tasks = event.tasks;
+        break;
+
+      // ── Thread lifecycle ───────────────────────────────────────────────
+      case 'thread_changed':
+        this.resetThreadDisplayState();
+        ds.tokenUsage = { ...this.tokenUsage };
+        break;
+
+      case 'thread_created':
+        this.resetThreadDisplayState();
+        ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        break;
+
+      case 'thread_deleted':
+        if (!this.currentThreadId) {
+          this.resetThreadDisplayState();
+          ds.tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+        }
+        break;
+
+      // ── State changes (for OM threshold overrides) ──────────────────────
+      case 'state_changed': {
+        const keys = event.changedKeys;
+        if (keys.includes('observationThreshold')) {
+          const value = (event.state as Record<string, unknown>).observationThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.threshold = value;
+            ds.omProgress.thresholdPercent = value > 0 ? (ds.omProgress.pendingTokens / value) * 100 : 0;
+          }
+        }
+        if (keys.includes('reflectionThreshold')) {
+          const value = (event.state as Record<string, unknown>).reflectionThreshold;
+          if (typeof value === 'number') {
+            ds.omProgress.reflectionThreshold = value;
+            ds.omProgress.reflectionThresholdPercent = value > 0 ? (ds.omProgress.observationTokens / value) * 100 : 0;
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
     }
   }
 
@@ -1569,6 +2641,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     const builtInTools: ToolsInput = {
       ask_user: askUserTool,
       submit_plan: submitPlanTool,
+      task_write: taskWriteTool,
+      task_check: taskCheckTool,
     };
 
     // Resolve user-configured harness tools (needed for both the harness toolset and subagent allowedHarnessTools)
@@ -1602,7 +2676,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
    * Build request context for agent execution.
    * Tools can access harness state via requestContext.get('harness').
    */
-  private async buildRequestContext(): Promise<RequestContext> {
+  private async buildRequestContext(requestContext?: RequestContext): Promise<RequestContext> {
+    requestContext ??= new RequestContext();
     const harnessContext: HarnessRequestContext<TState> = {
       harnessId: this.id,
       state: this.getState(),
@@ -1614,18 +2689,40 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
       abortSignal: this.abortController?.signal,
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      registerQuestion: (questionId, resolve) => this.registerQuestion(questionId, resolve),
-      registerPlanApproval: (planId, resolve) => this.registerPlanApproval(planId, resolve),
-      getSubagentModelId: (agentType?: string) => this.getSubagentModelId(agentType),
+      registerQuestion: params => this.registerQuestion(params),
+      registerPlanApproval: params => this.registerPlanApproval(params),
+      getSubagentModelId: params => this.getSubagentModelId(params),
     };
 
-    const requestContext = new RequestContext([['harness', harnessContext]]) as RequestContext;
+    requestContext.set('harness', harnessContext);
 
     if (this.workspaceFn) {
-      harnessContext.workspace = await Promise.resolve(this.workspaceFn({ requestContext }));
+      const resolved = await Promise.resolve(this.workspaceFn({ requestContext }));
+      harnessContext.workspace = resolved;
+      // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
+      this.workspace = resolved;
     }
 
     return requestContext;
+  }
+
+  /**
+   * Resolve memory from config — handles both static instances and dynamic factory functions.
+   */
+  private async resolveMemory(): Promise<MastraMemory> {
+    const mem = this.config.memory;
+    if (!mem) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    if (typeof mem !== 'function') {
+      return mem;
+    }
+    const requestContext = await this.buildRequestContext();
+    const resolved = await Promise.resolve(mem({ requestContext }));
+    if (!resolved) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+    return resolved;
   }
 
   // ===========================================================================
@@ -1662,6 +2759,25 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
 
   getWorkspace(): Workspace | undefined {
     return this.workspace;
+  }
+
+  /**
+   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
+   * this triggers resolution and caches the result so getWorkspace() returns it.
+   * Useful for code paths outside the request flow (e.g. slash commands).
+   */
+  async resolveWorkspace({
+    requestContext,
+  }: {
+    requestContext?: RequestContext;
+  } = {}): Promise<Workspace | undefined> {
+    if (this.workspace) return this.workspace;
+    if (this.workspaceFn) {
+      // buildRequestContext resolves the workspace and caches it on this.workspace
+      await this.buildRequestContext(requestContext);
+      return this.workspace;
+    }
+    return undefined;
   }
 
   hasWorkspace(): boolean {
@@ -1718,7 +2834,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   }
 
   registerHeartbeat(handler: HeartbeatHandler): void {
-    void this.removeHeartbeat(handler.id);
+    void this.removeHeartbeat({ id: handler.id });
 
     const run = async () => {
       try {
@@ -1737,7 +2853,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     this.heartbeatTimers.set(handler.id, { timer, shutdown: handler.shutdown });
   }
 
-  async removeHeartbeat(id: string): Promise<void> {
+  async removeHeartbeat({ id }: { id: string }): Promise<void> {
     const entry = this.heartbeatTimers.get(id);
     if (entry) {
       clearInterval(entry.timer);

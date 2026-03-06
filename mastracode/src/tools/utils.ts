@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import { skillPaths } from '../agents/workspace.js';
 import { truncateStringForTokenEstimate } from '../utils/token-estimator.js';
 import { ToolError } from './types.js';
 
@@ -137,18 +138,23 @@ export function assertPathAllowed(targetPath: string, projectRoot: string, allow
 }
 
 /**
- * Read `sandboxAllowedPaths` from the Mastra harness runtime context.
- * Returns an empty array when the context is unavailable (e.g. in tests).
+ * Read allowed paths from the Mastra harness runtime context.
+ * Combines skill paths (computed at startup) with user-approved sandbox paths
+ * from harness state so that both parent and subagent tools have the same access.
+ * Returns skill paths when the context is unavailable (e.g. in tests).
  */
 export function getAllowedPathsFromContext(
   toolContext: { requestContext?: { get: (key: string) => unknown } } | undefined,
 ): string[] {
-  if (!toolContext?.requestContext) return [];
+  if (!toolContext?.requestContext) {
+    return [...skillPaths];
+  }
   const harnessCtx = toolContext.requestContext.get('harness') as
     | {
         state?: { sandboxAllowedPaths?: string[] };
         getState?: () => { sandboxAllowedPaths?: string[] };
       }
     | undefined;
-  return harnessCtx?.getState?.()?.sandboxAllowedPaths ?? harnessCtx?.state?.sandboxAllowedPaths ?? [];
+  const sandboxPaths = harnessCtx?.getState?.()?.sandboxAllowedPaths ?? harnessCtx?.state?.sandboxAllowedPaths ?? [];
+  return [...skillPaths, ...sandboxPaths];
 }

@@ -43,16 +43,15 @@ npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
 
 All providers support zero-config setup via environment variables. Set the appropriate variables and the exporter will automatically use them:
 
-| Provider  | Environment Variables                                                                      |
-| --------- | ------------------------------------------------------------------------------------------ |
-| Dash0     | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional)        |
-| SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
-| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
-| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
-| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional)                           |
+| Provider | Environment Variables |
+| - | - |
+| Dash0 | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional) |
+| SigNoz | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional) |
+| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional) |
+| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
+| Laminar | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional) |
 
 ## Provider Configurations
-
 
 ### MLflow
 
@@ -63,9 +62,9 @@ new OtelExporter({
   provider: {
     custom: {
       endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
-      protocol: "http/protobuf",
+      protocol: 'http/protobuf',
       headers: {
-        "x-mlflow-experiment-id": process.env.MLFLOW_EXPERIMENT_ID,
+        'x-mlflow-experiment-id': process.env.MLFLOW_EXPERIMENT_ID,
       },
     },
   },
@@ -90,53 +89,53 @@ DASH0_DATASET=production
 ```
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelExporter } from "@mastra/otel-exporter";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelExporter } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       otel: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new OtelExporter({ provider: { dash0: {} } })],
       },
     },
   }),
-});
+})
 ```
 
 #### Explicit Configuration
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelExporter } from "@mastra/otel-exporter";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelExporter } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       otel: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new OtelExporter({
             provider: {
               dash0: {
                 apiKey: process.env.DASH0_API_KEY,
                 endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
-                dataset: "production", // Optional dataset name
+                dataset: 'production', // Optional dataset name
               },
             },
             resourceAttributes: {
               // Optional OpenTelemetry Resource Attributes for the trace
-              ["deployment.environment"]: "dev",
+              ['deployment.environment']: 'dev',
             },
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 :::info
@@ -171,11 +170,11 @@ new OtelExporter({
   provider: {
     signoz: {
       apiKey: process.env.SIGNOZ_API_KEY,
-      region: "us", // 'us' | 'eu' | 'in'
+      region: 'us', // 'us' | 'eu' | 'in'
       // endpoint: 'https://my-signoz.example.com', // For self-hosted
     },
   },
-});
+})
 ```
 
 ### New Relic
@@ -206,7 +205,7 @@ new OtelExporter({
       // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
     },
   },
-});
+})
 ```
 
 ### Traceloop
@@ -235,10 +234,10 @@ new OtelExporter({
   provider: {
     traceloop: {
       apiKey: process.env.TRACELOOP_API_KEY,
-      destinationId: "my-destination", // Optional
+      destinationId: 'my-destination', // Optional
     },
   },
-});
+})
 ```
 
 ### Laminar
@@ -268,7 +267,7 @@ new OtelExporter({
       apiKey: process.env.LMNR_PROJECT_API_KEY,
     },
   },
-});
+})
 ```
 
 :::tip Laminar-Native Exporter
@@ -285,30 +284,27 @@ Datadog uses gRPC for OTLP ingestion, which requires explicit imports and [bundl
 
 ```typescript title="src/mastra/index.ts"
 // Explicitly import gRPC dependencies for the bundler
-import "@grpc/grpc-js";
-import "@opentelemetry/exporter-trace-otlp-grpc";
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelExporter, type ExportProtocol } from "@mastra/otel-exporter";
+import '@grpc/grpc-js'
+import '@opentelemetry/exporter-trace-otlp-grpc'
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelExporter, type ExportProtocol } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
   // Add grpc-js to externals so it's handled at runtime
   bundler: {
-    externals: ["@grpc/grpc-js"],
+    externals: ['@grpc/grpc-js'],
   },
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new OtelExporter({
             provider: {
               custom: {
-                endpoint:
-                  process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
-                  "http://localhost:4317",
-                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
-                  "grpc") as ExportProtocol,
+                endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4317',
+                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL || 'grpc') as ExportProtocol,
                 headers: {},
               },
             },
@@ -317,7 +313,7 @@ export const mastra = new Mastra({
       },
     },
   }),
-});
+})
 ```
 
 :::info
@@ -356,14 +352,14 @@ For other OTEL-compatible platforms or custom collectors:
 new OtelExporter({
   provider: {
     custom: {
-      endpoint: "https://your-collector.example.com/v1/traces",
-      protocol: "http/protobuf", // 'http/json' | 'http/protobuf' | 'grpc'
+      endpoint: 'https://your-collector.example.com/v1/traces',
+      protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
       headers: {
-        "x-api-key": process.env.API_KEY,
+        'x-api-key': process.env.API_KEY,
       },
     },
   },
-});
+})
 ```
 
 ## Configuration Options
@@ -382,8 +378,8 @@ new OtelExporter({
   batchSize: 100, // Number of spans per batch
 
   // Debug options
-  logLevel: "info", // 'debug' | 'info' | 'warn' | 'error'
-});
+  logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'
+})
 ```
 
 ## OpenTelemetry Semantic Conventions
@@ -413,15 +409,15 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](http
 
 Choose the right protocol package based on your provider:
 
-| Provider  | Protocol      | Required Package                           |
-| --------- | ------------- | ------------------------------------------ |
-| Dash0     | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
-| Datadog   | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
-| SigNoz    | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Provider | Protocol | Required Package |
+| - | - | - |
+| Dash0 | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
+| Datadog | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
+| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Traceloop | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  |
-| Laminar   | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Custom    | Varies        | Depends on your collector                  |
+| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
+| Laminar | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Custom | Varies | Depends on your collector |
 
 :::warning
 
@@ -446,8 +442,8 @@ Install the suggested package for your provider.
 ### Common Issues
 
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
-2. **Invalid endpoint**: Check endpoint format matches provider requirements
-3. **Authentication failures**: Verify API keys and headers are correct
+1. **Invalid endpoint**: Check endpoint format matches provider requirements
+1. **Authentication failures**: Verify API keys and headers are correct
 
 ## Related
 

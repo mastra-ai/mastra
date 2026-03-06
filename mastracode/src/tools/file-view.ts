@@ -11,7 +11,7 @@ import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 const execAsync = promisify(exec);
 
 // Maximum tokens for view tool output
-const MAX_VIEW_TOKENS = 3_000;
+const MAX_VIEW_TOKENS = 2_000;
 
 /**
  * Shorten an absolute path for display to save tokens
@@ -116,7 +116,11 @@ Usage notes:
 - Output is truncated if the file is very large. Use view_range to see specific sections.`,
     inputSchema: z.object({
       path: z.string().describe('Path to the file or directory (relative to project root)'),
-      view_range: z.array(z.number()).length(2).optional().describe('Optional range of lines to view [start, end]'),
+      view_range: z
+        .array(z.number().nullable())
+        .length(2)
+        .optional()
+        .describe('Optional range of lines to view [start, end]'),
     }),
     execute: async (context, toolContext) => {
       try {
@@ -134,11 +138,7 @@ Usage notes:
 
         // Handle directory listing
         if (await isDirectory(absolutePath)) {
-          if (view_range) {
-            throw new Error('The `view_range` parameter is not allowed when `path` points to a directory.');
-          }
-
-          const { stdout, stderr } = await execAsync(`find "${absolutePath}" -maxdepth 2 -not -path '*/\\.*'`);
+          const { stdout, stderr } = await execAsync(`find "${absolutePath}" -maxdepth 2 -not -path '*/.*'`);
 
           if (stderr) {
             throw new Error(stderr);
@@ -146,13 +146,21 @@ Usage notes:
 
           // Shorten paths in output to save tokens
           const cwd = projectRoot || process.cwd();
-          const shortenedPaths = stdout
+          let lines = stdout
             .split('\n')
             .map(line => (line.trim() ? shortenPath(line.trim(), cwd) : ''))
-            .join('\n');
+            .filter(Boolean);
 
+          const totalLines = lines.length;
           const displayPath = shortenPath(absolutePath, cwd);
-          const dirOutput = `Here's the files and directories up to 2 levels deep in ${displayPath}, excluding hidden items:\n${shortenedPaths}\n`;
+
+          // Apply view_range to slice the directory listing
+          if (view_range && view_range[0] != null && view_range[1] != null) {
+            const [start, end] = view_range as [number, number];
+            lines = lines.slice(Math.max(0, start - 1), end === -1 ? undefined : end);
+          }
+
+          const dirOutput = `Here's the files and directories up to 2 levels deep in ${displayPath}, excluding hidden items (${totalLines} entries):\n${lines.join('\n')}\n`;
           return {
             content: truncateStringForTokenEstimate(dirOutput, MAX_VIEW_TOKENS, false),
             isError: false,
@@ -161,7 +169,7 @@ Usage notes:
 
         // Handle file viewing
         const fileContent = await readFile(absolutePath);
-        if (view_range) {
+        if (view_range && view_range[0] != null && view_range[1] != null) {
           const fileLines = fileContent.split('\n');
           const nLinesFile = fileLines.length;
           let [start, end] = view_range as [number, number];

@@ -210,12 +210,12 @@ test.describe('Agent Creation Persistence - Identity', () => {
 
     const agentId = await createAgentAndGetId(page);
 
-    // On edit page: nth(0) = version combobox, nth(1) = provider, nth(2) = model
+    // On edit page: nth(0) = provider, nth(1) = model
     await goToEditSubPage(page, agentId);
 
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
-    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
   });
 
   test('persists all identity fields (name, description, provider, model)', async ({ page }) => {
@@ -238,8 +238,8 @@ test.describe('Agent Creation Persistence - Identity', () => {
 
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
     await expect(page.locator('#agent-description')).toHaveValue(description);
-    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
   });
 });
 
@@ -284,8 +284,9 @@ test.describe('Agent Creation Persistence - Instruction Blocks', () => {
     await editor1.click();
     await page.keyboard.type(block1Content);
 
-    // Add second block
+    // Add second block (click dropdown trigger, then select inline option)
     await page.getByRole('button', { name: 'Add Instruction block' }).click();
+    await page.getByRole('menuitem', { name: 'Write inline block' }).click();
     await page.waitForTimeout(500);
 
     // Fill second block
@@ -530,7 +531,6 @@ test.describe('Agent Creation Persistence - Memory', () => {
 
     // Set lastMessages
     const lastMessagesInput = page.locator('#memory-last-messages');
-    await lastMessagesInput.clear();
     await lastMessagesInput.fill('20');
 
     const agentId = await createAgentAndGetId(page);
@@ -559,9 +559,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
-    // The switches after memory enabled are: Semantic Recall, Read Only, Observational Memory
-    // Main toggle = 0, Semantic Recall = 1, Read Only = 2, OM = 3
-    const readOnlySwitch = page.getByRole('switch').nth(2);
+    // The switches after memory enabled are: main=0, OM=1, LastMessages=2, SemanticRecall=3, ReadOnly=4
+    const readOnlySwitch = page.getByRole('switch').nth(4);
     await readOnlySwitch.click();
 
     const agentId = await createAgentAndGetId(page);
@@ -573,8 +572,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Memory enabled
     await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
 
-    // Read Only should be checked (3rd switch)
-    await expect(page.getByRole('switch').nth(2)).toBeChecked();
+    // Read Only should be checked (5th switch, index 4)
+    await expect(page.getByRole('switch').nth(4)).toBeChecked();
   });
 
   test('persists observational memory settings', async ({ page }) => {
@@ -590,8 +589,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
 
-    // Enable Observational Memory (4th switch: main=0, semantic=1, readOnly=2, OM=3)
-    const omSwitch = page.getByRole('switch').nth(3);
+    // Enable Observational Memory (2nd switch: main=0, OM=1, LastMessages=2, SemanticRecall=3, ReadOnly=4)
+    const omSwitch = page.getByRole('switch').nth(1);
     await omSwitch.click();
 
     // Wait for OM fields to appear
@@ -615,8 +614,8 @@ test.describe('Agent Creation Persistence - Memory', () => {
     // Memory should be enabled
     await expect(page.getByRole('switch').first()).toBeChecked({ timeout: 10000 });
 
-    // OM should be enabled (4th switch)
-    await expect(page.getByRole('switch').nth(3)).toBeChecked();
+    // OM should be enabled (2nd switch, index 1)
+    await expect(page.getByRole('switch').nth(1)).toBeChecked();
 
     // Scope should be resource
     await expect(page.locator('#memory-om-scope')).toContainText('Resource');
@@ -719,7 +718,6 @@ test.describe('Comprehensive Persistence Test', () => {
     await page.getByRole('button', { name: 'Enable Memory' }).click();
     await expect(page.locator('#memory-last-messages')).toBeVisible({ timeout: 5000 });
     const lastMsgInput = page.locator('#memory-last-messages');
-    await lastMsgInput.clear();
     await lastMsgInput.fill('25');
 
     // === Variables ===
@@ -735,9 +733,9 @@ test.describe('Comprehensive Persistence Test', () => {
     await goToEditSubPage(page, agentId);
     await expect(page.locator('#agent-name')).toHaveValue(agentName);
     await expect(page.locator('#agent-description')).toHaveValue(description);
-    // On edit page: nth(0) = version, nth(1) = provider, nth(2) = model
-    await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
-    await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
+    // On edit page: nth(0) = provider, nth(1) = model
+    await expect(page.getByRole('combobox').nth(0)).toContainText('OpenAI');
+    await expect(page.getByRole('combobox').nth(1)).toContainText('gpt-4o-mini');
 
     // === Verify Instructions ===
     await page.goto(`/cms/agents/${agentId}/edit/instruction-blocks`);

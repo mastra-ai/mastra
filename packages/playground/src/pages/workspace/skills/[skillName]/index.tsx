@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   MainContentLayout,
   Header,
@@ -13,10 +12,13 @@ import {
   useWorkspaceSkill,
   useWorkspaceSkillReference,
   useWorkspaceFile,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Bot, Folder, Wand2 } from 'lucide-react';
+import { useState } from 'react';
 
 import { Link, useParams, useSearchParams } from 'react-router';
-import { Bot, Folder, Wand2 } from 'lucide-react';
 
 export default function WorkspaceSkillDetailPage() {
   const { skillName, workspaceId } = useParams<{ skillName: string; workspaceId: string }>();
@@ -100,6 +102,18 @@ export default function WorkspaceSkillDetailPage() {
         <Header>{renderBreadcrumb('Loading...')}</Header>
         <div className="grid place-items-center h-full">
           <div className="h-8 w-8 border-2 border-accent1 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  // 403 check - permission denied for workspaces
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <Header>{renderBreadcrumb('Permission Denied')}</Header>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="workspaces" />
         </div>
       </MainContentLayout>
     );

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "0.2.4",
+  "version": "0.2.9",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -29,12 +29,13 @@
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
-    "build": "vite build",
-    "dev": "vite build --watch",
+    "lint": "eslint .",
+    "build": "echo 'Use turbo to run build'",
+    "build:js": "tsup --config tsup.config.ts",
+    "build:css": "tailwindcss -i src/ui/index.css -o dist/react.css",
+    "dev": "tsup --config tsup.config.ts --watch",
     "test": "vitest",
-    "test:watch": "vitest --watch",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage",
+    "test:unit": "vitest run",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -52,6 +53,7 @@
     "tailwind-merge": "^3.4.1"
   },
   "peerDependencies": {
+    "@mastra/core": ">=1.8.0-0 <2.0.0-0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "zod": "^3.25.0 || ^4.0.0"
@@ -59,24 +61,26 @@
   "devDependencies": {
     "@ai-sdk/react": "^2.0.57",
     "@assistant-ui/react": "^0.12.10",
+    "@internal/lint": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@internal/types-builder": "workspace:*",
     "@storybook/react-vite": "^9.1.16",
+    "@tailwindcss/cli": "^4",
     "@tailwindcss/vite": "^4.1.17",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.1.4",
     "@vitest/coverage-v8": "catalog:",
-    "@mastra/core": "workspace:*",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "eslint-plugin-storybook": "^10.1.11",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
-    "rollup-plugin-node-externals": "^8.0.1",
     "storybook": "^9.1.10",
     "tailwindcss": "^4",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vite": "^7.3.0",
-    "vite-plugin-dts": "^4.5.4",
+    "vite": "^7.3.1",
     "vitest": "catalog:",
     "zod": "^3.25.0"
   },

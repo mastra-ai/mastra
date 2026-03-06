@@ -5,8 +5,17 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { assertPathAllowed, getAllowedPathsFromContext } from './utils.js';
 
-// Get the project root from the working directory
-const getProjectRoot = () => process.cwd();
+interface SgNode {
+  text(): string;
+  range(): {
+    start: { index: number };
+    end: { index: number };
+  };
+  kind(): string;
+  children(): SgNode[];
+  findAll(query: unknown): SgNode[];
+  getMatch(name: string): SgNode | null;
+}
 
 const astSmartEditSchema = z.object({
   path: z.string().describe('File path relative to project root'),
@@ -32,9 +41,10 @@ const astSmartEditSchema = z.object({
     .describe('Import specification for add-import transform'),
 });
 
-export const astSmartEditTool = createTool({
-  id: 'ast_smart_edit',
-  description: `Edit code using AST-based analysis for intelligent transformations.
+export function createAstSmartEditTool(projectRoot?: string) {
+  return createTool({
+    id: 'ast_smart_edit',
+    description: `Edit code using AST-based analysis for intelligent transformations.
     
 Supports various code transformations:
 - Pattern-based search and replace with syntax awareness
@@ -47,113 +57,122 @@ Examples:
 - Add import: { transform: 'add-import', importSpec: { module: 'react', names: ['useState'] } }
 - Rename function: { transform: 'rename-function', targetName: 'oldFunc', newName: 'newFunc' }
 - Pattern replace: { pattern: 'console.log($ARG)', replacement: 'logger.debug($ARG)' }`,
-  // requireApproval: true,
-  inputSchema: astSmartEditSchema,
-  execute: async (
-    { path, pattern, replacement, selector, transform, targetName, newName, importSpec },
-    toolContext,
-  ) => {
-    try {
-      const projectRoot = getProjectRoot();
-      const filePath = resolve(projectRoot, path);
+    // requireApproval: true,
+    inputSchema: astSmartEditSchema,
+    execute: async (
+      { path, pattern, replacement, selector, transform, targetName, newName, importSpec },
+      toolContext,
+    ) => {
+      try {
+        const root = projectRoot || process.cwd();
+        const filePath = resolve(root, path);
 
-      // Security: ensure the path is within the project root or allowed paths
-      const allowedPaths = getAllowedPathsFromContext(toolContext);
-      assertPathAllowed(filePath, projectRoot, allowedPaths);
+        // Security: ensure the path is within the project root or allowed paths
+        const allowedPaths = getAllowedPathsFromContext(toolContext);
+        assertPathAllowed(filePath, root, allowedPaths);
 
-      // Read the file
-      const content = readFileSync(filePath, 'utf-8');
+        // Read the file
+        const content = readFileSync(filePath, 'utf-8');
 
-      // Determine the language from file extension
-      const lang = getLanguageFromPath(path);
+        // Determine the language from file extension
+        const lang = getLanguageFromPath(filePath);
 
-      // Parse the AST
-      const ast = parse(lang, content);
-      const root = ast.root();
+        // Parse the AST
+        const ast = parse(lang, content);
+        const astRoot = ast.root();
 
-      let modifiedContent = content;
-      let changes: string[] = [];
+        let modifiedContent = content;
+        const changes: string[] = [];
 
-      // Handle different transformation types
-      if (transform) {
-        switch (transform) {
-          case 'add-import':
-            if (!importSpec) {
-              throw new Error('importSpec is required for add-import transform');
-            }
-            modifiedContent = addImport(content, root, importSpec);
-            changes.push(`Added import from '${importSpec.module}'`);
-            break;
+        // Handle different transformation types
+        if (transform) {
+          switch (transform) {
+            case 'add-import':
+              if (!importSpec) {
+                throw new Error('importSpec is required for add-import transform');
+              }
+              modifiedContent = addImport(content, astRoot, importSpec);
+              changes.push(`Added import from '${importSpec.module}'`);
+              break;
 
-          case 'remove-import':
-            if (!targetName) {
-              throw new Error('targetName is required for remove-import transform');
-            }
-            modifiedContent = removeImport(content, root, targetName);
-            changes.push(`Removed import '${targetName}'`);
-            break;
+            case 'remove-import':
+              if (!targetName) {
+                throw new Error('targetName is required for remove-import transform');
+              }
+              modifiedContent = removeImport(content, astRoot, targetName);
+              changes.push(`Removed import '${targetName}'`);
+              break;
 
-          case 'rename-function':
-            if (!targetName || !newName) {
-              throw new Error('targetName and newName are required for rename-function transform');
-            }
-            const funcResult = renameFunction(content, root, targetName, newName);
-            modifiedContent = funcResult.content;
-            changes.push(`Renamed function '${targetName}' to '${newName}' (${funcResult.count} occurrences)`);
-            break;
+            case 'rename-function':
+              if (!targetName || !newName) {
+                throw new Error('targetName and newName are required for rename-function transform');
+              }
+              const funcResult = renameFunction(content, astRoot, targetName, newName);
+              modifiedContent = funcResult.content;
+              changes.push(`Renamed function '${targetName}' to '${newName}' (${funcResult.count} occurrences)`);
+              break;
 
-          case 'rename-variable':
-            if (!targetName || !newName) {
-              throw new Error('targetName and newName are required for rename-variable transform');
-            }
-            const varResult = renameVariable(content, root, targetName, newName);
-            modifiedContent = varResult.content;
-            changes.push(`Renamed variable '${targetName}' to '${newName}' (${varResult.count} occurrences)`);
-            break;
+            case 'rename-variable':
+              if (!targetName || !newName) {
+                throw new Error('targetName and newName are required for rename-variable transform');
+              }
+              const varResult = renameVariable(content, astRoot, targetName, newName);
+              modifiedContent = varResult.content;
+              changes.push(`Renamed variable '${targetName}' to '${newName}' (${varResult.count} occurrences)`);
+              break;
 
-          default:
-            throw new Error(`Unsupported transform: ${transform}`);
+            default:
+              throw new Error(`Unsupported transform: ${transform}`);
+          }
+        } else if (pattern && replacement !== undefined) {
+          // Pattern-based replacement
+          const result = patternReplace(content, astRoot, pattern, replacement);
+          modifiedContent = result.content;
+          changes.push(`Replaced ${result.count} occurrences of pattern`);
+        } else if (selector) {
+          // Selector-based query (just return matches for now)
+          const matches = astRoot.findAll(selector);
+          const matchInfo = matches.map((match: SgNode) => ({
+            text: match.text(),
+            range: match.range(),
+            kind: match.kind(),
+          }));
+
+          return {
+            matches: matchInfo.length,
+            details: matchInfo.slice(0, 10), // Limit to first 10 matches
+          };
+        } else {
+          throw new Error('Must provide either transform, pattern/replacement, or selector');
         }
-      } else if (pattern && replacement !== undefined) {
-        // Pattern-based replacement
-        const result = patternReplace(content, root, pattern, replacement);
-        modifiedContent = result.content;
-        changes.push(`Replaced ${result.count} occurrences of pattern`);
-      } else if (selector) {
-        // Selector-based query (just return matches for now)
-        const matches = root.findAll(selector);
-        const matchInfo = matches.map((match: any) => ({
-          text: match.text(),
-          range: match.range(),
-          kind: match.kind(),
-        }));
+
+        // Write the modified content back
+        if (modifiedContent !== content) {
+          writeFileSync(filePath, modifiedContent, 'utf-8');
+        }
 
         return {
-          matches: matchInfo.length,
-          details: matchInfo.slice(0, 10), // Limit to first 10 matches
+          success: true,
+          changes,
+          modified: modifiedContent !== content,
         };
-      } else {
-        throw new Error('Must provide either transform, pattern/replacement, or selector');
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (process.env.DEBUG === 'true' && error instanceof Error && error.stack) {
+          return {
+            error: message,
+            stack: error.stack,
+          };
+        }
+        return {
+          error: message,
+        };
       }
+    },
+  });
+}
 
-      // Write the modified content back
-      if (modifiedContent !== content) {
-        writeFileSync(filePath, modifiedContent, 'utf-8');
-      }
-
-      return {
-        success: true,
-        changes,
-        modified: modifiedContent !== content,
-      };
-    } catch (error: any) {
-      return {
-        error: error.message,
-        stack: error.stack,
-      };
-    }
-  },
-});
+export const astSmartEditTool = createAstSmartEditTool();
 
 function getLanguageFromPath(path: string): Lang {
   const ext = path.split('.').pop()?.toLowerCase();
@@ -193,7 +212,7 @@ function getLanguageFromPath(path: string): Lang {
 
 function addImport(
   content: string,
-  root: any,
+  root: SgNode,
   importSpec: { module: string; names: string[]; isDefault?: boolean },
 ): string {
   const { module, names, isDefault } = importSpec;
@@ -202,7 +221,7 @@ function addImport(
   const imports = root.findAll('ImportDeclaration');
 
   // Check if import already exists
-  const existingImport = imports.find((imp: any) => {
+  const existingImport = imports.find((imp: SgNode) => {
     const source = imp.getMatch('source')?.text();
     return source?.includes(module);
   });
@@ -234,7 +253,7 @@ function addImport(
   }
 }
 
-function removeImport(content: string, root: any, targetName: string): string {
+function removeImport(content: string, root: SgNode, targetName: string): string {
   const imports = root.findAll('ImportDeclaration');
 
   for (const imp of imports) {
@@ -255,7 +274,7 @@ function removeImport(content: string, root: any, targetName: string): string {
 
 function renameFunction(
   content: string,
-  root: any,
+  root: SgNode,
   oldName: string,
   newName: string,
 ): { content: string; count: number } {
@@ -345,7 +364,7 @@ function renameFunction(
 
 function renameVariable(
   content: string,
-  root: any,
+  root: SgNode,
   oldName: string,
   newName: string,
 ): { content: string; count: number } {
@@ -384,7 +403,7 @@ function renameVariable(
 
 function patternReplace(
   content: string,
-  root: any,
+  root: SgNode,
   pattern: string,
   replacement: string,
 ): { content: string; count: number } {

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["build:patch-commonjs", "build:lib"],
+      "inputs": ["package.json"]
+    },
+    "build:patch-commonjs": {
+      "dependsOn": ["build:lib"],
+      "outputs": ["./**/*.d.ts"],
+      "inputs": ["src/**", "package.json", "!**/*.md"]
+    },
+    "build:lib": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "inputs": [
+        "src/**",
+        "tsup.config.ts",
+        "tsconfig.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ]
+    }
+  }
+}

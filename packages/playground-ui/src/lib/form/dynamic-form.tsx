@@ -3,16 +3,17 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/ds/components/Button';
 import { AutoForm } from './auto-form';
 import type { UseFormReturn } from 'react-hook-form';
-import z, { ZodObject, ZodIntersection } from 'zod';
+import { z } from 'zod';
 import { Label } from '@/ds/components/Label';
 import { Icon } from '@/ds/icons';
 import { CustomZodProvider } from './zod-provider';
+import { getShape, getIntersection } from './zod-provider/compat';
 
-interface DynamicFormProps<T extends z.ZodSchema> {
-  schema: T;
-  onSubmit?: (values: z.infer<T>) => void | Promise<void>;
-  onValuesChange?: (values: z.infer<T>) => void;
-  defaultValues?: z.infer<T>;
+interface DynamicFormProps {
+  schema: any;
+  onSubmit?: (values: any) => void | Promise<void>;
+  onValuesChange?: (values: any) => void;
+  defaultValues?: any;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
   className?: string;
@@ -21,18 +22,24 @@ interface DynamicFormProps<T extends z.ZodSchema> {
 }
 
 function isEmptyZodObject(schema: unknown): boolean {
-  if (schema instanceof ZodObject) {
-    return Object.keys(schema.shape).length === 0;
+  const shape = getShape(schema);
+  if (shape) {
+    return Object.keys(shape).length === 0;
   }
 
-  if (schema instanceof ZodIntersection) {
-    return isEmptyZodObject(schema._def.left) || isEmptyZodObject(schema._def.right);
+  const intersection = getIntersection(schema);
+  if (intersection) {
+    return isEmptyZodObject(intersection.left) && isEmptyZodObject(intersection.right);
   }
 
   return false;
 }
 
-export function DynamicForm<T extends z.ZodSchema>({
+function isZodObjectLike(schema: any): boolean {
+  return getShape(schema) !== undefined;
+}
+
+export function DynamicForm({
   schema,
   onSubmit,
   onValuesChange,
@@ -42,9 +49,9 @@ export function DynamicForm<T extends z.ZodSchema>({
   className,
   readOnly,
   children,
-}: DynamicFormProps<T>) {
+}: DynamicFormProps) {
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
-  const isNotZodObject = !(schema instanceof ZodObject);
+  const isNotZodObject = !isZodObjectLike(schema);
   const onValuesChangeRef = useRef(onValuesChange);
 
   // Keep the callback ref up to date
@@ -86,7 +93,7 @@ export function DynamicForm<T extends z.ZodSchema>({
       return null;
     }
 
-    const normalizeSchema = (s: z.ZodSchema) => {
+    const normalizeSchema = (s: any) => {
       if (isEmptyZodObject(s)) {
         return z.object({});
       }

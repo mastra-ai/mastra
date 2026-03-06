@@ -5,6 +5,7 @@
  * read and write tools to complete it. It can modify files, run commands,
  * and perform actual development work within a constrained scope.
  */
+import { MC_TOOLS } from '../../tool-names.js';
 import type { SubagentDefinition } from './types.js';
 
 export const executeSubagent: SubagentDefinition = {
@@ -26,10 +27,10 @@ export const executeSubagent: SubagentDefinition = {
 
 ## Workflow
 . Understand the task and explore relevant code
-. For complex tasks (3+ steps): use todo_write to track progress
+. For complex tasks (3+ steps): use task_write to track progress
 . Make changes incrementally — verify each change before moving on
 . Run tests or type-check to verify
-. If you created todos: ALWAYS call todo_check before finishing
+. If you created tasks: ALWAYS call task_check before finishing
 
 ## Efficiency
 Your output returns to the parent agent. Be concise:
@@ -45,16 +46,16 @@ End with a structured summary:
 . **Notes**: Follow-up needed (if any)`,
   allowedTools: [
     // Read tools
-    'view',
-    'search_content',
-    'find_files',
+    MC_TOOLS.VIEW,
+    MC_TOOLS.SEARCH_CONTENT,
+    MC_TOOLS.FIND_FILES,
     // Write tools
-    'string_replace_lsp',
-    'write_file',
+    MC_TOOLS.STRING_REPLACE_LSP,
+    MC_TOOLS.WRITE_FILE,
     // Execution tool
-    'execute_command',
-    // Task tracking
-    'todo_write',
-    'todo_check',
+    MC_TOOLS.EXECUTE_COMMAND,
+    // Task tracking (built-in harness tools)
+    'task_write',
+    'task_check',
   ],
 };

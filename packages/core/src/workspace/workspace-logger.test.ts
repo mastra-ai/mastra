@@ -516,11 +516,9 @@ describe('Workspace Logger Integration', () => {
       const result = await sandbox.executeCommand!('echo', ['hello']);
 
       expect(result.success).toBe(true);
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        '[LocalSandbox] Executing command',
-        expect.objectContaining({ command: 'echo' }),
-      );
-      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Command completed', expect.any(Object));
+      // Base class fallback logs: "[LocalSandbox] Executing: echo hello"
+      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing: echo hello', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('[LocalSandbox] Exit code: 0'));
 
       await sandbox._destroy();
     });
@@ -533,8 +531,15 @@ describe('Workspace Logger Integration', () => {
       const result = await sandbox.executeCommand!('nonexistent-command-xyz', []);
 
       expect(result.success).toBe(false);
-      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing command', expect.any(Object));
-      expect(mockLogger.error).toHaveBeenCalledWith('[LocalSandbox] Command failed', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('[LocalSandbox] Executing:'),
+        expect.any(Object),
+      );
+      // With shell: true, the shell handles the missing command and returns
+      // a non-zero exit code (127) rather than throwing ENOENT, so the
+      // command completes normally (debug log) rather than erroring.
+      expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('[LocalSandbox] Exit code:'));
+      expect(mockLogger.error).not.toHaveBeenCalled();
 
       await sandbox._destroy();
     });
@@ -565,7 +570,10 @@ describe('Workspace Logger Integration', () => {
       // Sandbox operations should log
       const result = await workspace.sandbox!.executeCommand!('echo', ['hello']);
       expect(result.success).toBe(true);
-      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing command', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('[LocalSandbox] Executing:'),
+        expect.any(Object),
+      );
 
       await workspace.destroy();
     });
@@ -684,7 +692,10 @@ describe('Workspace Logger Integration', () => {
       // Sandbox operations should use the Mastra logger
       const result = await mastraWorkspace!.sandbox!.executeCommand!('echo', ['mastra']);
       expect(result.success).toBe(true);
-      expect(mockLogger.debug).toHaveBeenCalledWith('[LocalSandbox] Executing command', expect.any(Object));
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('[LocalSandbox] Executing:'),
+        expect.any(Object),
+      );
 
       await mastraWorkspace!.destroy();
     });

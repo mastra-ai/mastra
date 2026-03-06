@@ -113,13 +113,13 @@ If you must address the reader, it is OK to use "you" and "your." In particular,
 
 Certain words and phrases are problematic in instructions:
 
-- **"You should..."** — Avoid this phrase most of the time. The reader may wonder: "Do I have to? What happens if I don't?" You _can_ use this phrase when describing what the reader should be experiencing (e.g. after a successful installation), but even then it's almost always possible to rephrase.
+- **"You should..."**: Avoid this phrase most of the time. The reader may wonder: "Do I have to? What happens if I don't?" You _can_ use this phrase when describing what the reader should be experiencing (e.g. after a successful installation), but even then it's almost always possible to rephrase.
 
   > ❌ If the installation was successful, you should see a prompt to continue.
 
   > ✅ After a successful installation, a prompt to continue will appear.
 
-- **"You can..."** — Use this phrase **only** to give permission or state that an option exists. Do not use this in general instructions that you expect the reader to follow.
+- **"You can..."**: Use this phrase **only** to give permission or state that an option exists. Do not use this in general instructions that you expect the reader to follow.
 
 ### Lead with location; end with action
 
@@ -215,6 +215,30 @@ Use lists for a group of related items, such as a complete set of configuration 
 
 - Use unordered (bulleted) lists when the order of the items is not important.
 - Use ordered (numbered) lists when giving steps or instructions to be followed in sequence.
+
+### Do not use em-dashes in lists
+
+To not use em-dashes in lists, if you want to separate the concise summary from the description of a list item, use a colon instead of an em-dash.
+
+> ❌
+>
+> - **Memory** — Memory allows your agent to do stuff.
+> - `some-code` — Memory allows your agent to do stuff.
+
+> ✅
+>
+> - **Memory**: Memory allows your agent to do stuff.
+> - `some-code`: Memory allows your agent to do stuff.
+
+### Capitalize the first letter after colons in lists
+
+> ❌
+>
+> - **Memory**: memory allows your agent to do stuff.
+
+> ✅
+>
+> - **Memory**: Memory allows your agent to do stuff.
 
 ### List item punctuation
 
@@ -314,22 +338,42 @@ Use as little jargon as necessary. Describe jargon in parentheses on first refer
 
 > ✅ In your browser, open [`http://localhost:3000/`](http://localhost:3000/).
 
-### Specify syntax and filename for terminal commands
+### Specify syntax for terminal commands
 
-If the code should run in a terminal, set the code block's syntax highlighting and filename appropriately.
+If the code should run in a terminal, set the code block's syntax highlighting appropriately.
 
 > ❌
 
 ````
 ```
-npm i @mastra/core
+mastra dev
 ```
 ````
 
 > ✅
 
 ````
-```sh filename="terminal"
-npm i @mastra/core
+```sh
+mastra dev
+```
+````
+
+### Specify `npm2yarn` syntax for npm commands
+
+When adding instructions like `npm install`, `npx some-name` or `npm run some-script`, specify `npm2yarn` as code metadata. This allows the documentation site to automatically convert the command to the user's preferred package manager (npm, yarn, bun, or pnpm).
+
+> ❌
+
+````
+```sh
+npm install @mastra/core
+```
+````
+
+> ✅
+
+````
+```sh npm2yarn
+npm install @mastra/core
 ```
 ````

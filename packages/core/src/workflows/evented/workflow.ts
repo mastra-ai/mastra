@@ -12,8 +12,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import type { Mastra } from '../../mastra';
-import type { TracingContext } from '../../observability';
-import { EntityType, SpanType } from '../../observability';
+import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { Processor } from '../../processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
@@ -430,10 +430,11 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       mastra,
       [PUBSUB_SYMBOL]: pubsub,
       requestContext,
-      tracingContext,
       abortSignal,
       abort,
+      ...obsFields
     }) => {
+      const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
       const toolData = {
         name: params.name,
@@ -464,7 +465,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         // V2+ model path: use .stream() which returns MastraModelOutput
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
-          tracingContext,
+          ...observabilityContext,
           requestContext,
           onFinish: result => {
             handleFinish(result);
@@ -483,7 +484,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
         const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
-          tracingContext,
+          ...observabilityContext,
           requestContext,
           onFinish: result => {
             handleFinish(result);
@@ -548,7 +549,19 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
     retries: toolOpts?.retries,
     scorers: toolOpts?.scorers,
     metadata: toolOpts?.metadata,
-    execute: async ({ inputData, mastra, requestContext, suspend, resumeData, runId, workflowId, state, setState }) => {
+    execute: async ({
+      inputData,
+      mastra,
+      requestContext,
+      suspend,
+      resumeData,
+      runId,
+      workflowId,
+      state,
+      setState,
+      ...obsFields
+    }) => {
+      const observabilityContext = resolveObservabilityContext(obsFields);
       // Tools receive (input, context) - just call the tool's execute
       if (!params.execute) {
         throw new Error(`Tool ${params.id} does not have an execute function`);
@@ -558,7 +571,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       const context = {
         mastra,
         requestContext,
-        tracingContext: { currentSpan: undefined }, // TODO: Pass proper tracing context when evented workflows support tracing
+        ...observabilityContext,
         workflow: {
           runId,
           workflowId,
@@ -645,7 +658,8 @@ function createStepFromProcessor<TProcessorId extends string>(
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: ProcessorStepSchema,
     outputSchema: ProcessorStepOutputSchema,
-    execute: async ({ inputData, requestContext, tracingContext }) => {
+    execute: async ({ inputData, requestContext, ...obsFields }) => {
+      const observabilityContext = resolveObservabilityContext(obsFields);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -672,6 +686,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        messageId,
+        rotateResponseMessageId,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
       } = input;
@@ -680,6 +696,13 @@ function createStepFromProcessor<TProcessorId extends string>(
       const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
+      let currentMessageId = messageId;
+      const rotateCurrentResponseMessageId = rotateResponseMessageId
+        ? () => {
+            currentMessageId = rotateResponseMessageId();
+            return currentMessageId;
+          }
+        : undefined;
 
       // Early return if processor doesn't implement this phase - no span created
       // This prevents empty spans for phases the processor doesn't handle
@@ -689,7 +712,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       // Create processor span for non-stream phases
       // outputStream phase doesn't need its own span (stream chunks are already tracked)
-      const currentSpan = tracingContext?.currentSpan;
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
 
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
@@ -717,20 +740,22 @@ function createStepFromProcessor<TProcessorId extends string>(
             })
           : undefined;
 
-      // Create tracing context with processor span so internal agent calls nest correctly
-      const processorTracingContext: TracingContext | undefined = processorSpan
-        ? { currentSpan: processorSpan }
-        : tracingContext;
+      // Create observability context with processor span so internal agent calls nest correctly
+      const processorObservabilityContext: ObservabilityContext | undefined = createObservabilityContext(
+        processorSpan ? { currentSpan: processorSpan } : observabilityContext.tracingContext,
+      );
 
       // Base context for all processor methods - includes requestContext for memory processors
-      // and tracingContext for proper span nesting when processors call internal agents
+      // and observabilityContext for proper span nesting when processors call internal agents
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
-        tracingContext: processorTracingContext,
+        ...processorObservabilityContext,
         state: state ?? {},
         abortSignal,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -763,6 +788,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Helper to execute phase with proper span lifecycle management
@@ -884,6 +911,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
+                messageId: currentMessageId,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
@@ -906,8 +935,13 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
-              // so we must explicitly include it to avoid losing it for subsequent steps
-              return { ...passThrough, messages, ...validatedResult };
+              // so we must explicitly include it to avoid losing it for subsequent steps.
+              return {
+                ...passThrough,
+                messages,
+                ...validatedResult,
+                ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
+              };
             }
             return { ...passThrough, messages };
           }
@@ -948,10 +982,10 @@ function createStepFromProcessor<TProcessorId extends string>(
                 };
               }
 
-              // Create tracing context with processor span for internal agent calls
-              const processorTracingContext = processorSpan
-                ? { currentSpan: processorSpan }
-                : baseContext.tracingContext;
+              // Create observability context with processor span for internal agent calls
+              const processorObservabilityContext = createObservabilityContext(
+                processorSpan ? { currentSpan: processorSpan } : baseContext.tracingContext,
+              );
 
               // Handle outputStream span lifecycle explicitly (not via executePhaseWithSpan)
               // because outputStream uses a per-processor span stored in mutableState
@@ -959,7 +993,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               try {
                 result = await processor.processOutputStream({
                   ...baseContext,
-                  tracingContext: processorTracingContext,
+                  ...processorObservabilityContext,
                   part: part as ChunkType,
                   streamParts: (streamParts ?? []) as ChunkType[],
                   state: mutableState,
@@ -1197,6 +1231,18 @@ export class EventedWorkflow<
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
     const runIdToUse = options?.runId || randomUUID();
 
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+
+    const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
+    if (workflowsStore && !supportsConcurrentUpdates) {
+      throw new MastraError({
+        id: 'ATOMIC_STORAGE_OPERATIONS_NOT_SUPPORTED',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Atomic storage operations are not supported for this workflow store, please use a different storage or the default workflow engine',
+      });
+    }
+
     // Return a new Run instance with object parameters
     const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
       this.runs.get(runIdToUse) ??
@@ -1237,7 +1283,6 @@ export class EventedWorkflow<
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
-      const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
