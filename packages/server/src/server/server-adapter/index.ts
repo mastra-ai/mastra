@@ -4,6 +4,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig } from '@mastra/core/server';
 import { Hono } from 'hono';
+import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
 import { coreAuthMiddleware } from '../auth/helpers';
@@ -80,6 +81,73 @@ export interface ParsedRequestParams {
   bodyParseError?: {
     message: string;
   };
+}
+
+function getSchemaTypeName(schema: z.ZodTypeAny): string | undefined {
+  const schemaDef = (schema as any)?._def ?? (schema as any)?.def;
+  return schemaDef?.typeName ?? schemaDef?.type;
+}
+
+function unwrapOptionalNullable(schema: z.ZodTypeAny): z.ZodTypeAny {
+  let inner = schema;
+  let typeName = getSchemaTypeName(inner);
+
+  while (
+    typeName === 'ZodOptional' ||
+    typeName === 'ZodNullable' ||
+    typeName === 'optional' ||
+    typeName === 'nullable'
+  ) {
+    const innerDef = (inner as any)?._def ?? (inner as any)?.def;
+    if (!innerDef?.innerType) {
+      return inner;
+    }
+    inner = innerDef.innerType;
+    typeName = getSchemaTypeName(inner);
+  }
+
+  return inner;
+}
+
+function parseComplexQueryParams(
+  queryParamSchema: z.ZodTypeAny,
+  params: Record<string, QueryParamValue>,
+): Record<string, QueryParamValue | unknown> {
+  if (!(queryParamSchema instanceof z.ZodObject)) {
+    return params;
+  }
+
+  const parsedParams: Record<string, QueryParamValue | unknown> = { ...params };
+  const shape = queryParamSchema.shape as Record<string, z.ZodTypeAny>;
+
+  for (const [key, fieldSchema] of Object.entries(shape)) {
+    const rawValue = parsedParams[key];
+    if (typeof rawValue !== 'string') {
+      continue;
+    }
+
+    const unwrappedField = unwrapOptionalNullable(fieldSchema);
+    const typeName = getSchemaTypeName(unwrappedField);
+    const isComplex =
+      typeName === 'ZodObject' ||
+      typeName === 'ZodArray' ||
+      typeName === 'ZodRecord' ||
+      typeName === 'object' ||
+      typeName === 'array' ||
+      typeName === 'record';
+
+    if (!isComplex) {
+      continue;
+    }
+
+    try {
+      parsedParams[key] = JSON.parse(rawValue);
+    } catch {
+      // Keep original string; schema validation will surface a clear error.
+    }
+  }
+
+  return parsedParams;
 }
 
 /**
@@ -641,7 +709,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return pathParamSchema.parseAsync(params);
+    return pathParamSchema.parseAsync(params) as Promise<Record<string, any>>;
   }
 
   async parseQueryParams(route: ServerRoute, params: Record<string, QueryParamValue>): Promise<Record<string, any>> {
@@ -650,7 +718,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       return params;
     }
 
-    return queryParamSchema.parseAsync(params);
+    const normalizedParams = parseComplexQueryParams(queryParamSchema as z.ZodTypeAny, params);
+    return queryParamSchema.parseAsync(normalizedParams) as Promise<Record<string, any>>;
   }
 
   async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {

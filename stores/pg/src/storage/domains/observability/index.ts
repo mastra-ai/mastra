@@ -459,7 +459,8 @@ export class ObservabilityPG extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
@@ -612,10 +613,11 @@ export class ObservabilityPG extends ObservabilityStorage {
       // For endedAt DESC: NULLs FIRST (running spans on top when viewing newest)
       // For endedAt ASC: NULLs LAST (running spans at end when viewing oldest)
       // startedAt is never null (required field), so no special handling needed
-      const sortField = `${orderBy.field}Z`;
-      const sortDirection = orderBy.direction;
+      const orderField = orderBy?.field ?? 'startedAt';
+      const sortField = `${orderField}Z`;
+      const sortDirection = orderBy?.direction ?? 'DESC';
       let orderClause: string;
-      if (orderBy.field === 'endedAt') {
+      if (orderField === 'endedAt') {
         const nullsOrder = sortDirection === 'DESC' ? 'NULLS FIRST' : 'NULLS LAST';
         orderClause = `ORDER BY r."${sortField}" ${sortDirection} ${nullsOrder}`;
       } else {

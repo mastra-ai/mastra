@@ -6,7 +6,7 @@ import { paginationInfoSchema } from './common';
 // ============================================================================
 
 // JSON Schema type (simplified for storage - full spec too complex)
-const jsonSchemaObject: z.ZodType<Record<string, unknown>> = z.lazy(() => z.record(z.unknown()));
+const jsonSchemaObject: z.ZodType<Record<string, unknown>> = z.lazy(() => z.record(z.string(), z.unknown()));
 
 // JSON Schema field (object or null to disable)
 const jsonSchemaField = z.union([jsonSchemaObject, z.null()]).optional();
@@ -108,8 +108,8 @@ export const datasetResponseSchema = z.object({
   name: z.string(),
   description: z.string().optional().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
-  inputSchema: z.record(z.unknown()).optional(),
-  groundTruthSchema: z.record(z.unknown()).optional(),
+  inputSchema: z.record(z.string(), z.unknown()).optional(),
+  groundTruthSchema: z.record(z.string(), z.unknown()).optional(),
   version: z.number().int(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -136,7 +136,7 @@ export const experimentResponseSchema = z.object({
   targetId: z.string(),
   name: z.string().optional(),
   description: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),
   succeededCount: z.number(),
@@ -278,7 +278,7 @@ export const itemVersionResponseSchema = z.object({
   datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
   createdAt: z.coerce.date(),
@@ -311,7 +311,7 @@ export const batchInsertItemsBodySchema = z.object({
     z.object({
       input: z.unknown(),
       groundTruth: z.unknown().optional(),
-      metadata: z.record(z.unknown()).optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
     }),
   ),
 });

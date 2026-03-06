@@ -18,9 +18,19 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     return `jsonSchema7`;
   }
 
+  isReasoningModel(): boolean {
+    // there isn't a good way to automatically detect reasoning models besides doing this.
+    // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
+    return (
+      this.getModel().modelId.includes(`o3`) ||
+      this.getModel().modelId.includes(`o4`) ||
+      this.getModel().modelId.includes(`o1`)
+    );
+  }
+
   shouldApply(): boolean {
     if (
-      !this.getModel().supportsStructuredOutputs &&
+      !this.isReasoningModel() &&
       (this.getModel().provider.includes(`openai`) ||
         this.getModel().modelId.includes(`openai`) ||
         this.getModel().provider.includes(`groq`))
@@ -125,7 +135,6 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
-    // Process based on schema type
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);
     } else if (isArraySchema(schema)) {
@@ -144,10 +153,11 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
         }
       } else {
         // Other OpenAI models only have issues with emoji
-        if (schema.format === 'emoji') {
-          delete schema.format;
-        }
+        // if (schema.format === 'emoji') {
+        //   delete schema.format;
+        // }
       }
+      this.defaultStringHandler(schema);
     }
   }
 
@@ -157,16 +167,38 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       this.defaultUnionHandler(schema);
     }
 
+    if (schema.type === undefined && !schema.anyOf) {
+      let subSchema: typeof schema = {};
+      for (const key of Object.keys(schema)) {
+        // @ts-expect-error - key is a valid property for JSON Schema
+        subSchema[key] = schema[key];
+        // @ts-expect-error - key is a valid property for JSON Schema
+        delete schema[key];
+      }
+
+      schema.anyOf = [
+        subSchema,
+        {
+          type: 'null',
+        },
+      ];
+    }
+
     // Fix v4-specific issues in post-processing
     if (isObjectSchema(schema)) {
-      // Fix passthrough objects: convert additionalProperties: {} to additionalProperties: true
-      if (
-        schema.additionalProperties !== undefined &&
-        typeof schema.additionalProperties === 'object' &&
-        schema.additionalProperties !== null &&
-        Object.keys(schema.additionalProperties).length === 0
-      ) {
-        schema.additionalProperties = true;
+      // force all keys to be required
+      const keys = Object.keys(schema.properties || {});
+      if (keys.length) {
+        for (const key of keys) {
+          // @ts-expect-error - type is a valid property for JSON Schema
+          if (!schema.required?.includes(key) && schema.properties?.[key]?.type) {
+            // @ts-expect-error - nullable is a valid property for JSON Schema-
+            schema.properties[key]!.anyOf = [{ type: schema.properties[key]!.type }, { type: 'null' }];
+            // @ts-expect-error - nullable is a valid property for JSON Schema-
+            delete schema.properties[key]!.type;
+          }
+        }
+        schema.required = keys;
       }
 
       // Fix record schemas: remove propertyNames (v4 adds this but it's not needed)
