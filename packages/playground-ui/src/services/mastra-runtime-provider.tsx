@@ -654,7 +654,7 @@ export function MastraRuntimeProvider({
     topK,
     topP,
     seed,
-    maxOutputTokens: maxTokens, // AI SDK v5 uses maxOutputTokens
+    maxTokens,
     providerOptions,
     maxSteps,
     requireToolApproval,
