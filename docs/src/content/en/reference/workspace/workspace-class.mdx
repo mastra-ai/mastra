@@ -446,29 +446,43 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
 <PropertiesTable
   content={[
   {
-    name: 'backgroundProcesses.onStdout',
-    type: '(data: string, meta: BackgroundProcessMeta) => void',
-    description: 'Callback for stdout chunks from background processes.',
-    isOptional: true,
-  },
-  {
-    name: 'backgroundProcesses.onStderr',
-    type: '(data: string, meta: BackgroundProcessMeta) => void',
-    description: 'Callback for stderr chunks from background processes.',
-    isOptional: true,
-  },
-  {
-    name: 'backgroundProcesses.onExit',
-    type: '(meta: BackgroundProcessExitMeta) => void',
-    description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
-    isOptional: true,
-  },
-  {
-    name: 'backgroundProcesses.abortSignal',
-    type: 'AbortSignal | null | false',
+    name: 'backgroundProcesses',
+    type: 'BackgroundProcessesConfig',
     description:
-      "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
+      'Configuration for handling background processes. Only applicable if the sandbox supports background execution.',
     isOptional: true,
+    properties: [
+      {
+        type: 'BackgroundProcessesConfig',
+        parameters: [
+          {
+            name: 'onStdout',
+            type: '(data: string, meta: BackgroundProcessMeta) => void',
+            description: 'Callback for stdout chunks from background processes.',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string, meta: BackgroundProcessMeta) => void',
+            description: 'Callback for stderr chunks from background processes.',
+            isOptional: true,
+          },
+          {
+            name: 'onExit',
+            type: '(meta: BackgroundProcessExitMeta) => void',
+            description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
+            isOptional: true,
+          },
+          {
+            name: 'abortSignal',
+            type: 'AbortSignal | null | false',
+            description:
+              "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
