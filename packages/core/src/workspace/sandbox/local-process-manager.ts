@@ -5,6 +5,8 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
+import { execSync } from 'node:child_process';
+
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
 import { getExeca } from './execa';
@@ -12,6 +14,8 @@ import type { LocalSandbox } from './local-sandbox';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { ProcessInfo, SpawnProcessOptions } from './process-manager';
 import type { CommandResult } from './types';
+
+const isWindows = process.platform === 'win32';
 
 // =============================================================================
 // Local Process Handle
@@ -39,14 +43,10 @@ class LocalProcessHandle extends ProcessHandle {
     const timeoutId = options?.timeout
       ? setTimeout(() => {
           timedOut = true;
-          // Kill the entire process group so child processes are also terminated.
+          // Kill the entire process tree so child processes are also terminated.
           // We handle timeout ourselves rather than using execa's timeout option
-          // because execa only kills the direct subprocess, not the process group.
-          try {
-            process.kill(-this.pid, 'SIGTERM');
-          } catch {
-            subprocess.kill('SIGTERM');
-          }
+          // because execa only kills the direct subprocess, not the process tree.
+          killProcessTree(this.pid, subprocess, 'SIGTERM');
         }, options.timeout)
       : undefined;
 
@@ -100,18 +100,11 @@ class LocalProcessHandle extends ProcessHandle {
 
   async kill(): Promise<boolean> {
     if (this.exitCode !== undefined) return false;
-    // Kill the entire process group (negative PID) to ensure child processes
-    // spawned by the shell are also terminated. Without this, commands like
+    // Kill the entire process tree to ensure child processes spawned by the
+    // shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
-    // Execa doesn't handle process tree killing natively.
-    try {
-      process.kill(-this.pid, 'SIGKILL');
-      return true;
-    } catch {
-      // Fallback to direct kill if process group kill fails
-      this.subprocess.kill('SIGKILL');
-      return true;
-    }
+    killProcessTree(this.pid, this.subprocess, 'SIGKILL');
+    return true;
   }
 
   async sendStdin(data: string): Promise<void> {
@@ -124,6 +117,38 @@ class LocalProcessHandle extends ProcessHandle {
     return new Promise<void>((resolve, reject) => {
       this.subprocess.stdin!.write(data, (err: Error | null | undefined) => (err ? reject(err) : resolve()));
     });
+  }
+}
+
+// =============================================================================
+// Process Tree Killing
+// =============================================================================
+
+/**
+ * Kill a process and all its children.
+ *
+ * On Unix, we use process groups (negative PID) since processes are spawned
+ * with `detached: true` which creates a new process group.
+ *
+ * On Windows, `process.kill(-pid)` doesn't work (no process groups), and
+ * `detached: true` opens a new console window. Instead we use `taskkill /T`
+ * which recursively kills the process tree by PID.
+ */
+function killProcessTree(pid: number, subprocess: ResultPromise, signal: NodeJS.Signals): void {
+  if (isWindows) {
+    try {
+      // /T = kill child processes, /F = force, /PID = target process
+      execSync(`taskkill /T /F /PID ${pid}`, { stdio: 'ignore' });
+    } catch {
+      // Process may have already exited
+      subprocess.kill(signal);
+    }
+  } else {
+    try {
+      process.kill(-pid, signal);
+    } catch {
+      subprocess.kill(signal);
+    }
   }
 }
 
@@ -141,13 +166,11 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     const env = this.sandbox.buildEnv(options.env);
     const wrapped = this.sandbox.wrapCommandForIsolation(command);
 
-    const execaOptions: ExecaOptions = {
+    // Base options shared across all platforms.
+    const baseOptions = {
       cwd,
       env,
-      shell: this.sandbox.isolation === 'none',
-      // detached: true creates a new process group so we can kill the entire tree.
-      detached: true,
-      stdio: 'pipe',
+      stdio: 'pipe' as const,
       // Don't throw on non-zero exit — we handle exit codes ourselves.
       reject: false,
       // Don't buffer output — we stream it via ProcessHandle callbacks.
@@ -157,6 +180,36 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
       // Don't extend process.env — the sandbox controls the full environment via buildEnv().
       extendEnv: false,
     };
+
+    let execaOptions: ExecaOptions;
+
+    if (isWindows) {
+      // On Windows, `detached: true` opens a new console window (visible cmd.exe
+      // popup) and breaks stdout/stderr piping. Instead we spawn without detached
+      // and use `taskkill /T` for process tree killing.
+      //
+      // For shell interpretation (isolation=none), we explicitly invoke cmd.exe
+      // rather than using execa's `shell: true` which also triggers the console
+      // window issue when combined with detached.
+      if (this.sandbox.isolation === 'none') {
+        // Wrap the command for cmd.exe: /d disables AutoRun, /s /c handles quoting
+        wrapped.command = process.env.COMSPEC || 'cmd.exe';
+        wrapped.args = ['/d', '/s', '/c', `"${command}"`];
+      }
+      execaOptions = baseOptions;
+    } else {
+      // On Unix, `detached: true` creates a new process group so we can kill the
+      // entire tree via `process.kill(-pid, signal)`.
+      //
+      // Non-isolated: use shell mode so the host shell interprets the command string
+      // (pipes, redirects, chaining, etc.). Isolated (seatbelt/bwrap): the wrapper
+      // already includes `sh -c` inside the sandbox, so we spawn the wrapper directly.
+      execaOptions = {
+        ...baseOptions,
+        detached: true,
+        shell: this.sandbox.isolation === 'none',
+      };
+    }
 
     const execa = await getExeca();
     const subprocess = execa(wrapped.command, wrapped.args, execaOptions);
