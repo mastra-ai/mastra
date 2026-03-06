@@ -10,14 +10,12 @@ import type { TUIState } from './state.js';
 import { theme } from './theme.js';
 
 export function showError(state: TUIState, message: string): void {
-  state.chatContainer.addChild(new Spacer(1));
-  state.chatContainer.addChild(new Text(theme.fg('error', `Error: ${message}`), 1, 0));
+  state.chatContainer.addChild(new Text(theme.fg('error', `✗ ${message}`), 1, 0));
   state.ui.requestRender();
 }
 
 export function showInfo(state: TUIState, message: string): void {
-  state.chatContainer.addChild(new Spacer(1));
-  state.chatContainer.addChild(new Text(theme.fg('muted', message), 1, 0));
+  state.chatContainer.addChild(new Text(theme.fg('dim', '  ') + theme.fg('muted', message), 1, 0));
   state.ui.requestRender();
 }
 

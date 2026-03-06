@@ -723,26 +723,24 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const lines: string[] = [];
     let firstChangeIndex = -1;
 
-    // Use soft red for removed, green for added
-    const removedColor = chalk.hex(mastra.red); // soft red
-    const addedColor = chalk.hex(theme.getTheme().success); // soft green
+    const removedColor = chalk.hex(mastra.red);
+    const addedColor = chalk.hex(theme.getTheme().success);
 
     const maxLines = Math.max(oldLines.length, newLines.length);
 
     for (let i = 0; i < maxLines; i++) {
       if (i >= oldLines.length) {
         if (firstChangeIndex === -1) firstChangeIndex = lines.length;
-        lines.push(addedColor(newLines[i]));
+        lines.push(addedColor(`+ ${newLines[i]}`));
       } else if (i >= newLines.length) {
         if (firstChangeIndex === -1) firstChangeIndex = lines.length;
-        lines.push(removedColor(oldLines[i]));
+        lines.push(removedColor(`- ${oldLines[i]}`));
       } else if (oldLines[i] !== newLines[i]) {
         if (firstChangeIndex === -1) firstChangeIndex = lines.length;
-        lines.push(removedColor(oldLines[i]!));
-        lines.push(addedColor(newLines[i]!));
+        lines.push(removedColor(`- ${oldLines[i]!}`));
+        lines.push(addedColor(`+ ${newLines[i]!}`));
       } else {
-        // Context line
-        lines.push(theme.fg('muted', oldLines[i]!));
+        lines.push(theme.fg('muted', `  ${oldLines[i]!}`));
       }
     }
 

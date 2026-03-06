@@ -13,7 +13,8 @@ import type { EventHandlerContext } from './types.js';
 export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
 
-  // Refresh git branch so status line reflects the current branch
+  state.agentStartTime = Date.now();
+
   const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
   if (freshBranch) {
     state.projectInfo.gitBranch = freshBranch;
@@ -29,11 +30,12 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
 
 export function handleAgentEnd(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.agentStartTime = undefined;
+
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
 
-  // Refresh git branch — tool calls during this turn may have switched branches
   const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
   if (freshBranch) {
     state.projectInfo.gitBranch = freshBranch;
@@ -62,6 +64,8 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.agentStartTime = undefined;
+
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -89,6 +93,8 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
 
 export function handleAgentError(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  state.agentStartTime = undefined;
+
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }

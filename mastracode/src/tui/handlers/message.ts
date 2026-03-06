@@ -65,11 +65,15 @@ export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMes
   if (message.role === 'user') {
     ctx.addUserMessage(message);
   } else if (message.role === 'assistant') {
-    // Clear tool component references when starting a new assistant message
     state.lastAskUserComponent = undefined;
     state.lastSubmitPlanComponent = undefined;
     if (!state.streamingComponent) {
-      state.streamingComponent = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
+      state.streamingComponent = new AssistantMessageComponent(
+        undefined,
+        state.hideThinkingBlock,
+        getMarkdownTheme(),
+        true,
+      );
       ctx.addChildBeforeFollowUps(state.streamingComponent);
       state.streamingMessage = message;
       const trailingParts = getTrailingContentParts(message);

@@ -1,5 +1,6 @@
 /**
  * Component that renders an assistant message with streaming support.
+ * Includes a role indicator and improved thinking block presentation.
  */
 
 import fs from 'node:fs';
@@ -26,15 +27,21 @@ export class AssistantMessageComponent extends Container {
   private markdownTheme: MarkdownTheme;
   private lastMessage?: HarnessMessage;
   private _id: number;
+  private showRoleIndicator: boolean;
 
-  constructor(message?: HarnessMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
+  constructor(
+    message?: HarnessMessage,
+    hideThinkingBlock = false,
+    markdownTheme: MarkdownTheme = getMarkdownTheme(),
+    showRoleIndicator = false,
+  ) {
     super();
     this._id = ++_compId;
 
     this.hideThinkingBlock = hideThinkingBlock;
     this.markdownTheme = markdownTheme;
+    this.showRoleIndicator = showRoleIndicator;
 
-    // Container for text/thinking content
     this.contentContainer = new Container();
     this.addChild(this.contentContainer);
 
@@ -61,13 +68,11 @@ export class AssistantMessageComponent extends Container {
   }
 
   updateContent(message: HarnessMessage): void {
-    // Deep copy the message to prevent mutation from the harness's shared content array
     this.lastMessage = {
       ...message,
       content: message.content.map(c => ({ ...c })),
     };
 
-    // Clear content container
     this.contentContainer.clear();
 
     const hasVisibleContent = message.content.some(
@@ -76,28 +81,45 @@ export class AssistantMessageComponent extends Container {
 
     if (hasVisibleContent) {
       this.contentContainer.addChild(new Spacer(1));
+      if (this.showRoleIndicator) {
+        this.contentContainer.addChild(
+          new Text(theme.bold(theme.fg('accent', '◆')) + ' ' + theme.bold(theme.fg('text', 'Assistant')), 1, 0),
+        );
+      }
     }
-    // Render content in order
+
     for (let i = 0; i < message.content.length; i++) {
       const content = message.content[i]!;
 
       if (content.type === 'text' && (content as any).text.trim()) {
-        // Assistant text messages - trim the text
         this.contentContainer.addChild(new Markdown((content as any).text.trim(), 1, 0, this.markdownTheme));
       } else if (content.type === 'thinking' && (content as any).thinking.trim()) {
-        // Check if there's text content after this thinking block
         const hasTextAfter = message.content.slice(i + 1).some(c => c.type === 'text' && (c as any).text.trim());
+        const thinkingText = (content as any).thinking.trim();
+        const thinkingLines = thinkingText.split('\n').length;
 
         if (this.hideThinkingBlock) {
-          // Show static "Thinking..." label when hidden
-          this.contentContainer.addChild(new Text(theme.italic(theme.fg('thinkingText', 'Thinking...')), 1, 0));
+          const summary = thinkingText.length > 80 ? thinkingText.slice(0, 77) + '...' : thinkingText;
+          const firstLine = summary.split('\n')[0] || '';
+          const label = thinkingLines > 1
+            ? `${firstLine.slice(0, 60)}${firstLine.length > 60 ? '…' : ''} (+${thinkingLines - 1} lines)`
+            : firstLine;
+          this.contentContainer.addChild(
+            new Text(
+              theme.fg('dim', '  ') + theme.italic(theme.fg('thinkingText', `💭 ${label}`)) +
+              theme.fg('dim', '  ctrl+t to expand'),
+              1, 0,
+            ),
+          );
           if (hasTextAfter) {
             this.contentContainer.addChild(new Spacer(1));
           }
         } else {
-          // Thinking traces in thinkingText color, italic
           this.contentContainer.addChild(
-            new Markdown((content as any).thinking.trim(), 1, 0, this.markdownTheme, {
+            new Text(theme.fg('dim', '  ') + theme.italic(theme.fg('thinkingText', '💭 Thinking')), 1, 0),
+          );
+          this.contentContainer.addChild(
+            new Markdown(thinkingText, 1, 0, this.markdownTheme, {
               color: (text: string) => theme.fg('thinkingText', text),
               italic: true,
             }),
@@ -105,10 +127,8 @@ export class AssistantMessageComponent extends Container {
           this.contentContainer.addChild(new Spacer(1));
         }
       }
-      // Skip tool_call and tool_result - those are rendered by ToolExecutionComponent
     }
 
-    // Check if aborted or error - show after partial content
     if (message.stopReason === 'aborted') {
       const abortMessage = message.errorMessage || 'Interrupted';
       this.contentContainer.addChild(new Spacer(1));

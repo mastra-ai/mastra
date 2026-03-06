@@ -55,47 +55,40 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
   }
 
   private buildUI(): void {
-    // Title
-    this.addChild(new Text(theme.fg('warning', '⚠ Tool Approval Required'), 0, 0));
-    this.addChild(new Spacer(1));
+    const t = theme.getTheme();
+    const dimColor = chalk.hex(t.dim);
+    const key = chalk.hex(t.text).bold;
 
-    // Tool name
-    this.addChild(new Text(theme.fg('accent', `Tool: `) + theme.fg('text', this.toolName), 0, 0));
-    if (this.categoryLabel) {
-      this.addChild(new Text(theme.fg('accent', `Category: `) + theme.fg('text', this.categoryLabel), 0, 0));
-    }
-    this.addChild(new Spacer(1));
+    this.addChild(
+      new Text(
+        theme.fg('warning', '⚠') + ' ' +
+        theme.bold(theme.fg('text', this.toolName)) +
+        (this.categoryLabel ? theme.fg('muted', ` [${this.categoryLabel}]`) : ''),
+        0, 0,
+      ),
+    );
 
-    // Arguments (formatted)
-    this.addChild(new Text(theme.fg('muted', 'Arguments:'), 0, 0));
     const argsText = this.formatArgs(this.args);
-    for (const line of argsText.split('\n').slice(0, 10)) {
-      this.addChild(new Text(theme.fg('text', '  ' + line), 0, 0));
+    const argsLines = argsText.split('\n').slice(0, 8);
+    for (const line of argsLines) {
+      this.addChild(new Text(theme.fg('muted', '  ' + line), 0, 0));
     }
-    if (argsText.split('\n').length > 10) {
-      this.addChild(new Text(theme.fg('muted', '  ... (truncated)'), 0, 0));
+    if (argsText.split('\n').length > 8) {
+      this.addChild(new Text(theme.fg('dim', '  ... (truncated)'), 0, 0));
     }
 
     this.addChild(new Spacer(1));
-    // Prompt text with keyboard shortcuts
     const categoryHint = this.categoryLabel
       ? `lways allow ${this.categoryLabel.toLowerCase()}`
       : 'lways allow category';
-    const dimColor = chalk.hex(theme.getTheme().dim);
-    const key = chalk.hex(theme.getTheme().text).bold;
     this.addChild(
       new Text(
         theme.fg('accent', 'Allow? ') +
-          key('y') +
-          dimColor('es  ') +
-          key('n') +
-          dimColor('o  ') +
-          key('a') +
-          dimColor(categoryHint + '  ') +
-          key('Y') +
-          dimColor('olo'),
-        0,
-        0,
+          key('y') + dimColor('es  ') +
+          key('n') + dimColor('o  ') +
+          key('a') + dimColor(categoryHint + '  ') +
+          key('Y') + dimColor('olo'),
+        0, 0,
       ),
     );
   }
