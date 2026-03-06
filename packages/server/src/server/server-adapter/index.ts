@@ -578,6 +578,35 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
   }
 
+  /**
+   * Builds the OpenAPI spec object with servers field and custom route paths.
+   */
+  private buildOpenAPISpec(config: { title: string; version: string; description: string }, prefix?: string): any {
+    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, config);
+
+    // Set the servers field so clients know routes are served under the prefix
+    if (prefix) {
+      openApiSpec.servers = [{ url: prefix }];
+    }
+
+    // Merge custom API routes into the OpenAPI spec.
+    // Custom routes are served at root (/), not under the API prefix,
+    // so each custom path item gets its own servers override per OpenAPI 3.1.
+    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
+      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
+      if (prefix) {
+        for (const pathKey of Object.keys(customPaths)) {
+          if (!customPaths[pathKey].servers) {
+            customPaths[pathKey].servers = [{ url: '/' }];
+          }
+        }
+      }
+      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
+    }
+
+    return openApiSpec;
+  }
+
   async registerOpenAPIRoute(app: TApp, config: OpenAPIConfig = {}, { prefix }: { prefix?: string }): Promise<void> {
     const {
       title = 'Mastra API',
@@ -586,22 +615,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       path = '/openapi.json',
     } = config;
 
-    const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, {
-      title,
-      version,
-      description,
-    });
-
-    // Set the servers field so Swagger UI knows routes are served under the prefix
-    if (prefix) {
-      openApiSpec.servers = [{ url: prefix }];
-    }
-
-    // Merge custom API routes into the OpenAPI spec
-    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
-      openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
-    }
+    const openApiSpec = this.buildOpenAPISpec({ title, version, description }, prefix);
 
     const openApiRoute: ServerRoute = {
       method: 'GET',
@@ -622,16 +636,27 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     if (this.openapiPath) {
-      await this.registerOpenAPIRoute(
-        this.app,
-        {
-          title: 'Mastra API',
-          version: '1.0.0',
-          description: 'Mastra Server API',
+      const specConfig = {
+        title: 'Mastra API',
+        version: '1.0.0',
+        description: 'Mastra Server API',
+      };
+
+      // Register the spec under the API prefix (e.g. /api/openapi.json)
+      await this.registerOpenAPIRoute(this.app, { ...specConfig, path: this.openapiPath }, { prefix: this.prefix });
+
+      // Also serve the spec at the root path (e.g. /openapi.json) for backwards
+      // compatibility — pre-V1 served it at the root.
+      if (this.prefix) {
+        const openApiSpec = this.buildOpenAPISpec(specConfig, this.prefix);
+        const rootOpenApiRoute: ServerRoute = {
+          method: 'GET',
           path: this.openapiPath,
-        },
-        { prefix: this.prefix },
-      );
+          responseType: 'json',
+          handler: async () => openApiSpec,
+        };
+        await this.registerRoute(this.app, rootOpenApiRoute, { prefix: '' });
+      }
     }
   }
 
