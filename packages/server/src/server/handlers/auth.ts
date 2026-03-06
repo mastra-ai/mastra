@@ -211,8 +211,9 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
 
       // Build OAuth callback URI using the configured route prefix
       const origin = getPublicOrigin(request);
-      const rawPrefix = (routePrefix as string) || '/api';
-      const prefix = rawPrefix.endsWith('/') ? rawPrefix.slice(0, -1) : rawPrefix;
+      const raw = ((routePrefix as string) || '/api').trim();
+      const withSlash = raw.startsWith('/') ? raw : `/${raw}`;
+      const prefix = withSlash.endsWith('/') ? withSlash.slice(0, -1) : withSlash;
       const oauthCallbackUri = `${origin}${prefix}/auth/sso/callback`;
 
       // Encode the post-login redirect in state (where user goes after auth completes)
