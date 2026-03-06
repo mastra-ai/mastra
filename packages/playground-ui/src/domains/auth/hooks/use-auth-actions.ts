@@ -31,31 +31,45 @@ import type { SSOLoginResponse, LogoutResponse } from '../types';
  * }
  * ```
  */
+/**
+ * Makes a request to initiate SSO login.
+ * Exported for testing purposes.
+ *
+ * @internal
+ */
+export async function makeSSOLoginRequest(
+  client: { options: any },
+  { redirectUri }: { redirectUri?: string },
+): Promise<SSOLoginResponse> {
+  const { baseUrl = '', apiPrefix } = client.options || {};
+  const prefix = (apiPrefix || '/api').replace(/\/+$/, '');
+
+  const params = new URLSearchParams();
+  if (redirectUri) {
+    params.set('redirect_uri', redirectUri);
+  }
+
+  const url = `${baseUrl}${prefix}/auth/sso/login${params.toString() ? `?${params}` : ''}`;
+
+  const response = await fetch(url, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to initiate SSO login: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export function useSSOLogin() {
   const client = useMastraClient();
 
   return useMutation<SSOLoginResponse, Error, { redirectUri?: string }>({
-    mutationFn: async ({ redirectUri }) => {
-      const params = new URLSearchParams();
-      if (redirectUri) {
-        params.set('redirect_uri', redirectUri);
-      }
-
-      const url = `${(client as any).options?.baseUrl || ''}/api/auth/sso/login${params.toString() ? `?${params}` : ''}`;
-
-      const response = await fetch(url, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to initiate SSO login: ${response.status}`);
-      }
-
-      return response.json();
-    },
+    mutationFn: ({ redirectUri }) => makeSSOLoginRequest(client as any, { redirectUri }),
   });
 }
 
@@ -94,26 +108,37 @@ export function useSSOLogin() {
  * }
  * ```
  */
+/**
+ * Makes a logout request.
+ * Exported for testing purposes.
+ *
+ * @internal
+ */
+export async function makeLogoutRequest(client: { options: any }): Promise<LogoutResponse> {
+  const { baseUrl = '', apiPrefix } = client.options || {};
+  const prefix = (apiPrefix || '/api').replace(/\/+$/, '');
+
+  const response = await fetch(`${baseUrl}${prefix}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to logout: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 export function useLogout() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
 
   return useMutation<LogoutResponse, Error, void>({
-    mutationFn: async () => {
-      const response = await fetch(`${(client as any).options?.baseUrl || ''}/api/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to logout: ${response.status}`);
-      }
-
-      return response.json();
-    },
+    mutationFn: () => makeLogoutRequest(client as any),
     onSuccess: () => {
       // Invalidate all auth-related queries
       queryClient.invalidateQueries({ queryKey: ['auth'] });

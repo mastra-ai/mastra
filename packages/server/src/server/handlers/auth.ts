@@ -108,7 +108,7 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     try {
-      const { mastra, request } = ctx as any;
+      const { mastra, request, routePrefix } = ctx as any;
 
       // In dev playground mode, return auth as disabled so the UI doesn't show login gates.
       // The server already bypasses auth for dev playground requests, so the UI should match.
@@ -127,7 +127,7 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
       if (!buildCapabilities) {
         return { enabled: false, login: null };
       }
-      const capabilities = await buildCapabilities(auth, request, { rbac });
+      const capabilities = await buildCapabilities(auth, request, { rbac, apiPrefix: routePrefix });
 
       return capabilities;
     } catch (error) {
@@ -202,16 +202,17 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     try {
-      const { mastra, redirect_uri, request } = ctx as any;
+      const { mastra, redirect_uri, request, routePrefix } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
         throw new HTTPException(404, { message: 'SSO not configured' });
       }
 
-      // Build OAuth callback URI (always /api/auth/sso/callback)
+      // Build OAuth callback URI using the configured route prefix
       const origin = getPublicOrigin(request);
-      const oauthCallbackUri = `${origin}/api/auth/sso/callback`;
+      const prefix = ((routePrefix as string) || '/api').replace(/\/+$/, '');
+      const oauthCallbackUri = `${origin}${prefix}/auth/sso/callback`;
 
       // Encode the post-login redirect in state (where user goes after auth completes)
       // State format: uuid|postLoginRedirect
@@ -273,17 +274,14 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
       }
     }
 
-    // Build absolute redirect URL, preventing open redirects to external origins
+    // Build absolute redirect URL.
+    // Cross-origin redirects are allowed because the redirect_uri originates from
+    // the Studio that initiated the login flow (encoded in state). When Studio and
+    // the API server run on different origins (e.g. different ports), the redirect
+    // must be honoured as-is.
     let absoluteRedirect: string;
     if (redirectTo.startsWith('http')) {
-      try {
-        const redirectUrl = new URL(redirectTo);
-        const baseUrlObj = new URL(baseUrl);
-        // Only allow same-origin redirects
-        absoluteRedirect = redirectUrl.origin === baseUrlObj.origin ? redirectTo : `${baseUrl}/`;
-      } catch {
-        absoluteRedirect = `${baseUrl}/`;
-      }
+      absoluteRedirect = redirectTo;
     } else {
       absoluteRedirect = `${baseUrl}${redirectTo}`;
     }
