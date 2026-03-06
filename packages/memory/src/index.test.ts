@@ -254,6 +254,16 @@ describe('Memory', () => {
       // Messages must not be silently dropped
       expect(result.messages.length).toBeGreaterThan(0);
       expect(result.messages).toHaveLength(2);
+
+      const recalled = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(recalled.messages).toHaveLength(2);
+      expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
+      expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
   });
 
