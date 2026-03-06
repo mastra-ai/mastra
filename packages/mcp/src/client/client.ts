@@ -4,7 +4,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
-import type { Tool } from '@mastra/core/tools';
+import type { Tool, ToolExecutionContext } from '@mastra/core/tools';
 import { isZodType } from '@mastra/core/utils';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
@@ -789,7 +789,10 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async (input: any, context?: { requestContext?: RequestContext | null; runId?: string }) => {
+          execute: async (
+            input: any,
+            context?: Partial<ToolExecutionContext> & { runId?: string },
+          ) => {
             const operationContext = context?.requestContext ?? null;
 
             return this.operationContextStore.run(operationContext, async () => {
@@ -807,6 +810,7 @@ export class InternalMastraMCPClient extends MastraBase {
                   CallToolResultSchema,
                   {
                     timeout: this.timeout,
+                    signal: context?.abortSignal,
                   },
                 );
 
