@@ -38,14 +38,7 @@ import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
 import { stateSchema } from './schema.js';
-import {
-  createViewTool,
-  createGrepTool,
-  createGlobTool,
-  createExecuteCommandTool,
-  createWriteFileTool,
-  createStringReplaceLspTool,
-} from './tools/index.js';
+
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { detectProject, getStorageConfig, getResourceIdOverride } from './utils/project.js';
@@ -149,29 +142,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
   });
 
-  // Build subagent definitions with project-scoped tools
-  const viewTool = createViewTool(project.rootPath);
-  const grepTool = createGrepTool(project.rootPath);
-  const globTool = createGlobTool(project.rootPath);
-  const executeCommandTool = createExecuteCommandTool(project.rootPath);
-  const writeFileTool = createWriteFileTool(project.rootPath);
-  const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
-
-  // Filter disabled tools from a tool map so subagents respect disabledTools config.
-  const filterDisabled = <T extends Record<string, unknown>>(tools: T): T => {
-    if (!config?.disabledTools?.length) return tools;
-    const filtered = { ...tools };
-    for (const name of config.disabledTools) {
-      delete (filtered as Record<string, unknown>)[name];
-    }
-    return filtered;
-  };
-
-  const readOnlyTools = filterDisabled({
-    view: viewTool,
-    search_content: grepTool,
-    find_files: globTool,
-  });
+  // Build subagent definitions.
+  // Subagents inherit workspace tools from the parent agent's workspace automatically.
+  // allowedWorkspaceTools restricts which workspace tools the model can see.
+  // Non-workspace tools (task_write, task_check) are passed explicitly.
+  const filterDisabled = (tools: string[]) =>
+    config?.disabledTools?.length ? tools.filter(t => !config.disabledTools!.includes(t)) : tools;
 
   const defaultSubagents: HarnessSubagent[] = [
     {
@@ -180,7 +156,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       description:
         "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
       instructions: exploreSubagent.instructions,
-      tools: readOnlyTools,
+      allowedWorkspaceTools: filterDisabled(exploreSubagent.allowedTools),
     },
     {
       id: planSubagent.id,
@@ -188,7 +164,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       description:
         "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
       instructions: planSubagent.instructions,
-      tools: readOnlyTools,
+      allowedWorkspaceTools: filterDisabled(planSubagent.allowedTools),
     },
     {
       id: executeSubagent.id,
@@ -196,14 +172,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       description:
         "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
       instructions: executeSubagent.instructions,
-      tools: filterDisabled({
-        ...readOnlyTools,
-        string_replace_lsp: stringReplaceLspTool,
-        write_file: writeFileTool,
-        execute_command: executeCommandTool,
+      tools: {
         task_write: taskWriteTool,
         task_check: taskCheckTool,
-      }),
+      },
+      allowedWorkspaceTools: filterDisabled(executeSubagent.allowedTools),
     },
   ];
 

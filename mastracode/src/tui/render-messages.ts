@@ -6,7 +6,7 @@
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { parseSubagentMeta } from '../tools/subagent.js';
+import { parseSubagentMeta } from '@mastra/core/harness';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
