@@ -636,6 +636,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               messageId: currentStep.messageId,
               rotateResponseMessageId: () => {
                 currentMessageId = _internal?.generateId?.() ?? generateId();
+                currentStep.messageId = currentMessageId;
                 return currentMessageId;
               },
               tools,
