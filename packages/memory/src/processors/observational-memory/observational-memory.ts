@@ -56,8 +56,10 @@ import {
 } from './markers';
 import {
   buildObserverSystemPrompt,
-  buildObserverPrompt,
-  buildMultiThreadObserverPrompt,
+  buildObserverTaskPrompt,
+  buildObserverHistoryMessage,
+  buildMultiThreadObserverTaskPrompt,
+  buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   parseMultiThreadObserverOutput,
   optimizeObservationsForContext,
@@ -1598,11 +1600,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }> {
     const agent = this.getObserverAgent();
 
-    const prompt = buildObserverPrompt(existingObservations, messagesToObserve, options);
+    const observerMessages = [
+      {
+        role: 'user' as const,
+        content: buildObserverTaskPrompt(existingObservations, options),
+      },
+      buildObserverHistoryMessage(messagesToObserve),
+    ];
 
     const doGenerate = async () => {
       return this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(prompt, {
+        const streamResult = await agent.stream(observerMessages, {
           modelSettings: {
             ...this.observationConfig.modelSettings,
           },
@@ -1677,7 +1685,13 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       instructions: buildObserverSystemPrompt(true, this.observationConfig.instruction),
     });
 
-    const prompt = buildMultiThreadObserverPrompt(existingObservations, messagesByThread, threadOrder);
+    const observerMessages = [
+      {
+        role: 'user' as const,
+        content: buildMultiThreadObserverTaskPrompt(existingObservations),
+      },
+      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
+    ];
 
     // Flatten all messages for context dump
     const allMessages: MastraDBMessage[] = [];
@@ -1692,7 +1706,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     const doGenerate = async () => {
       return this.withAbortCheck(async () => {
-        const streamResult = await agent.stream(prompt, {
+        const streamResult = await agent.stream(observerMessages, {
           modelSettings: {
             ...this.observationConfig.modelSettings,
           },

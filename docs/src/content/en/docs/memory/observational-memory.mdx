@@ -77,6 +77,8 @@ When message history tokens exceed a threshold (default: 30,000), the Observer c
 
 Image parts now contribute to this threshold with model-aware estimates too, so multimodal conversations trigger observation more accurately than before. That also applies to image-like `file` parts when the transport normalizes an uploaded image as a file instead of an image part. For example, OpenAI image detail settings can materially change when OM decides to observe.
 
+The Observer can also see supported image attachments in the history it reviews. OM keeps readable placeholders like `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript while sending image parts alongside that text. This applies to both normal thread observation and batched resource-scope observation. Image-like `file` parts are upgraded to image inputs for the Observer when possible, while true non-image files remain text-only placeholders.
+
 ```
 Date: 2026-01-15
 - 🔴 12:10 User is building a Next.js app with Supabase auth, due in 1 week (meaning January 22nd 2026)

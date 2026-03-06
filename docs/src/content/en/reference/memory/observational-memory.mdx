@@ -34,6 +34,8 @@ export const agent = new Agent({
 
 The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `google/gemini-2.5-flash` as the default model. When passing a config object, a `model` must be explicitly set — either at the top level, or on `observation.model` and/or `reflection.model`.
 
+Observer input is now multimodal-aware for supported image attachments. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. True non-image files still appear as placeholders only.
+
 <PropertiesTable
   content={[
   {
