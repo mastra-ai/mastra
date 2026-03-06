@@ -299,10 +299,17 @@ export class DatadogExporter extends BaseExporter {
     // The native span error status is also set via ddSpan.setTag('error', true) in emitSpan()
     const tags: Record<string, any> = {};
 
-    // Convert span.tags (string[]) to object format - each tag becomes a key with value true
+    // Convert span.tags (string[]) to object format
+    // Tags in "key:value" format (e.g. "instance_name:career-scout-api") are split into { key: "value" }
+    // Tags without a colon (e.g. "production") are set as { tag: "" }
     if (span.tags?.length) {
       for (const tag of span.tags) {
-        tags[tag] = true;
+        const colonIndex = tag.indexOf(':');
+        if (colonIndex > 0) {
+          tags[tag.substring(0, colonIndex)] = tag.substring(colonIndex + 1);
+        } else {
+          tags[tag] = '';
+        }
       }
     }
 

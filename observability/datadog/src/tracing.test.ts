@@ -309,7 +309,7 @@ describe('DatadogExporter', () => {
     it('converts span.tags string array to object format', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        tags: ['production', 'experiment-v2', 'user-request'],
+        tags: ['production', 'experiment-v2', 'instance_name:career-scout-api'],
       });
 
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
@@ -318,9 +318,9 @@ describe('DatadogExporter', () => {
         expect.anything(),
         expect.objectContaining({
           tags: {
-            production: true,
-            'experiment-v2': true,
-            'user-request': true,
+            production: '',
+            'experiment-v2': '',
+            instance_name: 'career-scout-api',
           },
         }),
       );
@@ -342,8 +342,8 @@ describe('DatadogExporter', () => {
         expect.anything(),
         expect.objectContaining({
           tags: {
-            production: true,
-            critical: true,
+            production: '',
+            critical: '',
             error: true,
             errorInfo: {
               message: 'Something failed',
