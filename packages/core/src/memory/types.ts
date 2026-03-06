@@ -57,14 +57,6 @@ export type ThreadOMMetadata = {
   suggestedResponse?: string;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
-  /**
-   * Stable fallback cursor for replay filtering when message IDs are reminted.
-   * Represents the last fully observed message boundary in this thread.
-   */
-  lastObservedMessageCursor?: {
-    createdAt: string;
-    id: string;
-  };
   // Note: Patterns are stored on the ObservationalMemoryRecord (resource-level), not thread metadata
 };
 

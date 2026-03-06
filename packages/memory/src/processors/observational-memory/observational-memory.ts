@@ -2323,12 +2323,9 @@ ${suggestedResponse}
           // Explicitly write undefined when omitted so stale values are cleared.
           const thread = await this.storage.getThreadById({ threadId });
           if (thread) {
-            const activatedSet = new Set(activationResult.activatedMessageIds ?? []);
-            const activatedMessages = messageList.get.all.db().filter(msg => msg?.id && activatedSet.has(msg.id));
             const newMetadata = setThreadOMMetadata(thread.metadata, {
               suggestedResponse: activationResult.suggestedContinuation,
               currentTask: activationResult.currentTask,
-              lastObservedMessageCursor: this.getLastObservedMessageCursor(activatedMessages),
             });
             await this.storage.updateThread({
               id: threadId,
@@ -2445,39 +2442,25 @@ ${suggestedResponse}
       `[OM:cleanupBranch] allMsgs=${allMsgs.length}, markerFound=${markerIdx !== -1}, markerIdx=${markerIdx}, observedMessageIds=${observedMessageIds?.length ?? 'undefined'}, allIds=${allMsgs.map(m => m.id?.slice(0, 8)).join(',')}`,
     );
 
-    const isActivationCleanup = Boolean(observedMessageIds && observedMessageIds.length > 0);
-
-    if (isActivationCleanup) {
+    if (observedMessageIds && observedMessageIds.length > 0) {
       // Activation-based cleanup: remove activated message IDs first.
       // This path must take precedence over marker cleanup so absolute retention
       // floors are enforced during buffered activation.
       const observedSet = new Set(observedMessageIds);
       const idsToRemove = new Set<string>();
-      const removalOrder: string[] = [];
       let skipped = 0;
       let backoffTriggered = false;
-      const retentionCounter = typeof minRemaining === 'number' ? new TokenCounter() : null;
 
       for (const msg of allMsgs) {
         if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
           continue;
         }
 
-        const unobservedParts = this.getUnobservedParts(msg);
-        const totalParts = msg.content?.parts?.length ?? 0;
-
-        // Activation can target a message ID whose observed boundary is inside the same message.
-        // In that case, keep the fresh tail visible to the model instead of removing the whole message.
-        if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
-          msg.content.parts = unobservedParts;
-          continue;
-        }
-
-        if (retentionCounter && typeof minRemaining === 'number') {
+        if (typeof minRemaining === 'number') {
           const nextRemainingMessages = allMsgs.filter(
             m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
           );
-          const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
+          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
           if (remainingIfRemoved < minRemaining) {
             skipped += 1;
             backoffTriggered = true;
@@ -2486,21 +2469,6 @@ ${suggestedResponse}
         }
 
         idsToRemove.add(msg.id);
-        removalOrder.push(msg.id);
-      }
-
-      if (retentionCounter && typeof minRemaining === 'number' && idsToRemove.size > 0) {
-        let remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
-        let remainingTokens = retentionCounter.countMessages(remainingMessages);
-
-        while (remainingTokens < minRemaining && removalOrder.length > 0) {
-          const restoreId = removalOrder.pop()!;
-          idsToRemove.delete(restoreId);
-          skipped += 1;
-          backoffTriggered = true;
-          remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
-          remainingTokens = retentionCounter.countMessages(remainingMessages);
-        }
       }
 
       omDebug(
@@ -2555,24 +2523,19 @@ ${suggestedResponse}
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
     } else {
-      // No marker found — save current input/response messages first, then clear.
-      // Keeping them in MessageList until save finishes avoids brief under-inclusion windows
-      // where fresh-next-turn context can disappear during async persistence.
-      const newInput = messageList.get.input.db();
-      const newOutput = messageList.get.response.db();
+      // No marker found — fall back to source-based clearing
+      const newInput = messageList.clear.input.db();
+      const newOutput = messageList.clear.response.db();
       const messagesToSave = [...newInput, ...newOutput];
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
     }
 
-    // Clear any remaining input/response tracking for non-activation cleanup paths.
-    // Activation cleanup only removes observed IDs from context and should not clear
-    // fresh input/response queues, otherwise retention-floor scenarios can drop too much context.
-    if (!isActivationCleanup) {
-      messageList.clear.input.db();
-      messageList.clear.response.db();
-    }
+    // Clear any remaining input/response tracking
+    // (only reached for marker-based and fallback paths, NOT activation path)
+    messageList.clear.input.db();
+    messageList.clear.response.db();
   }
 
   /**
@@ -2664,24 +2627,11 @@ ${suggestedResponse}
   }
 
   /**
-   * Filter out already-observed messages from the in-memory context.
-   *
-   * Marker-boundary pruning is safest at step 0 (historical resume/rebuild), where
-   * list ordering mirrors persisted history.
-   * For step > 0, the list may include mid-loop mutations (sealing/splitting/trim),
-   * so we prefer record-based fallback pruning over position-based marker pruning.
+   * Filter out already-observed messages from message list (step 0 only).
+   * Historical messages loaded from DB may contain observation markers from previous sessions.
    */
-  private async filterAlreadyObservedMessages(
-    messageList: MessageList,
-    record?: ObservationalMemoryRecord,
-    options?: { useMarkerBoundaryPruning?: boolean },
-  ): Promise<void> {
+  private filterAlreadyObservedMessages(messageList: MessageList, record?: ObservationalMemoryRecord): void {
     const allMessages = messageList.get.all.db();
-    const useMarkerBoundaryPruning = options?.useMarkerBoundaryPruning ?? true;
-    const fallbackCursor = record?.threadId
-      ? getThreadOMMetadata((await this.storage.getThreadById({ threadId: record.threadId }))?.metadata)
-          ?.lastObservedMessageCursor
-      : undefined;
 
     // Find the message with the last observation end marker
     let markerMessageIndex = -1;
@@ -2697,7 +2647,7 @@ ${suggestedResponse}
       }
     }
 
-    if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
+    if (markerMessage && markerMessageIndex !== -1) {
       const messagesToRemove: string[] = [];
       for (let i = 0; i < markerMessageIndex; i++) {
         const msg = allMessages[i];
@@ -2730,53 +2680,20 @@ ${suggestedResponse}
       // for the LLM to see. Only observedMessageIds and lastObservedAt determine what's
       // been truly observed.
 
-      const derivedCursor =
-        fallbackCursor ??
-        this.getLastObservedMessageCursor(
-          allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt),
-        );
       const lastObservedAt = record.lastObservedAt;
       const messagesToRemove: string[] = [];
 
       for (const msg of allMessages) {
         if (!msg?.id || msg.id === 'om-continuation') continue;
 
+        // Remove if explicitly tracked in observedMessageIds or buffered chunks
         if (observedIds.has(msg.id)) {
           messagesToRemove.push(msg.id);
           continue;
         }
 
-        const parts = Array.isArray(msg.content?.parts) ? msg.content.parts : [];
-        if (derivedCursor && parts.length > 0) {
-          let observedSealBoundaryIndex = -1;
-          for (let i = parts.length - 1; i >= 0; i--) {
-            const sealedAt = (parts[i] as { metadata?: { mastra?: { sealedAt?: string | number | Date } } })?.metadata
-              ?.mastra?.sealedAt;
-            if (!sealedAt) {
-              continue;
-            }
-
-            if (new Date(sealedAt).toISOString() <= derivedCursor.createdAt) {
-              observedSealBoundaryIndex = i;
-              break;
-            }
-          }
-
-          if (observedSealBoundaryIndex === parts.length - 1) {
-            messagesToRemove.push(msg.id);
-            continue;
-          }
-
-          if (observedSealBoundaryIndex >= 0) {
-            msg.content.parts = parts.slice(observedSealBoundaryIndex + 1);
-          }
-        }
-
-        if (derivedCursor && this.isMessageAtOrBeforeCursor(msg, derivedCursor)) {
-          messagesToRemove.push(msg.id);
-          continue;
-        }
-
+        // Remove if created before lastObservedAt (these messages' content is
+        // already captured in activeObservations via buffered activation)
         if (lastObservedAt && msg.createdAt) {
           const msgDate = new Date(msg.createdAt);
           if (msgDate <= lastObservedAt) {
@@ -2943,12 +2860,9 @@ ${suggestedResponse}
             // Explicitly write undefined when omitted so stale values are cleared.
             const thread = await this.storage.getThreadById({ threadId });
             if (thread) {
-              const activatedSet = new Set(activationResult.activatedMessageIds ?? []);
-              const activatedMessages = messageList.get.all.db().filter(msg => msg?.id && activatedSet.has(msg.id));
               const newMetadata = setThreadOMMetadata(thread.metadata, {
                 suggestedResponse: activationResult.suggestedContinuation,
                 currentTask: activationResult.currentTask,
-                lastObservedMessageCursor: this.getLastObservedMessageCursor(activatedMessages),
               });
               await this.storage.updateThread({
                 id: threadId,
@@ -3010,7 +2924,6 @@ ${suggestedResponse}
     // ════════════════════════════════════════════════════════════════════════
     // STEP 2: CHECK THRESHOLD AND OBSERVE IF NEEDED
     // ════════════════════════════════════════════════════════════════════════
-    let didThresholdCleanup = false;
     if (!readOnly) {
       const allMessages = messageList.get.all.db();
       const unobservedMessages = this.getUnobservedMessages(allMessages, record);
@@ -3137,7 +3050,6 @@ ${suggestedResponse}
             observedIds,
             minRemaining,
           );
-          didThresholdCleanup = true;
 
           // Clean up sealed IDs for activated messages (prevents memory leak)
           if (activatedMessageIds?.length) {
@@ -3172,14 +3084,10 @@ ${suggestedResponse}
     );
 
     // ════════════════════════════════════════════════════════════════════════
-    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES
-    // - step 0: use marker-boundary pruning + record fallback (historical resume)
-    // - step >0: use record fallback only (avoid position-based marker over-pruning mid-loop)
+    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES (step 0 only)
     // ════════════════════════════════════════════════════════════════════════
-    // If step-level cleanup already ran after threshold handling, skip this pass to avoid
-    // a second timestamp-based prune that can undercut retention-floor guarantees.
-    if (!didThresholdCleanup) {
-      await this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
+    if (stepNumber === 0) {
+      this.filterAlreadyObservedMessages(messageList, record);
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -3502,29 +3410,6 @@ ${formattedMessages}
     return maxTime > 0 ? new Date(maxTime) : new Date();
   }
 
-  private getLastObservedMessageCursor(messages: MastraDBMessage[]): { createdAt: string; id: string } | undefined {
-    let cursor: { createdAt: string; id: string } | undefined;
-
-    for (const msg of messages) {
-      if (!msg?.id || !msg.createdAt) continue;
-      const createdAt = new Date(msg.createdAt).toISOString();
-      if (!cursor || createdAt > cursor.createdAt || (createdAt === cursor.createdAt && msg.id > cursor.id)) {
-        cursor = { createdAt, id: msg.id };
-      }
-    }
-
-    return cursor;
-  }
-
-  private isMessageAtOrBeforeCursor(message: MastraDBMessage, cursor: { createdAt: string; id: string }): boolean {
-    if (!message.id || !message.createdAt) return false;
-
-    const messageCreatedAt = new Date(message.createdAt).toISOString();
-    if (messageCreatedAt < cursor.createdAt) return true;
-    if (messageCreatedAt > cursor.createdAt) return false;
-    return message.id <= cursor.id;
-  }
-
   /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
@@ -3763,7 +3648,6 @@ ${formattedMessages}
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: result.suggestedContinuation,
           currentTask: result.currentTask,
-          lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
         });
         await this.storage.updateThread({
           id: threadId,
@@ -5032,7 +4916,6 @@ ${formattedMessages}
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
             currentTask: result.currentTask,
-            lastObservedMessageCursor: this.getLastObservedMessageCursor(threadMessages),
           });
           await this.storage.updateThread({
             id: threadId,

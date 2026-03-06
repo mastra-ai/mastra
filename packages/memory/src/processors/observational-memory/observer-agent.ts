@@ -240,7 +240,6 @@ Group related observations (like tool sequences) by indenting:
   * -> ran git status, found 3 modified files
   * -> viewed auth.ts:45-60, found missing null check
   * -> applied fix, tests now pass
-* 🔴 (14:36) Agent completed auth issue fix; tests passing
 
 Group observations by date, then list each with 24-hour time.
 
