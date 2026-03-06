@@ -1,6 +1,17 @@
+import o200k_base from 'js-tiktoken/ranks/o200k_base';
 import { describe, it, expect } from 'vitest';
 
 import { TokenCounter } from '../token-counter';
+
+let sharedCustomCounter: TokenCounter | undefined;
+
+function getSharedCustomCounter() {
+  if (!sharedCustomCounter) {
+    sharedCustomCounter = new TokenCounter(o200k_base);
+  }
+
+  return sharedCustomCounter;
+}
 
 function createMessage(content: any) {
   return {
@@ -9,6 +20,37 @@ function createMessage(content: any) {
     createdAt: new Date(),
     content,
   } as any;
+}
+
+async function createToolResultPartFromExecutedTool({
+  toolName,
+  args,
+  execute,
+  toModelOutput,
+}: {
+  toolName: string;
+  args: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+  toModelOutput: (output: unknown) => unknown | Promise<unknown>;
+}) {
+  const result = await execute(args);
+  const modelOutput = await toModelOutput(result);
+
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: 'tool-1',
+      toolName,
+      args,
+      result,
+    },
+    providerMetadata: {
+      mastra: {
+        modelOutput,
+      },
+    },
+  } as const;
 }
 
 describe('TokenCounter', () => {
@@ -42,8 +84,7 @@ describe('TokenCounter', () => {
   describe('custom encoding', () => {
     it('constructor with explicit encoding creates a separate encoder instance', () => {
       const defaultCounter = new TokenCounter();
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const customCounter = new TokenCounter(o200k_base);
+      const customCounter = getSharedCustomCounter();
 
       const encoderDefault = (defaultCounter as any).encoder;
       const encoderCustom = (customCounter as any).encoder;
@@ -52,8 +93,7 @@ describe('TokenCounter', () => {
     });
 
     it('custom encoding still produces valid token counts', () => {
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const counter = new TokenCounter(o200k_base);
+      const counter = getSharedCustomCounter();
 
       const tokens = counter.countString('hello world');
       expect(tokens).toBeGreaterThan(0);
@@ -175,8 +215,7 @@ describe('TokenCounter', () => {
       defaultCounter.countMessage(message);
       const defaultEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const customCounter = new TokenCounter(o200k_base);
+      const customCounter = getSharedCustomCounter();
       customCounter.countMessage(message);
 
       const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
@@ -256,6 +295,93 @@ describe('TokenCounter', () => {
 
       expect(withToolResult).not.toBe(initial);
       expect(withToolResultAgain).toBe(withToolResult);
+    });
+
+    it('prefers stored mastra.modelOutput over raw tool results for token counting', async () => {
+      const counter = new TokenCounter();
+      const args = { q: 'weather in sf' };
+      const rawResult = {
+        longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
+      };
+
+      const weatherTool = {
+        execute: async (_args: Record<string, unknown>) => rawResult,
+        toModelOutput: async (output: unknown) => {
+          const entryCount = (output as { longPayload: string[] }).longPayload.length;
+          return { type: 'text', value: `sunny, 72°F (${entryCount} entries summarized)` };
+        },
+      };
+
+      const executedResult = await weatherTool.execute(args);
+      const withoutModelOutput = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'lookup',
+              args,
+              result: executedResult,
+            },
+          },
+        ],
+      });
+
+      const withModelOutput = createMessage({
+        format: 2,
+        parts: [
+          await createToolResultPartFromExecutedTool({
+            toolName: 'lookup',
+            args,
+            execute: weatherTool.execute,
+            toModelOutput: weatherTool.toModelOutput,
+          }),
+        ],
+      });
+
+      const rawResultTokens = counter.countMessage(withoutModelOutput);
+      const modelOutputTokens = counter.countMessage(withModelOutput);
+
+      expect(modelOutputTokens).toBeLessThan(rawResultTokens);
+    });
+
+    it('recomputes tool-result estimates when stored modelOutput changes', async () => {
+      const counter = new TokenCounter();
+      const args = { q: 'weather in sf' };
+      const weatherTool = {
+        execute: async (_args: Record<string, unknown>) => ({
+          longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
+        }),
+        toModelOutput: async () => ({ type: 'text', value: 'brief output' }),
+      };
+
+      const message = createMessage({
+        format: 2,
+        parts: [
+          await createToolResultPartFromExecutedTool({
+            toolName: 'lookup',
+            args,
+            execute: weatherTool.execute,
+            toModelOutput: weatherTool.toModelOutput,
+          }),
+        ],
+      });
+
+      const first = counter.countMessage(message);
+      const firstEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      message.content.parts[0].providerMetadata.mastra.modelOutput = {
+        type: 'text',
+        value: 'expanded output '.repeat(40),
+      };
+
+      const second = counter.countMessage(message);
+      const secondEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(second).toBeGreaterThan(first);
+      expect(secondEstimate.key).not.toBe(firstEstimate.key);
     });
   });
 

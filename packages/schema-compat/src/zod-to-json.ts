@@ -163,6 +163,52 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   return result;
 }
 
+/**
+ * Recursively ensures all properties in an object schema are included in the `required` array.
+ * OpenAI's strict structured output mode requires every key in `properties` to also appear in `required`.
+ *
+ * @param schema - The JSON Schema to process
+ * @returns A new schema with all properties marked as required
+ */
+export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema };
+
+  if (result.type === 'object' && result.properties) {
+    result.required = Object.keys(result.properties);
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => [key, ensureAllPropertiesRequired(value as JSONSchema7)]),
+    );
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => ensureAllPropertiesRequired(item as JSONSchema7));
+    } else if (typeof result.items === 'object') {
+      result.items = ensureAllPropertiesRequired(result.items as JSONSchema7);
+    }
+  }
+
+  if (result.additionalProperties && typeof result.additionalProperties === 'object') {
+    result.additionalProperties = ensureAllPropertiesRequired(result.additionalProperties as JSONSchema7);
+  }
+
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    result.oneOf = result.oneOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+  if (result.allOf && Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+
+  return result;
+}
+
 // export function zotToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7', strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative'): JSONSchema7 {
 //   const target = 'draft-07' as StandardJSONSchemaV1.Target;
 //   const standardSchema = toStandardSchema(zodSchema);

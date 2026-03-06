@@ -531,8 +531,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (isAgentTool) {
           if (typeof args === 'object' && args !== null && 'prompt' in args) {
-            args.threadId = args.threadId || _internal?.threadId;
-            args.resourceId = args.resourceId || _internal?.resourceId;
+            args.threadId = _internal?.threadId;
+            args.resourceId = _internal?.resourceId;
           }
         }
 

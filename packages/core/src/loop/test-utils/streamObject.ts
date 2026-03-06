@@ -946,6 +946,28 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "reasoningText": "",
                   "request": {},
                   "response": {
+                    "dbMessages": [
+                      {
+                        "content": {
+                          "content": "{ "content": "Hello, world!" }",
+                          "format": 2,
+                          "metadata": {
+                            "structuredOutput": {
+                              "content": "Hello, world!",
+                            },
+                          },
+                          "parts": [
+                            {
+                              "text": "{ "content": "Hello, world!" }",
+                              "type": "text",
+                            },
+                          ],
+                        },
+                        "createdAt": 2024-01-01T00:00:00.001Z,
+                        "id": "1234",
+                        "role": "assistant",
+                      },
+                    ],
                     "headers": undefined,
                     "id": "id-0",
                     "messages": [
@@ -1178,6 +1200,23 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "reasoningText": "",
                   "request": {},
                   "response": {
+                    "dbMessages": [
+                      {
+                        "content": {
+                          "content": "{ "invalid": "Hello, world!" }",
+                          "format": 2,
+                          "parts": [
+                            {
+                              "text": "{ "invalid": "Hello, world!" }",
+                              "type": "text",
+                            },
+                          ],
+                        },
+                        "createdAt": 2024-01-01T00:00:00.001Z,
+                        "id": "1234",
+                        "role": "assistant",
+                      },
+                    ],
                     "headers": undefined,
                     "id": "id-0",
                     "messages": [
@@ -1407,6 +1446,23 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "reasoningText": "",
                   "request": {},
                   "response": {
+                    "dbMessages": [
+                      {
+                        "content": {
+                          "content": "{ "invalid": "Hello, world!" }",
+                          "format": 2,
+                          "parts": [
+                            {
+                              "text": "{ "invalid": "Hello, world!" }",
+                              "type": "text",
+                            },
+                          ],
+                        },
+                        "createdAt": 2024-01-01T00:00:00.001Z,
+                        "id": "1234",
+                        "role": "assistant",
+                      },
+                    ],
                     "headers": undefined,
                     "id": "id-0",
                     "messages": [

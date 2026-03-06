@@ -50,7 +50,13 @@ function toolhandlingE2ETests(version: 'v1' | 'v2' | 'v3') {
           : toolCalls.find((tc: any) => tc.payload?.toolName === 'agent-researchAgent');
 
       expect(version === 'v1' ? toolCalls[0]?.result : toolCalls[0]?.payload?.result).toStrictEqual({
-        ...(version === 'v1' ? {} : { subAgentResourceId: expect.any(String), subAgentThreadId: expect.any(String) }),
+        ...(version === 'v1'
+          ? {}
+          : {
+              subAgentResourceId: expect.any(String),
+              subAgentThreadId: expect.any(String),
+              subAgentToolResults: expect.any(Array),
+            }),
         text: 'Dummy response',
       });
 
