@@ -6,9 +6,9 @@ import { parseArgs } from 'node:util';
 import type { Harness, HarnessEvent } from '@mastra/core/harness';
 
 // Imported from local modules
-import { createMastraCode } from './index.js';
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
+import { createMastraCode } from './index.js';
 
 export interface HeadlessArgs {
   prompt?: string;
