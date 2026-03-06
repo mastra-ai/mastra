@@ -3432,3 +3432,170 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     expect(secondDelegationPrompt).toContain('Created record with ID rec_12345');
   });
 });
+
+describe('Supervisor Pattern - Sub-agent should not receive parent tool call references for unknown tools', () => {
+  it('should not pass tool_call content parts for parent agent-tools to the sub-agent model', async () => {
+    // Scenario: Supervisor delegates to a sub-agent that has its own tools.
+    // On a second generate() call, the supervisor's memory includes the previous
+    // delegation's tool_call/tool_result for the agent-* tool. When the supervisor
+    // delegates again, the sub-agent's model receives these messages which reference
+    // tools (agent-recordAgent) that the sub-agent does NOT have. This causes
+    // providers (especially via custom gateways) to reject or mishandle the request.
+    //
+    // This test captures the prompts sent to the sub-agent's model and verifies
+    // that on the second delegation, the sub-agent does NOT receive tool_call
+    // content parts referencing the parent's agent-* tools.
+
+    const subAgentReceivedPrompts: any[][] = [];
+    const subAgentReceivedTools: any[][] = [];
+
+    // Sub-agent model: captures prompts and tools
+    let subCallCount = 0;
+    const subAgentModel = new MockLanguageModelV2({
+      doGenerate: async ({ prompt, tools }) => {
+        subCallCount++;
+        subAgentReceivedPrompts.push(prompt as any[]);
+        subAgentReceivedTools.push(tools as any[]);
+
+        if (subCallCount === 1) {
+          // First call: use the createRecord tool
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'create-call-1',
+                toolName: 'createRecord',
+                input: JSON.stringify({ name: 'Test Record' }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+
+        // Subsequent calls: respond with text
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          text: subCallCount === 2 ? 'Created record rec_001' : 'Updated record rec_001',
+          content: [
+            {
+              type: 'text' as const,
+              text: subCallCount === 2 ? 'Created record rec_001' : 'Updated record rec_001',
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const createRecordTool = createTool({
+      id: 'create-record',
+      description: 'Creates a new record',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async ({ name }) => ({ id: 'rec_001', name, status: 'created' }),
+    });
+
+    const subAgent = new Agent({
+      id: 'data-agent',
+      name: 'data-agent',
+      description: 'Manages data records',
+      instructions: 'You manage data records using your tools.',
+      model: subAgentModel,
+      tools: { createRecord: createRecordTool },
+    });
+
+    // Supervisor model: delegates to data-agent on each call
+    let supervisorCallCount = 0;
+    const supervisorModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        supervisorCallCount++;
+        if (supervisorCallCount % 2 === 1) {
+          const prompt = supervisorCallCount === 1 ? 'Create a record named Test Record' : 'Create another record';
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: '',
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallId: `supervisor-call-${supervisorCallCount}`,
+                toolName: 'agent-dataAgent',
+                input: JSON.stringify({ prompt }),
+              },
+            ],
+            warnings: [],
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          text: 'Done',
+          content: [{ type: 'text' as const, text: 'Done' }],
+          warnings: [],
+        };
+      },
+    });
+
+    const sharedMemory = new MockMemory();
+
+    const supervisor = new Agent({
+      id: 'supervisor-tool-leak',
+      name: 'supervisor-tool-leak',
+      instructions: 'You orchestrate data management via sub-agents.',
+      model: supervisorModel,
+      agents: { dataAgent: subAgent },
+      memory: sharedMemory,
+    });
+
+    const threadId = 'tool-leak-thread';
+    const resourceId = 'tool-leak-user';
+
+    // First generate: supervisor delegates to sub-agent
+    await supervisor.generate('Create a record named Test Record', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    // Reset sub-agent tracking for second call
+    const firstCallPromptCount = subAgentReceivedPrompts.length;
+
+    // Second generate: supervisor delegates to sub-agent again
+    await supervisor.generate('Create another record', {
+      maxSteps: 5,
+      memory: { thread: threadId, resource: resourceId },
+    });
+
+    // Verify the sub-agent was called on the second delegation
+    expect(subAgentReceivedPrompts.length).toBeGreaterThan(firstCallPromptCount);
+
+    // Check the prompts received by the sub-agent on the SECOND delegation
+    // The sub-agent's model should NOT receive tool_call content parts
+    // referencing the parent's 'agent-dataAgent' tool, because the sub-agent
+    // doesn't have that tool and it would confuse the model.
+    for (let i = firstCallPromptCount; i < subAgentReceivedPrompts.length; i++) {
+      const prompt = subAgentReceivedPrompts[i]!;
+      for (const message of prompt) {
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const agentToolCalls = message.content.filter(
+            (part: any) => part.type === 'tool-call' && part.toolName?.startsWith('agent-'),
+          );
+          expect(agentToolCalls).toEqual([]);
+        }
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          const agentToolResults = message.content.filter(
+            (part: any) =>
+              part.type === 'tool-result' && typeof part.toolName === 'string' && part.toolName.startsWith('agent-'),
+          );
+          expect(agentToolResults).toEqual([]);
+        }
+      }
+    }
+  });
+});
