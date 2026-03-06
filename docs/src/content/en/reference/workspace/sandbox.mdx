@@ -78,34 +78,47 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
     isOptional: true,
   },
   {
-    name: 'options.timeout',
-    type: 'number',
-    description: 'Execution timeout in milliseconds',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-  },
-  {
-    name: 'options.cwd',
-    type: 'string',
-    description: 'Working directory for the command',
-    isOptional: true,
-  },
-  {
-    name: 'options.env',
-    type: 'Record<string, string>',
-    description: 'Additional environment variables',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStdout',
-    type: '(data: string) => void',
-    description: 'Callback for stdout streaming',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStderr',
-    type: '(data: string) => void',
-    description: 'Callback for stderr streaming',
-    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'timeout',
+            type: 'number',
+            description: 'Execution timeout in milliseconds',
+            isOptional: true,
+          },
+          {
+            name: 'cwd',
+            type: 'string',
+            description: 'Working directory for the command',
+            isOptional: true,
+          },
+          {
+            name: 'env',
+            type: 'Record<string, string>',
+            description: 'Additional environment variables',
+            isOptional: true,
+          },
+          {
+            name: 'onStdout',
+            type: '(data: string) => void',
+            description: 'Callback for stdout streaming',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string) => void',
+            description: 'Callback for stderr streaming',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
