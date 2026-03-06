@@ -11,6 +11,34 @@ import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
+/**
+ * Sanitizes tool-call input strings for safe JSON parsing.
+ *
+ * LLMs sometimes append internal tokens like `<|call|>`, `<|endoftext|>`, or `<|end|>`
+ * to otherwise valid JSON in streamed tool-call arguments, causing JSON.parse to fail.
+ *
+ * This function first attempts JSON.parse on the original input. If parsing succeeds,
+ * the original string is returned unchanged — this avoids corrupting valid JSON payloads
+ * that legitimately contain `<|...|>` patterns inside string values.
+ *
+ * Only when the original input is not valid JSON does the function fall back to stripping
+ * `<|...|>` token patterns and surrounding whitespace via regex.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/13261
+ * @see https://github.com/mastra-ai/mastra/issues/13185
+ */
+export function sanitizeToolCallInput(input: string): string {
+  // Fast path: if input is already valid JSON, return unchanged to avoid
+  // corrupting <|...|> patterns that appear inside JSON string values.
+  try {
+    JSON.parse(input);
+    return input;
+  } catch {
+    // Input is not valid JSON — strip LLM-specific tokens and retry
+    return input.replace(/[\s]*<\|[^|]*\|>[\s]*/g, '').trim();
+  }
+}
+
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
@@ -134,14 +162,17 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       let toolCallInput: Record<string, any> | undefined = undefined;
 
       if (value.input) {
-        try {
-          toolCallInput = JSON.parse(value.input);
-        } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
+        const sanitized = sanitizeToolCallInput(value.input);
+        if (sanitized) {
+          try {
+            toolCallInput = JSON.parse(sanitized);
+          } catch (error) {
+            console.error('Error converting tool call input to JSON', {
+              error,
+              input: value.input,
+            });
+            toolCallInput = undefined;
+          }
         }
       }
 

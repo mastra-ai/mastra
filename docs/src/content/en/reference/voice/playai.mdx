@@ -96,11 +96,24 @@ Converts text to speech using the configured speech model and voice.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Override the default speaker for this request',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Override the default speaker for this request',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

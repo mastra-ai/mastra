@@ -141,6 +141,20 @@ function add(a: number, b: number) {
 ```
 ````
 
+#### Prettier formatting
+
+By default, Prettier will format code blocks in all Markdown/MDX files. If you want to disable Prettier for a specific code block, add `prettier:false` to the code block's metadata.
+
+**Important:** This is an anti-pattern! This is an escape hatch for edge cases where Prettier's formatting produces undesirable results. In general, you should strive to write code that can be formatted by Prettier to maintain a consistent style across the documentation.
+
+````md
+```typescript prettier:false
+function add(a: number, b: number) {
+  return a + b
+}
+```
+````
+
 ### `npm install` code blocks
 
 When including `npm install` code blocks, please use the following format to ensure consistent styling across the documentation:

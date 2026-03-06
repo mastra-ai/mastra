@@ -125,18 +125,31 @@ Converts text to speech using OpenAI's text-to-speech models.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'OpenAIVoiceId',
-    description: 'Voice ID to use for speech synthesis.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
-  },
-  {
-    name: 'options.speed',
-    type: 'number',
-    description: 'Speech speed multiplier.',
-    isOptional: true,
-    defaultValue: '1.0',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'OpenAIVoiceId',
+            description: 'Voice ID to use for speech synthesis.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+          {
+            name: 'speed',
+            type: 'number',
+            description: 'Speech speed multiplier.',
+            isOptional: true,
+            defaultValue: '1.0',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -156,11 +169,24 @@ Transcribes audio using OpenAI's Whisper model.
     isOptional: false,
   },
   {
-    name: 'options.filetype',
-    type: 'string',
-    description: 'Audio format of the input stream.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "'mp3'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'filetype',
+            type: 'string',
+            description: 'Audio format of the input stream.',
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
