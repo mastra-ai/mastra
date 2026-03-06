@@ -387,7 +387,7 @@ async function processOutputStream<OUTPUT = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
+            isContinued: !['stop', 'error', 'length'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -1196,7 +1196,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
       // - OR finishReason indicates more work (e.g., tool-use)
-      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error'].includes(finishReason));
+      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error', 'length'].includes(finishReason));
 
       // Increment processor retry count if we're retrying
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;
