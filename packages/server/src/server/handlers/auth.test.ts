@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-import { GET_AUTH_CAPABILITIES_ROUTE } from './auth';
+import { GET_AUTH_CAPABILITIES_ROUTE, getPublicOrigin } from './auth';
 
 describe('Auth Handlers', () => {
   const originalEnv = process.env;
@@ -12,6 +12,29 @@ describe('Auth Handlers', () => {
 
   afterEach(() => {
     process.env = originalEnv;
+  });
+
+  describe('getPublicOrigin', () => {
+    it('returns origin from x-forwarded-host when present', () => {
+      const request = new Request('http://internal:3000/api/auth/sso/login', {
+        headers: { 'X-Forwarded-Host': 'app.example.com' },
+      });
+      expect(getPublicOrigin(request)).toBe('https://app.example.com');
+    });
+
+    it('uses only the first value from a multi-value x-forwarded-host', () => {
+      const request = new Request('http://internal:3000/api/auth/sso/login', {
+        headers: {
+          'X-Forwarded-Host': 'my-project.studio.mastra.cloud, 3000-abc123.daytonaproxy01.net',
+        },
+      });
+      expect(getPublicOrigin(request)).toBe('https://my-project.studio.mastra.cloud');
+    });
+
+    it('falls back to request.url origin when x-forwarded-host is absent', () => {
+      const request = new Request('http://localhost:3000/api/auth/sso/login');
+      expect(getPublicOrigin(request)).toBe('http://localhost:3000');
+    });
   });
 
   describe('GET_AUTH_CAPABILITIES_ROUTE', () => {
