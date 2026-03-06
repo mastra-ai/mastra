@@ -47,9 +47,7 @@ describe('ModelsLabVoice', () => {
     it('sends key in request body, not Authorization header', async () => {
       const audioBuffer = Buffer.from('fake-audio-bytes');
       fetchMock
-        .mockResolvedValueOnce(
-          makeJsonResponse({ status: 'success', output: 'https://cdn.modelslab.com/audio.mp3' }),
-        )
+        .mockResolvedValueOnce(makeJsonResponse({ status: 'success', output: 'https://cdn.modelslab.com/audio.mp3' }))
         .mockResolvedValueOnce({
           ok: true,
           arrayBuffer: async () => audioBuffer.buffer,
@@ -69,9 +67,7 @@ describe('ModelsLabVoice', () => {
     it('returns a Readable stream on success', async () => {
       const audioBuffer = Buffer.from('fake-audio-content');
       fetchMock
-        .mockResolvedValueOnce(
-          makeJsonResponse({ status: 'success', output: 'https://cdn.modelslab.com/audio.mp3' }),
-        )
+        .mockResolvedValueOnce(makeJsonResponse({ status: 'success', output: 'https://cdn.modelslab.com/audio.mp3' }))
         .mockResolvedValueOnce({
           ok: true,
           arrayBuffer: async () => audioBuffer.buffer,
@@ -100,12 +96,8 @@ describe('ModelsLabVoice', () => {
       const audioBuffer = Buffer.from('audio-bytes');
 
       fetchMock
-        .mockResolvedValueOnce(
-          makeJsonResponse({ status: 'processing', request_id: 'req_123', eta: 5 }),
-        )
-        .mockResolvedValueOnce(
-          makeJsonResponse({ status: 'success', output: 'https://cdn.modelslab.com/audio.mp3' }),
-        )
+        .mockResolvedValueOnce(makeJsonResponse({ status: 'processing', request_id: 'req_123', eta: 5 }))
+        .mockResolvedValueOnce(makeJsonResponse({ status: 'success', output: 'https://cdn.modelslab.com/audio.mp3' }))
         .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => audioBuffer.buffer } as Response);
 
       const voice = new ModelsLabVoice();
@@ -123,9 +115,7 @@ describe('ModelsLabVoice', () => {
     });
 
     it('throws on error status', async () => {
-      fetchMock.mockResolvedValueOnce(
-        makeJsonResponse({ status: 'error', message: 'Invalid API key' }),
-      );
+      fetchMock.mockResolvedValueOnce(makeJsonResponse({ status: 'error', message: 'Invalid API key' }));
 
       const voice = new ModelsLabVoice();
       await expect(voice.speak('test')).rejects.toThrow('Invalid API key');
