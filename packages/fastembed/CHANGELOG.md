@@ -1,5 +1,14 @@
 # @mastra/fastembed
 
+## 1.0.1
+
+### Patch Changes
+
+- dependencies updates: ([#10195](https://github.com/mastra-ai/mastra/pull/10195))
+  - Updated dependency [`fastembed@^2.1.0` ↗︎](https://www.npmjs.com/package/fastembed/v/2.1.0) (from `^1.14.4`, in `dependencies`)
+
+- Add `warmup()` export to pre-download fastembed models without creating ONNX sessions. This prevents concurrent download race conditions when multiple consumers call `FlagEmbedding.init()` in parallel, which could corrupt the model archive and cause `Z_BUF_ERROR`. ([#13752](https://github.com/mastra-ai/mastra/pull/13752))
+
 ## 1.0.1-alpha.0
 
 ### Patch Changes
