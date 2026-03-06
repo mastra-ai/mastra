@@ -64,6 +64,26 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       cssCodeSplit: false,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (
+              id.includes('@codemirror/') ||
+              id.includes('@lezer/') ||
+              id.includes('@uiw/react-codemirror') ||
+              id.includes('@uiw/codemirror-theme')
+            ) {
+              return 'vendor-codemirror';
+            }
+            if (id.includes('@xyflow/') || id.includes('@dagrejs/')) {
+              return 'vendor-xyflow';
+            }
+            if (id.includes('posthog')) {
+              return 'vendor-posthog';
+            }
+          },
+        },
+      },
     },
     server: {
       fs: {
