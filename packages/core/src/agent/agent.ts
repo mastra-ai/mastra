@@ -2621,22 +2621,28 @@ export class Agent<
    * conversation context (user messages, assistant text, etc.).
    * @internal
    */
-  private stripParentToolParts(messages: any[]): any[] {
+  private stripParentToolParts(messages: MastraDBMessage[]): MastraDBMessage[] {
     return messages
       .map(message => {
-        if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter((part: any) => part.type !== 'tool-call');
+        if (message.role === 'assistant') {
+          const content = message.content;
+          const parts = Array.isArray(content) ? content : content?.parts;
+          if (!Array.isArray(parts)) return message;
+          const filtered = parts.filter((part: any) => part?.type !== 'tool-call');
           if (filtered.length === 0) return null;
-          return { ...message, content: filtered };
+          if (Array.isArray(content)) {
+            return { ...message, content: filtered };
+          }
+          return { ...message, content: { ...content, parts: filtered } };
         }
 
-        if (message.role === 'tool') {
+        if ((message as any).role === 'tool') {
           return null;
         }
 
         return message;
       })
-      .filter(Boolean);
+      .filter((message): message is MastraDBMessage => Boolean(message));
   }
 
   /**
