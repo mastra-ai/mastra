@@ -1,16 +1,23 @@
-export const formatJSON = async (code: string) => {
-  const [prettier, prettierPluginBabel, prettierPluginEstree] = await Promise.all([
+let prettierModules: Promise<
+  [typeof import('prettier/standalone'), typeof import('prettier/plugins/babel'), typeof import('prettier/plugins/estree')]
+>;
+
+const loadPrettier = () =>
+  (prettierModules ??= Promise.all([
     import('prettier/standalone'),
     import('prettier/plugins/babel'),
     import('prettier/plugins/estree'),
-  ]);
+  ]));
 
-  const formatted = await prettier.default.format(code, {
+export const formatJSON = async (code: string) => {
+  const [prettier, prettierPluginBabel, prettierPluginEstree] = await loadPrettier();
+
+  const formatted = await prettier.format(code, {
     semi: false,
     parser: 'json',
     printWidth: 80,
     tabWidth: 2,
-    plugins: [prettierPluginBabel.default, prettierPluginEstree.default],
+    plugins: [prettierPluginBabel, prettierPluginEstree],
   });
 
   return formatted;
