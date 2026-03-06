@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { zodToJsonSchema } from './zod-to-json';
+import { zodToJsonSchema, ensureAllPropertiesRequired } from './zod-to-json';
 
 /**
  * Shared test suite for zodToJsonSchema that runs with both Zod v3 and v4.
@@ -594,5 +594,133 @@ describe('zodToJsonSchema', () => {
       expect(result.type).toBe('object');
       expect(Object.keys(result.properties || {}).length).toBe(4);
     });
+  });
+});
+
+describe('ensureAllPropertiesRequired', () => {
+  it('should add all properties to required array for object schemas', () => {
+    const schema = zodToJsonSchema(
+      z.object({
+        isComplete: z.boolean(),
+        completionReason: z.string(),
+        finalResult: z.string().optional(),
+      }),
+    );
+
+    // Before fix: finalResult should be in properties but NOT in required
+    expect(schema.properties).toHaveProperty('finalResult');
+    expect(schema.required).not.toContain('finalResult');
+
+    const fixed = ensureAllPropertiesRequired(schema);
+
+    // After fix: ALL properties should be in required
+    expect(fixed.required).toContain('isComplete');
+    expect(fixed.required).toContain('completionReason');
+    expect(fixed.required).toContain('finalResult');
+  });
+
+  it('should handle the defaultCompletionSchema pattern from mastra-ai/mastra#12284', () => {
+    const defaultCompletionSchema = z.object({
+      isComplete: z.boolean().describe('Whether the task is complete'),
+      completionReason: z.string().describe('Explanation of why the task is or is not complete'),
+      finalResult: z.string().optional().describe('The final result text to return to the user'),
+    });
+
+    const schema = zodToJsonSchema(defaultCompletionSchema);
+    const fixed = ensureAllPropertiesRequired(schema);
+
+    expect(fixed.type).toBe('object');
+    expect(fixed.required).toEqual(expect.arrayContaining(['isComplete', 'completionReason', 'finalResult']));
+    expect(fixed.required).toHaveLength(3);
+  });
+
+  it('should recursively fix nested object schemas', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: {
+        outer: {
+          type: 'object' as const,
+          properties: {
+            required: { type: 'string' as const },
+            optional: { type: ['string', 'null'] as const },
+          },
+          required: ['required'],
+        },
+      },
+      required: [] as string[],
+    };
+
+    const fixed = ensureAllPropertiesRequired(schema);
+
+    // Outer level
+    expect(fixed.required).toContain('outer');
+
+    // Nested level
+    const outerProp = fixed.properties!.outer as any;
+    expect(outerProp.required).toContain('required');
+    expect(outerProp.required).toContain('optional');
+  });
+
+  it('should handle schemas without properties (no-op)', () => {
+    const schema = { type: 'string' as const };
+    const fixed = ensureAllPropertiesRequired(schema);
+    expect(fixed).toEqual({ type: 'string' });
+  });
+
+  it('should handle null/non-object schemas', () => {
+    expect(ensureAllPropertiesRequired(null as any)).toBeNull();
+    expect(ensureAllPropertiesRequired(true as any)).toBe(true);
+  });
+
+  it('should handle schemas with items (arrays)', () => {
+    const schema = {
+      type: 'array' as const,
+      items: {
+        type: 'object' as const,
+        properties: {
+          name: { type: 'string' as const },
+          age: { type: ['number', 'null'] as const },
+        },
+        required: ['name'],
+      },
+    };
+
+    const fixed = ensureAllPropertiesRequired(schema);
+    const items = fixed.items as any;
+    expect(items.required).toContain('name');
+    expect(items.required).toContain('age');
+  });
+
+  it('should handle anyOf/oneOf/allOf schemas', () => {
+    const schema = {
+      anyOf: [
+        {
+          type: 'object' as const,
+          properties: {
+            a: { type: 'string' as const },
+            b: { type: ['string', 'null'] as const },
+          },
+          required: ['a'],
+        },
+      ],
+    };
+
+    const fixed = ensureAllPropertiesRequired(schema);
+    const branch = (fixed.anyOf as any)[0];
+    expect(branch.required).toContain('a');
+    expect(branch.required).toContain('b');
+  });
+
+  it('should not modify zodToJsonSchema default behavior', () => {
+    // zodToJsonSchema should still produce correct standard JSON Schema
+    // where optional fields are NOT in required
+    const schema = z.object({
+      required: z.string(),
+      optional: z.string().optional(),
+    });
+
+    const result = zodToJsonSchema(schema);
+    expect(result.required).toContain('required');
+    expect(result.required).not.toContain('optional');
   });
 });

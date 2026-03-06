@@ -163,6 +163,65 @@ function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
   return result;
 }
 
+/**
+ * Recursively ensures all properties in an object schema are included in the `required` array.
+ * This is needed for OpenAI's strict structured output mode, which requires every key listed
+ * in `properties` to also appear in `required`.
+ *
+ * Standard JSON Schema allows optional fields (in `properties` but not in `required`),
+ * but OpenAI strict mode does not. Optional fields should be made nullable instead.
+ *
+ * @param schema - The JSON Schema to process
+ * @returns A new schema with all properties marked as required
+ */
+export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema };
+
+  // If this is an object with properties, ensure all are required
+  if (result.type === 'object' && result.properties) {
+    const allPropertyKeys = Object.keys(result.properties);
+    result.required = allPropertyKeys;
+  }
+
+  // Recursively process nested schemas in properties
+  if (result.properties) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => [key, ensureAllPropertiesRequired(value as JSONSchema7)]),
+    );
+  }
+
+  // Recursively process items in arrays
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => ensureAllPropertiesRequired(item as JSONSchema7));
+    } else {
+      result.items = ensureAllPropertiesRequired(result.items as JSONSchema7);
+    }
+  }
+
+  // Recursively process additionalProperties if it's a schema
+  if (result.additionalProperties && typeof result.additionalProperties === 'object') {
+    result.additionalProperties = ensureAllPropertiesRequired(result.additionalProperties as JSONSchema7);
+  }
+
+  // Recursively process anyOf/oneOf/allOf schemas
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    result.oneOf = result.oneOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+  if (result.allOf && Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+
+  return result;
+}
+
 // export function zotToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7', strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative'): JSONSchema7 {
 //   const target = 'draft-07' as StandardJSONSchemaV1.Target;
 //   const standardSchema = toStandardSchema(zodSchema);
