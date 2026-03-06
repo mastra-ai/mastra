@@ -288,7 +288,7 @@ describe('Stream ID Consistency', () => {
       id: 'rotate-response-message-id-processor',
       processInputStep: async ({ messageId, rotateResponseMessageId }) => {
         initialMessageId = messageId;
-        rotatedMessageId = (rotateResponseMessageId!)();
+        rotatedMessageId = rotateResponseMessageId!();
         return {};
       },
     } satisfies Processor;
