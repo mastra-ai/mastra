@@ -150,7 +150,10 @@ export function setupKeyboardShortcuts(
     const current = state.harness.getMessageDeliveryMode();
     const next = current === 'interrupt' ? 'queue' : 'interrupt';
     state.harness.setMessageDeliveryMode({ mode: next });
-    showInfo(state, next === 'queue' ? 'Queue mode on — new messages are queued' : 'Interrupt mode on — new messages interrupt');
+    showInfo(
+      state,
+      next === 'queue' ? 'Queue mode on — new messages are queued' : 'Interrupt mode on — new messages interrupt',
+    );
   });
 
   // Ctrl+F - queue follow-up message while streaming
