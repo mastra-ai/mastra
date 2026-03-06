@@ -43,71 +43,71 @@ You must `await` the call to `writer.write()` or else you will lock the stream a
 
 :::
 
-```typescript {4,7,14} prettier:false
-import { createTool } from "@mastra/core/tools";
+```typescript {4,7,14}
+import { createTool } from '@mastra/core/tools'
 
 export const testTool = createTool({
   execute: async (inputData, context) => {
-    const { value } = inputData;
+    const { value } = inputData
 
     await context?.writer?.write({
-      type: "custom-event",
-      status: "pending"
-    });
+      type: 'custom-event',
+      status: 'pending',
+    })
 
-    const response = await fetch(...);
+    const response = await fetch()
 
     await context?.writer?.write({
-      type: "custom-event",
-      status: "success"
-    });
+      type: 'custom-event',
+      status: 'success',
+    })
 
     return {
-      value: ""
-    };
-  }
-});
+      value: '',
+    }
+  },
+})
 ```
 
 You can also use `writer.custom()` if you want to emit top level stream chunks, This useful and relevant when
 integrating with UI Frameworks
 
-```typescript {4,7,14} prettier:false
-import { createTool } from "@mastra/core/tools";
+```typescript {4,7,14}
+import { createTool } from '@mastra/core/tools'
 
 export const testTool = createTool({
   execute: async (inputData, context) => {
-    const { value } = inputData;
+    const { value } = inputData
 
-   await context?.writer?.custom({
-      type: "data-tool-progress",
-      status: "pending"
-    });
+    await context?.writer?.custom({
+      type: 'data-tool-progress',
+      status: 'pending',
+    })
 
-    const response = await fetch(...);
+    const response = await fetch()
 
-   await context?.writer?.custom({
-      type: "data-tool-progress",
-      status: "success"
-    });
+    await context?.writer?.custom({
+      type: 'data-tool-progress',
+      status: 'success',
+    })
 
     return {
-      value: ""
-    };
-  }
-});
+      value: '',
+    }
+  },
+})
 ```
 
 ### Transient data chunks
 
 By default, `data-*` chunks emitted with `writer.custom()` are persisted to storage as part of the message history. For chunks that are only needed during live streaming — such as progress updates or verbose log output — set `transient: true` to skip storage persistence. Transient chunks are still streamed to the client in real time but are not saved to the database.
 
-```typescript {5} prettier:false
+```typescript {4}
 await context?.writer?.custom({
-  type: "data-build-log",
-  data: { line: "Compiling module 3 of 12..." },
+  type: 'data-build-log',
+  data: { line: 'Compiling module 3 of 12...' },
   transient: true,
-});
+})
 ```
 
 Use transient chunks when the data is large or high-frequency and only relevant during the live session. After a page refresh, transient chunks are no longer available — only the tool's return value and any non-transient chunks are loaded from storage.
