@@ -15,6 +15,13 @@ import { stepLoggerProcessor, responseQualityProcessor } from '../processors';
 import { findUserWorkflow } from '../workflows/other';
 import { createScorer } from '@mastra/core/evals';
 import { weatherTool as weatherInfo } from '../tools/weather-tool';
+import {
+  createSubscription,
+  getSubscription,
+  listSubscriptions,
+  updateSubscription,
+  deleteSubscription,
+} from '../tools';
 
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 
@@ -470,5 +477,68 @@ export const supervisorAgent = new Agent({
         );
       },
     },
+  },
+});
+
+// =============================================================================
+// Subscription Management Sub-Agent Example
+// Tests sub-agent context persistence across multiple delegations
+// =============================================================================
+
+const subscriptionSubAgent = new Agent({
+  id: 'subscription-agent',
+  name: 'Subscription Agent',
+  description: 'Manages subscriptions - can create, read, update, list, and delete subscriptions',
+  instructions: `You are a subscription management specialist. You can:
+    - Create new subscriptions with a name, plan, and price
+    - Look up existing subscriptions by ID
+    - List all subscriptions (optionally filtered by status)
+    - Update subscription details (plan, price, status)
+    - Delete subscriptions
+
+    When creating a subscription, always confirm the details back to the user including the subscription ID.
+    When updating, always confirm what was changed.
+    Always be precise with subscription IDs.`,
+  model: 'openai/gpt-4o-mini',
+  tools: {
+    createSubscription,
+    getSubscription,
+    listSubscriptions,
+    updateSubscription,
+    deleteSubscription,
+  },
+});
+
+const generalSubAgent = new Agent({
+  id: 'general-agent',
+  name: 'General Agent',
+  description: 'Answers general questions about subscription plans, pricing, and policies',
+  instructions: `You are a helpful assistant that answers general questions about subscription services.
+    You can explain different plan tiers, pricing structures, and policies.
+    You do NOT have access to actual subscription data - for that, the user should be routed to the subscription management agent.`,
+  model: 'openai/gpt-4o-mini',
+});
+
+export const subscriptionOrchestratorAgent = new Agent({
+  id: 'subscription-orchestrator',
+  name: 'Subscription Orchestrator',
+  description: 'Orchestrates subscription management and general queries using sub-agents',
+  instructions: `You are the main orchestrator for a subscription management app.
+
+    You have two sub-agents:
+    1. subscriptionAgent - Use this for any CRUD operations on subscriptions (create, read, update, delete, list)
+    2. generalAgent - Use this for general questions about plans, pricing, or policies
+
+    Route user requests to the appropriate sub-agent. For follow-up actions on the same subscription
+    (e.g., "create a subscription" then "now upgrade it"), make sure to include relevant context
+    like the subscription ID in your delegation prompt.`,
+  model: 'openai/gpt-4o-mini',
+  agents: {
+    subscriptionAgent: subscriptionSubAgent,
+    generalAgent: generalSubAgent,
+  },
+  memory: new Memory(),
+  defaultOptions: {
+    maxSteps: 10,
   },
 });
