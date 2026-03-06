@@ -16,18 +16,21 @@
  * const m = new Mastra({ logger: new ConsoleLogger({ name: 'test' }) });
  * ```
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Deterministic crypto.randomUUID — counter resets before each test.
+// Deterministic crypto.randomUUID — each test gets its own counter via
+// AsyncLocalStorage so concurrent tests within a file stay isolated.
 // Covers both global `crypto.randomUUID()` and
 // `import { randomUUID } from 'node:crypto'` / `'crypto'`.
 // ---------------------------------------------------------------------------
-let uuidCounter = 0;
+const uuidStore = new AsyncLocalStorage<{ counter: number }>();
 
 function deterministicUUID() {
-  uuidCounter++;
-  const hex = uuidCounter.toString(16).padStart(12, '0');
+  const ctx = uuidStore.getStore();
+  const count = ctx ? ++ctx.counter : 0;
+  const hex = count.toString(16).padStart(12, '0');
   return `00000000-0000-4000-8000-${hex}`;
 }
 
@@ -54,8 +57,11 @@ vi.mock('crypto', async importOriginal => {
   return { ...original, randomUUID: deterministicUUID };
 });
 
+// enterWith transitions the current async context into the store.
+// vitest runs beforeEach in the same async context as the test,
+// so each test (including concurrent ones) gets its own counter.
 beforeEach(() => {
-  uuidCounter = 0;
+  uuidStore.enterWith({ counter: 0 });
 });
 
 // ---------------------------------------------------------------------------
