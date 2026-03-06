@@ -3187,11 +3187,15 @@ ${suggestedResponse}
       // Persist the computed token count so the UI can display it on page load
       await this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens);
 
-      const captureStorageIds = this.getStorageIds(threadId, resourceId);
-      const postCaptureRecord = reproCaptureEnabled
-        ? ((await this.storage.getObservationalMemory(captureStorageIds.threadId, captureStorageIds.resourceId)) ??
-          freshRecord)
-        : freshRecord;
+      let postCaptureRecord = freshRecord;
+      if (reproCaptureEnabled) {
+        const captureStorageIds = this.getStorageIds(threadId, resourceId);
+        const captureRecordHistory = await this.storage.getObservationalMemoryHistory(
+          captureStorageIds.threadId,
+          captureStorageIds.resourceId,
+        );
+        postCaptureRecord = captureRecordHistory.find(record => record.id === freshRecord.id) ?? freshRecord;
+      }
 
       if (reproCaptureEnabled && preRecordSnapshot && preMessagesSnapshot && preSerializedMessageList) {
         writeProcessInputStepReproCapture({
