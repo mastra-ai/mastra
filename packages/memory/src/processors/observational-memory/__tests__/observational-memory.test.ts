@@ -1,7 +1,8 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 import {
@@ -12,8 +13,16 @@ import {
   formatMessagesForObserver,
   hasCurrentTaskSection,
   extractCurrentTask,
+  sanitizeObservationLines,
+  detectDegenerateRepetition,
 } from '../observer-agent';
-import { buildReflectorPrompt, parseReflectorOutput, validateCompression } from '../reflector-agent';
+import {
+  buildReflectorPrompt,
+  parseReflectorOutput,
+  validateCompression,
+  buildReflectorSystemPrompt,
+} from '../reflector-agent';
+import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -44,6 +53,49 @@ function createTestMessages(count: number, baseContent = 'Test message'): Mastra
 function createInMemoryStorage(): InMemoryMemory {
   const db = new InMemoryDB();
   return new InMemoryMemory({ db });
+}
+
+function createStreamCapableMockModel(config: Record<string, any>) {
+  if (config.doGenerate && !config.doStream) {
+    const originalDoGenerate = config.doGenerate;
+    return new MockLanguageModelV2({
+      ...config,
+      // Replace doGenerate so any accidental generate-path call fails fast
+      doGenerate: async () => {
+        throw new Error('Unexpected doGenerate call — OM should use the stream path');
+      },
+      doStream: async (options: any) => {
+        const generated = await originalDoGenerate(options);
+        const text = generated.content?.find((part: any) => part?.type === 'text')?.text ?? generated.text ?? '';
+        const usage = generated.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+
+        const stream = new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: generated.warnings ?? [] });
+            controller.enqueue({
+              type: 'response-metadata',
+              id: 'mock-response',
+              modelId: 'mock-model',
+              timestamp: new Date(),
+            });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({ type: 'finish', finishReason: generated.finishReason ?? 'stop', usage });
+            controller.close();
+          },
+        });
+
+        return {
+          stream,
+          rawCall: generated.rawCall ?? { rawPrompt: null, rawSettings: {} },
+          warnings: generated.warnings ?? [],
+        };
+      },
+    });
+  }
+
+  return new MockLanguageModelV2(config);
 }
 
 // =============================================================================
@@ -844,6 +896,61 @@ User asked about </current-task> parsing and how it works
     });
   });
 
+  describe('sanitizeObservationLines', () => {
+    it('should pass through normal observations unchanged', () => {
+      const obs = '- 🔴 User asked about React\n- 🟡 Some context';
+      expect(sanitizeObservationLines(obs)).toBe(obs);
+    });
+
+    it('should truncate lines exceeding 10k characters', () => {
+      const longLine = 'x'.repeat(15_000);
+      const obs = `- 🔴 Short line\n${longLine}\n- 🟡 Another line`;
+      const result = sanitizeObservationLines(obs);
+      expect(result).toContain('- 🔴 Short line');
+      expect(result).toContain('- 🟡 Another line');
+      expect(result).toContain(' … [truncated]');
+      // The truncated line should be 10k + the suffix
+      const lines = result.split('\n');
+      expect(lines[1]!.length).toBeLessThan(11_000);
+    });
+
+    it('should handle empty input', () => {
+      expect(sanitizeObservationLines('')).toBe('');
+    });
+  });
+
+  describe('detectDegenerateRepetition', () => {
+    it('should return false for normal text', () => {
+      const text = '- 🔴 User asked about React\n- 🟡 Some context\n- 🔴 Another observation';
+      expect(detectDegenerateRepetition(text)).toBe(false);
+    });
+
+    it('should return false for short text', () => {
+      expect(detectDegenerateRepetition('hello')).toBe(false);
+    });
+
+    it('should detect repeated content patterns', () => {
+      // Simulate Gemini Flash repetition bug - same ~200 char block repeated many times
+      const block =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
+      const text = block.repeat(100); // ~11k chars of the same block
+      expect(detectDegenerateRepetition(text)).toBe(true);
+    });
+
+    it('should detect extremely long single lines', () => {
+      const line = 'a'.repeat(60_000);
+      expect(detectDegenerateRepetition(line)).toBe(true);
+    });
+
+    it('should flag degenerate output in parseObserverOutput', () => {
+      const block = 'StreamTextResult.getLanguageModel().doGenerate(options): PromiseLike<Result>, ';
+      const text = `<observations>\n${block.repeat(100)}\n</observations>`;
+      const result = parseObserverOutput(text);
+      expect(result.degenerate).toBe(true);
+      expect(result.observations).toBe('');
+    });
+  });
+
   describe('optimizeObservationsForContext', () => {
     it('should strip yellow and green emojis', () => {
       const observations = `
@@ -887,6 +994,31 @@ Line 2`;
 // =============================================================================
 
 describe('Reflector Agent Helpers', () => {
+  describe('buildReflectorSystemPrompt', () => {
+    it('should include base reflector instructions', () => {
+      const systemPrompt = buildReflectorSystemPrompt();
+
+      expect(systemPrompt).toContain('observational-memory-instruction');
+      expect(systemPrompt).toContain('observation reflector');
+    });
+
+    it('should include custom instruction when provided', () => {
+      const customInstruction = 'Prioritize consolidating health-related observations together.';
+      const systemPrompt = buildReflectorSystemPrompt(customInstruction);
+
+      expect(systemPrompt).toContain(customInstruction);
+      expect(systemPrompt).toContain('observational-memory-instruction');
+    });
+
+    it('should work without custom instruction', () => {
+      const systemPrompt = buildReflectorSystemPrompt();
+      const systemPromptWithUndefined = buildReflectorSystemPrompt(undefined);
+
+      expect(systemPrompt).toBe(systemPromptWithUndefined);
+      expect(systemPrompt).toContain('observational-memory-instruction');
+    });
+  });
+
   describe('buildReflectorPrompt', () => {
     it('should include observations to reflect on', () => {
       const observations = '- 🔴 User is building a React app';
@@ -1076,6 +1208,48 @@ describe('Token Counter', () => {
       const msg = createTestMessage('Hello, world!');
       const count = counter.countMessage(msg);
       expect(Number.isInteger(count)).toBe(true);
+    });
+
+    it('should skip data-* parts when counting tokens', () => {
+      const largeObservationText = 'x'.repeat(10000);
+      const msgWithDataParts: MastraDBMessage = {
+        id: 'msg-data-parts',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+            },
+            { type: 'data-om-activation', data: { cycleId: 'cycle-1', observations: largeObservationText } } as any,
+            { type: 'data-om-buffering-start', data: { cycleId: 'cycle-2' } } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const msgWithoutDataParts: MastraDBMessage = {
+        id: 'msg-no-data-parts',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolName: 'test', toolCallId: 'tc1', result: 'ok' },
+            },
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      const countWith = counter.countMessage(msgWithDataParts);
+      const countWithout = counter.countMessage(msgWithoutDataParts);
+      // data-* parts should be skipped, so counts should be equal
+      expect(countWith).toBe(countWithout);
     });
   });
 
@@ -2072,6 +2246,209 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).toContain('<current-task>');
     expect(systemPrompt).toContain('MUST use XML tags');
   });
+
+  it('observer system prompt should include custom instruction when provided', () => {
+    const customInstruction = 'Focus on capturing user dietary preferences and allergies.';
+    const systemPrompt = buildObserverSystemPrompt(false, customInstruction);
+
+    // Should include the custom instruction at the end
+    expect(systemPrompt).toContain(customInstruction);
+    expect(systemPrompt).toContain('<current-task>');
+  });
+
+  it('observer system prompt should work without custom instruction', () => {
+    const systemPrompt = buildObserverSystemPrompt(false);
+    const systemPromptWithUndefined = buildObserverSystemPrompt(false, undefined);
+
+    // Both should be identical
+    expect(systemPrompt).toBe(systemPromptWithUndefined);
+    expect(systemPrompt).toContain('<current-task>');
+  });
+
+  it('multi-thread observer system prompt should include custom instruction', () => {
+    const customInstruction = 'Prioritize cross-thread patterns and recurring topics.';
+    const systemPrompt = buildObserverSystemPrompt(true, customInstruction);
+
+    expect(systemPrompt).toContain(customInstruction);
+    expect(systemPrompt).toContain('<thread id=');
+  });
+});
+
+describe('Instruction property integration', () => {
+  it('should pass observation instruction to observer agent during synchronous observation', async () => {
+    const storage = createInMemoryStorage();
+    const customInstruction = 'Focus on capturing user dietary preferences and allergies.';
+
+    let capturedPrompt: any = null;
+    const mockModel = createStreamCapableMockModel({
+      doGenerate: async options => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- User mentioned they are vegetarian
+</observations>
+<current-task>
+- Primary: Discussing dietary preferences
+</current-task>
+<suggested-response>
+Ask about favorite vegetarian dishes
+</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 10, // Low threshold to trigger observation
+        model: mockModel as any,
+        instruction: customInstruction,
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    // Initialize record
+    await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Simulate observation
+    const messages = [
+      createTestMessage('I am vegetarian', 'user', 'msg-1'),
+      createTestMessage('That is great to know!', 'assistant', 'msg-2'),
+    ];
+
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
+
+    // Verify the custom instruction was passed to the observer agent
+    expect(capturedPrompt).not.toBeNull();
+    const systemMessage = capturedPrompt.find((msg: any) => msg.role === 'system');
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage.content).toContain(customInstruction);
+    expect(systemMessage.content).toContain('<current-task>');
+  });
+
+  it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
+    const storage = createInMemoryStorage();
+    const customInstruction = 'Consolidate observations about user preferences and remove duplicates.';
+
+    let capturedPrompt: any = null;
+    const mockObserverModel = createStreamCapableMockModel({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        content: [
+          {
+            type: 'text' as const,
+            text: `<observations>
+- User likes pizza
+</observations>
+<current-task>
+- Primary: Discussing food preferences
+</current-task>
+<suggested-response>
+Ask about favorite pizza toppings
+</suggested-response>`,
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const mockReflectorModel = createStreamCapableMockModel({
+      doGenerate: async options => {
+        capturedPrompt = options.prompt;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          content: [
+            {
+              type: 'text' as const,
+              text: `<observations>
+- User enjoys pizza and Italian food
+</observations>
+<current-task>
+- Primary: Discussing food preferences
+</current-task>
+<suggested-response>
+Ask about favorite Italian dishes
+</suggested-response>`,
+            },
+          ],
+          warnings: [],
+        };
+      },
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 10, // Low threshold to trigger observation
+        model: mockObserverModel as any,
+      },
+      reflection: {
+        observationTokens: 10, // Low threshold to trigger reflection
+        model: mockReflectorModel as any,
+        instruction: customInstruction,
+      },
+      scope: 'thread',
+    });
+
+    // Initialize record with some existing observations to trigger reflection
+    const record = await storage.initializeObservationalMemory({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      scope: 'thread',
+      config: {},
+    });
+
+    // Add existing observations to meet reflection threshold
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: `- Existing observation 1
+- Existing observation 2
+- Existing observation 3`,
+      tokenCount: 50000, // High count to trigger reflection
+      lastObservedAt: new Date(),
+    });
+
+    // Simulate observation which should then trigger reflection
+    const messages = [
+      createTestMessage('I like pizza', 'user', 'msg-1'),
+      createTestMessage('Nice!', 'assistant', 'msg-2'),
+    ];
+
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
+
+    // Verify the custom instruction was passed to the reflector agent
+    expect(capturedPrompt).not.toBeNull();
+    const systemMessage = capturedPrompt.find((msg: any) => msg.role === 'system');
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage.content).toContain(customInstruction);
+  });
 });
 
 describe('Scenario: Cross-session memory (resource scope)', () => {
@@ -2149,6 +2526,31 @@ describe('Scenario: Observation quality checks', () => {
     expect(observations).toBeGreaterThan(20);
     expect(observations).toBeLessThan(100);
   });
+
+  it('reuses cached part token metadata across repeated counting and message lifecycle copy', () => {
+    const counter = new TokenCounter();
+    const message = createTestMessage('ignored-content', 'assistant');
+    message.content = {
+      format: 2,
+      parts: [{ type: 'text', text: 'Persistent tiktoken estimate on part metadata' } as any],
+    } as any;
+
+    const firstCount = counter.countMessage(message);
+    const firstCache = (message.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(firstCache).toBeTruthy();
+
+    const reloaded = {
+      ...JSON.parse(JSON.stringify(message)),
+      createdAt: new Date(message.createdAt),
+    } as MastraDBMessage;
+
+    const secondCount = counter.countMessage(reloaded);
+    const secondCache = (reloaded.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(secondCount).toBe(firstCount);
+    expect(secondCache).toEqual(firstCache);
+  });
 });
 
 // =============================================================================
@@ -2163,7 +2565,7 @@ describe('Thread Attribution Helpers', () => {
     storage = createInMemoryStorage();
     om = new ObservationalMemory({
       storage,
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 100 },
       reflection: { observationTokens: 1000 },
       scope: 'resource',
@@ -2285,7 +2687,7 @@ describe('Resource Scope Observation Flow', () => {
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2332,11 +2734,11 @@ Ask about preferred brewing method
       createTestMessage('What kind do you prefer?', 'assistant', 'msg-2'),
     ];
 
-    await (om as any).doSynchronousObservation(
-      await storage.getObservationalMemory(null, 'resource-1'),
-      'thread-1',
-      messages,
-    );
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory(null, 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
 
     // Check stored observations have thread tag
     const record = await storage.getObservationalMemory(null, 'resource-1');
@@ -2360,7 +2762,7 @@ Ask about preferred brewing method
       },
     });
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2400,11 +2802,11 @@ Ask about preferred brewing method
 
     const messages = [createTestMessage('I love tea!', 'user', 'msg-1')];
 
-    await (om as any).doSynchronousObservation(
-      await storage.getObservationalMemory('thread-1', 'resource-1'),
-      'thread-1',
-      messages,
-    );
+    await (om as any).doSynchronousObservation({
+      record: await storage.getObservationalMemory('thread-1', 'resource-1'),
+      threadId: 'thread-1',
+      unobservedMessages: messages,
+    });
 
     const record = await storage.getObservationalMemory('thread-1', 'resource-1');
     // Should NOT have thread tags in thread scope
@@ -2418,7 +2820,7 @@ describe('Locking Behavior', () => {
     const storage = createInMemoryStorage();
 
     let reflectorCalled = false;
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => {
         reflectorCalled = true;
         return {
@@ -2440,7 +2842,7 @@ describe('Locking Behavior', () => {
       },
     });
 
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2496,10 +2898,10 @@ describe('Locking Behavior', () => {
 
     // Try to reflect — stale isReflecting should be detected and cleared,
     // because no operation is registered in this process's activeOps registry
-    await (om as any).maybeReflect(
-      { ...record, isReflecting: true },
-      500, // Token count exceeds threshold
-    );
+    await (om as any).maybeReflect({
+      record: { ...record, isReflecting: true },
+      observationTokens: 500, // Token count exceeds threshold
+    });
 
     // Reflector SHOULD be called because the stale flag was cleared
     expect(reflectorCalled).toBe(true);
@@ -2513,7 +2915,7 @@ describe('Locking Behavior', () => {
     const storage = createInMemoryStorage();
 
     let _observerCalled = false;
-    const mockObserverModel = new MockLanguageModelV2({
+    const mockObserverModel = createStreamCapableMockModel({
       doGenerate: async () => {
         _observerCalled = true;
         return {
@@ -2601,7 +3003,7 @@ describe('Reflection with Thread Attribution', () => {
   it('should create a new record after reflection', async () => {
     const storage = createInMemoryStorage();
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2656,7 +3058,7 @@ describe('Reflection with Thread Attribution', () => {
     // Trigger reflection via maybeReflect (called internally)
     const record = await storage.getObservationalMemory(null, 'resource-1');
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect(record!, 500);
+    await om.maybeReflect({ record: record!, observationTokens: 500 });
 
     // Get all records for this resource
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -2680,7 +3082,7 @@ describe('Reflection with Thread Attribution', () => {
     const storage = createInMemoryStorage();
 
     // Reflector that maintains thread attribution
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2745,7 +3147,7 @@ describe('Reflection with Thread Attribution', () => {
     // Trigger reflection
     const record = await storage.getObservationalMemory(null, 'resource-1');
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect(record!, 500);
+    await om.maybeReflect({ record: record!, observationTokens: 500 });
 
     // Get the new reflection record
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -2762,7 +3164,7 @@ describe('Reflection with Thread Attribution', () => {
   it('should update lastObservedAt cursor after reflection', async () => {
     const storage = createInMemoryStorage();
 
-    const mockReflectorModel = new MockLanguageModelV2({
+    const mockReflectorModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -2816,7 +3218,7 @@ describe('Reflection with Thread Attribution', () => {
 
     // Trigger reflection
     // @ts-expect-error - accessing private method for testing
-    await om.maybeReflect(recordBeforeReflection!, 500);
+    await om.maybeReflect({ record: recordBeforeReflection!, observationTokens: 500 });
 
     // Get the new reflection record
     const allRecords = await storage.getObservationalMemoryHistory(null, 'resource-1');
@@ -2935,7 +3337,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     expect(setupRecord?.activeObservations).toContain('favorite color is blue');
 
     // Create OM with resource scope
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async () => ({
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop' as const,
@@ -3163,7 +3565,7 @@ describe('Async Buffering Storage Operations', () => {
       // With activationRatio=0.5, target = 5000
       // After chunk 1: 3000 (under target, distance=2000)
       // After chunk 2: 6000 (over target, distance=1000)
-      // 6000 is closer to 5000, but since 3000 is under and 6000 is over, prefer under
+      // 6000 is closer to 5000, and since we bias over, prefer chunk 2 boundary
       await storage.updateBufferedObservations({
         id: initial.id,
         chunk: {
@@ -3208,16 +3610,15 @@ describe('Async Buffering Storage Operations', () => {
         lastObservedAt: new Date('2026-02-05T12:00:00Z'),
       });
 
-      // Biased under: should activate 1 chunk (3000 tokens), leaving 2 remaining
-      expect(result.chunksActivated).toBeGreaterThanOrEqual(1);
-      expect(result.activatedCycleIds.length).toBeGreaterThanOrEqual(1);
+      // Biased over: should activate 2 chunks (6000 tokens), leaving 1 remaining
+      expect(result.chunksActivated).toBe(2);
+      expect(result.activatedCycleIds).toEqual(['cycle-1', 'cycle-2']);
+      expect(result.messageTokensActivated).toBe(6000);
 
       const record = await storage.getObservationalMemory(threadId, resourceId);
       expect(record?.activeObservations).toContain('Chunk 1');
-      // Remaining chunks should still be in buffered
-      if (result.chunksActivated === 1) {
-        expect(record?.bufferedObservationChunks).toHaveLength(2);
-      }
+      expect(record?.activeObservations).toContain('Chunk 2');
+      expect(record?.bufferedObservationChunks).toHaveLength(1);
     });
 
     it('should always activate at least one chunk when at threshold', async () => {
@@ -3306,6 +3707,193 @@ describe('Async Buffering Storage Operations', () => {
 
       expect(result.chunksActivated).toBe(1);
       expect(result.observations).toContain('Important observation about X');
+    });
+
+    it('should return suggestedContinuation and currentTask from the most recent activated chunk', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: older, with a stale hint
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1 observation',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Stale suggestion from chunk 1',
+          currentTask: 'Old task from chunk 1',
+        },
+      });
+
+      // Chunk 2: newer, with the latest hint
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2 observation',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+          suggestedContinuation: 'Latest suggestion from chunk 2',
+          currentTask: 'Current task from chunk 2',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(2);
+      // Should return the hints from the most recent chunk
+      expect(result.suggestedContinuation).toBe('Latest suggestion from chunk 2');
+      expect(result.currentTask).toBe('Current task from chunk 2');
+    });
+
+    it('should return suggestedContinuation from partial activation when latest activated chunk has hints', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: with hints (will be activated)
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Activated suggestion',
+          currentTask: 'Activated task',
+        },
+      });
+
+      // Chunk 2: with newer hints (will remain buffered)
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+          suggestedContinuation: 'Remaining buffered suggestion',
+          currentTask: 'Remaining buffered task',
+        },
+      });
+
+      // Activate only chunk 1 (activationRatio=0.5, target=5000, chunk1=5000 exact match)
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 0.5,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.suggestedContinuation).toBe('Activated suggestion');
+      expect(result.currentTask).toBe('Activated task');
+    });
+
+    it('should return undefined continuation hints when chunks have no hints', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk without hints',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 5000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(1);
+      expect(result.suggestedContinuation).toBeUndefined();
+      expect(result.currentTask).toBeUndefined();
+    });
+
+    it('should discard stale hints from older chunks when the most recent activated chunk has none', async () => {
+      const initial = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      // Chunk 1: older, with hints
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🔴 Chunk 1 with hints',
+          tokenCount: 30,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+          suggestedContinuation: 'Stale suggestion',
+          currentTask: 'Stale task',
+        },
+      });
+
+      // Chunk 2: newer, without hints
+      await storage.updateBufferedObservations({
+        id: initial.id,
+        chunk: {
+          observations: '- 🟡 Chunk 2 without hints',
+          tokenCount: 30,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T11:00:00Z'),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      const result = await storage.swapBufferedToActive({
+        id: initial.id,
+        activationRatio: 1,
+        messageTokensThreshold: 10000,
+        currentPendingTokens: 10000,
+        lastObservedAt: new Date('2026-02-05T12:00:00Z'),
+      });
+
+      expect(result.chunksActivated).toBe(2);
+      // Should NOT fall back to chunk 1's stale hints
+      expect(result.suggestedContinuation).toBeUndefined();
+      expect(result.currentTask).toBeUndefined();
     });
   });
 
@@ -3500,6 +4088,30 @@ describe('Async Buffering Storage Operations', () => {
 });
 
 describe('Model Requirement', () => {
+  const originalCoreFeatures = new Set(coreFeatures);
+
+  afterEach(() => {
+    coreFeatures.clear();
+    for (const feature of originalCoreFeatures) {
+      coreFeatures.add(feature);
+    }
+  });
+
+  it('should throw when core does not support request-response-id-rotation', () => {
+    coreFeatures.delete('request-response-id-rotation');
+
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Please bump @mastra/core to a newer version');
+  });
+
   it('should throw when no model is provided at all', () => {
     expect(
       () =>
@@ -3530,7 +4142,7 @@ describe('Model Requirement', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
         }),
@@ -3545,7 +4157,7 @@ describe('Model Requirement', () => {
           scope: 'thread',
           observation: {
             messageTokens: 50000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
           reflection: { observationTokens: 20000 },
         }),
@@ -3561,7 +4173,7 @@ describe('Model Requirement', () => {
           observation: { messageTokens: 50000 },
           reflection: {
             observationTokens: 20000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
         }),
     ).not.toThrow();
@@ -3586,14 +4198,42 @@ describe('Model Requirement', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
-            model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+            model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           },
           reflection: { observationTokens: 20000 },
         }),
     ).toThrow('Cannot set both');
+  });
+});
+
+describe('Model Settings Defaults', () => {
+  it('should default maxOutputTokens when using model: "default"', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'default',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBe(100_000);
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBe(100_000);
+  });
+
+  it('should not default maxOutputTokens for non-default models', () => {
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      scope: 'thread',
+      model: 'openai/gpt-5.1-codex-mini',
+      observation: { messageTokens: 50000 },
+      reflection: { observationTokens: 20000 },
+    });
+
+    expect((om as any).observationConfig.modelSettings.maxOutputTokens).toBeUndefined();
+    expect((om as any).reflectionConfig.modelSettings.maxOutputTokens).toBeUndefined();
   });
 });
 
@@ -3604,7 +4244,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           shareTokenBudget: true,
           observation: {
             messageTokens: 50000,
@@ -3624,7 +4264,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           shareTokenBudget: true,
           observation: { messageTokens: 50000 },
           reflection: { observationTokens: 20000 },
@@ -3636,7 +4276,7 @@ describe('Async Buffering Config Validation', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       shareTokenBudget: true,
       observation: { messageTokens: 50000, bufferTokens: false },
       reflection: { observationTokens: 20000 },
@@ -3645,33 +4285,13 @@ describe('Async Buffering Config Validation', () => {
     expect(om.isAsyncReflectionEnabled()).toBe(false);
   });
 
-  it('should throw if bufferActivation is out of range', () => {
-    expect(
-      () =>
-        new ObservationalMemory({
-          storage: createInMemoryStorage(),
-          scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
-          observation: {
-            messageTokens: 50000,
-            bufferTokens: 10000,
-            bufferActivation: 1.5,
-          },
-          reflection: {
-            observationTokens: 20000,
-            bufferActivation: 0.7,
-          },
-        }),
-    ).toThrow('bufferActivation must be in range (0, 1]');
-  });
-
   it('should throw if bufferActivation is zero', () => {
     expect(
       () =>
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -3682,7 +4302,67 @@ describe('Async Buffering Config Validation', () => {
             bufferActivation: 0.7,
           },
         }),
-    ).toThrow('bufferActivation must be in range (0, 1]');
+    ).toThrow('bufferActivation must be > 0');
+  });
+
+  it('should throw if bufferActivation is in dead zone (1, 1000)', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 1.5,
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).toThrow('must be <= 1 (ratio) or >= 1000 (absolute token retention)');
+  });
+
+  it('should throw if absolute bufferActivation >= messageTokens', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 50000, // Invalid: must be < messageTokens
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).toThrow('bufferActivation as absolute retention');
+  });
+
+  it('should accept bufferActivation > 1000 as absolute retention target', () => {
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: {
+            messageTokens: 50000,
+            bufferTokens: 10000,
+            bufferActivation: 3000, // Valid: retain 3000 tokens
+          },
+          reflection: {
+            observationTokens: 20000,
+            bufferActivation: 0.7,
+          },
+        }),
+    ).not.toThrow();
   });
 
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
@@ -3692,7 +4372,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -3712,7 +4392,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 10000,
             bufferTokens: 15000,
@@ -3732,7 +4412,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -3752,7 +4432,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -3772,7 +4452,7 @@ describe('Async Buffering Config Validation', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'thread',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -3796,7 +4476,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -3809,7 +4489,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -3833,7 +4513,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferTokens: false },
       reflection: { observationTokens: 20000 },
     });
@@ -3855,7 +4535,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'resource',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000 },
       reflection: { observationTokens: 20000 },
     });
@@ -3870,7 +4550,7 @@ describe('Async Buffering Defaults & Disabling', () => {
         new ObservationalMemory({
           storage: createInMemoryStorage(),
           scope: 'resource',
-          model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
           observation: {
             messageTokens: 50000,
             bufferTokens: 10000,
@@ -3884,7 +4564,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferTokens: 5000 },
       reflection: { observationTokens: 20000 },
     });
@@ -3898,7 +4578,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 50000, bufferActivation: 0.7 },
       reflection: { observationTokens: 20000, bufferActivation: 0.3 },
     });
@@ -3914,7 +4594,7 @@ describe('Async Buffering Defaults & Disabling', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: { messageTokens: 100000, bufferTokens: 0.1 },
       reflection: { observationTokens: 20000 },
     });
@@ -3935,7 +4615,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -3986,7 +4666,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4009,7 +4689,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4071,7 +4751,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4084,7 +4764,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4097,7 +4777,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4115,7 +4795,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4128,7 +4808,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4143,7 +4823,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4156,7 +4836,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4168,7 +4848,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4180,7 +4860,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4199,7 +4879,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
@@ -4211,7 +4891,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4231,7 +4911,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4249,7 +4929,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4277,7 +4957,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4301,6 +4981,69 @@ describe('Async Buffering Processor Logic', () => {
       // Next interval boundary should trigger
       expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
+
+    it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 40000,
+          bufferTokens: 4000,
+          bufferActivation: 0.8,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      // threshold=40000, bufferTokens=4000, rampPoint=40000-4000*1.1=35600, halved=2000
+      const lockKey = 'thread:halve-test';
+
+      // Well below ramp point (35600): normal 4000 interval
+      // At 3000 tokens, interval = floor(3000/4000) = 0, last = 0 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(3000, lockKey, mockRecord, 40000)).toBe(false);
+      // At 4000 tokens, interval = floor(4000/4000) = 1, last = 0 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(4000, lockKey, mockRecord, 40000)).toBe(true);
+
+      // Still below ramp point: normal 4000 interval
+      const recordAt32k = { isBufferingObservation: false, lastBufferedAtTokens: 32000 } as any;
+      // At 35000 tokens (below rampPoint 35600), interval = floor(35000/4000) = 8, last = floor(32000/4000) = 8 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(false);
+
+      // Above ramp point (35600): halved 2000 interval
+      // At 36000 tokens, halved interval = 2000
+      // interval = floor(36000/2000) = 18, last = floor(32000/2000) = 16 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, 40000)).toBe(true);
+
+      // Simulate buffering at 36000
+      const recordAt36k = { isBufferingObservation: false, lastBufferedAtTokens: 36000 } as any;
+      // At 37000 tokens, interval = floor(37000/2000) = 18, last = floor(36000/2000) = 18 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, 40000)).toBe(false);
+      // At 38000 tokens, interval = floor(38000/2000) = 19, last = 18 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, 40000)).toBe(true);
+    });
+
+    it('should not halve interval when no threshold is provided', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 40000,
+          bufferTokens: 4000,
+          bufferActivation: 0.8,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      const lockKey = 'thread:no-threshold-test';
+      const recordAt28k = { isBufferingObservation: false, lastBufferedAtTokens: 28000 } as any;
+
+      // Without threshold, even near messageTokens limit, the normal 4000 interval is used
+      // At 31000 tokens, interval = floor(31000/4000) = 7, last = floor(28000/4000) = 7 → no trigger
+      expect((om as any).shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
+      // At 32000 tokens, interval = floor(32000/4000) = 8, last = 7 → trigger
+      expect((om as any).shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
+    });
   });
 
   describe('shouldTriggerAsyncReflection', () => {
@@ -4310,7 +5053,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
@@ -4322,7 +5065,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4345,7 +5088,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4365,7 +5108,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4386,7 +5129,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4417,7 +5160,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4429,7 +5172,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4444,7 +5187,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4471,7 +5214,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4490,7 +5233,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4519,7 +5262,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: { messageTokens: 50000 },
         reflection: { observationTokens: 20000 },
       });
@@ -4543,7 +5286,7 @@ describe('Async Buffering Processor Logic', () => {
   });
 
   describe('swapBufferedToActive boundary selection', () => {
-    it('should prefer under-target boundary when equidistant', async () => {
+    it('should prefer over-target boundary when equidistant', async () => {
       const storage = createInMemoryStorage();
       const record = await storage.initializeObservationalMemory({
         threadId: 'thread-1',
@@ -4689,7 +5432,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4705,7 +5448,7 @@ describe('Async Buffering Processor Logic', () => {
         config: {},
       });
 
-      const result = await (om as any).tryActivateBufferedObservations(record, 'thread:thread-1');
+      const result = await (om as any).tryActivateBufferedObservations(record, 'thread:thread-1', 1000);
 
       expect(result.success).toBe(false);
     });
@@ -4715,7 +5458,7 @@ describe('Async Buffering Processor Logic', () => {
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4737,14 +5480,14 @@ describe('Async Buffering Processor Logic', () => {
           observations: '- Important observation',
           tokenCount: 100,
           messageIds: ['msg-1', 'msg-2'],
-          messageTokens: 8000,
+          messageTokens: 45000,
           lastObservedAt: new Date('2026-02-05T10:00:00Z'),
           cycleId: 'cycle-1',
         },
       });
 
       const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
-      const result = await (om as any).tryActivateBufferedObservations(updatedRecord!, 'thread:thread-1');
+      const result = await (om as any).tryActivateBufferedObservations(updatedRecord!, 'thread:thread-1', 50000);
 
       expect(result.success).toBe(true);
       expect(result.updatedRecord).toBeDefined();
@@ -4752,12 +5495,78 @@ describe('Async Buffering Processor Logic', () => {
       expect(result.updatedRecord.bufferedObservationChunks).toBeUndefined();
     });
 
+    it('should skip activation when projected remaining is far above retention floor', async () => {
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 30000,
+          bufferTokens: 6000,
+          bufferActivation: 2000,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 1',
+          tokenCount: 50,
+          messageIds: ['msg-1'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 2',
+          tokenCount: 50,
+          messageIds: ['msg-2'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:01:00Z'),
+          cycleId: 'cycle-2',
+        },
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Chunk 3',
+          tokenCount: 50,
+          messageIds: ['msg-3'],
+          messageTokens: 3000,
+          lastObservedAt: new Date('2026-02-05T10:02:00Z'),
+          cycleId: 'cycle-3',
+        },
+      });
+
+      const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+      const result = await (om as any).tryActivateBufferedObservations(updatedRecord!, 'thread:thread-1', 30000);
+
+      expect(result.success).toBe(false);
+      const finalRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
+      expect(finalRecord?.bufferedObservationChunks).toHaveLength(3);
+      expect(finalRecord?.activeObservations).toBeFalsy();
+    });
+
     it('should not reset lastBufferedBoundary after activation (callers set it)', async () => {
       const storage = createInMemoryStorage();
       const om = new ObservationalMemory({
         storage,
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 50000,
           bufferTokens: 10000,
@@ -4792,7 +5601,7 @@ describe('Async Buffering Processor Logic', () => {
       (ObservationalMemory as any).lastBufferedBoundary.set(bufferKey, 15000);
 
       const updatedRecord = await storage.getObservationalMemory('thread-1', 'resource-1');
-      await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey);
+      await (om as any).tryActivateBufferedObservations(updatedRecord!, lockKey, 50000);
 
       // After activation, the boundary should NOT be cleared by tryActivateBufferedObservations.
       // Callers are responsible for setting it to the post-activation context size.
@@ -4821,6 +5630,8 @@ describe('Full Async Buffering Flow', () => {
     blockAfter?: number;
     /** Number of messages to pre-save (each ~200 tokens via repeated filler text) */
     messageCount?: number;
+    /** Optional fixed observer responses in call order */
+    observerResponses?: string[];
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -4840,7 +5651,7 @@ describe('Full Async Buffering Flow', () => {
     const observerCalls: { input: string }[] = [];
     const reflectorCalls: { input: string }[] = [];
 
-    const mockModel = new MockLanguageModelV2({
+    const mockModel = createStreamCapableMockModel({
       doGenerate: async ({ prompt }) => {
         const promptText = JSON.stringify(prompt);
 
@@ -4864,6 +5675,9 @@ describe('Full Async Buffering Flow', () => {
 
         // Observer call
         observerCalls.push({ input: promptText.slice(0, 200) });
+        const observerResponse =
+          opts.observerResponses?.[observerCalls.length - 1] ??
+          `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
@@ -4871,7 +5685,7 @@ describe('Full Async Buffering Flow', () => {
           content: [
             {
               type: 'text' as const,
-              text: `<observations>\nDate: Jan 1, 2025\n* 🔴 Observed at call ${observerCalls.length}\n* User discussed topic ${observerCalls.length}\n</observations>`,
+              text: observerResponse,
             },
           ],
           warnings: [],
@@ -5277,13 +6091,141 @@ describe('Full Async Buffering Flow', () => {
     expect(lastCall.input.length).toBeGreaterThan(0);
   });
 
+  it('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+      observerResponses: [
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
+        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+      ],
+    });
+
+    // Step 0 triggers async buffering; step 1 activates the buffered chunk,
+    // propagating the continuation hints to thread metadata.
+    await step(0);
+    await waitForAsyncOps();
+    await step(1);
+    await waitForAsyncOps();
+    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(firstOM.currentTask).toBe('Implement sync path');
+    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
+
+    // Step 2 starts a new async buffering round (observer call 2, no hints).
+    // Step 3 activates the new chunk, clearing the stale hints.
+    await step(2, { freshState: true });
+    await waitForAsyncOps();
+    await step(3);
+    await waitForAsyncOps();
+    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(secondOM.currentTask).toBeUndefined();
+    expect(secondOM.suggestedResponse).toBeUndefined();
+  });
+
+  it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
+    // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
+    // With 20 messages at ~112 tokens each ≈ 2240 tokens, forceMaxActivation triggers.
+    const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 200,
+      bufferActivation: 1,
+      reflectionObservationTokens: 50000,
+      messageCount: 20,
+    });
+
+    // Create the OM record (the helper does not initialize one automatically).
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
+    expect(record).toBeDefined();
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🔴 Older chunk with hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-1'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:00:00Z'),
+        cycleId: 'buf-cycle-1',
+        currentTask: 'Old buffered task',
+        suggestedContinuation: 'Old buffered suggestion',
+      },
+    });
+
+    await storage.updateBufferedObservations({
+      id: record!.id,
+      chunk: {
+        observations: '- 🟡 Latest chunk without hints',
+        tokenCount: 30,
+        messageIds: ['buf-msg-2'],
+        messageTokens: 600,
+        lastObservedAt: new Date('2025-01-01T10:05:00Z'),
+        cycleId: 'buf-cycle-2',
+      },
+    });
+
+    const existingThread = await storage.getThreadById({ threadId });
+    await storage.updateThread({
+      id: threadId,
+      title: existingThread?.title ?? 'Test Thread',
+      metadata: {
+        ...(existingThread?.metadata ?? {}),
+        mastra: {
+          ...((existingThread?.metadata as any)?.mastra ?? {}),
+          om: {
+            ...((existingThread?.metadata as any)?.mastra?.om ?? {}),
+            currentTask: 'Stale task before activation',
+            suggestedResponse: 'Stale suggestion before activation',
+          },
+        },
+      },
+    });
+
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+
+    const threadAfterActivation = await storage.getThreadById({ threadId });
+    const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(omAfterActivation.currentTask).toBeUndefined();
+    expect(omAfterActivation.suggestedResponse).toBeUndefined();
+  });
+
   it('should default reflection.bufferActivation when observation.bufferTokens is set', () => {
     // reflection.bufferActivation defaults to 0.5 so this should not throw
     expect(() => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -5302,7 +6244,7 @@ describe('Full Async Buffering Flow', () => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -5316,7 +6258,7 @@ describe('Full Async Buffering Flow', () => {
       new ObservationalMemory({
         storage: createInMemoryStorage(),
         scope: 'thread',
-        model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
         observation: {
           messageTokens: 10000,
           bufferTokens: 5000,
@@ -5332,7 +6274,7 @@ describe('Full Async Buffering Flow', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
         bufferTokens: 0.25,
@@ -5348,7 +6290,7 @@ describe('Full Async Buffering Flow', () => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
-      model: new MockLanguageModelV2({ defaultObjectGenerationMode: 'json' }),
+      model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
       observation: {
         messageTokens: 20000,
         bufferTokens: 5000,
@@ -5825,7 +6767,7 @@ describe('Full Async Buffering Flow', () => {
       });
 
       let _reflectorCallCount = 0;
-      const mockModel = new MockLanguageModelV2({
+      const mockModel = createStreamCapableMockModel({
         doGenerate: async ({ prompt }) => {
           const promptText = JSON.stringify(prompt);
           const isReflection = promptText.includes('consolidat') || promptText.includes('reflect');
@@ -5973,6 +6915,9 @@ describe('Full Async Buffering Flow', () => {
       chunks: Array<{ cycleId: string; messageTokens: number; observationTokens: number; obs: string }>;
       activationRatio: number;
       messageTokensThreshold: number;
+      currentPendingTokens?: number;
+      retentionFloor?: number;
+      forceMaxActivation?: boolean;
     }) {
       const storage = createInMemoryStorage();
       const threadId = `partial-${crypto.randomUUID()}`;
@@ -6010,7 +6955,9 @@ describe('Full Async Buffering Flow', () => {
         id: recordId,
         activationRatio: opts.activationRatio,
         messageTokensThreshold: opts.messageTokensThreshold,
-        currentPendingTokens: opts.messageTokensThreshold,
+        currentPendingTokens: opts.currentPendingTokens ?? opts.messageTokensThreshold,
+        retentionFloor: opts.retentionFloor,
+        forceMaxActivation: opts.forceMaxActivation,
       });
 
       const afterRecord = await storage.getObservationalMemory(threadId, resourceId);
@@ -6048,12 +6995,12 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining[1].cycleId).toBe('c-4');
     });
 
-    it('uneven chunks, ratio 0.6: biases under target', async () => {
+    it('uneven chunks, ratio 0.6: biases over target', async () => {
       // Chunks: 8k, 15k, 12k, 7k, 6k (total 48k). threshold=50k, ratio=0.6 → target=30k
       // After 1: 8k  (under, distance=22k)
-      // After 2: 23k (under, distance=7k)  ← best under
-      // After 3: 35k (over, distance=5k)
-      // Best under = 2 chunks (23k). Algorithm prefers under over over.
+      // After 2: 23k (under, distance=7k)
+      // After 3: 35k (over, distance=5k)  ← best over
+      // Algorithm prefers the over boundary to ensure retention target is met.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
@@ -6069,26 +7016,24 @@ describe('Full Async Buffering Flow', () => {
       });
 
       // 2 chunks = 23k (under target of 30k), 3 chunks = 35k (over).
-      // Algorithm prefers the under boundary.
-      expect(result.chunksActivated).toBe(2);
-      expect(result.messageTokensActivated).toBe(23000);
-      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      // Algorithm prefers the over boundary to hit the retention target.
+      expect(result.chunksActivated).toBe(3);
+      expect(result.messageTokensActivated).toBe(35000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
       expect(result.observations).toContain('Chunk 0');
       expect(result.observations).toContain('Chunk 1');
-      expect(result.observations).not.toContain('Chunk 2');
+      expect(result.observations).toContain('Chunk 2');
 
-      expect(remaining).toHaveLength(3);
-      expect(remaining[0].cycleId).toBe('c-2');
-      expect(remaining[1].cycleId).toBe('c-3');
-      expect(remaining[2].cycleId).toBe('c-4');
+      expect(remaining).toHaveLength(2);
+      expect(remaining[0].cycleId).toBe('c-3');
+      expect(remaining[1].cycleId).toBe('c-4');
     });
 
-    it('uneven chunks, ratio 0.4: activates fewer oldest chunks', async () => {
+    it('uneven chunks, ratio 0.4: biases over target', async () => {
       // Same uneven chunks. threshold=50k, ratio=0.4 → target=20k
       // After 1: 8k  (under, distance=12k)
-      // After 2: 23k (over, distance=3k)
-      // Best under = 1 chunk (8k). 2 chunks = 23k (over).
-      // Algorithm prefers the under boundary: 1 chunk.
+      // After 2: 23k (over, distance=3k)  ← best over
+      // Algorithm prefers the over boundary to hit the retention target.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0: small early messages' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1: big tool call results' },
@@ -6103,22 +7048,22 @@ describe('Full Async Buffering Flow', () => {
         messageTokensThreshold: 50000,
       });
 
-      expect(result.chunksActivated).toBe(1);
-      expect(result.messageTokensActivated).toBe(8000);
-      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(23000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
 
-      expect(remaining).toHaveLength(4);
-      expect(remaining[0].cycleId).toBe('c-1');
+      expect(remaining).toHaveLength(3);
+      expect(remaining[0].cycleId).toBe('c-2');
     });
 
-    it('uneven chunks, high ratio 0.9: activates most but not all', async () => {
+    it('uneven chunks, high ratio 0.9: activates all when over boundary meets target', async () => {
       // Same uneven chunks (total 48k). threshold=50k, ratio=0.9 → target=45k
       // After 1: 8k  (under)
       // After 2: 23k (under)
       // After 3: 35k (under)
-      // After 4: 42k (under, distance=3k) ← best under
-      // After 5: 48k (over, distance=3k)
-      // Both boundaries at distance=3k, but algorithm prefers under.
+      // After 4: 42k (under, distance=3k)
+      // After 5: 48k (over, distance=3k) ← best over
+      // Algorithm prefers the over boundary to hit the retention target.
       const chunks = [
         { cycleId: 'c-0', messageTokens: 8000, observationTokens: 150, obs: 'Chunk 0' },
         { cycleId: 'c-1', messageTokens: 15000, observationTokens: 300, obs: 'Chunk 1' },
@@ -6133,12 +7078,11 @@ describe('Full Async Buffering Flow', () => {
         messageTokensThreshold: 50000,
       });
 
-      expect(result.chunksActivated).toBe(4);
-      expect(result.messageTokensActivated).toBe(42000);
-      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3']);
+      expect(result.chunksActivated).toBe(5);
+      expect(result.messageTokensActivated).toBe(48000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3', 'c-4']);
 
-      expect(remaining).toHaveLength(1);
-      expect(remaining[0].cycleId).toBe('c-4');
+      expect(remaining).toHaveLength(0);
     });
 
     it('one huge first chunk exceeds target: still activates just 1 (biased over)', async () => {
@@ -6190,6 +7134,33 @@ describe('Full Async Buffering Flow', () => {
       expect(remaining).toHaveLength(0);
     });
 
+    it('absolute bufferActivation: equivalent to ratio when converted', async () => {
+      // threshold=50k, absolute retention=10000 → equivalent ratio = 1 - 10000/50000 = 0.8
+      // retentionFloor=10000, target=40000
+      // Chunks: 10k each, cumulative: 10k, 20k, 30k, 40k, 50k
+      // After 4: 40k (exactly on target) → activates 4
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 2' },
+        { cycleId: 'c-3', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 3' },
+        { cycleId: 'c-4', messageTokens: 10000, observationTokens: 200, obs: 'Chunk 4' },
+      ];
+
+      // Using ratio 0.8 (equivalent of absolute 10000 with threshold 50000)
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 50000,
+      });
+
+      expect(result.chunksActivated).toBe(4);
+      expect(result.messageTokensActivated).toBe(40000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2', 'c-3']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-4');
+    });
+
     it('single chunk: always activates it regardless of ratio', async () => {
       const chunks = [{ cycleId: 'c-only', messageTokens: 12000, observationTokens: 200, obs: 'The only chunk' }];
 
@@ -6202,6 +7173,186 @@ describe('Full Async Buffering Flow', () => {
       // target=15k, chunk is 12k (under) → activates it
       expect(result.chunksActivated).toBe(1);
       expect(result.activatedCycleIds).toEqual(['c-only']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('overshoot safeguard: falls back to under boundary when over would exceed 95% of retention floor', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Chunk 1: 3k (under, distance=5k)
+      // Chunk 2: 7k → cumulative 10k (over, overshoot=2k)
+      // maxOvershoot = 2000 * 0.95 = 1900. overshoot 2000 > 1900 → safeguard triggers
+      // Falls back to under boundary (chunk 1, 3k)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 3000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 7000, observationTokens: 100, obs: 'Chunk 1: large tool output' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // Safeguard prevents over boundary (10k) — falls back to under (3k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(3000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('overshoot safeguard: allows over boundary when within 95% of retention floor', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Chunk 1: 3k (under)
+      // Chunk 2: 6k → cumulative 9k (over, overshoot=1k)
+      // maxOvershoot = 2000 * 0.95 = 1900. overshoot 1000 <= 1900 → allowed
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 3000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 6000, observationTokens: 100, obs: 'Chunk 1: moderate output' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // Over boundary (9k, overshoot=1k) is within safeguard — activates both
+      expect(result.chunksActivated).toBe(2);
+      expect(result.messageTokensActivated).toBe(9000);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('overshoot safeguard: still activates over when no under boundary exists', async () => {
+      // threshold=10000, ratio=0.8 → retentionFloor=2000, target=8000
+      // Single chunk: 10k (over, overshoot=2k > 1900 safeguard)
+      // No under boundary → still activates the over boundary
+      const chunks = [{ cycleId: 'c-0', messageTokens: 10000, observationTokens: 150, obs: 'Chunk 0: the only chunk' }];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.8,
+        messageTokensThreshold: 10000,
+      });
+
+      // No under boundary exists, so over boundary is used despite exceeding safeguard
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(10000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(0);
+    });
+
+    it('forceMaxActivation: still respects minimum remaining tokens', async () => {
+      // Same scenario as the safeguard test below, but with forceMaxActivation=true.
+      // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
+      // retentionFloor=1000, currentPending=48000, target=47000
+      // Chunk 1: 2k (under)
+      // Chunk 2: 46k → cumulative 48k (over, overshoot=1k > maxOvershoot=950)
+      // Remaining after over boundary would be 0, so we still avoid dropping below 1k tokens.
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: small messages' },
+        { cycleId: 'c-1', messageTokens: 46000, observationTokens: 600, obs: 'Chunk 1: large web search result' },
+      ];
+
+      const activationRatio = 1 - 1000 / 30000; // ~0.967
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 48000,
+        retentionFloor: 1000,
+        forceMaxActivation: true,
+      });
+
+      // Still falls back to the under boundary when over would leave < 1000 tokens
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+    });
+
+    it('large message scenario: safeguard falls back to small chunk when oversized message dominates', async () => {
+      // Real-world scenario: a small chunk (2k) followed by a huge web_search result (46k).
+      // threshold=30k, absolute retention=1000 → ratio ≈ 0.967
+      // retentionFloor=1000, currentPending=48000, target=47000
+      // Chunk 1: 2k (under, distance=45k)
+      // Chunk 2: 46k → cumulative 48k (over, overshoot=1k)
+      // maxOvershoot = 1000 * 0.95 = 950. overshoot 1000 > 950 → safeguard triggers
+      // Falls back to under boundary (chunk 1, 2k).
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: small messages' },
+        { cycleId: 'c-1', messageTokens: 46000, observationTokens: 600, obs: 'Chunk 1: large web search result' },
+      ];
+
+      const activationRatio = 1 - 1000 / 30000; // ~0.967
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio,
+        messageTokensThreshold: 30000,
+        currentPendingTokens: 48000,
+        retentionFloor: 1000,
+      });
+
+      // Safeguard prevents activating both (overshoot > 95% of retentionFloor),
+      // falls back to chunk 1 only (2k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('low retention floor: falls back to under boundary when over would leave < min(1000, retentionFloor)', async () => {
+      // threshold=5000, ratio=0.9 → retentionFloor=500, target=4500
+      // currentPending=5000
+      // Chunk 1: 2k (under, distance=2.5k)
+      // Chunk 2: 2.8k → cumulative 4.8k (over, overshoot=300)
+      // maxOvershoot = 500 * 0.95 = 475. overshoot 300 <= 475 → overshoot safeguard allows it
+      // BUT remainingAfterOver = 5000 - 4800 = 200 < min(1000, 500)=500 → low-retention floor triggers
+      // Falls back to under boundary (chunk 1, 2k)
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 2000, observationTokens: 50, obs: 'Chunk 0: early messages' },
+        { cycleId: 'c-1', messageTokens: 2800, observationTokens: 80, obs: 'Chunk 1: more messages' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.9,
+        messageTokensThreshold: 5000,
+      });
+
+      // Over boundary would leave only 200 tokens — falls back to under (chunk 1, 2k)
+      expect(result.chunksActivated).toBe(1);
+      expect(result.messageTokensActivated).toBe(2000);
+      expect(result.activatedCycleIds).toEqual(['c-0']);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].cycleId).toBe('c-1');
+    });
+
+    it('low retention floor: allows activation at target boundary when remaining >= retention floor', async () => {
+      // threshold=1024, ratio=31/32 → retentionFloor=32, target=992
+      // currentPending=1024
+      // Chunk 1: 400 (under)
+      // Chunk 2: 450 → cumulative 850 (under)
+      // Chunk 3: 142 → cumulative 992 (over, exactly on target, overshoot=0)
+      // remainingAfterOver = 1024 - 992 = 32 >= min(1000, 32) → allowed
+      const chunks = [
+        { cycleId: 'c-0', messageTokens: 400, observationTokens: 50, obs: 'Chunk 0' },
+        { cycleId: 'c-1', messageTokens: 450, observationTokens: 60, obs: 'Chunk 1' },
+        { cycleId: 'c-2', messageTokens: 142, observationTokens: 20, obs: 'Chunk 2' },
+      ];
+
+      const { result, remaining } = await setupAndActivate({
+        chunks,
+        activationRatio: 0.96875,
+        messageTokensThreshold: 1024,
+      });
+
+      // Over boundary leaves exactly the retention floor — allowed
+      expect(result.chunksActivated).toBe(3);
+      expect(result.messageTokensActivated).toBe(992);
+      expect(result.activatedCycleIds).toEqual(['c-0', 'c-1', 'c-2']);
       expect(remaining).toHaveLength(0);
     });
   });
@@ -6219,8 +7370,9 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 3000,
       bufferTokens: 500,
-      bufferActivation: 1.0,
+      bufferActivation: 2000,
       reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
       messageCount: 10, // ~2200 tokens, below 3000 threshold
     });
 
@@ -6303,8 +7455,9 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 3000,
       bufferTokens: 500,
-      bufferActivation: 1.0,
+      bufferActivation: 2000,
       reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
       messageCount: 10, // ~2200 tokens, below 3000 threshold → triggers buffering
     });
 
@@ -6457,8 +7610,9 @@ describe('Full Async Buffering Flow', () => {
     const { storage, threadId, resourceId, step, waitForAsyncOps, observerCalls } = await setupAsyncBufferingScenario({
       messageTokens: 3000,
       bufferTokens: 500,
-      bufferActivation: 1.0,
+      bufferActivation: 2000,
       reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
       messageCount: 10, // ~2200 tokens, below 3000 threshold → buffers first
     });
 
@@ -6503,6 +7657,73 @@ describe('Full Async Buffering Flow', () => {
     // The key assertion is that new buffering was triggered (observer called again).
     const callsAfterActivation = observerCalls.length;
     expect(callsAfterActivation).toBeGreaterThan(1); // buffered once before, buffered again after activation
+  });
+
+  it('should retain at least the configured absolute bufferActivation floor after chunk activation', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999,
+      bufferTokens: 999998,
+      bufferActivation: 0.5,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 20,
+    });
+
+    const messageListAfterStep0 = await step(0);
+    await waitForAsyncOps();
+
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const tokensBeforeActivation = new TokenCounter().countMessages(contextMsgs);
+    expect(tokensBeforeActivation).toBeGreaterThan(0);
+
+    const chunkMsgIds = contextMsgs.slice(0, 6).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(6);
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+
+    await storage.updateBufferedObservations({
+      id: recordId,
+      chunk: {
+        observations: 'Manual chunk floor observations',
+        tokenCount: 80,
+        messageIds: chunkMsgIds,
+        messageTokens: 1200,
+        lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+        cycleId: 'manual-cycle-floor',
+      },
+    });
+
+    (om as any).observationConfig.messageTokens = 1000;
+    (om as any).observationConfig.bufferTokens = 500;
+    (om as any).observationConfig.blockAfter = 1200;
+    (om as any).observationConfig.bufferActivation = 2000;
+
+    const originalCleanup = (om as any).cleanupAfterObservation.bind(om);
+    let capturedMinRemaining: number | undefined;
+    (om as any).cleanupAfterObservation = async (...args: any[]) => {
+      capturedMinRemaining = args[6];
+      return originalCleanup(...args);
+    };
+
+    const messageListAfterStep1 = await step(1);
+    await waitForAsyncOps();
+
+    const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk floor observations');
+
+    const expectedFloor = resolveRetentionFloor(
+      (om as any).observationConfig.bufferActivation,
+      (om as any).observationConfig.messageTokens,
+    );
+    expect(capturedMinRemaining).toBe(expectedFloor);
+
+    const remainingMessages = messageListAfterStep1.get.all.db();
+    const remainingTokens = new TokenCounter().countMessages(remainingMessages);
+    expect(remainingTokens).toBeGreaterThanOrEqual(Math.floor(expectedFloor * 0.9));
+
+    const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
+    expect(chunkMsgIds.some(id => !remainingIds.has(id))).toBe(true);
   });
 
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {
@@ -6652,8 +7873,10 @@ describe('Full Async Buffering Flow', () => {
       await setupAsyncBufferingScenario({
         messageTokens: 2000,
         bufferTokens: 300,
-        bufferActivation: 1.0,
+        bufferActivation: 1500,
+        blockAfter: 1.1,
         reflectionObservationTokens: 50000,
+        reflectionAsyncActivation: 0.5,
         messageCount: 5, // ~1100 tokens, below 2000 threshold
       });
 
@@ -6736,5 +7959,385 @@ describe('Full Async Buffering Flow', () => {
         ? JSON.parse(record.bufferedObservationChunks)
         : (record?.bufferedObservationChunks ?? []);
     expect(newChunks.length).toBeGreaterThan(0);
+  });
+});
+
+// =============================================================================
+// Regression: threadId required in thread scope (prevents deadlock via shared OM row)
+// =============================================================================
+
+describe('threadId validation in thread scope', () => {
+  it('should throw when getOrCreateRecord is called without threadId in thread scope', async () => {
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 500, model: 'test-model' },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+      // scope defaults to 'thread'
+    });
+
+    await expect(om.getOrCreateRecord('', 'resource-1')).rejects.toThrow(/requires a threadId/);
+  });
+
+  it('should NOT throw when getOrCreateRecord is called without threadId in resource scope', async () => {
+    const storage = createInMemoryStorage();
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'resource',
+      observation: { messageTokens: 500, model: 'test-model', bufferTokens: false },
+      reflection: { observationTokens: 1000, model: 'test-model' },
+    });
+
+    // In resource scope, threadId is null — this should succeed
+    const record = await om.getOrCreateRecord('ignored-thread', 'resource-1');
+    expect(record).toBeDefined();
+    expect(record.threadId).toBeNull();
+    expect(record.resourceId).toBe('resource-1');
+  });
+});
+
+// =============================================================================
+// Per-step save: sealed message deduplication
+// =============================================================================
+describe('Per-step save deduplication', () => {
+  async function setupMultiStepScenario(opts: { messageTokens: number }) {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'dedup-thread';
+    const resourceId = 'dedup-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [
+          {
+            type: 'text' as const,
+            text: '<observations>\nDate: Jan 1, 2025\n* Observed user request\n</observations>',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: opts.messageTokens },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    const runStep = async (stepNumber: number) => {
+      await om.processInputStep({
+        messageList,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        abort,
+      });
+    };
+
+    const addToolResponse = (id: string, toolName: string, callId: string, ms: number) => {
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'result', toolName, toolCallId: callId, args: {}, result: {} },
+              },
+            ],
+          },
+          createdAt: new Date(`2025-01-01T10:00:0${ms}Z`),
+        } as any,
+        'response',
+      );
+    };
+
+    const finalize = async () => {
+      await om.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        requestContext: makeCtx(),
+        state,
+        abort,
+      });
+    };
+
+    async function waitForAsyncOps(timeoutMs = 5000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    return {
+      storage,
+      threadId,
+      resourceId,
+      om,
+      state,
+      messageList,
+      runStep,
+      addToolResponse,
+      finalize,
+      waitForAsyncOps,
+    };
+  }
+
+  it('should save each user message exactly once across a multi-step turn', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize } = await setupMultiStepScenario({
+      messageTokens: 100000,
+    });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Help me with something' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    addToolResponse('resp-0', 'search', 'c1', 1);
+    await runStep(1);
+    addToolResponse('resp-1', 'lookup', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Done.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not duplicate sealed-for-buffering messages during per-step save', async () => {
+    // Low threshold triggers async buffering at step 0, which seals the user message.
+    // handlePerStepSave at step 1 must skip the already-persisted sealed message.
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Help me debug a distributed system issue involving multiple microservices communicating over gRPC.',
+            },
+          ],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'The root cause is DNS resolution.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not insert the same logical user message with different IDs across steps', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Track this exact user message identity across agent steps' }],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Finished analysis.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const logicalUserKey = (m: any) => {
+      const text = m?.content?.parts?.find((p: any) => p?.type === 'text')?.text ?? '';
+      const createdAt = new Date(m.createdAt).toISOString();
+      return `${m.role}|${createdAt}|${text}`;
+    };
+
+    const matchingUserMessages = messages.filter(
+      m =>
+        logicalUserKey(m) === 'user|2025-01-01T10:00:00.000Z|Track this exact user message identity across agent steps',
+    );
+
+    expect(matchingUserMessages.length).toBe(1);
+    expect(new Set(matchingUserMessages.map(m => m.id)).size).toBe(1);
+    expect(matchingUserMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should upsert sealed messages with completed boundaries instead of inserting new IDs', async () => {
+    const { storage, threadId, resourceId, om, state } = await setupMultiStepScenario({ messageTokens: 50 });
+
+    const messageWithCompletedBoundary = {
+      id: 'user-1',
+      threadId,
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'same logical message' },
+          { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+        ],
+      },
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      resourceId,
+    } as any;
+
+    state.sealedIds = new Set(['user-1']);
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const sameLogical = messages.filter(
+      m =>
+        m.role === 'user' &&
+        new Date(m.createdAt).toISOString() === '2025-01-01T10:00:00.000Z' &&
+        m.content?.parts?.some((p: any) => p?.type === 'text' && p?.text === 'same logical message'),
+    );
+
+    expect(sameLogical.length).toBe(1);
+    expect(sameLogical[0]!.id).toBe('user-1');
   });
 });

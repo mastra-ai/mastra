@@ -13,6 +13,7 @@ export interface MCPServerComboboxProps {
   className?: string;
   disabled?: boolean;
   variant?: 'default' | 'light' | 'outline' | 'ghost';
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
 }
 
 export function MCPServerCombobox({
@@ -24,6 +25,7 @@ export function MCPServerCombobox({
   className,
   disabled = false,
   variant = 'default',
+  container,
 }: MCPServerComboboxProps) {
   const { data: mcpServers = [], isLoading, isError, error } = useMCPServers();
   const { navigate, paths } = useLinkComponent();
@@ -59,6 +61,7 @@ export function MCPServerCombobox({
       className={className}
       disabled={disabled || isLoading || isError}
       variant={variant}
+      container={container}
     />
   );
 }

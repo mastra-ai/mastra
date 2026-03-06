@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ai-sdk",
-  "version": "1.0.4",
+  "version": "1.1.2",
   "description": "Adds custom API routes to be compatible with the AI SDK UI parts",
   "type": "module",
   "main": "dist/index.js",
@@ -29,22 +29,25 @@
   },
   "files": [
     "dist",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "./**/*.d.ts"
   ],
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.5.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^2.0.0",
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^5.0.60",
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
@@ -53,7 +56,8 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "build": "tsup --config tsup.config.ts",
+    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "test": "vitest run"
   },
   "keywords": [

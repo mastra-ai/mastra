@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-better-auth",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Mastra Better Auth integration - self-hosted authentication",
   "type": "module",
   "main": "dist/index.js",
@@ -28,12 +28,15 @@
   "dependencies": {
     "better-auth": "^1.4.18"
   },
+  "peerDependencies": {
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+  },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
-    "hono": "^4.11.3",
+    "@types/node": "22.19.13",
+    "hono": "^4.11.9",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

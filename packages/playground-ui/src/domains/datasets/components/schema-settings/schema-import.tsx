@@ -14,6 +14,29 @@ interface SchemaImportProps {
  * JSON Schema representing MessageListInput type for agent.generate() input.
  * Supports: string, string[], message object, message object[]
  */
+/**
+ * Content can be a plain string or an array of content parts (e.g. text, image, tool-call).
+ * This matches the AI SDK's CoreMessage / ModelMessage content field.
+ */
+const messageContentSchema = {
+  anyOf: [
+    { type: 'string' },
+    {
+      type: 'array',
+      items: { type: 'object', additionalProperties: true },
+    },
+  ],
+};
+
+const messageObjectSchema = {
+  type: 'object' as const,
+  properties: {
+    role: { type: 'string' as const, enum: ['user', 'assistant', 'system', 'tool'] },
+    content: messageContentSchema,
+  },
+  required: ['role', 'content'],
+};
+
 const AGENT_INPUT_SCHEMA: Record<string, unknown> = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   description: 'Agent message input (MessageListInput)',
@@ -25,25 +48,13 @@ const AGENT_INPUT_SCHEMA: Record<string, unknown> = {
       description: 'Array of text messages',
     },
     {
-      type: 'object',
+      ...messageObjectSchema,
       description: 'Single message object',
-      properties: {
-        role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
-        content: { type: 'string' },
-      },
-      required: ['role', 'content'],
     },
     {
       type: 'array',
       description: 'Array of message objects',
-      items: {
-        type: 'object',
-        properties: {
-          role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] },
-          content: { type: 'string' },
-        },
-        required: ['role', 'content'],
-      },
+      items: messageObjectSchema,
     },
   ],
 };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { TargetSelector, TargetType } from './target-selector';
@@ -31,6 +31,7 @@ export function ExperimentTriggerDialog({
   onOpenChange,
   onSuccess,
 }: ExperimentTriggerDialogProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
   const [targetType, setTargetType] = useState<TargetType | ''>('');
   const [targetId, setTargetId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
@@ -78,7 +79,7 @@ export function ExperimentTriggerDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent>
+      <DialogContent ref={contentRef}>
         <DialogHeader>
           <DialogTitle>Run Experiment</DialogTitle>
           <DialogDescription>
@@ -94,6 +95,7 @@ export function ExperimentTriggerDialog({
             setTargetType={setTargetType}
             targetId={targetId}
             setTargetId={setTargetId}
+            container={contentRef}
           />
 
           {/* Only show scorer selector for agent/workflow targets */}
@@ -102,6 +104,7 @@ export function ExperimentTriggerDialog({
               selectedScorers={selectedScorers}
               setSelectedScorers={setSelectedScorers}
               disabled={isRunning}
+              container={contentRef}
             />
           )}
         </DialogBody>

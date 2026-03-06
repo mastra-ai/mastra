@@ -28,46 +28,43 @@ Pass `requestContext` into an agent, network, workflow, or tool call to make val
 The `.set()` method takes two arguments:
 
 1. **key**: The name used to identify the value.
-2. **value**: The data to associate with that key.
+1. **value**: The data to associate with that key.
 
 ```typescript
-import { RequestContext } from "@mastra/core/request-context";
+import { RequestContext } from '@mastra/core/request-context'
 
 export type UserTier = {
-  "user-tier": "enterprise" | "pro";
-};
+  'user-tier': 'enterprise' | 'pro'
+}
 
-const requestContext = new RequestContext<UserTier>();
-requestContext.set("user-tier", "enterprise");
+const requestContext = new RequestContext<UserTier>()
+requestContext.set('user-tier', 'enterprise')
 
-const agent = mastra.getAgent("weatherAgent");
+const agent = mastra.getAgent('weatherAgent')
 await agent.generate("What's the weather in London?", {
   requestContext,
-});
+})
 
-const routingAgent = mastra.getAgent("routingAgent");
+const routingAgent = mastra.getAgent('routingAgent')
 routingAgent.network("What's the weather in London?", {
   requestContext,
-});
+})
 
-const run = await mastra.getWorkflow("weatherWorkflow").createRun();
+const run = await mastra.getWorkflow('weatherWorkflow').createRun()
 await run.start({
   inputData: {
-    location: "London",
+    location: 'London',
   },
   requestContext,
-});
+})
 await run.resume({
   resumeData: {
-    city: "New York",
+    city: 'New York',
   },
   requestContext,
-});
+})
 
-await weatherTool.execute(
-  { location: "London" },
-  { requestContext },
-);
+await weatherTool.execute({ location: 'London' }, { requestContext })
 ```
 
 ### Setting values based on request headers
@@ -75,28 +72,25 @@ await weatherTool.execute(
 You can populate `requestContext` dynamically in server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { RequestContext } from "@mastra/core/request-context";
-import { testWeatherAgent } from "./agents/test-weather-agent";
+import { Mastra } from '@mastra/core'
+import { RequestContext } from '@mastra/core/request-context'
+import { testWeatherAgent } from './agents/test-weather-agent'
 
 export const mastra = new Mastra({
   agents: { testWeatherAgent },
   server: {
     middleware: [
       async (context, next) => {
-        const country = context.req.header("CF-IPCountry");
-        const requestContext = context.get("requestContext");
+        const country = context.req.header('CF-IPCountry')
+        const requestContext = context.get('requestContext')
 
-        requestContext.set(
-          "temperature-unit",
-          country === "US" ? "fahrenheit" : "celsius",
-        );
+        requestContext.set('temperature-unit', country === 'US' ? 'fahrenheit' : 'celsius')
 
-        await next();
+        await next()
       },
     ],
   },
-});
+})
 ```
 
 :::info
@@ -111,21 +105,22 @@ You can access the `requestContext` argument from any supported configuration op
 
 ```typescript title="src/mastra/agents/weather-agent.ts"
 export type UserTier = {
-  "user-tier": "enterprise" | "pro";
-};
+  'user-tier': 'enterprise' | 'pro'
+}
 
 export const weatherAgent = new Agent({
-  id: "weather-agent",
-  name: "Weather Agent",
+  id: 'weather-agent',
+  name: 'Weather Agent',
   instructions: async ({ requestContext }) => {
-    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+    const userTier = requestContext.get('user-tier') as UserTier['user-tier']
 
-    if (userTier === "enterprise") {}
+    if (userTier === 'enterprise') {
+    }
   },
   model: ({ requestContext }) => {},
   tools: ({ requestContext }) => {},
   memory: ({ requestContext }) => {},
-});
+})
 ```
 
 You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
@@ -140,29 +135,28 @@ Agent instructions can be provided as an async function, enabling you to resolve
 - **External prompt management**: Fetch prompts from registry services without redeploying
 
 ```typescript title="src/mastra/agents/dynamic-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 export const dynamicAgent = new Agent({
-  id: "dynamic-agent",
-  name: "Dynamic Agent",
+  id: 'dynamic-agent',
+  name: 'Dynamic Agent',
   instructions: async ({ requestContext }) => {
-    const userTier = requestContext?.get("user-tier");
-    const locale = requestContext?.get("locale");
+    const userTier = requestContext?.get('user-tier')
+    const locale = requestContext?.get('locale')
 
     // Personalize based on user tier
-    const basePrompt = userTier === "enterprise"
-      ? "You are a premium support agent. Provide detailed, thorough responses with technical depth."
-      : "You are a helpful assistant. Be concise and friendly.";
+    const basePrompt =
+      userTier === 'enterprise'
+        ? 'You are a premium support agent. Provide detailed, thorough responses with technical depth.'
+        : 'You are a helpful assistant. Be concise and friendly.'
 
     // Localize behavior
-    const localeInstructions = locale === "ja"
-      ? "Respond in Japanese using formal keigo."
-      : "";
+    const localeInstructions = locale === 'ja' ? 'Respond in Japanese using formal keigo.' : ''
 
-    return `${basePrompt} ${localeInstructions}`.trim();
+    return `${basePrompt} ${localeInstructions}`.trim()
   },
-  model: "openai/gpt-5.1",
-});
+  model: 'openai/gpt-5.1',
+})
 ```
 
 #### Fetching from a prompt registry
@@ -170,26 +164,26 @@ export const dynamicAgent = new Agent({
 If your organization uses a prompt registry service for central prompt management, you can fetch instructions at runtime. This allows you to update prompts without redeploying, run experiments with variants, and track prompt usage across your agents.
 
 ```typescript title="src/mastra/agents/registry-agent.ts"
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 
 // Your prompt registry client
-import { promptRegistry } from "../lib/prompt-registry";
+import { promptRegistry } from '../lib/prompt-registry'
 
 export const registryAgent = new Agent({
-  id: "registry-agent",
-  name: "Registry Agent",
+  id: 'registry-agent',
+  name: 'Registry Agent',
   instructions: async ({ requestContext }) => {
     const prompt = await promptRegistry.getPrompt({
-      promptId: "customer-support-agent",
+      promptId: 'customer-support-agent',
       // Pass context for variant selection or tracking
-      variant: requestContext?.get("experiment-variant"),
-      userId: requestContext?.get("user-id"),
-    });
+      variant: requestContext?.get('experiment-variant'),
+      userId: requestContext?.get('user-id'),
+    })
 
-    return prompt.content;
+    return prompt.content
   },
-  model: "openai/gpt-5.1",
-});
+  model: 'openai/gpt-5.1',
+})
 ```
 
 :::info
@@ -204,17 +198,18 @@ You can access the `requestContext` argument from a workflow step's `execute` fu
 
 ```typescript title="src/mastra/workflows/weather-workflow.ts"
 export type UserTier = {
-  "user-tier": "enterprise" | "pro";
-};
+  'user-tier': 'enterprise' | 'pro'
+}
 
 const stepOne = createStep({
-  id: "step-one",
+  id: 'step-one',
   execute: async ({ requestContext }) => {
-    const userTier = requestContext.get("user-tier") as UserTier["user-tier"];
+    const userTier = requestContext.get('user-tier') as UserTier['user-tier']
 
-    if (userTier === "enterprise") {}
+    if (userTier === 'enterprise') {
+    }
   },
-});
+})
 ```
 
 :::info
@@ -229,17 +224,18 @@ You can access the `requestContext` argument from a tool's `execute` function. T
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 export type UserTier = {
-  "user-tier": "enterprise" | "pro";
-};
+  'user-tier': 'enterprise' | 'pro'
+}
 
 export const weatherTool = createTool({
-  id: "weather-tool",
+  id: 'weather-tool',
   execute: async (inputData, context) => {
-    const userTier = context?.requestContext?.get("user-tier") as UserTier["user-tier"] | undefined;
+    const userTier = context?.requestContext?.get('user-tier') as UserTier['user-tier'] | undefined
 
-    if (userTier === "enterprise") {}
+    if (userTier === 'enterprise') {
+    }
   },
-});
+})
 ```
 
 :::info
@@ -253,20 +249,17 @@ Visit [createTool()](/reference/tools/create-tool) for a full list of configurat
 Mastra reserves special context keys for security purposes. When set by middleware, these keys take precedence over client-provided values. The server automatically validates ownership and returns 403 errors when users attempt to access resources they don't own.
 
 ```typescript
-import {
-  MASTRA_RESOURCE_ID_KEY,
-  MASTRA_THREAD_ID_KEY,
-} from "@mastra/core/request-context";
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context'
 
 // In middleware: force memory operations to use authenticated user's ID
-requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id);
+requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
 
 // In middleware: set validated thread ID
-requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 ```
 
 | Key | Purpose |
-|-----|---------|
+| - | - |
 | `MASTRA_RESOURCE_ID_KEY` | Forces all memory operations to use this resource ID. The server validates that accessed threads belong to this resource and returns 403 if not. |
 | `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values |
 
@@ -277,24 +270,24 @@ These keys are used to implement user isolation in multi-tenant applications. Se
 When you provide a type parameter to `RequestContext`, all methods are fully typed:
 
 ```typescript
-import { RequestContext } from "@mastra/core/request-context";
+import { RequestContext } from '@mastra/core/request-context'
 
 type MyContext = {
-  userId: string;
-  maxTokens: number;
-  isPremium: boolean;
-};
+  userId: string
+  maxTokens: number
+  isPremium: boolean
+}
 
-const ctx = new RequestContext<MyContext>();
+const ctx = new RequestContext<MyContext>()
 
 // set() enforces correct value types
-ctx.set("userId", "user-123");   // ✓ valid
-ctx.set("maxTokens", 4096);      // ✓ valid
-ctx.set("maxTokens", "wrong");   // ✗ TypeScript error: expected number
+ctx.set('userId', 'user-123') // ✓ valid
+ctx.set('maxTokens', 4096) // ✓ valid
+ctx.set('maxTokens', 'wrong') // ✗ TypeScript error: expected number
 
 // get() returns the correct type automatically
-const tokens = ctx.get("maxTokens"); // inferred as number
-const id = ctx.get("userId");        // inferred as string
+const tokens = ctx.get('maxTokens') // inferred as number
+const id = ctx.get('userId') // inferred as string
 
 // keys() returns typed keys
 for (const key of ctx.keys()) {
@@ -303,13 +296,13 @@ for (const key of ctx.keys()) {
 
 // entries() supports type narrowing
 for (const [key, value] of ctx.entries()) {
-  if (key === "maxTokens") {
+  if (key === 'maxTokens') {
     // TypeScript knows value is number here
-    console.log(value.toFixed(2));
+    console.log(value.toFixed(2))
   }
-  if (key === "userId") {
+  if (key === 'userId') {
     // TypeScript knows value is string here
-    console.log(value.toUpperCase());
+    console.log(value.toUpperCase())
   }
 }
 ```
@@ -323,29 +316,29 @@ Use `requestContextSchema` to define a Zod schema that validates request context
 When you define `requestContextSchema` on an agent, the context is validated at the start of `generate()` or `stream()`. If validation fails, the agent throws a `MastraError` before any LLM calls are made.
 
 ```typescript title="src/mastra/agents/validated-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { z } from "zod";
+import { Agent } from '@mastra/core/agent'
+import { z } from 'zod'
 
 export const validatedAgent = new Agent({
-  id: "validated-agent",
-  name: "Validated Agent",
+  id: 'validated-agent',
+  name: 'Validated Agent',
   requestContextSchema: z.object({
     userId: z.string(),
     apiKey: z.string(),
   }),
   instructions: ({ requestContext }) => {
     // Access all values as a typed object
-    const { userId, apiKey } = requestContext.all;
+    const { userId, apiKey } = requestContext.all
     // { userId: string; apiKey: string }
 
     // Or retrieve individual values with .get()
-    const id = requestContext.get("userId");
+    const id = requestContext.get('userId')
     // string
 
-    return `You are helping user ${userId}`;
+    return `You are helping user ${userId}`
   },
-  model: "openai/gpt-4o",
-});
+  model: 'openai/gpt-4o',
+})
 ```
 
 When validation fails, the error includes the agent ID and details about which fields failed:
@@ -360,12 +353,12 @@ Request context validation failed for agent 'validated-agent':
 When you define `requestContextSchema` on a tool, the context is validated before `execute()` runs. Unlike agents, tools return a validation error object instead of throwing:
 
 ```typescript title="src/mastra/tools/validated-tool.ts"
-import { createTool } from "@mastra/core/tools";
-import { z } from "zod";
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
 
 export const validatedTool = createTool({
-  id: "validated-tool",
-  description: "A tool that requires authenticated context",
+  id: 'validated-tool',
+  description: 'A tool that requires authenticated context',
   inputSchema: z.object({
     query: z.string(),
   }),
@@ -374,16 +367,16 @@ export const validatedTool = createTool({
   }),
   execute: async (inputData, context) => {
     // Access all values as a typed object
-    const { userId } = context.requestContext?.all ?? {};
+    const { userId } = context.requestContext?.all ?? {}
     // { userId: string }
 
     // Or retrieve individual values with .get()
-    const id = context.requestContext?.get("userId");
+    const id = context.requestContext?.get('userId')
     // string | undefined
 
-    return { result: `Processed for ${userId}` };
+    return { result: `Processed for ${userId}` }
   },
-});
+})
 ```
 
 When validation fails, the tool returns an error object instead of throwing:
@@ -400,41 +393,41 @@ When validation fails, the tool returns an error object instead of throwing:
 When you define `requestContextSchema` on a workflow, the context is validated at the start of `run.start()`. If validation fails, the workflow throws an error before any steps execute.
 
 ```typescript title="src/mastra/workflows/validated-workflow.ts"
-import { createWorkflow, createStep } from "@mastra/core/workflows";
-import { z } from "zod";
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
 
 // Define schema once and share between workflow and steps
 const workflowContextSchema = z.object({
   tenantId: z.string(),
-});
+})
 
 const step1 = createStep({
-  id: "step-1",
+  id: 'step-1',
   inputSchema: z.object({ message: z.string() }),
   outputSchema: z.object({ result: z.string() }),
   // Add schema to step for type inference
   requestContextSchema: workflowContextSchema,
   execute: async ({ inputData, requestContext }) => {
     // Access all values as a typed object
-    const { tenantId } = requestContext.all;
+    const { tenantId } = requestContext.all
     // { tenantId: string }
 
     // Or retrieve individual values with .get()
-    const id = requestContext.get("tenantId");
+    const id = requestContext.get('tenantId')
     // string
 
-    return { result: `Processed for tenant ${tenantId}` };
+    return { result: `Processed for tenant ${tenantId}` }
   },
-});
+})
 
 export const validatedWorkflow = createWorkflow({
-  id: "validated-workflow",
+  id: 'validated-workflow',
   inputSchema: z.object({ message: z.string() }),
   outputSchema: z.object({ result: z.string() }),
   requestContextSchema: workflowContextSchema,
 })
   .then(step1)
-  .commit();
+  .commit()
 ```
 
 When validation fails, the workflow throws an error:
@@ -449,7 +442,7 @@ Steps can also define their own `requestContextSchema` for step-level validation
 ### Validation behavior
 
 | Component | Property | Validation timing | On failure |
-|-----------|----------|-------------------|------------|
+| - | - | - | - |
 | Agent | `requestContextSchema` | Start of `generate()` / `stream()` | Throws `MastraError` |
 | Tool | `requestContextSchema` | Before `execute()` | Returns error object |
 | Workflow | `requestContextSchema` | Start of `run.start()` | Throws `Error` |
@@ -461,8 +454,8 @@ Steps can also define their own `requestContextSchema` for step-level validation
 
 ```typescript
 // Middleware sets these fields
-requestContext.set("userId", user.id);
-requestContext.set("tenantId", tenant.id);
+requestContext.set('userId', user.id)
+requestContext.set('tenantId', tenant.id)
 
 // Schema validates they exist
 requestContextSchema: z.object({
@@ -475,7 +468,7 @@ requestContextSchema: z.object({
 
 ```typescript
 requestContextSchema: z.object({
-  userId: z.string(),               // Always required
+  userId: z.string(), // Always required
   experimentVariant: z.string().optional(), // May not be set
 })
 ```

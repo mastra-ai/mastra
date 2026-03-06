@@ -22,8 +22,8 @@ npm install @mastra/langfuse@latest
 ### Prerequisites
 
 1. **Langfuse Account**: Sign up at [cloud.langfuse.com](https://cloud.langfuse.com) or deploy self-hosted
-2. **API Keys**: Create public/secret key pair in Langfuse Settings → API Keys
-3. **Environment Variables**: Set your credentials
+1. **API Keys**: Create public/secret key pair in Langfuse Settings → API Keys
+1. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
 LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxx
@@ -36,20 +36,20 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com  # Or your self-hosted URL
 With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { LangfuseExporter } from "@mastra/langfuse";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       langfuse: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new LangfuseExporter()],
       },
     },
   }),
-});
+})
 ```
 
 ### Explicit Configuration
@@ -57,15 +57,15 @@ export const mastra = new Mastra({
 You can also pass credentials directly (takes precedence over environment variables):
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { LangfuseExporter } from "@mastra/langfuse";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       langfuse: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new LangfuseExporter({
             publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
@@ -79,7 +79,7 @@ export const mastra = new Mastra({
       },
     },
   }),
-});
+})
 ```
 
 ## Configuration Options
@@ -97,7 +97,7 @@ new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
   realtime: true, // Flush after each event
-});
+})
 ```
 
 #### Batch Mode (Production)
@@ -109,7 +109,7 @@ new LangfuseExporter({
   publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
   secretKey: process.env.LANGFUSE_SECRET_KEY!,
   realtime: false, // Default - batch traces
-});
+})
 ```
 
 ### Complete Configuration
@@ -122,8 +122,8 @@ new LangfuseExporter({
 
   // Optional settings
   baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
-  realtime: process.env.NODE_ENV === "development", // Dynamic mode selection
-  logLevel: "info", // Diagnostic logging: debug | info | warn | error
+  realtime: process.env.NODE_ENV === 'development', // Dynamic mode selection
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
   // Langfuse-specific options
   options: {
@@ -131,7 +131,7 @@ new LangfuseExporter({
     version: process.env.APP_VERSION, // Track different versions
     release: process.env.GIT_COMMIT, // Git commit hash
   },
-});
+})
 ```
 
 ## Prompt Linking
@@ -143,25 +143,25 @@ You can link LLM generations to prompts stored in [Langfuse Prompt Management](h
 Use `withLangfusePrompt` with `buildTracingOptions` for the cleanest API:
 
 ```typescript title="src/agents/support-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { buildTracingOptions } from "@mastra/observability";
-import { withLangfusePrompt } from "@mastra/langfuse";
-import { Langfuse } from "langfuse";
+import { Agent } from '@mastra/core/agent'
+import { buildTracingOptions } from '@mastra/observability'
+import { withLangfusePrompt } from '@mastra/langfuse'
+import { Langfuse } from 'langfuse'
 
 // Reads credentials from LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, LANGFUSE_BASE_URL env vars
-const langfuse = new Langfuse();
+const langfuse = new Langfuse()
 
 // Fetch the prompt from Langfuse Prompt Management
-const prompt = await langfuse.getPrompt("customer-support");
+const prompt = await langfuse.getPrompt('customer-support')
 
 export const supportAgent = new Agent({
-  name: "support-agent",
+  name: 'support-agent',
   instructions: prompt.prompt, // Use the prompt text from Langfuse
-  model: "openai/gpt-4o",
+  model: 'openai/gpt-4o',
   defaultGenerateOptions: {
     tracingOptions: buildTracingOptions(withLangfusePrompt(prompt)),
   },
-});
+})
 ```
 
 The `withLangfusePrompt` helper automatically extracts `name`, `version`, and `id` from the Langfuse prompt object.
@@ -171,14 +171,10 @@ The `withLangfusePrompt` helper automatically extracts `name`, `version`, and `i
 You can also pass manual fields if you're not using the Langfuse SDK:
 
 ```typescript
-const tracingOptions = buildTracingOptions(
-  withLangfusePrompt({ name: "my-prompt", version: 1 }),
-);
+const tracingOptions = buildTracingOptions(withLangfusePrompt({ name: 'my-prompt', version: 1 }))
 
 // Or with just an ID
-const tracingOptions = buildTracingOptions(
-  withLangfusePrompt({ id: "prompt-uuid-12345" }),
-);
+const tracingOptions = buildTracingOptions(withLangfusePrompt({ id: 'prompt-uuid-12345' }))
 ```
 
 ### Prompt Object Fields
@@ -186,12 +182,13 @@ const tracingOptions = buildTracingOptions(
 The prompt object supports these fields:
 
 | Field | Type | Description |
-|-------|------|-------------|
+| - | - | - |
 | `name` | string | The prompt name in Langfuse |
 | `version` | number | The prompt version number |
 | `id` | string | The prompt UUID for direct linking |
 
 You can link prompts using either:
+
 - `id` alone (the UUID uniquely identifies a prompt version)
 - `name` + `version` together
 - All three fields

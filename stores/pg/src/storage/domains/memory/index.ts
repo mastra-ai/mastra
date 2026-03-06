@@ -155,6 +155,7 @@ export class MemoryPG extends MemoryStorage {
           'isBufferingReflection',
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
+          'metadata',
         ],
       });
     }
@@ -1538,7 +1539,7 @@ export class MemoryPG extends MemoryStorage {
         const newThread: StorageThreadType = {
           id: newThreadId,
           resourceId: resourceId || sourceThread.resourceId,
-          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+          title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
           metadata: {
             ...metadata,
             clone: cloneMetadata,
@@ -1573,10 +1574,12 @@ export class MemoryPG extends MemoryStorage {
 
         // Clone messages with new IDs
         const clonedMessages: MastraDBMessage[] = [];
+        const messageIdMap: Record<string, string> = {};
         const targetResourceId = resourceId || sourceThread.resourceId;
 
         for (const sourceMsg of sourceMessages) {
           const newMessageId = crypto.randomUUID();
+          messageIdMap[sourceMsg.id] = newMessageId;
           const normalizedMsg = this.normalizeMessageRow(sourceMsg);
           let parsedContent = normalizedMsg.content;
           try {
@@ -1614,6 +1617,7 @@ export class MemoryPG extends MemoryStorage {
         return {
           thread: newThread,
           clonedMessages,
+          messageIdMap,
         };
       });
     } catch (error) {
@@ -1840,6 +1844,79 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      const tableName = getTableName({
+        indexName: OM_TABLE,
+        schemaName: getSchemaName(this.#schema),
+      });
+      const lastObservedAtStr = record.lastObservedAt ? record.lastObservedAt.toISOString() : null;
+      const lastBufferedAtTimeStr = record.lastBufferedAtTime ? record.lastBufferedAtTime.toISOString() : null;
+      await this.#db.client.none(
+        `INSERT INTO ${tableName} (
+          id, "lookupKey", scope, "resourceId", "threadId",
+          "activeObservations", "activeObservationsPendingUpdate",
+          "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
+          "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
+          "observedMessageIds", "bufferedObservationChunks",
+          "bufferedReflection", "bufferedReflectionTokens", "bufferedReflectionInputTokens",
+          "reflectedObservationLineCount",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
+          "lastBufferedAtTokens", "lastBufferedAtTime",
+          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)`,
+        [
+          record.id,
+          lookupKey,
+          record.scope,
+          record.resourceId,
+          record.threadId || null,
+          record.activeObservations || '',
+          null,
+          record.originType || 'initial',
+          record.config ? JSON.stringify(record.config) : null,
+          record.generationCount || 0,
+          lastObservedAtStr,
+          lastObservedAtStr,
+          null, // lastReflectionAt
+          null, // lastReflectionAtZ
+          record.pendingMessageTokens || 0,
+          record.totalTokensObserved || 0,
+          record.observationTokenCount || 0,
+          record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
+          record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
+          record.bufferedReflection || null,
+          record.bufferedReflectionTokens ?? null,
+          record.bufferedReflectionInputTokens ?? null,
+          record.reflectedObservationLineCount ?? null,
+          record.isObserving || false,
+          record.isReflecting || false,
+          record.isBufferingObservation || false,
+          record.isBufferingReflection || false,
+          record.lastBufferedAtTokens || 0,
+          lastBufferedAtTimeStr,
+          record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
+          record.createdAt.toISOString(),
+          record.createdAt.toISOString(),
+          record.updatedAt.toISOString(),
+          record.updatedAt.toISOString(),
+        ],
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: record.id, threadId: record.threadId, resourceId: record.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
@@ -1945,8 +2022,8 @@ export class MemoryPG extends MemoryStorage {
           "originType", config, "generationCount", "lastObservedAt", "lastObservedAtZ", "lastReflectionAt", "lastReflectionAtZ",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)`,
+          "observedTimezone", metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)`,
         [
           id,
           lookupKey,
@@ -1972,6 +2049,7 @@ export class MemoryPG extends MemoryStorage {
           0, // lastBufferedAtTokens
           null, // lastBufferedAtTime
           record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
           nowStr, // createdAt
           nowStr, // createdAtZ
           nowStr, // updatedAt
@@ -2326,48 +2404,62 @@ export class MemoryPG extends MemoryStorage {
       const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
       const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
-      // Find the closest chunk boundary to the target, biased under
+      // Find the closest chunk boundary to the target, biased over (prefer removing
+      // slightly more than the target so remaining context lands at or below retentionFloor).
+      // Track both best-over and best-under boundaries so we can fall back to under
+      // if the over boundary would overshoot by too much.
       let cumulativeMessageTokens = 0;
       let chunksToActivate = 0;
-      let bestBoundary = 0;
-      let bestBoundaryMessageTokens = 0;
+      let bestOverBoundary = 0;
+      let bestOverTokens = 0;
+      let bestUnderBoundary = 0;
+      let bestUnderTokens = 0;
 
       for (let i = 0; i < chunks.length; i++) {
         cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
         const boundary = i + 1;
 
-        // Prefer boundaries that are under the target (leaves more raw messages in context)
-        // Only go over if there's no under option
-        const isUnder = cumulativeMessageTokens <= targetMessageTokens;
-        const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
-
-        if (bestBoundary === 0) {
-          // First boundary, take it
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
-        } else if (isUnder && !bestIsUnder) {
-          // Current is under, best is over - prefer under
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
-        } else if (isUnder && bestIsUnder) {
-          // Both under - prefer the one closer to target (higher)
-          if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
-            bestBoundary = boundary;
-            bestBoundaryMessageTokens = cumulativeMessageTokens;
+        if (cumulativeMessageTokens >= targetMessageTokens) {
+          // Over or equal — track the closest (lowest) over boundary
+          if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+            bestOverBoundary = boundary;
+            bestOverTokens = cumulativeMessageTokens;
           }
-        } else if (!isUnder && !bestIsUnder) {
-          // Both over - prefer the one closer to target (lower)
-          if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
-            bestBoundary = boundary;
-            bestBoundaryMessageTokens = cumulativeMessageTokens;
+        } else {
+          // Under — track the closest (highest) under boundary
+          if (cumulativeMessageTokens > bestUnderTokens) {
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
-        // If current is over and best is under, keep best (do nothing)
       }
 
-      // If bestBoundary is 0 (no boundary under target), activate at least 1 chunk
-      // since we've reached threshold and need to clear some context
-      chunksToActivate = bestBoundary === 0 ? 1 : bestBoundary;
+      // Safeguard: if the over boundary would eat into more than 95% of the
+      // retention floor, fall back to the best under boundary instead.
+      // This prevents edge cases where a large chunk overshoots dramatically.
+      // When forceMaxActivation is set (above blockAfter), still prefer the over
+      // boundary, but never if it would leave fewer than the smaller of 1000
+      // tokens or the retention floor remaining.
+      const maxOvershoot = retentionFloor * 0.95;
+      const overshoot = bestOverTokens - targetMessageTokens;
+      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+      // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+      const minRemaining = Math.min(1000, retentionFloor);
+
+      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+        chunksToActivate = bestUnderBoundary;
+      } else if (bestOverBoundary > 0) {
+        // All boundaries are over and exceed the safeguard — still activate
+        // the closest over boundary (better than nothing)
+        chunksToActivate = bestOverBoundary;
+      } else {
+        chunksToActivate = 1;
+      }
 
       // Split chunks
       const activatedChunks = chunks.slice(0, chunksToActivate);
@@ -2421,6 +2513,9 @@ export class MemoryPG extends MemoryStorage {
         ],
       );
 
+      // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
       return {
         chunksActivated: activatedChunks.length,
         messageTokensActivated: activatedMessageTokens,
@@ -2436,6 +2531,8 @@ export class MemoryPG extends MemoryStorage {
           messageCount: c.messageIds.length,
           observations: c.observations,
         })),
+        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+        currentTask: latestChunkHints?.currentTask ?? undefined,
       };
     } catch (error) {
       if (error instanceof MastraError) {

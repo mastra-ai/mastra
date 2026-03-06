@@ -1,18 +1,15 @@
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { PostgresStore, PgVector } from '@mastra/pg';
-import dotenv from 'dotenv';
-import { describe } from 'vitest';
+import { $ } from 'execa';
+import { afterAll, beforeAll, describe } from 'vitest';
 
 import { getPerformanceTests } from './performance-tests';
 
-dotenv.config({ path: '.env.test' });
-
-// Ensure environment variables are set
-if (!process.env.DB_URL) {
-  console.warn('DB_URL not set, using default local PostgreSQL connection');
-}
-
-const connectionString = process.env.DB_URL || 'postgres://postgres:password@localhost:5434/mastra';
+const __dirname = fileURLToPath(import.meta.url);
+const connectionString = process.env.PERF_DB_URL || 'postgres://postgres:password@localhost:5435/mastra';
 
 const parseConnectionString = (url: string) => {
   const parsedUrl = new URL(url);
@@ -26,19 +23,44 @@ const parseConnectionString = (url: string) => {
   };
 };
 
-describe('Memory with PostgresStore Integration', () => {
-  const config = parseConnectionString(connectionString);
-  const memory = new Memory({
-    storage: new PostgresStore(config),
-    vector: new PgVector({ connectionString, id: 'perf-test-vector' }),
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-    },
+// Track connections so we can close them before Docker teardown
+let storage: PostgresStore | undefined;
+let vector: PgVector | undefined;
+
+describe('Memory with PostgresStore Performance', () => {
+  beforeAll(async () => {
+    await $({
+      cwd: join(__dirname, '..', '..'),
+      stdio: 'inherit',
+      detached: true,
+    })`docker compose up -d perf-postgres --wait`;
   });
 
-  getPerformanceTests(memory);
+  afterAll(async () => {
+    // Gracefully close all PG pools before tearing down Docker
+    await Promise.allSettled([storage?.close(), vector?.disconnect()]);
+
+    return $({
+      cwd: join(__dirname, '..', '..'),
+    })`docker compose down --volumes perf-postgres`;
+  });
+
+  getPerformanceTests(() => {
+    const config = parseConnectionString(connectionString);
+    storage = new PostgresStore(config);
+    vector = new PgVector({ connectionString, id: 'perf-test-vector' });
+
+    return new Memory({
+      storage,
+      vector,
+      embedder: fastembed.small,
+      options: {
+        lastMessages: 10,
+        semanticRecall: {
+          topK: 3,
+          messageRange: 2,
+        },
+      },
+    });
+  });
 });

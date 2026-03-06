@@ -3,18 +3,17 @@
  * Tests: sandbox reconnection capabilities
  */
 
-import type { WorkspaceSandbox, WorkspaceFilesystem } from '@mastra/core/workspace';
-import { callLifecycle } from '@mastra/core/workspace';
+import type { MastraSandbox, WorkspaceFilesystem } from '@mastra/core/workspace';
 import { describe, it, expect } from 'vitest';
 
-import type { SandboxCapabilities } from '../types';
+import type { CreateSandboxOptions, SandboxCapabilities } from '../types';
 
 interface TestContext {
-  sandbox: WorkspaceSandbox;
+  sandbox: MastraSandbox;
   capabilities: Required<SandboxCapabilities>;
   testTimeout: number;
   fastOnly: boolean;
-  createSandbox: () => Promise<WorkspaceSandbox> | WorkspaceSandbox;
+  createSandbox: (options?: CreateSandboxOptions) => Promise<MastraSandbox> | MastraSandbox;
   createMountableFilesystem?: () => Promise<WorkspaceFilesystem> | WorkspaceFilesystem;
 }
 
@@ -43,13 +42,12 @@ export function createReconnectionTests(getContext: () => TestContext): void {
         async () => {
           const { sandbox, capabilities } = getContext();
           if (!capabilities.supportsReconnection) return;
-          if (!sandbox.stop || !sandbox.start) return;
 
           const originalId = sandbox.id;
 
           // Stop and restart
-          await callLifecycle(sandbox, 'stop');
-          await callLifecycle(sandbox, 'start');
+          await sandbox._stop();
+          await sandbox._start();
 
           // ID should remain the same
           expect(sandbox.id).toBe(originalId);
@@ -64,7 +62,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
         async () => {
           const { sandbox, capabilities } = getContext();
           if (!capabilities.supportsReconnection) return;
-          if (!sandbox.stop || !sandbox.start) return;
+
           if (!sandbox.executeCommand) return;
 
           // Create a file
@@ -78,8 +76,8 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           expect(beforeResult.stdout.trim()).toBe(testContent);
 
           // Stop and restart
-          await callLifecycle(sandbox, 'stop');
-          await callLifecycle(sandbox, 'start');
+          await sandbox._stop();
+          await sandbox._start();
 
           // File should still exist
           const afterResult = await sandbox.executeCommand('cat', [testFile]);
@@ -96,12 +94,12 @@ export function createReconnectionTests(getContext: () => TestContext): void {
         async () => {
           const { sandbox, capabilities } = getContext();
           if (!capabilities.supportsReconnection) return;
-          if (!sandbox.stop || !sandbox.start) return;
+
           if (!sandbox.executeCommand) return;
 
           // Stop and restart
-          await callLifecycle(sandbox, 'stop');
-          await callLifecycle(sandbox, 'start');
+          await sandbox._stop();
+          await sandbox._start();
 
           // Basic environment should work
           const result = await sandbox.executeCommand('pwd', []);
@@ -119,7 +117,7 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           const { sandbox, capabilities, createMountableFilesystem } = getContext();
           if (!capabilities.supportsReconnection) return;
           if (!capabilities.supportsMounting) return;
-          if (!sandbox.stop || !sandbox.start) return;
+
           if (!sandbox.mounts || !sandbox.mount) return;
           if (!createMountableFilesystem) return;
 
@@ -133,8 +131,8 @@ export function createReconnectionTests(getContext: () => TestContext): void {
           expect(sandbox.mounts.has(mountPath)).toBe(true);
 
           // Stop and restart
-          await callLifecycle(sandbox, 'stop');
-          await callLifecycle(sandbox, 'start');
+          await sandbox._stop();
+          await sandbox._start();
 
           // Mount state should be tracked (may need re-mounting depending on provider)
           // At minimum, the sandbox should be operational
