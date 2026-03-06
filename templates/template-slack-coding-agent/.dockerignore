@@ -1,0 +1,6 @@
+node_modules
+.env
+*.test.ts
+__tests__
+pnpm-lock.yaml
+.git

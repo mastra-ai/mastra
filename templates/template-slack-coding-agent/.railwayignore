@@ -1,0 +1,6 @@
+node_modules
+.mastra
+.env
+__tests__
+*.test.ts
+.git
