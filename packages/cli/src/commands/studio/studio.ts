@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { config } from 'dotenv';
 import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
@@ -112,6 +113,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson));
 
+  // Pre-compress the HTML shell since it's served for every non-asset request
+  const compressedHtml = gzipSync(Buffer.from(html));
+
   const server = http.createServer((req, res) => {
     const url = req.url || '/';
     const queryStart = url.indexOf('?');
@@ -131,8 +135,19 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
     const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
 
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    const supportsGzip = typeof acceptEncoding === 'string' && acceptEncoding.includes('gzip');
+
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {
+      if (supportsGzip) {
+        res.writeHead(200, {
+          'Content-Type': 'text/html',
+          'Content-Encoding': 'gzip',
+          'Content-Length': compressedHtml.length,
+        });
+        return res.end(compressedHtml);
+      }
       res.writeHead(200, { 'Content-Type': 'text/html' });
       return res.end(html);
     }

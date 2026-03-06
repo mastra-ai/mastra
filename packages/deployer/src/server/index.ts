@@ -12,6 +12,7 @@ import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
+import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
@@ -191,6 +192,9 @@ export async function createHonoServer(
     };
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
+
+  // Enable gzip/deflate compression for all responses
+  app.use('*', compress());
 
   // Health check endpoint (before auth middleware so it's publicly accessible)
   app.get(
