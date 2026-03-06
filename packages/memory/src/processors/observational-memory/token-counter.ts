@@ -49,6 +49,8 @@ type ImageTokenEstimatorConfig = {
   fallbackTiles: number;
 };
 
+type GoogleMediaResolution = 'low' | 'medium' | 'high' | 'ultra_high' | 'unspecified';
+
 type ImageTokenEstimate = {
   tokens: number;
   cachePayload: string;
@@ -68,13 +70,33 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-const TOKEN_ESTIMATE_CACHE_VERSION = 2;
+const TOKEN_ESTIMATE_CACHE_VERSION = 3;
 
 const DEFAULT_IMAGE_ESTIMATOR: ImageTokenEstimatorConfig = {
   baseTokens: 85,
   tileTokens: 170,
   fallbackTiles: 4,
 };
+
+const GOOGLE_LEGACY_IMAGE_TOKENS_PER_TILE = 258;
+const GOOGLE_GEMINI_3_IMAGE_TOKENS_BY_RESOLUTION: Record<GoogleMediaResolution, number> = {
+  low: 280,
+  medium: 560,
+  high: 1120,
+  ultra_high: 2240,
+  unspecified: 1120,
+};
+
+const ANTHROPIC_IMAGE_TOKENS_PER_PIXEL = 1 / 750;
+const ANTHROPIC_IMAGE_MAX_LONG_EDGE = 1568;
+
+const GOOGLE_MEDIA_RESOLUTION_VALUES = new Set<GoogleMediaResolution>([
+  'low',
+  'medium',
+  'high',
+  'ultra_high',
+  'unspecified',
+]);
 
 type CacheablePart = any;
 
@@ -266,6 +288,26 @@ function resolveImageDetail(part: CacheablePart): ImageTokenDetail {
   );
 }
 
+function normalizeGoogleMediaResolution(value: unknown): GoogleMediaResolution | undefined {
+  return typeof value === 'string' && GOOGLE_MEDIA_RESOLUTION_VALUES.has(value as GoogleMediaResolution)
+    ? (value as GoogleMediaResolution)
+    : undefined;
+}
+
+function resolveGoogleMediaResolution(part: CacheablePart): GoogleMediaResolution {
+  const providerOptions = getObjectValue(getObjectValue(part, 'providerOptions'), 'google');
+  const providerMetadata = getObjectValue(getObjectValue(part, 'providerMetadata'), 'google');
+  const mastraMetadata = getObjectValue(getObjectValue(part, 'providerMetadata'), 'mastra');
+
+  return (
+    normalizeGoogleMediaResolution(getObjectValue(part, 'mediaResolution')) ??
+    normalizeGoogleMediaResolution(getObjectValue(providerOptions, 'mediaResolution')) ??
+    normalizeGoogleMediaResolution(getObjectValue(providerMetadata, 'mediaResolution')) ??
+    normalizeGoogleMediaResolution(getObjectValue(mastraMetadata, 'mediaResolution')) ??
+    'unspecified'
+  );
+}
+
 function getFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
@@ -364,34 +406,41 @@ function isImageLikeFilePart(part: CacheablePart): boolean {
   return hasImageFilenameExtension(getObjectValue(part, 'filename'));
 }
 
-function resolveImageEstimatorConfig(modelContext?: TokenCounterModelContext): ImageTokenEstimatorConfig {
-  const provider = modelContext?.provider?.toLowerCase();
-  const modelId = modelContext?.modelId?.toLowerCase() ?? '';
+function resolveProviderId(modelContext?: TokenCounterModelContext): string | undefined {
+  return modelContext?.provider?.toLowerCase();
+}
 
-  if (provider === 'openai') {
-    if (modelId.startsWith('gpt-5') || modelId === 'gpt-5-chat-latest') {
-      return { baseTokens: 70, tileTokens: 140, fallbackTiles: 4 };
-    }
+function resolveModelId(modelContext?: TokenCounterModelContext): string {
+  return modelContext?.modelId?.toLowerCase() ?? '';
+}
 
-    if (modelId.startsWith('gpt-4o-mini')) {
-      return { baseTokens: 2833, tileTokens: 5667, fallbackTiles: 1 };
-    }
+function resolveOpenAIImageEstimatorConfig(modelContext?: TokenCounterModelContext): ImageTokenEstimatorConfig {
+  const modelId = resolveModelId(modelContext);
 
-    if (modelId.startsWith('o1') || modelId.startsWith('o3')) {
-      return { baseTokens: 75, tileTokens: 150, fallbackTiles: 4 };
-    }
+  if (modelId.startsWith('gpt-5') || modelId === 'gpt-5-chat-latest') {
+    return { baseTokens: 70, tileTokens: 140, fallbackTiles: 4 };
+  }
 
-    if (modelId.includes('computer-use')) {
-      return { baseTokens: 65, tileTokens: 129, fallbackTiles: 4 };
-    }
+  if (modelId.startsWith('gpt-4o-mini')) {
+    return { baseTokens: 2833, tileTokens: 5667, fallbackTiles: 1 };
+  }
 
-    return DEFAULT_IMAGE_ESTIMATOR;
+  if (modelId.startsWith('o1') || modelId.startsWith('o3')) {
+    return { baseTokens: 75, tileTokens: 150, fallbackTiles: 4 };
+  }
+
+  if (modelId.includes('computer-use')) {
+    return { baseTokens: 65, tileTokens: 129, fallbackTiles: 4 };
   }
 
   return DEFAULT_IMAGE_ESTIMATOR;
 }
 
-function scaleDimensionsForHighDetail(width: number, height: number): { width: number; height: number } {
+function isGoogleGemini3Model(modelContext?: TokenCounterModelContext): boolean {
+  return resolveProviderId(modelContext) === 'google' && resolveModelId(modelContext).startsWith('gemini-3');
+}
+
+function scaleDimensionsForOpenAIHighDetail(width: number, height: number): { width: number; height: number } {
   let scaledWidth = width;
   let scaledHeight = height;
   const largestSide = Math.max(scaledWidth, scaledHeight);
@@ -415,13 +464,26 @@ function scaleDimensionsForHighDetail(width: number, height: number): { width: n
   };
 }
 
-function estimateHighDetailTiles(
+function scaleDimensionsForAnthropic(width: number, height: number): { width: number; height: number } {
+  const largestSide = Math.max(width, height);
+  if (largestSide <= ANTHROPIC_IMAGE_MAX_LONG_EDGE) {
+    return { width, height };
+  }
+
+  const ratio = ANTHROPIC_IMAGE_MAX_LONG_EDGE / largestSide;
+  return {
+    width: Math.max(1, Math.round(width * ratio)),
+    height: Math.max(1, Math.round(height * ratio)),
+  };
+}
+
+function estimateOpenAIHighDetailTiles(
   dimensions: { width?: number; height?: number },
   sourceStats: { sizeBytes?: number },
   estimator: ImageTokenEstimatorConfig,
 ): number {
   if (dimensions.width && dimensions.height) {
-    const scaled = scaleDimensionsForHighDetail(dimensions.width, dimensions.height);
+    const scaled = scaleDimensionsForOpenAIHighDetail(dimensions.width, dimensions.height);
     return Math.max(1, Math.ceil(scaled.width / 512) * Math.ceil(scaled.height / 512));
   }
 
@@ -435,7 +497,7 @@ function estimateHighDetailTiles(
   return estimator.fallbackTiles;
 }
 
-function resolveEffectiveImageDetail(
+function resolveEffectiveOpenAIImageDetail(
   detail: ImageTokenDetail,
   dimensions: { width?: number; height?: number },
   sourceStats: { sizeBytes?: number },
@@ -451,6 +513,49 @@ function resolveEffectiveImageDetail(
   }
 
   return 'low';
+}
+
+function estimateLegacyGoogleImageTiles(dimensions: { width?: number; height?: number }): number {
+  if (!dimensions.width || !dimensions.height) return 1;
+  return Math.max(1, Math.ceil(dimensions.width / 768) * Math.ceil(dimensions.height / 768));
+}
+
+function estimateAnthropicImageTokens(
+  dimensions: { width?: number; height?: number },
+  sourceStats: { sizeBytes?: number },
+): number {
+  if (dimensions.width && dimensions.height) {
+    const scaled = scaleDimensionsForAnthropic(dimensions.width, dimensions.height);
+    return Math.max(1, Math.ceil(scaled.width * scaled.height * ANTHROPIC_IMAGE_TOKENS_PER_PIXEL));
+  }
+
+  if (sourceStats.sizeBytes !== undefined) {
+    if (sourceStats.sizeBytes <= 512 * 1024) return 341;
+    if (sourceStats.sizeBytes <= 2 * 1024 * 1024) return 1366;
+    if (sourceStats.sizeBytes <= 4 * 1024 * 1024) return 2048;
+    return 2731;
+  }
+
+  return 1600;
+}
+
+function estimateGoogleImageTokens(
+  modelContext: TokenCounterModelContext | undefined,
+  part: CacheablePart,
+  dimensions: { width?: number; height?: number },
+): { tokens: number; mediaResolution: GoogleMediaResolution } {
+  if (isGoogleGemini3Model(modelContext)) {
+    const mediaResolution = resolveGoogleMediaResolution(part);
+    return {
+      tokens: GOOGLE_GEMINI_3_IMAGE_TOKENS_BY_RESOLUTION[mediaResolution],
+      mediaResolution,
+    };
+  }
+
+  return {
+    tokens: estimateLegacyGoogleImageTiles(dimensions) * GOOGLE_LEGACY_IMAGE_TOKENS_PER_TILE,
+    mediaResolution: 'unspecified',
+  };
 }
 
 /**
@@ -562,20 +667,62 @@ export class TokenCounter {
   }
 
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
+    const provider = resolveProviderId(this.modelContext);
+    const modelId = this.modelContext?.modelId ?? null;
     const detail = resolveImageDetail(part);
     const dimensions = resolveImageDimensions(part);
     const sourceStats = resolveImageSourceStats(asset);
-    const estimator = resolveImageEstimatorConfig(this.modelContext);
-    const effectiveDetail = resolveEffectiveImageDetail(detail, dimensions, sourceStats);
-    const tiles = effectiveDetail === 'high' ? estimateHighDetailTiles(dimensions, sourceStats, estimator) : 0;
+
+    if (provider === 'google') {
+      const googleEstimate = estimateGoogleImageTokens(this.modelContext, part, dimensions);
+      return {
+        tokens: googleEstimate.tokens,
+        cachePayload: JSON.stringify({
+          kind,
+          provider,
+          modelId,
+          estimator: isGoogleGemini3Model(this.modelContext) ? 'google-gemini-3' : 'google-legacy',
+          mediaResolution: googleEstimate.mediaResolution,
+          width: dimensions.width ?? null,
+          height: dimensions.height ?? null,
+          source: sourceStats.source,
+          sizeBytes: sourceStats.sizeBytes ?? null,
+          mimeType: getObjectValue(part, 'mimeType') ?? null,
+          filename: getObjectValue(part, 'filename') ?? null,
+        }),
+      };
+    }
+
+    if (provider === 'anthropic') {
+      return {
+        tokens: estimateAnthropicImageTokens(dimensions, sourceStats),
+        cachePayload: JSON.stringify({
+          kind,
+          provider,
+          modelId,
+          estimator: 'anthropic',
+          width: dimensions.width ?? null,
+          height: dimensions.height ?? null,
+          source: sourceStats.source,
+          sizeBytes: sourceStats.sizeBytes ?? null,
+          mimeType: getObjectValue(part, 'mimeType') ?? null,
+          filename: getObjectValue(part, 'filename') ?? null,
+        }),
+      };
+    }
+
+    const estimator = resolveOpenAIImageEstimatorConfig(this.modelContext);
+    const effectiveDetail = resolveEffectiveOpenAIImageDetail(detail, dimensions, sourceStats);
+    const tiles = effectiveDetail === 'high' ? estimateOpenAIHighDetailTiles(dimensions, sourceStats, estimator) : 0;
     const tokens = estimator.baseTokens + tiles * estimator.tileTokens;
 
     return {
       tokens,
       cachePayload: JSON.stringify({
         kind,
-        provider: this.modelContext?.provider ?? null,
-        modelId: this.modelContext?.modelId ?? null,
+        provider,
+        modelId,
+        estimator: provider === 'openai' ? 'openai' : 'fallback',
         detail,
         effectiveDetail,
         width: dimensions.width ?? null,

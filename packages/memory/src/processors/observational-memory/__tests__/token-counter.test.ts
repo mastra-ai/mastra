@@ -281,6 +281,87 @@ describe('TokenCounter', () => {
       expect(miniCachedEntry.tokens).toBe(25501);
       expect(miniCachedEntry.key).not.toBe(defaultCachedEntry.key);
     });
+
+    it('uses google media resolution when the provider is google', () => {
+      const counter = new TokenCounter(undefined, {
+        model: { provider: 'google', modelId: 'gemini-3-flash-preview' },
+      });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/diagram.png'),
+            providerOptions: {
+              google: {
+                mediaResolution: 'medium',
+              },
+            },
+          },
+        ],
+      });
+
+      counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(cachedEntry.tokens).toBe(560);
+    });
+
+    it('uses anthropic image sizing when the provider is anthropic even if the model id looks openai-ish', () => {
+      const counter = new TokenCounter(undefined, {
+        model: { provider: 'anthropic', modelId: 'gpt-4o' },
+      });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/reference-board.png'),
+            providerMetadata: {
+              mastra: {
+                imageDimensions: {
+                  width: 750,
+                  height: 750,
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(cachedEntry.tokens).toBe(750);
+    });
+
+    it('uses legacy google tiling for pre-gemini-3 google models', () => {
+      const counter = new TokenCounter(undefined, {
+        model: { provider: 'google', modelId: 'gemini-2.5-flash' },
+      });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/map.png'),
+            providerMetadata: {
+              mastra: {
+                imageDimensions: {
+                  width: 769,
+                  height: 769,
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(cachedEntry.tokens).toBe(1032);
+    });
   });
 
   describe('token estimate cache', () => {
