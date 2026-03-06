@@ -2609,17 +2609,16 @@ export class Agent<
   }
 
   /**
-   * Strips agent-* and workflow-* tool_call/tool_result parts from messages.
+   * Strips tool parts from messages.
    *
    * When a supervisor delegates to a sub-agent, the parent's conversation
    * history may include tool_call parts for its own delegation tools
-   * (agent-* and workflow-*). The sub-agent doesn't have these tools,
+   * (agent-* and workflow-*) and other tools. The sub-agent doesn't have these tools,
    * so sending references to them causes model providers to reject or
    * mishandle the request.
    *
    * This function removes those parts while preserving all other
-   * conversation context (user messages, assistant text, the sub-agent's
-   * own tool calls, etc.).
+   * conversation context (user messages, assistant text, etc.).
    * @internal
    */
   private stripParentToolParts(messages: any[]): any[] {
