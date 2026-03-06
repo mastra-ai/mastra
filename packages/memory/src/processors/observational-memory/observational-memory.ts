@@ -44,6 +44,7 @@ if (OM_DEBUG_LOG) {
   };
 }
 
+import { getObservationBackpressureState, isMessageSealedForBuffering } from './backpressure';
 import { addRelativeTimeToObservations } from './date-utils';
 import {
   createActivationMarker,
@@ -626,17 +627,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return shouldTrigger;
   }
 
-  private resolveObservationBackpressureWaitMs(currentTokens: number, threshold: number): number {
-    if (threshold <= 0) return 0;
-
-    const ratio = currentTokens / threshold;
-    if (ratio >= 1.3) return 4000;
-    if (ratio >= 1.2) return 3000;
-    if (ratio >= 1.0) return 2000;
-    if (ratio >= 0.8) return 1000;
-    return 0;
-  }
-
   private async maybeApplyObservationBackpressure(params: {
     currentTokens: number;
     threshold: number;
@@ -649,55 +639,46 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       return { waitMs: 0, ratio: 0 };
     }
 
-    const ratio = params.threshold > 0 ? params.currentTokens / params.threshold : 0;
-    const waitMs = this.resolveObservationBackpressureWaitMs(params.currentTokens, params.threshold);
-    if (waitMs <= 0) {
-      return { waitMs: 0, ratio };
-    }
-
     const bufferKey = this.getObservationBufferKey(params.lockKey);
     const hasOngoingBuffering = params.record.isBufferingObservation || this.isAsyncBufferingInProgress(bufferKey);
     if (!hasOngoingBuffering) {
+      const ratio = params.threshold > 0 ? params.currentTokens / params.threshold : 0;
       return { waitMs: 0, ratio };
     }
 
-    const bufferedChunks = this.getBufferedChunks(params.record);
-    const messageTokensThreshold = getMaxThreshold(this.observationConfig.messageTokens);
-    const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
-    const bufferTokens = this.observationConfig.bufferTokens ?? 0;
-    const retentionFloor = resolveRetentionFloor(bufferActivation, messageTokensThreshold);
-    const projectedMessageRemoval = calculateProjectedMessageRemoval(
-      bufferedChunks,
-      bufferActivation,
-      messageTokensThreshold,
-      params.currentTokens,
-    );
-    const projectedRemaining = Math.max(0, params.currentTokens - projectedMessageRemoval);
-    const forceMaxActivation = !!(
-      this.observationConfig.blockAfter && params.currentTokens >= this.observationConfig.blockAfter
-    );
-    const maxRemaining = retentionFloor + bufferTokens;
-    const bufferedActivationLooksReady =
-      projectedMessageRemoval > 0 && (forceMaxActivation || bufferTokens <= 0 || projectedRemaining <= maxRemaining);
+    const backpressure = getObservationBackpressureState({
+      currentTokens: params.currentTokens,
+      threshold: params.threshold,
+      record: params.record,
+      messageTokensThreshold: getMaxThreshold(this.observationConfig.messageTokens),
+      bufferActivation: this.observationConfig.bufferActivation ?? 0.7,
+      bufferTokens: this.observationConfig.bufferTokens ?? 0,
+      blockAfter: this.observationConfig.blockAfter,
+      getBufferedChunks: record => this.getBufferedChunks(record),
+    });
 
-    if (bufferedActivationLooksReady) {
+    if (backpressure.waitMs <= 0) {
+      return { waitMs: 0, ratio: backpressure.ratio };
+    }
+
+    if (backpressure.bufferedActivationLooksReady) {
       omDebug(
-        `[OM:backpressure] skipping wait: buffered chunks already look activation-ready, current=${params.currentTokens}, projectedRemoval=${projectedMessageRemoval}, projectedRemaining=${projectedRemaining}, maxRemaining=${maxRemaining}`,
+        `[OM:backpressure] skipping wait: buffered chunks already look activation-ready, current=${params.currentTokens}, projectedRemoval=${backpressure.projectedMessageRemoval}, projectedRemaining=${backpressure.projectedRemaining}, maxRemaining=${backpressure.maxRemaining}`,
       );
-      return { waitMs: 0, ratio };
+      return { waitMs: 0, ratio: backpressure.ratio };
     }
 
     omDebug(
-      `[OM:backpressure] applying waitMs=${waitMs}, ratio=${ratio.toFixed(3)}, current=${params.currentTokens}, threshold=${params.threshold}, projectedRemoval=${projectedMessageRemoval}, projectedRemaining=${projectedRemaining}, maxRemaining=${maxRemaining}, isBufferingObs=${params.record.isBufferingObservation}`,
+      `[OM:backpressure] applying waitMs=${backpressure.waitMs}, ratio=${backpressure.ratio.toFixed(3)}, current=${params.currentTokens}, threshold=${params.threshold}, projectedRemoval=${backpressure.projectedMessageRemoval}, projectedRemaining=${backpressure.projectedRemaining}, maxRemaining=${backpressure.maxRemaining}, isBufferingObs=${params.record.isBufferingObservation}`,
     );
 
     await Promise.race([
-      new Promise(resolve => setTimeout(resolve, waitMs)),
-      ObservationalMemory.awaitBuffering(params.threadId, params.resourceId, this.scope, waitMs),
+      new Promise(resolve => setTimeout(resolve, backpressure.waitMs)),
+      ObservationalMemory.awaitBuffering(params.threadId, params.resourceId, this.scope, backpressure.waitMs),
     ]);
 
     const recordAfterWait = await this.getOrCreateRecord(params.threadId, params.resourceId);
-    return { waitMs, ratio, recordAfterWait };
+    return { waitMs: backpressure.waitMs, ratio: backpressure.ratio, recordAfterWait };
   }
 
   /**
@@ -1475,11 +1456,6 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
   }
 
-  private isMessageSealedForBuffering(message: MastraDBMessage): boolean {
-    const metadata = message.content?.metadata as { mastra?: { sealed?: boolean } } | undefined;
-    return metadata?.mastra?.sealed === true;
-  }
-
   private async maybePreSealNearThreshold(params: {
     messageList: MessageList;
     record: ObservationalMemoryRecord;
@@ -1503,7 +1479,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       m =>
         m.id !== 'om-continuation' &&
         !params.sealedIds.has(m.id) &&
-        !this.isMessageSealedForBuffering(m) &&
+        !isMessageSealedForBuffering(m) &&
         this.hasUnobservedParts(m),
     );
 
