@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Improved observational memory backpressure so it only pauses while buffered observations still need time to become activation-ready. Waiting now ends early when buffering finishes, which reduces unnecessary delays near the message token threshold.
+Improved observational memory near the message token threshold by adding runtime backpressure, more aggressive near-threshold buffering, and pre-sealing of eligible messages before threshold handling. Buffered activation now waits only when it still looks necessary, reducing collapse-prone threshold crossings.
