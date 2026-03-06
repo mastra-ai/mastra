@@ -288,7 +288,16 @@ const snapshotConfigUpdateSchema = snapshotConfigSchema.extend({
  * PATCH /stored/agents/:storedAgentId - Update stored agent body
  * Optional metadata-level fields + optional config fields
  */
-export const updateStoredAgentBodySchema = agentMetadataSchema.partial().merge(snapshotConfigUpdateSchema.partial());
+export const updateStoredAgentBodySchema = agentMetadataSchema
+  .partial()
+  .merge(snapshotConfigUpdateSchema.partial())
+  .extend({
+    changeMessage: z
+      .string()
+      .max(500)
+      .optional()
+      .describe('Optional message describing the changes for the auto-created version'),
+  });
 
 // ============================================================================
 // Response Schemas

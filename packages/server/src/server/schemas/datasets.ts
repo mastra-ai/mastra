@@ -63,6 +63,7 @@ export const createDatasetBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
   groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
+  requestContextSchema: jsonSchemaField.describe('JSON Schema describing expected request context shape'),
 });
 
 export const updateDatasetBodySchema = z.object({
@@ -71,17 +72,20 @@ export const updateDatasetBodySchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   inputSchema: jsonSchemaField.describe('JSON Schema for validating item input'),
   groundTruthSchema: jsonSchemaField.describe('JSON Schema for validating item groundTruth'),
+  requestContextSchema: jsonSchemaField.describe('JSON Schema describing expected request context shape'),
 });
 
 export const addItemBodySchema = z.object({
   input: z.unknown().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
 });
 
 export const updateItemBodySchema = z.object({
   input: z.unknown().optional().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
 });
 
@@ -91,6 +95,7 @@ export const triggerExperimentBodySchema = z.object({
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
+  requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
 });
 
 export const compareExperimentsBodySchema = z.object({
@@ -110,6 +115,7 @@ export const datasetResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   inputSchema: z.record(z.unknown()).optional(),
   groundTruthSchema: z.record(z.unknown()).optional(),
+  requestContextSchema: z.record(z.unknown()).optional(),
   version: z.number().int(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -122,6 +128,7 @@ export const datasetItemResponseSchema = z.object({
   datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -311,6 +318,7 @@ export const batchInsertItemsBodySchema = z.object({
     z.object({
       input: z.unknown(),
       groundTruth: z.unknown().optional(),
+      requestContext: z.record(z.string(), z.unknown()).optional(),
       metadata: z.record(z.unknown()).optional(),
     }),
   ),

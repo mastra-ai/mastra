@@ -4,6 +4,7 @@ import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
+import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { Workflow } from '../../workflows';
 
@@ -96,7 +97,7 @@ export async function executeTarget(
   target: Target,
   targetType: TargetType,
   item: { input: unknown; groundTruth?: unknown },
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; requestContext?: Record<string, unknown> },
 ): Promise<ExecutionResult> {
   try {
     const signal = options?.signal;
@@ -109,7 +110,7 @@ export async function executeTarget(
     let executionPromise: Promise<ExecutionResult>;
     switch (targetType) {
       case 'agent':
-        executionPromise = executeAgent(target as Agent, item, signal);
+        executionPromise = executeAgent(target as Agent, item, signal, options?.requestContext);
         break;
       case 'workflow':
         executionPromise = executeWorkflow(target as Workflow, item);
@@ -178,6 +179,7 @@ async function executeAgent(
   agent: Agent,
   item: { input: unknown; groundTruth?: unknown },
   signal?: AbortSignal,
+  requestContext?: Record<string, unknown>,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -185,15 +187,21 @@ async function executeAgent(
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
   const input = item.input as MessageListInput;
 
+  const reqCtx: RequestContext | undefined = requestContext
+    ? new RequestContext(Object.entries(requestContext) as any)
+    : undefined;
+
   const rawResult = isSupportedLanguageModel(model)
     ? await agent.generate(input, {
         scorers: {},
         returnScorerData: true,
         abortSignal: signal,
+        ...(reqCtx ? { requestContext: reqCtx } : {}),
       })
     : await agent.generateLegacy(input, {
         scorers: {},
         returnScorerData: true,
+        ...(reqCtx ? { requestContext: reqCtx } : {}),
       });
 
   // Narrow to the common fields we need — both v1 and v2 results share these

@@ -117,6 +117,58 @@ export function ToolsPage() {
     return options.filter(option => option.label.toLowerCase().includes(search.toLowerCase()));
   }, [options, search]);
 
+  const selectedOptions = useMemo(() => {
+    return filteredOptions.filter(opt => selectedToolIds.includes(opt.value));
+  }, [filteredOptions, selectedToolIds]);
+
+  const unselectedOptions = useMemo(() => {
+    return filteredOptions.filter(opt => !selectedToolIds.includes(opt.value));
+  }, [filteredOptions, selectedToolIds]);
+
+  const renderToolEntity = (tool: (typeof options)[number], isSelected: boolean) => {
+    const isDisabled = readOnly || !isSelected;
+
+    return (
+      <Entity key={tool.value} className="bg-surface2">
+        <EntityContent>
+          <EntityName>{tool.label}</EntityName>
+          <EntityDescription>
+            <input
+              type="text"
+              disabled={isDisabled}
+              className={cn(
+                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
+                !isDisabled && 'border-border1 border-dashed ',
+              )}
+              value={
+                isSelected
+                  ? (selectedTools?.[tool.value]?.description ?? tool.description)
+                  : tool.description
+              }
+              onChange={e => handleDescriptionChange(tool.value, e.target.value)}
+            />
+          </EntityDescription>
+        </EntityContent>
+
+        {isSelected && !readOnly && (
+          <DisplayConditionsDialog
+            entityName={tool.label}
+            schema={variables}
+            rules={selectedTools?.[tool.value]?.rules}
+            onRulesChange={rules => handleRulesChange(tool.value, rules)}
+          />
+        )}
+
+        {!readOnly && (
+          <Switch
+            checked={isSelected}
+            onCheckedChange={() => handleValueChange(tool.value)}
+          />
+        )}
+      </Entity>
+    );
+  };
+
   return (
     <ScrollArea className="h-full">
       <div className="flex flex-col gap-6">
@@ -132,6 +184,18 @@ export function ToolsPage() {
           onSubmitTools={readOnly ? undefined : handleIntegrationToolsSubmit}
         />
 
+        {selectedOptions.length > 0 && (
+          <SubSectionRoot>
+            <Section.Header>
+              <SubSectionHeader title="Configured Tools" icon={<ToolsIcon />} />
+            </Section.Header>
+
+            <div className="flex flex-col gap-1">
+              {selectedOptions.map(tool => renderToolEntity(tool, true))}
+            </div>
+          </SubSectionRoot>
+        )}
+
         <SubSectionRoot>
           <Section.Header>
             <SubSectionHeader title="Available Tools" icon={<ToolsIcon />} />
@@ -139,53 +203,9 @@ export function ToolsPage() {
 
           <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
 
-          {filteredOptions.length > 0 && (
+          {unselectedOptions.length > 0 && (
             <div className="flex flex-col gap-1">
-              {filteredOptions.map(tool => {
-                const isSelected = selectedToolIds.includes(tool.value);
-
-                const isDisabled = readOnly || !isSelected;
-
-                return (
-                  <Entity key={tool.value} className="bg-surface2">
-                    <EntityContent>
-                      <EntityName>{tool.label}</EntityName>
-                      <EntityDescription>
-                        <input
-                          type="text"
-                          disabled={isDisabled}
-                          className={cn(
-                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
-                          )}
-                          value={
-                            isSelected
-                              ? (selectedTools?.[tool.value]?.description ?? tool.description)
-                              : tool.description
-                          }
-                          onChange={e => handleDescriptionChange(tool.value, e.target.value)}
-                        />
-                      </EntityDescription>
-                    </EntityContent>
-
-                    {isSelected && !readOnly && (
-                      <DisplayConditionsDialog
-                        entityName={tool.label}
-                        schema={variables}
-                        rules={selectedTools?.[tool.value]?.rules}
-                        onRulesChange={rules => handleRulesChange(tool.value, rules)}
-                      />
-                    )}
-
-                    {!readOnly && (
-                      <Switch
-                        checked={selectedToolIds.includes(tool.value)}
-                        onCheckedChange={() => handleValueChange(tool.value)}
-                      />
-                    )}
-                  </Entity>
-                );
-              })}
+              {unselectedOptions.map(tool => renderToolEntity(tool, false))}
             </div>
           )}
         </SubSectionRoot>
