@@ -180,6 +180,35 @@ function serializePartForTokenCounting(part: CacheablePart): string {
   return JSON.stringify(clonedPart);
 }
 
+function getFilenameFromAttachmentData(data: unknown): string | undefined {
+  const pathname =
+    data instanceof URL
+      ? data.pathname
+      : typeof data === 'string' && /^https?:\/\//i.test(data)
+        ? (() => {
+            try {
+              return new URL(data).pathname;
+            } catch {
+              return undefined;
+            }
+          })()
+        : undefined;
+
+  const filename = pathname?.split('/').filter(Boolean).pop();
+  return filename ? decodeURIComponent(filename) : undefined;
+}
+
+function serializeNonImageFilePartForTokenCounting(part: CacheablePart): string {
+  const filename = getObjectValue(part, 'filename');
+  const inferredFilename = getFilenameFromAttachmentData(getObjectValue(part, 'data'));
+
+  return JSON.stringify({
+    type: 'file',
+    mimeType: getObjectValue(part, 'mimeType') ?? null,
+    filename: typeof filename === 'string' && filename.trim().length > 0 ? filename.trim() : (inferredFilename ?? null),
+  });
+}
+
 function isValidCacheEntry(
   entry: TokenEstimateCacheEntry | undefined,
   expectedKey: string,
@@ -594,6 +623,12 @@ export class TokenCounter {
               'image-like-file',
               estimate.cachePayload,
               estimate.tokens,
+            );
+          } else if (part.type === 'file') {
+            payloadTokens += this.readOrPersistPartEstimate(
+              part,
+              'file-descriptor',
+              serializeNonImageFilePartForTokenCounting(part),
             );
           } else if (part.type === 'tool-invocation') {
             const invocation = part.toolInvocation;

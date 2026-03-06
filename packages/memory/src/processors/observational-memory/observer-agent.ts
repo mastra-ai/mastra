@@ -436,14 +436,24 @@ type ObserverAttachmentPart =
       experimental_providerMetadata?: unknown;
     };
 
-type ObserverInputAttachmentPart = {
-  type: 'image';
-  image: unknown;
-  mimeType?: string;
-  providerOptions?: unknown;
-  providerMetadata?: unknown;
-  experimental_providerMetadata?: unknown;
-};
+type ObserverInputAttachmentPart =
+  | {
+      type: 'image';
+      image: unknown;
+      mimeType?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    }
+  | {
+      type: 'file';
+      data: unknown;
+      mimeType?: string;
+      filename?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    };
 
 interface ObserverFormattedMessage {
   text: string;
@@ -512,7 +522,7 @@ function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
   return hasObserverImageFilenameExtension(part.filename);
 }
 
-function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart | undefined {
+function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart {
   if (part.type === 'image') {
     return {
       type: 'image',
@@ -524,14 +534,22 @@ function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverIn
     };
   }
 
-  if (!isImageLikeObserverFilePart(part)) {
-    return undefined;
+  if (isImageLikeObserverFilePart(part)) {
+    return {
+      type: 'image',
+      image: part.data,
+      mimeType: part.mimeType,
+      providerOptions: part.providerOptions,
+      providerMetadata: part.providerMetadata,
+      experimental_providerMetadata: part.experimental_providerMetadata,
+    };
   }
 
   return {
-    type: 'image',
-    image: part.data,
+    type: 'file',
+    data: part.data,
     mimeType: part.mimeType,
+    filename: part.filename,
     providerOptions: part.providerOptions,
     providerMetadata: part.providerMetadata,
     experimental_providerMetadata: part.experimental_providerMetadata,

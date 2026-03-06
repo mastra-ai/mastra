@@ -835,8 +835,13 @@ describe('Observer Agent Helpers', () => {
         type: 'image',
         image: 'https://example.com/annotated-photo.jpg',
       });
-      expect(capturedPrompt[1].content).not.toContainEqual(
-        expect.objectContaining({ type: 'image', image: 'https://example.com/floorplan.pdf' }),
+      expect(capturedPrompt[1].content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
       );
     });
   });
@@ -868,8 +873,13 @@ describe('Observer Agent Helpers', () => {
         type: 'image',
         image: 'https://example.com/reference-board.png',
       });
-      expect(historyMessage.content).not.toContainEqual(
-        expect.objectContaining({ type: 'file', data: 'https://example.com/specs/floorplan.pdf' }),
+      expect(historyMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/specs/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
       );
     });
 
@@ -920,8 +930,14 @@ describe('Observer Agent Helpers', () => {
       ).toBe(true);
       expect(historyMessage.content.some((part: any) => part.type === 'image')).toBe(true);
       expect(
-        historyMessage.content.some((part: any) => part.type === 'file' && part.filename === 'floorplan.pdf'),
-      ).toBe(false);
+        historyMessage.content.some(
+          (part: any) =>
+            part.type === 'file' &&
+            part.filename === 'floorplan.pdf' &&
+            part.mimeType === 'application/pdf' &&
+            part.data === 'https://example.com/specs/floorplan.pdf',
+        ),
+      ).toBe(true);
     });
   });
 
@@ -2858,9 +2874,15 @@ Ask about favorite vegetarian dishes
         (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
       ),
     ).toBe(true);
-    expect(historyMessage.content.some((part: any) => part.type === 'file' && part.filename === 'floorplan.pdf')).toBe(
-      false,
-    );
+    expect(
+      historyMessage.content.some(
+        (part: any) =>
+          part.type === 'file' &&
+          part.filename === 'floorplan.pdf' &&
+          part.mimeType === 'application/pdf' &&
+          part.data === 'https://example.com/specs/floorplan.pdf',
+      ),
+    ).toBe(true);
   });
 
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {

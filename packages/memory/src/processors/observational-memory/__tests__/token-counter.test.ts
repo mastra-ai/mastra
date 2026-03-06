@@ -181,6 +181,40 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(85);
     });
 
+    it('counts non-image file parts from descriptors instead of raw payload bytes', () => {
+      const counter = new TokenCounter();
+      const pdfUrlMessage = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          },
+        ],
+      });
+      const uploadedPdfMessage = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          },
+        ],
+      });
+
+      const pdfUrlTokens = counter.countMessage(pdfUrlMessage);
+      const uploadedPdfTokens = counter.countMessage(uploadedPdfMessage);
+
+      expect(pdfUrlTokens).toBeGreaterThan(0);
+      expect(uploadedPdfTokens).toBeGreaterThan(0);
+      expect(uploadedPdfTokens).toBeLessThan(500);
+      expect(Math.abs(uploadedPdfTokens - pdfUrlTokens)).toBeLessThan(50);
+    });
+
     it('reuses cached image estimates without re-encoding text payloads', () => {
       const counter = new TokenCounter();
       const message = createMessage({
