@@ -584,14 +584,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   private buildOpenAPISpec(config: { title: string; version: string; description: string }, prefix?: string): any {
     const openApiSpec = generateOpenAPIDocument(SERVER_ROUTES, config);
 
-    // Set the servers field so clients know routes are served under the prefix
     if (prefix) {
       openApiSpec.servers = [{ url: prefix }];
     }
 
-    // Merge custom API routes into the OpenAPI spec.
-    // Custom routes are served at root (/), not under the API prefix,
-    // so each custom path item gets its own servers override per OpenAPI 3.1.
+    // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
     if (this.customApiRoutes && this.customApiRoutes.length > 0) {
       const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
       if (prefix) {
@@ -642,7 +639,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         description: 'Mastra Server API',
       };
 
-      // Register the spec under the API prefix (e.g. /api/openapi.json)
       await this.registerOpenAPIRoute(this.app, { ...specConfig, path: this.openapiPath }, { prefix: this.prefix });
 
       // Also serve the spec at the root path (e.g. /openapi.json) for backwards

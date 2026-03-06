@@ -500,7 +500,6 @@ describe('Hono Server Adapter', () => {
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : 0;
 
-      // Both paths should return 200
       const prefixedResponse = await fetch(`http://localhost:${port}/api/openapi.json`);
       expect(prefixedResponse.status).toBe(200);
       const prefixedSpec = await prefixedResponse.json();
@@ -559,11 +558,9 @@ describe('Hono Server Adapter', () => {
         expect(spec.paths[p].servers).toBeUndefined();
       }
 
-      // Custom route /health should have servers override pointing to root
       expect(spec.paths['/health']).toBeDefined();
       expect(spec.paths['/health'].servers).toEqual([{ url: '/' }]);
 
-      // The root spec should also have the same override
       const rootResponse = await fetch(`http://localhost:${port}/openapi.json`);
       const rootSpec = await rootResponse.json();
       expect(rootSpec.paths['/health'].servers).toEqual([{ url: '/' }]);
@@ -606,10 +603,8 @@ describe('Hono Server Adapter', () => {
       const response = await fetch(`http://localhost:${port}/openapi.json`);
       const spec = await response.json();
 
-      // No prefix → no servers override needed on custom routes
       expect(spec.paths['/health']).toBeDefined();
       expect(spec.paths['/health'].servers).toBeUndefined();
-      // Top-level servers should also not be set
       expect(spec.servers).toBeUndefined();
     });
 
@@ -650,9 +645,6 @@ describe('Hono Server Adapter', () => {
       const response = await fetch(`http://localhost:${port}/api/openapi.json`);
       const spec = await response.json();
 
-      // The route's own servers from openapi metadata should be at the operation level.
-      // The path-item level servers override should still be set to root since the
-      // route itself didn't set path-item level servers.
       expect(spec.paths['/external']).toBeDefined();
       expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
     });
