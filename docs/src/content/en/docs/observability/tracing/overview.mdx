@@ -440,6 +440,21 @@ requestContext.set('session', { data: { experimentId: 'exp-999' } })
 1. **Child Span Extraction**: Child spans can also extract metadata if you pass `requestContext` when creating them
 1. **Metadata Precedence**: Explicit metadata passed to span options always takes precedence over extracted metadata
 
+#### Full RequestContext Snapshot
+
+In addition to extracting specific keys into metadata, every span automatically captures a serialized snapshot of the full `RequestContext` at the time it was created. This snapshot is stored on the `requestContext` field of the span data.
+
+This is useful for debugging and reproducing executions, since the `requestContext` can change between steps in a workflow or between an agent and its sub-agents.
+
+```ts
+// The requestContext field is automatically included in exported spans
+const exported = span.exportSpan()
+console.log(exported.requestContext)
+// { userId: 'user-123', environment: 'production', tenantId: 'tenant-456' }
+```
+
+Non-serializable values (functions, symbols, circular references) are automatically filtered out of the snapshot.
+
 ### Adding Tags to Traces
 
 Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are simple strings designed for quick filtering and organization.

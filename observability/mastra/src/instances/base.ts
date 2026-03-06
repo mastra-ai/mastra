@@ -197,6 +197,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       ? (options.parentSpanId ?? tracingOptions?.parentSpanId)
       : options.parentSpanId;
 
+    // Serialize requestContext snapshot for span data
+    const serializedRequestContext = requestContext?.toJSON?.();
+    const requestContextData =
+      serializedRequestContext && Object.keys(serializedRequestContext).length > 0
+        ? serializedRequestContext
+        : undefined;
+
     const span = this.createSpan<TType>({
       ...rest,
       traceId,
@@ -205,6 +212,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState,
       tags,
     });
+
+    // Attach serialized requestContext to the span
+    if (requestContextData) {
+      (span as any).requestContext = requestContextData;
+    }
 
     if (span.isEvent) {
       this.emitSpanEnded(span);
