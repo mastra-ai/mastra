@@ -3435,14 +3435,15 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     expect(secondDelegationPrompt).toContain('rec_12345');
     expect(secondDelegationPrompt).toContain('Record rec_12345 was created successfully.');
 
-    // Verify no agent-* tool calls leaked into the sub-agent's context
+    // Verify no parent tool calls leaked into the sub-agent's context.
+    // Only the sub-agent's own tool calls (e.g. createRecord) should appear.
     for (const prompt of subAgentReceivedPrompts) {
       for (const message of prompt) {
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const agentToolCalls = message.content.filter(
-            (part: any) => part.type === 'tool-call' && part.toolName?.startsWith('agent-'),
-          );
-          expect(agentToolCalls).toEqual([]);
+          const toolCalls = message.content.filter((part: any) => part.type === 'tool-call');
+          for (const tc of toolCalls) {
+            expect(tc.toolName).toBe('createRecord');
+          }
         }
       }
     }
@@ -3450,17 +3451,17 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
 });
 
 describe('Supervisor Pattern - Sub-agent should not receive parent tool call references for unknown tools', () => {
-  it('should not pass tool_call content parts for parent agent-tools to the sub-agent model', async () => {
+  it('should not pass tool_call or tool_result content parts from the parent to the sub-agent model', async () => {
     // Scenario: Supervisor delegates to a sub-agent that has its own tools.
     // On a second generate() call, the supervisor's memory includes the previous
-    // delegation's tool_call/tool_result for the agent-* tool. When the supervisor
-    // delegates again, the sub-agent's model receives these messages which reference
-    // tools (agent-recordAgent) that the sub-agent does NOT have. This causes
-    // providers (especially via custom gateways) to reject or mishandle the request.
+    // delegation's tool_call/tool_result pairs. When the supervisor delegates again,
+    // the sub-agent's model receives these messages which reference tools the
+    // sub-agent does NOT have. This causes providers (especially via custom gateways)
+    // to reject or mishandle the request.
     //
     // This test captures the prompts sent to the sub-agent's model and verifies
-    // that on the second delegation, the sub-agent does NOT receive tool_call
-    // content parts referencing the parent's agent-* tools.
+    // that on the second delegation, the sub-agent does NOT receive any tool_call
+    // or tool_result content parts from the parent conversation.
 
     const subAgentReceivedPrompts: any[][] = [];
     const subAgentReceivedTools: any[][] = [];
@@ -3591,25 +3592,31 @@ describe('Supervisor Pattern - Sub-agent should not receive parent tool call ref
     // Verify the sub-agent was called on the second delegation
     expect(subAgentReceivedPrompts.length).toBeGreaterThan(firstCallPromptCount);
 
-    // Check the prompts received by the sub-agent on the SECOND delegation
-    // The sub-agent's model should NOT receive tool_call content parts
-    // referencing the parent's 'agent-dataAgent' tool, because the sub-agent
-    // doesn't have that tool and it would confuse the model.
+    // Check the prompts received by the sub-agent on the SECOND delegation.
+    // The sub-agent's model should NOT receive any tool_call or tool_result
+    // content parts from the parent conversation, because the sub-agent
+    // doesn't have those tools and it would confuse the model.
     for (let i = firstCallPromptCount; i < subAgentReceivedPrompts.length; i++) {
       const prompt = subAgentReceivedPrompts[i]!;
       for (const message of prompt) {
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const agentToolCalls = message.content.filter(
-            (part: any) => part.type === 'tool-call' && part.toolName?.startsWith('agent-'),
-          );
-          expect(agentToolCalls).toEqual([]);
+          const parentToolCalls = message.content.filter((part: any) => part.type === 'tool-call');
+          // The only tool-calls allowed are those for the sub-agent's OWN tools (e.g. createRecord)
+          for (const tc of parentToolCalls) {
+            expect(tc.toolName).toBe('createRecord');
+          }
         }
-        if (message.role === 'tool' && Array.isArray(message.content)) {
-          const agentToolResults = message.content.filter(
-            (part: any) =>
-              part.type === 'tool-result' && typeof part.toolName === 'string' && part.toolName.startsWith('agent-'),
-          );
-          expect(agentToolResults).toEqual([]);
+        // No tool role messages from the parent should be forwarded
+        if (message.role === 'tool') {
+          // tool messages in the sub-agent prompt should only be for the sub-agent's own tool calls
+          if (Array.isArray(message.content)) {
+            for (const part of message.content) {
+              if (part.type === 'tool-result') {
+                // Must not be a parent tool call ID (supervisor-call-*)
+                expect(part.toolCallId).not.toMatch(/^supervisor-call-/);
+              }
+            }
+          }
         }
       }
     }

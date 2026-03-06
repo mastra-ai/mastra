@@ -2622,36 +2622,17 @@ export class Agent<
    * own tool calls, etc.).
    * @internal
    */
-  private static stripParentDelegationToolParts(messages: any[]): any[] {
-    const filteredToolCallIds = new Set<string>();
-
+  private stripParentToolParts(messages: any[]): any[] {
     return messages
       .map(message => {
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter((part: any) => {
-            if (
-              part.type === 'tool-call' &&
-              typeof part.toolName === 'string' &&
-              (part.toolName.startsWith('agent-') || part.toolName.startsWith('workflow-'))
-            ) {
-              filteredToolCallIds.add(part.toolCallId);
-              return false;
-            }
-            return true;
-          });
+          const filtered = message.content.filter((part: any) => part.type !== 'tool-call');
           if (filtered.length === 0) return null;
           return { ...message, content: filtered };
         }
 
-        if (message.role === 'tool' && Array.isArray(message.content)) {
-          const filtered = message.content.filter((part: any) => {
-            if (part.type === 'tool-result' && filteredToolCallIds.has(part.toolCallId)) {
-              return false;
-            }
-            return true;
-          });
-          if (filtered.length === 0) return null;
-          return { ...message, content: filtered };
+        if (message.role === 'tool') {
+          return null;
         }
 
         return message;
@@ -2738,11 +2719,19 @@ export class Agent<
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
 
-            let fullSubAgentMessages: MastraDBMessage[] = contextMessages;
+            // Strip agent-* and workflow-* tool call/result parts from the context.
+            // The parent's conversation history includes tool_call parts for its own
+            // agent-*/workflow-* tools that the sub-agent doesn't have. Sending these
+            // to the sub-agent's model causes providers to reject or mishandle the
+            // request because the tool references are undefined in the sub-agent's
+            // tool list.
+            const sanitizedMessages = this.stripParentToolParts(contextMessages);
+
+            let fullSubAgentMessages: MastraDBMessage[] = sanitizedMessages;
 
             // Derive iteration from the number of assistant messages (rough approximation)
             // Each iteration typically produces an assistant message
-            const derivedIteration = Math.max(1, contextMessages.filter(m => m.role === 'assistant').length);
+            const derivedIteration = Math.max(1, sanitizedMessages.filter(m => m.role === 'assistant').length);
 
             // Build delegation start context
             const delegationStartContext: DelegationStartContext = {
@@ -2762,7 +2751,7 @@ export class Agent<
               parentAgentId: this.id,
               parentAgentName: this.name,
               toolCallId,
-              messages: contextMessages,
+              messages: sanitizedMessages,
             };
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
@@ -2942,11 +2931,11 @@ export class Agent<
 
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
-              let filteredContextMessages = contextMessages;
+              let filteredContextMessages = sanitizedMessages;
               if (delegation?.messageFilter) {
                 try {
                   filteredContextMessages = await delegation.messageFilter({
-                    messages: contextMessages,
+                    messages: sanitizedMessages,
                     primitiveId: agent.id,
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
@@ -2964,16 +2953,8 @@ export class Agent<
                 }
               }
 
-              // Strip agent-* and workflow-* tool call/result parts from the context.
-              // The parent's conversation history includes tool_call parts for its own
-              // agent-*/workflow-* tools that the sub-agent doesn't have. Sending these
-              // to the sub-agent's model causes providers to reject or mishandle the
-              // request because the tool references are undefined in the sub-agent's
-              // tool list.
-              const sanitizedMessages = Agent.stripParentDelegationToolParts(filteredContextMessages);
-
               const messagesForSubAgent: MessageListInput = [
-                ...sanitizedMessages,
+                ...filteredContextMessages,
                 { role: 'user' as const, content: effectivePrompt },
               ];
 
