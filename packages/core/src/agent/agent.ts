@@ -2609,6 +2609,57 @@ export class Agent<
   }
 
   /**
+   * Strips agent-* and workflow-* tool_call/tool_result parts from messages.
+   *
+   * When a supervisor delegates to a sub-agent, the parent's conversation
+   * history may include tool_call parts for its own delegation tools
+   * (agent-* and workflow-*). The sub-agent doesn't have these tools,
+   * so sending references to them causes model providers to reject or
+   * mishandle the request.
+   *
+   * This function removes those parts while preserving all other
+   * conversation context (user messages, assistant text, the sub-agent's
+   * own tool calls, etc.).
+   * @internal
+   */
+  private static stripParentDelegationToolParts(messages: any[]): any[] {
+    const filteredToolCallIds = new Set<string>();
+
+    return messages
+      .map(message => {
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const filtered = message.content.filter((part: any) => {
+            if (
+              part.type === 'tool-call' &&
+              typeof part.toolName === 'string' &&
+              (part.toolName.startsWith('agent-') || part.toolName.startsWith('workflow-'))
+            ) {
+              filteredToolCallIds.add(part.toolCallId);
+              return false;
+            }
+            return true;
+          });
+          if (filtered.length === 0) return null;
+          return { ...message, content: filtered };
+        }
+
+        if (message.role === 'tool' && Array.isArray(message.content)) {
+          const filtered = message.content.filter((part: any) => {
+            if (part.type === 'tool-result' && filteredToolCallIds.has(part.toolCallId)) {
+              return false;
+            }
+            return true;
+          });
+          if (filtered.length === 0) return null;
+          return { ...message, content: filtered };
+        }
+
+        return message;
+      })
+      .filter(Boolean);
+  }
+
+  /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
@@ -2913,8 +2964,16 @@ export class Agent<
                 }
               }
 
+              // Strip agent-* and workflow-* tool call/result parts from the context.
+              // The parent's conversation history includes tool_call parts for its own
+              // agent-*/workflow-* tools that the sub-agent doesn't have. Sending these
+              // to the sub-agent's model causes providers to reject or mishandle the
+              // request because the tool references are undefined in the sub-agent's
+              // tool list.
+              const sanitizedMessages = Agent.stripParentDelegationToolParts(filteredContextMessages);
+
               const messagesForSubAgent: MessageListInput = [
-                ...filteredContextMessages,
+                ...sanitizedMessages,
                 { role: 'user' as const, content: effectivePrompt },
               ];
 

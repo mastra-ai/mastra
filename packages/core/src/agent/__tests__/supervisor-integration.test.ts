@@ -3291,11 +3291,12 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
 });
 
 describe('Supervisor Pattern - Sub-agent context across multiple generate calls', () => {
-  it('should forward prior delegation results to sub-agent on subsequent generate calls via supervisor memory', async () => {
-    // Scenario: Supervisor delegates to a sub-agent which "creates" a record (returns an ID).
+  it('should forward supervisor text conversation to sub-agent on subsequent generate calls via memory', async () => {
+    // Scenario: Supervisor delegates to a sub-agent which "creates" a record.
     // On a second generate() call, the supervisor delegates to the same sub-agent again.
-    // The sub-agent should see the prior tool result (with the record ID) in its context
-    // because the supervisor's memory replays the full conversation history.
+    // The sub-agent should see the supervisor's text conversation history (user messages
+    // and assistant text responses) but NOT the raw agent-* tool call/result pairs,
+    // since those reference tools the sub-agent doesn't have.
 
     const subAgentReceivedPrompts: any[][] = [];
 
@@ -3359,6 +3360,8 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     });
 
     // Supervisor model: delegates to record-agent on each generate() call
+    // The supervisor's final text response includes the record ID so context
+    // flows through text conversation rather than leaked tool results.
     let supervisorCallCount = 0;
     const supervisorModel = new MockLanguageModelV2({
       doGenerate: async () => {
@@ -3382,13 +3385,13 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
             warnings: [],
           };
         }
-        // Even calls: final response
+        // Even calls: final response includes context from delegation
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop' as const,
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          text: 'Done',
-          content: [{ type: 'text' as const, text: 'Done' }],
+          text: 'Record rec_12345 was created successfully.',
+          content: [{ type: 'text' as const, text: 'Record rec_12345 was created successfully.' }],
           warnings: [],
         };
       },
@@ -3425,11 +3428,24 @@ describe('Supervisor Pattern - Sub-agent context across multiple generate calls'
     // - Call 3 from second generate (text response for update)
     expect(subAgentReceivedPrompts.length).toBeGreaterThanOrEqual(3);
 
-    // The sub-agent's prompt on the second delegation (index 2) should contain
-    // the record ID from the first delegation's result, forwarded via supervisor memory
+    // The sub-agent's prompt on the second delegation should contain the
+    // supervisor's text response (which includes the record ID) — context
+    // flows through the supervisor's text conversation, not leaked tool results.
     const secondDelegationPrompt = JSON.stringify(subAgentReceivedPrompts[2]);
     expect(secondDelegationPrompt).toContain('rec_12345');
-    expect(secondDelegationPrompt).toContain('Created record with ID rec_12345');
+    expect(secondDelegationPrompt).toContain('Record rec_12345 was created successfully.');
+
+    // Verify no agent-* tool calls leaked into the sub-agent's context
+    for (const prompt of subAgentReceivedPrompts) {
+      for (const message of prompt) {
+        if (message.role === 'assistant' && Array.isArray(message.content)) {
+          const agentToolCalls = message.content.filter(
+            (part: any) => part.type === 'tool-call' && part.toolName?.startsWith('agent-'),
+          );
+          expect(agentToolCalls).toEqual([]);
+        }
+      }
+    }
   });
 });
 
