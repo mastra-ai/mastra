@@ -3803,7 +3803,14 @@ export class Agent<
     runId?: string;
   }) {
     try {
-      messageList.add(result.response.messages, 'response');
+      // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+      // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+      const stepResponseMessages = result.response.dbMessages?.length
+        ? result.response.dbMessages
+        : result.response.messages;
+      if (stepResponseMessages?.length) {
+        messageList.add(stepResponseMessages, 'response');
+      }
       // Message saving is now handled by MessageHistory output processor
     } catch (e) {
       this.logger.error('Error adding messages on step finish', {
@@ -4054,17 +4061,17 @@ export class Agent<
       // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
       // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
       // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
-      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
-        if (isZodType(options.structuredOutput.schema) && targetModelId) {
+      if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
+        if (isZodType(options.structuredOutput.schema)) {
           const modelInfo: ModelInformation = {
             provider: targetProvider,
-            modelId: targetModelId,
+            modelId: targetModelId ?? '',
             supportsStructuredOutputs: false, // Set to false to enable transform
           };
 
-          const isReasoningModel = /^o[1-5]/.test(targetModelId);
-          const compatLayer = isReasoningModel
-            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+          const reasoningLayer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+          const compatLayer = reasoningLayer.isReasoningModel()
+            ? reasoningLayer
             : new OpenAISchemaCompatLayer(modelInfo);
 
           if (compatLayer.shouldApply() && options.structuredOutput.schema) {
@@ -4241,29 +4248,33 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
     const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
 
+    // Add LLM response messages to the list
+    // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+    // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+    let responseMessages: MessageInput[] | undefined = result.response.dbMessages?.length
+      ? result.response.dbMessages
+      : result.response.messages;
+    if ((!responseMessages || responseMessages.length === 0) && result.object) {
+      responseMessages = [
+        {
+          id: result.response.id,
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: outputText, // outputText contains the stringified object
+            },
+          ],
+        },
+      ];
+    }
+
+    if (responseMessages?.length) {
+      messageList.add(responseMessages, 'response');
+    }
+
     if (memory && resourceId && thread && !readOnlyMemory) {
       try {
-        // Add LLM response messages to the list
-        let responseMessages = result.response.messages;
-        if (!responseMessages && result.object) {
-          responseMessages = [
-            {
-              id: result.response.id,
-              role: 'assistant',
-              content: [
-                {
-                  type: 'text',
-                  text: outputText, // outputText contains the stringified object
-                },
-              ],
-            },
-          ];
-        }
-
-        if (responseMessages) {
-          messageList.add(responseMessages, 'response');
-        }
-
         if (!threadExists) {
           await memory.createThread({
             threadId: thread.id,
@@ -4327,25 +4338,6 @@ export class Agent<
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
         throw mastraError;
-      }
-    } else {
-      let responseMessages = result.response.messages;
-      if (!responseMessages && result.object) {
-        responseMessages = [
-          {
-            id: result.response.id,
-            role: 'assistant',
-            content: [
-              {
-                type: 'text',
-                text: outputText, // outputText contains the stringified object
-              },
-            ],
-          },
-        ];
-      }
-      if (responseMessages) {
-        messageList.add(responseMessages, 'response');
       }
     }
 
