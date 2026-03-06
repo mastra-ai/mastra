@@ -138,11 +138,25 @@ const workspace = new Workspace({
             defaultValue: 'false',
           },
           {
+            name: 'name',
+            type: 'string',
+            description:
+              'Custom name to expose this tool as. Replaces the default `mastra_workspace_*` name. The config key must still use the original `WORKSPACE_TOOLS` constant.',
+            isOptional: true,
+          },
+          {
             name: 'requireReadBeforeWrite',
             type: 'boolean',
             description: 'For write tools: require reading the file first to prevent overwrites',
             isOptional: true,
             defaultValue: 'false',
+          },
+          {
+            name: 'maxOutputTokens',
+            type: 'number',
+            description: 'Maximum tokens for tool output. Output exceeding this limit is truncated using tiktoken.',
+            isOptional: true,
+            defaultValue: '2000',
           },
         ],
       },
@@ -161,19 +175,24 @@ const workspace = new Workspace({
 
 The `tools` option accepts a `WorkspaceToolsConfig` object that controls which workspace tools are enabled and their safety settings.
 
-```typescript prettier:false
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+```typescript {2,7-16}
+import { Workspace } from '@mastra/core/workspace'
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
-tools: {
-  // Global defaults (apply to all tools)
-  enabled: true,
-  requireApproval: false,
+const workspace = new Workspace({
+  id: 'my-workspace',
+  name: 'My Workspace',
+  tools: {
+    // Global defaults (apply to all tools)
+    enabled: true,
+    requireApproval: false,
 
-  // Per-tool overrides using WORKSPACE_TOOLS constants
-  [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
-    requireApproval: true,
+    // Per-tool overrides using WORKSPACE_TOOLS constants
+    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+      requireApproval: true,
+    },
   },
-}
+})
 ```
 
 The config object has two parts:
@@ -183,61 +202,22 @@ The config object has two parts:
 
 See [workspace overview](/docs/workspace/overview#tool-configuration) for more examples.
 
-### Per-tool options
-
-Each tool can be configured with these options:
-
-<PropertiesTable
-  content={[
-  {
-    name: 'enabled',
-    type: 'boolean',
-    description: 'Whether the tool is available to agents',
-    isOptional: true,
-    defaultValue: 'true',
-  },
-  {
-    name: 'requireApproval',
-    type: 'boolean',
-    description: 'Whether the tool requires user approval before execution',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description:
-      'Custom name to expose this tool as. Replaces the default mastra_workspace_* name. The config key must still use the original WORKSPACE_TOOLS constant.',
-    isOptional: true,
-  },
-  {
-    name: 'requireReadBeforeWrite',
-    type: 'boolean',
-    description: 'For write tools: require reading the file first to prevent overwrites',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'maxOutputTokens',
-    type: 'number',
-    description: 'Maximum tokens for tool output. Output exceeding this limit is truncated using tiktoken.',
-    isOptional: true,
-    defaultValue: '2000',
-  },
-]}
-/>
-
 ### Tool name remapping
 
 Rename workspace tools by setting the `name` property on individual tool configs. The config key remains the original constant — only the name exposed to the agent changes.
 
-```typescript prettier:false
-import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+```typescript {8,9}
+import { Workspace } from '@mastra/core/workspace'
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
-tools: {
-  [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
-  [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
-}
+const workspace = new Workspace({
+  id: 'my-workspace',
+  name: 'My Workspace',
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
+    [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
+  },
+})
 ```
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
