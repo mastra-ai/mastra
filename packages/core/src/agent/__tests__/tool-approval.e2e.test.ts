@@ -825,7 +825,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           thread: randomUUID(),
           resource: randomUUID(),
         };
-        const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
+        const stream = await agentOne.stream('Find the name, email, age and profession of the user - Dero Israel', {
           memory,
         });
         for await (const _chunk of stream.fullStream) {
@@ -1161,221 +1161,229 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         expect(email).toBe('test@test.com');
       }, 15000);
 
-      it('should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true', async () => {
-        const findUserStep = createStep({
-          id: 'find-user-step',
-          description: 'This is a test step that returns the name, email and age',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          suspendSchema: z.object({
-            message: z.string(),
-          }),
-          resumeSchema: z.object({
-            noOfYears: z.number(),
-          }),
-          outputSchema: z.object({
-            name: z.string(),
-            email: z.string(),
-            age: z.number(),
-          }),
-          execute: async ({ suspend, resumeData, inputData }) => {
-            if (!resumeData) {
-              return await suspend({ message: 'Please provide the age of the user' });
-            }
+      it(
+        'should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true',
+        { retry: 2, timeout: 30000 },
+        async () => {
+          const findUserStep = createStep({
+            id: 'find-user-step',
+            description: 'This is a test step that returns the name, email and age',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            suspendSchema: z.object({
+              message: z.string(),
+            }),
+            resumeSchema: z.object({
+              noOfYears: z.number(),
+            }),
+            outputSchema: z.object({
+              name: z.string(),
+              email: z.string(),
+              age: z.number(),
+            }),
+            execute: async ({ suspend, resumeData, inputData }) => {
+              if (!resumeData) {
+                return await suspend({ message: 'Please provide the age of the user' });
+              }
 
-            return {
-              name: inputData?.name,
-              email: 'test@test.com',
-              age: resumeData?.noOfYears,
-            };
-          },
-        });
+              return {
+                name: inputData?.name,
+                email: 'test@test.com',
+                age: resumeData?.noOfYears,
+              };
+            },
+          });
 
-        const findUserWorkflow = createWorkflow({
-          id: 'find-user-workflow',
-          description: 'This is a test tool that returns the name, and age',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          outputSchema: z.object({
-            name: z.string(),
-            email: z.string(),
-            age: z.number(),
-          }),
-        })
-          .then(findUserStep)
-          .commit();
+          const findUserWorkflow = createWorkflow({
+            id: 'find-user-workflow',
+            description: 'This is a test tool that returns the name, and age',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            outputSchema: z.object({
+              name: z.string(),
+              email: z.string(),
+              age: z.number(),
+            }),
+          })
+            .then(findUserStep)
+            .commit();
 
-        const userAgent = new Agent({
-          id: 'user-agent',
-          name: 'User Agent',
-          instructions: 'You are an agent that can get list of users using findUserWorkflow.',
-          model: openaiModel,
-          workflows: { findUserWorkflow },
-          memory: new MockMemory(),
-          defaultOptions: {
-            autoResumeSuspendedTools: true,
-          },
-        });
+          const userAgent = new Agent({
+            id: 'user-agent',
+            name: 'User Agent',
+            instructions: 'You are an agent that can get list of users using findUserWorkflow.',
+            model: openaiModel,
+            workflows: { findUserWorkflow },
+            memory: new MockMemory(),
+            defaultOptions: {
+              autoResumeSuspendedTools: true,
+            },
+          });
 
-        const mastra = new Mastra({
-          agents: { userAgent },
-          logger: false,
-          storage: mockStorage,
-        });
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
 
-        const agentOne = mastra.getAgent('userAgent');
+          const agentOne = mastra.getAgent('userAgent');
 
-        let toolCall;
-        const stream = await agentOne.stream('Find the user with name and age of - Dero Israel', {
-          memory: {
-            thread: 'test-thread',
-            resource: 'test-resource',
-          },
-        });
-        const suspendData = {
-          suspendPayload: null,
-          suspendedToolName: '',
-        };
-        for await (const _chunk of stream.fullStream) {
-          if (_chunk.type === 'tool-call-suspended') {
-            suspendData.suspendPayload = _chunk.payload.suspendPayload;
-            suspendData.suspendedToolName = _chunk.payload.toolName;
-          }
-        }
-        if (suspendData.suspendPayload) {
-          const resumeStream = await agentOne.stream('He is 25 years old', {
+          let toolCall;
+          const stream = await agentOne.stream('Find the user with name and age of - Dero Israel', {
             memory: {
               thread: 'test-thread',
               resource: 'test-resource',
             },
           });
-          for await (const _chunk of resumeStream.fullStream) {
+          const suspendData = {
+            suspendPayload: null,
+            suspendedToolName: '',
+          };
+          for await (const _chunk of stream.fullStream) {
+            if (_chunk.type === 'tool-call-suspended') {
+              suspendData.suspendPayload = _chunk.payload.suspendPayload;
+              suspendData.suspendedToolName = _chunk.payload.toolName;
+            }
+          }
+          if (suspendData.suspendPayload) {
+            const resumeStream = await agentOne.stream('He is 25 years old', {
+              memory: {
+                thread: 'test-thread',
+                resource: 'test-resource',
+              },
+            });
+            for await (const _chunk of resumeStream.fullStream) {
+            }
+
+            const toolResults = await resumeStream.toolResults;
+
+            toolCall = toolResults?.find(
+              (result: any) => result.payload.toolName === 'workflow-findUserWorkflow',
+            )?.payload;
+
+            const name = toolCall?.result?.result?.name;
+            const email = toolCall?.result?.result?.email;
+            const age = toolCall?.result?.result?.age;
+
+            expect(name).toBe('Dero Israel');
+            expect(email).toBe('test@test.com');
+            expect(age).toBe(25);
           }
 
-          const toolResults = await resumeStream.toolResults;
+          expect(suspendData.suspendPayload).toBeDefined();
+          expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
+          expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
+        },
+      );
 
-          toolCall = toolResults?.find(
+      it(
+        'should call findUserWorkflow with suspend and resume via generate when autoResumeSuspendedTools is true',
+        { retry: 2, timeout: 30000 },
+        async () => {
+          const findUserStep = createStep({
+            id: 'find-user-step',
+            description: 'This is a test step that returns the name, email and age',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            suspendSchema: z.object({
+              message: z.string(),
+            }),
+            resumeSchema: z.object({
+              age: z.number(),
+            }),
+            outputSchema: z.object({
+              name: z.string(),
+              email: z.string(),
+              age: z.number(),
+            }),
+            execute: async ({ suspend, resumeData, inputData }) => {
+              if (!resumeData) {
+                return await suspend({ message: 'Please provide the age of the user' });
+              }
+
+              return {
+                name: inputData?.name,
+                email: 'test@test.com',
+                age: resumeData?.age,
+              };
+            },
+          });
+
+          const findUserWorkflow = createWorkflow({
+            id: 'find-user-workflow',
+            description: 'This is a test tool that returns the name, and age',
+            inputSchema: z.object({
+              name: z.string(),
+            }),
+            outputSchema: z.object({
+              name: z.string(),
+              email: z.string(),
+              age: z.number(),
+            }),
+          })
+            .then(findUserStep)
+            .commit();
+
+          const userAgent = new Agent({
+            id: 'user-agent',
+            name: 'User Agent',
+            instructions: 'You are an agent that can get list of users using findUserWorkflow.',
+            model: openaiModel,
+            workflows: { findUserWorkflow },
+            memory: new MockMemory(),
+            defaultOptions: {
+              autoResumeSuspendedTools: true,
+            },
+          });
+
+          const mastra = new Mastra({
+            agents: { userAgent },
+            logger: false,
+            storage: mockStorage,
+          });
+
+          const agentOne = mastra.getAgent('userAgent');
+
+          const output = await agentOne.generate('Find the user with name and age of - Dero Israel', {
+            memory: {
+              thread: 'test-thread',
+              resource: 'test-resource',
+            },
+          });
+          expect(output.finishReason).toBe('suspended');
+          expect(output.toolResults).toHaveLength(0);
+          expect(output.suspendPayload).toMatchObject({
+            toolName: 'workflow-findUserWorkflow',
+            suspendPayload: {
+              message: 'Please provide the age of the user',
+            },
+          });
+          const resumeOutput = await agentOne.generate('He is 25 years old', {
+            memory: {
+              thread: 'test-thread',
+              resource: 'test-resource',
+            },
+          });
+
+          const toolResults = resumeOutput.toolResults;
+
+          const toolCall = toolResults?.find(
             (result: any) => result.payload.toolName === 'workflow-findUserWorkflow',
           )?.payload;
 
-          const name = toolCall?.result?.result?.name;
-          const email = toolCall?.result?.result?.email;
-          const age = toolCall?.result?.result?.age;
+          const name = (toolCall?.result as any)?.result?.name;
+          const email = (toolCall?.result as any)?.result?.email;
+          const age = (toolCall?.result as any)?.result?.age;
 
+          expect(resumeOutput.suspendPayload).toBeUndefined();
           expect(name).toBe('Dero Israel');
           expect(email).toBe('test@test.com');
           expect(age).toBe(25);
-        }
-
-        expect(suspendData.suspendPayload).toBeDefined();
-        expect(suspendData.suspendedToolName).toBe('workflow-findUserWorkflow');
-        expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
-      }, 15000);
-
-      it('should call findUserWorkflow with suspend and resume via generate when autoResumeSuspendedTools is true', async () => {
-        const findUserStep = createStep({
-          id: 'find-user-step',
-          description: 'This is a test step that returns the name, email and age',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          suspendSchema: z.object({
-            message: z.string(),
-          }),
-          resumeSchema: z.object({
-            age: z.number(),
-          }),
-          outputSchema: z.object({
-            name: z.string(),
-            email: z.string(),
-            age: z.number(),
-          }),
-          execute: async ({ suspend, resumeData, inputData }) => {
-            if (!resumeData) {
-              return await suspend({ message: 'Please provide the age of the user' });
-            }
-
-            return {
-              name: inputData?.name,
-              email: 'test@test.com',
-              age: resumeData?.age,
-            };
-          },
-        });
-
-        const findUserWorkflow = createWorkflow({
-          id: 'find-user-workflow',
-          description: 'This is a test tool that returns the name, and age',
-          inputSchema: z.object({
-            name: z.string(),
-          }),
-          outputSchema: z.object({
-            name: z.string(),
-            email: z.string(),
-            age: z.number(),
-          }),
-        })
-          .then(findUserStep)
-          .commit();
-
-        const userAgent = new Agent({
-          id: 'user-agent',
-          name: 'User Agent',
-          instructions: 'You are an agent that can get list of users using findUserWorkflow.',
-          model: openaiModel,
-          workflows: { findUserWorkflow },
-          memory: new MockMemory(),
-          defaultOptions: {
-            autoResumeSuspendedTools: true,
-          },
-        });
-
-        const mastra = new Mastra({
-          agents: { userAgent },
-          logger: false,
-          storage: mockStorage,
-        });
-
-        const agentOne = mastra.getAgent('userAgent');
-
-        const output = await agentOne.generate('Find the user with name and age of - Dero Israel', {
-          memory: {
-            thread: 'test-thread',
-            resource: 'test-resource',
-          },
-        });
-        expect(output.finishReason).toBe('suspended');
-        expect(output.toolResults).toHaveLength(0);
-        expect(output.suspendPayload).toMatchObject({
-          toolName: 'workflow-findUserWorkflow',
-          suspendPayload: {
-            message: 'Please provide the age of the user',
-          },
-        });
-        const resumeOutput = await agentOne.generate('He is 25 years old', {
-          memory: {
-            thread: 'test-thread',
-            resource: 'test-resource',
-          },
-        });
-
-        const toolResults = resumeOutput.toolResults;
-
-        const toolCall = toolResults?.find(
-          (result: any) => result.payload.toolName === 'workflow-findUserWorkflow',
-        )?.payload;
-
-        const name = (toolCall?.result as any)?.result?.name;
-        const email = (toolCall?.result as any)?.result?.email;
-        const age = (toolCall?.result as any)?.result?.age;
-
-        expect(resumeOutput.suspendPayload).toBeUndefined();
-        expect(name).toBe('Dero Israel');
-        expect(email).toBe('test@test.com');
-        expect(age).toBe(25);
-      }, 15000);
+        },
+      );
     });
 
     describe.skipIf(version === 'v1')('persist model output stream state', () => {

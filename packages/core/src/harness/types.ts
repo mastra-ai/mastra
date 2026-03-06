@@ -1,8 +1,9 @@
 import type { z } from 'zod';
 
 import type { Agent } from '../agent';
-import type { ToolsInput } from '../agent/types';
+import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
@@ -31,7 +32,7 @@ export interface HeartbeatHandler {
 
 // =============================================================================
 // Harness Configuration
-// =============================================================================
+// ===================
 
 /**
  * Configuration for a single agent mode within the harness.
@@ -81,8 +82,11 @@ export interface HarnessSubagent {
   /** Description of what this subagent does (used in auto-generated tool description) */
   description: string;
 
-  /** System prompt for this subagent */
-  instructions: string;
+  /**
+   * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
+   * array of system messages, or a function that returns any of these types dynamically.
+   */
+  instructions: DynamicArgument<AgentInstructions>;
 
   /** Tools this subagent has direct access to */
   tools?: ToolsInput;
@@ -95,6 +99,12 @@ export interface HarnessSubagent {
 
   /** Default model ID for this subagent type (e.g., "anthropic/claude-sonnet-4-20250514") */
   defaultModelId?: string;
+
+  /** Optional maximum number of steps for this subagent's execution loop */
+  maxSteps?: number;
+
+  /** Optional stop condition for this subagent's execution loop */
+  stopWhen?: LoopOptions['stopWhen'];
 }
 
 /**
@@ -125,7 +135,7 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   initialState?: Partial<z.infer<TState>>;
 
   /** Memory configuration (shared across all modes) */
-  memory?: MastraMemory;
+  memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
   modes: HarnessMode<TState>[];
@@ -171,6 +181,18 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   modelUseCountProvider?: ModelUseCountProvider;
 
   /**
+   * Callback invoked when a model is selected via switchModel().
+   * Lets the app layer track and persist model usage for ranking.
+   */
+  modelUseCountTracker?: ModelUseCountTracker;
+
+  /**
+   * Optional catalog hook for additional models (e.g., user-defined custom providers).
+   * Returned entries are merged into `listAvailableModels()`.
+   */
+  customModelCatalogProvider?: CustomModelCatalogProvider;
+
+  /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
@@ -203,8 +225,8 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
    * `acquire` should throw if the lock is held by another process.
    */
   threadLock?: {
-    acquire: (threadId: string) => void;
-    release: (threadId: string) => void;
+    acquire: (threadId: string) => void | Promise<void>;
+    release: (threadId: string) => void | Promise<void>;
   };
 }
 
@@ -279,6 +301,16 @@ export interface AvailableModel {
 }
 
 /**
+ * Additional model entries supplied by the app layer.
+ */
+export type CustomAvailableModel = Omit<AvailableModel, 'useCount'>;
+
+/**
+ * Provides additional model catalog entries for `listAvailableModels()`.
+ */
+export type CustomModelCatalogProvider = () => CustomAvailableModel[] | Promise<CustomAvailableModel[]>;
+
+/**
  * Custom auth checker for model providers.
  * Called by `getCurrentModelAuthStatus()` and `listAvailableModels()` to determine
  * whether a provider has valid authentication beyond just env var checks
@@ -294,6 +326,12 @@ export type ModelAuthChecker = (provider: string) => boolean | undefined;
  * Return a map of model ID → use count.
  */
 export type ModelUseCountProvider = () => Record<string, number>;
+
+/**
+ * Callback invoked when a model is selected via switchModel().
+ * Lets the app layer track and persist model usage for ranking.
+ */
+export type ModelUseCountTracker = (modelId: string) => void;
 
 // =============================================================================
 // Harness State
@@ -334,6 +372,234 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+// =============================================================================
+// Observational Memory Progress
+// =============================================================================
+
+/**
+ * Status of the Observational Memory system.
+ */
+export type OMStatus = 'idle' | 'observing' | 'reflecting';
+
+/**
+ * Status of a buffered OM operation (observation or reflection).
+ */
+export type OMBufferedStatus = 'idle' | 'running' | 'complete';
+
+/**
+ * Full progress state for Observational Memory.
+ * Maintained by the Harness and exposed via `HarnessDisplayState`.
+ */
+export interface OMProgressState {
+  status: OMStatus;
+  // Active window tokens/thresholds (from om_status events)
+  pendingTokens: number;
+  threshold: number;
+  thresholdPercent: number;
+  observationTokens: number;
+  reflectionThreshold: number;
+  reflectionThresholdPercent: number;
+  // Buffered state (from om_status events)
+  buffered: {
+    observations: {
+      status: OMBufferedStatus;
+      chunks: number;
+      messageTokens: number;
+      projectedMessageRemoval: number;
+      observationTokens: number;
+    };
+    reflection: {
+      status: OMBufferedStatus;
+      inputObservationTokens: number;
+      observationTokens: number;
+    };
+  };
+  generationCount: number;
+  stepNumber: number;
+  cycleId?: string;
+  startTime?: number;
+  /** Observation tokens before reflection compression (set on om_reflection_start) */
+  preReflectionTokens: number;
+}
+
+// =============================================================================
+// Display State
+// =============================================================================
+
+/**
+ * State of an active tool execution, tracked by the Harness for UI consumption.
+ */
+export interface ActiveToolState {
+  name: string;
+  args: unknown;
+  status: 'streaming_input' | 'running' | 'completed' | 'error';
+  partialResult?: string;
+  result?: unknown;
+  isError?: boolean;
+  shellOutput?: string;
+}
+
+/**
+ * State of an active subagent execution, tracked by the Harness for UI consumption.
+ */
+export interface ActiveSubagentState {
+  agentType: string;
+  task: string;
+  modelId?: string;
+  toolCalls: Array<{ name: string; isError: boolean }>;
+  textDelta: string;
+  status: 'running' | 'completed' | 'error';
+  durationMs?: number;
+  result?: string;
+}
+
+/**
+ * Canonical display state maintained by the Harness.
+ *
+ * This is the single source of truth for *what to display*.
+ * Any UI (TUI, web, desktop) can subscribe to snapshots of this state
+ * instead of interpreting 35+ raw event types.
+ *
+ * The Harness updates this state alongside every event emission,
+ * then emits a `display_state_changed` event so UIs can react.
+ */
+export interface HarnessDisplayState {
+  // ── Agent lifecycle ──────────────────────────────────────────────────
+  /** Whether an agent operation is currently in progress */
+  isRunning: boolean;
+
+  // ── Current streaming message ────────────────────────────────────────
+  /** The message currently being streamed (null when idle) */
+  currentMessage: HarnessMessage | null;
+
+  // ── Token usage ──────────────────────────────────────────────────────
+  /** Cumulative token usage for the current thread */
+  tokenUsage: TokenUsage;
+
+  // ── Tool execution tracking ──────────────────────────────────────────
+  /** Active tool executions keyed by toolCallId */
+  activeTools: Map<string, ActiveToolState>;
+
+  // ── Streaming tool input ─────────────────────────────────────────────
+  /** Partial JSON buffers for tools whose arguments are being streamed */
+  toolInputBuffers: Map<string, { text: string; toolName: string }>;
+
+  // ── Tool approval ────────────────────────────────────────────────────
+  /** A tool awaiting user approval (null when no approval pending) */
+  pendingApproval: {
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+  } | null;
+
+  // ── Interactive prompts ──────────────────────────────────────────────
+  /** A question from the agent awaiting user answer (null when none) */
+  pendingQuestion: {
+    questionId: string;
+    question: string;
+    options?: Array<{ label: string; description?: string }>;
+  } | null;
+
+  /** A plan awaiting user approval (null when none) */
+  pendingPlanApproval: {
+    planId: string;
+    title?: string;
+    plan: string;
+  } | null;
+
+  // ── Subagent tracking ────────────────────────────────────────────────
+  /** Active subagent executions keyed by parent toolCallId */
+  activeSubagents: Map<string, ActiveSubagentState>;
+
+  // ── Observational Memory ─────────────────────────────────────────────
+  /** Full OM progress state (status, tokens, thresholds, buffered) */
+  omProgress: OMProgressState;
+
+  /** Whether message buffering is currently running */
+  bufferingMessages: boolean;
+
+  /** Whether observation buffering is currently running */
+  bufferingObservations: boolean;
+
+  // ── File modifications ───────────────────────────────────────────────
+  /** Files modified by tool executions (for /diff and similar features) */
+  modifiedFiles: Map<string, { operations: string[]; firstModified: Date }>;
+
+  // ── Tasks ────────────────────────────────────────────────────────────
+  /** Current task list (from task_write tool) */
+  tasks: Array<{
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }>;
+
+  /** Previous task list snapshot (for diff detection) */
+  previousTasks: Array<{
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }>;
+}
+
+/**
+ * Creates the default/initial `HarnessDisplayState`.
+ */
+export function defaultDisplayState(): HarnessDisplayState {
+  return {
+    isRunning: false,
+    currentMessage: null,
+    tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    activeTools: new Map(),
+    toolInputBuffers: new Map(),
+    pendingApproval: null,
+    pendingQuestion: null,
+    pendingPlanApproval: null,
+    activeSubagents: new Map(),
+    omProgress: defaultOMProgressState(),
+    bufferingMessages: false,
+    bufferingObservations: false,
+    modifiedFiles: new Map(),
+    tasks: [],
+    previousTasks: [],
+  };
+}
+
+/**
+ * Creates the default OM progress state.
+ */
+export function defaultOMProgressState(): OMProgressState {
+  return {
+    status: 'idle',
+    pendingTokens: 0,
+    threshold: 30000,
+    thresholdPercent: 0,
+    observationTokens: 0,
+    reflectionThreshold: 40000,
+    reflectionThresholdPercent: 0,
+    buffered: {
+      observations: {
+        status: 'idle',
+        chunks: 0,
+        messageTokens: 0,
+        projectedMessageRemoval: 0,
+        observationTokens: 0,
+      },
+      reflection: {
+        status: 'idle',
+        inputObservationTokens: 0,
+        observationTokens: 0,
+      },
+    },
+    generationCount: 0,
+    stepNumber: 0,
+    preReflectionTokens: 0,
+  };
+}
+
+// =============================================================================
+// Events
+// =============================================================================
+
 /**
  * Events emitted by the harness that UIs can subscribe to.
  */
@@ -342,6 +608,7 @@ export type HarnessEvent =
   | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: HarnessThread }
+  | { type: 'thread_deleted'; threadId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' }
@@ -493,7 +760,8 @@ export type HarnessEvent =
         status: 'pending' | 'in_progress' | 'completed';
         activeForm: string;
       }>;
-    };
+    }
+  | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 
 /**
  * Listener function for harness events.
@@ -523,6 +791,7 @@ export type HarnessMessageContent =
   | { type: 'tool_call'; id: string; name: string; args: unknown }
   | { type: 'tool_result'; id: string; name: string; result: unknown; isError: boolean }
   | { type: 'image'; data: string; mimeType: string }
+  | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {
       type: 'om_observation_start';
       tokensToObserve: number;

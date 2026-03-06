@@ -13,7 +13,7 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { z } from 'zod';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType } from '../../observability';
+import { SpanType, wrapMastra, executeWithContext, EntityType, createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isVercelTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
@@ -58,7 +58,9 @@ export class CoreToolBuilder extends MastraBase {
     this.logType = input.logType;
     if (
       !isVercelTool(this.originalTool) &&
-      (input.autoResumeSuspendedTools || (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-'))
+      (input.autoResumeSuspendedTools ||
+        (this.originalTool as ToolAction<any, any>).id?.startsWith('agent-') ||
+        (this.originalTool as ToolAction<any, any>).id?.startsWith('workflow-'))
     ) {
       let schema = this.originalTool.inputSchema;
       if (typeof schema === 'function') {
@@ -216,6 +218,7 @@ export class CoreToolBuilder extends MastraBase {
             )
           : undefined,
         toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+        inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
       } as unknown as (CoreTool & { id: `${string}.${string}` }) | undefined;
     }
 
@@ -343,7 +346,7 @@ export class CoreToolBuilder extends MastraBase {
               },
               options.outputWriter || execOptions.outputWriter,
             ),
-            tracingContext: { currentSpan: toolSpan },
+            ...createObservabilityContext({ currentSpan: toolSpan }),
             abortSignal: execOptions.abortSignal,
             suspend: (args: any, suspendOptions?: SuspendOptions) => {
               suspendData = args;
@@ -476,7 +479,10 @@ export class CoreToolBuilder extends MastraBase {
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = processedSchema || this.getParameters();
         const { data, error } = validateToolInput(parameters, args, options.name);
-        if (error) {
+        //suspendedToolRunId is only required when resumeData is provided
+        const suspendedToolRunIdErrToIgnore =
+          error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
+        if (error && !suspendedToolRunIdErrToIgnore) {
           logger.warn(error.message);
           return error;
         }
@@ -663,6 +669,11 @@ export class CoreToolBuilder extends MastraBase {
       providerOptions: 'providerOptions' in this.originalTool ? this.originalTool.providerOptions : undefined,
       mcp: 'mcp' in this.originalTool ? this.originalTool.mcp : undefined,
       toModelOutput: 'toModelOutput' in this.originalTool ? this.originalTool.toModelOutput : undefined,
+      inputExamples: 'inputExamples' in this.originalTool ? this.originalTool.inputExamples : undefined,
+      onInputStart: 'onInputStart' in this.originalTool ? this.originalTool.onInputStart : undefined,
+      onInputDelta: 'onInputDelta' in this.originalTool ? this.originalTool.onInputDelta : undefined,
+      onInputAvailable: 'onInputAvailable' in this.originalTool ? this.originalTool.onInputAvailable : undefined,
+      onOutput: 'onOutput' in this.originalTool ? this.originalTool.onOutput : undefined,
     } as unknown as CoreTool;
   }
 }

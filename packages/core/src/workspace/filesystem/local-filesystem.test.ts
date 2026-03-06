@@ -1,8 +1,9 @@
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import { RequestContext } from '../../request-context';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -442,6 +443,15 @@ describe('LocalFilesystem', () => {
   // Contained Mode (path restrictions)
   // ===========================================================================
   describe('contained mode', () => {
+    it('should expose contained getter as true by default', () => {
+      expect(localFs.contained).toBe(true);
+    });
+
+    it('should expose contained getter as false when set', () => {
+      const uncontainedFs = new LocalFilesystem({ basePath: tempDir, contained: false });
+      expect(uncontainedFs.contained).toBe(false);
+    });
+
     it('should block path traversal by default', async () => {
       await expect(localFs.readFile('/../../../etc/passwd')).rejects.toThrow(PermissionError);
     });
@@ -740,6 +750,171 @@ describe('LocalFilesystem', () => {
         expect(instructions).toContain('Additionally');
         expect(instructions).toContain(outsideDir);
       });
+    });
+  });
+
+  // ===========================================================================
+  // getInstructions with custom override
+  // ===========================================================================
+  describe('getInstructions with custom override', () => {
+    it('should return custom instructions when provided', () => {
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: 'Custom filesystem instructions here.',
+      });
+      expect(testFs.getInstructions()).toBe('Custom filesystem instructions here.');
+    });
+
+    it('should return empty string when override is empty string', () => {
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: '',
+      });
+      expect(testFs.getInstructions()).toBe('');
+    });
+
+    it('should return auto-generated instructions when no override', () => {
+      const testFs = new LocalFilesystem({ basePath: tempDir });
+      expect(testFs.getInstructions()).toContain('Local filesystem');
+    });
+
+    it('should support function form that extends auto instructions', () => {
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: ({ defaultInstructions }) => `${defaultInstructions}\nExtra info.`,
+      });
+      const result = testFs.getInstructions();
+      expect(result).toContain('Local filesystem');
+      expect(result).toContain('Extra info.');
+    });
+
+    it('should pass requestContext to function form', () => {
+      const ctx = new RequestContext([['locale', 'fr']]);
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} locale=${requestContext?.get('locale')}`;
+      });
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: fn,
+      });
+      const result = testFs.getInstructions({ requestContext: ctx });
+      expect(fn).toHaveBeenCalledOnce();
+      expect(result).toContain('locale=fr');
+      expect(result).toContain('Local filesystem');
+    });
+
+    it('should pass undefined requestContext when not provided to function form', () => {
+      const fn = vi.fn(({ defaultInstructions, requestContext }: any) => {
+        return `${defaultInstructions} ctx=${String(requestContext)}`;
+      });
+      const testFs = new LocalFilesystem({
+        basePath: tempDir,
+        instructions: fn,
+      });
+      const result = testFs.getInstructions();
+      expect(result).toContain('ctx=undefined');
+    });
+  });
+
+  // ===========================================================================
+  // Tilde (~) expansion
+  // ===========================================================================
+  describe('tilde expansion', () => {
+    let homeDir: string;
+    let tildeTargetDir: string;
+
+    beforeEach(async () => {
+      homeDir = os.homedir();
+      // Create a temp directory inside the real home dir for tilde tests
+      tildeTargetDir = await fs.mkdtemp(path.join(homeDir, '.mastra-tilde-test-'));
+    });
+
+    afterEach(async () => {
+      try {
+        await fs.rm(tildeTargetDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    });
+
+    it('should expand ~ in basePath', () => {
+      const tildeFs = new LocalFilesystem({ basePath: '~/my-project' });
+      expect(tildeFs.basePath).toBe(path.join(homeDir, 'my-project'));
+    });
+
+    it('should expand ~ in allowedPaths constructor option', () => {
+      const tildeFs = new LocalFilesystem({
+        basePath: tempDir,
+        allowedPaths: ['~/allowed-dir'],
+      });
+      expect(tildeFs.allowedPaths).toEqual([path.join(homeDir, 'allowed-dir')]);
+    });
+
+    it('should expand ~ to home directory when contained is false', async () => {
+      const uncontainedFs = new LocalFilesystem({
+        basePath: tempDir,
+        contained: false,
+      });
+      const relativeTildePath = tildeTargetDir.replace(homeDir, '~');
+      const filePath = `${relativeTildePath}/tilde-test.txt`;
+
+      await uncontainedFs.writeFile(filePath, 'tilde works');
+
+      const absoluteExpected = path.join(tildeTargetDir, 'tilde-test.txt');
+      const content = await fs.readFile(absoluteExpected, 'utf-8');
+      expect(content).toBe('tilde works');
+    });
+
+    it('should expand ~ to home directory when path is in allowedPaths', async () => {
+      const relativeTildeDir = tildeTargetDir.replace(homeDir, '~');
+      const fsWithAllowed = new LocalFilesystem({
+        basePath: tempDir,
+        contained: true,
+        allowedPaths: [relativeTildeDir],
+      });
+      const filePath = `${relativeTildeDir}/tilde-allowed.txt`;
+
+      await fsWithAllowed.writeFile(filePath, 'tilde allowed works');
+
+      const absoluteExpected = path.join(tildeTargetDir, 'tilde-allowed.txt');
+      const content = await fs.readFile(absoluteExpected, 'utf-8');
+      expect(content).toBe('tilde allowed works');
+    });
+
+    it('should expand ~ in setAllowedPaths', async () => {
+      const relativeTildeDir = tildeTargetDir.replace(homeDir, '~');
+      localFs.setAllowedPaths([relativeTildeDir]);
+
+      const filePath = `${relativeTildeDir}/tilde-set-allowed.txt`;
+      await localFs.writeFile(filePath, 'tilde set allowed works');
+
+      const absoluteExpected = path.join(tildeTargetDir, 'tilde-set-allowed.txt');
+      const content = await fs.readFile(absoluteExpected, 'utf-8');
+      expect(content).toBe('tilde set allowed works');
+    });
+
+    it('should throw PermissionError for tilde path outside basePath in contained mode', async () => {
+      const relativeTildeDir = tildeTargetDir.replace(homeDir, '~');
+      const filePath = `${relativeTildeDir}/contained.txt`;
+
+      // contained: true, no allowedPaths — tilde expands to a real absolute path
+      // outside basePath, so it should throw PermissionError (not nest under basePath)
+      await expect(localFs.writeFile(filePath, 'should not be here')).rejects.toThrow('Permission');
+    });
+
+    it('should read files written via tilde path', async () => {
+      const uncontainedFs = new LocalFilesystem({
+        basePath: tempDir,
+        contained: false,
+      });
+      const relativeTildePath = tildeTargetDir.replace(homeDir, '~');
+
+      // Write directly to disk
+      await fs.writeFile(path.join(tildeTargetDir, 'read-test.txt'), 'read via tilde');
+
+      // Read via tilde path
+      const content = await uncontainedFs.readFile(`${relativeTildePath}/read-test.txt`);
+      expect(content.toString()).toBe('read via tilde');
     });
   });
 

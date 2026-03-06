@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list';
 
 function saveAndErrorTests(version: 'v1' | 'v2') {
   let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -641,6 +642,45 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect((resultError as any).requestId).toBe(testErrorRequestId);
       });
 
+      it('should throw APICallError in generate when model throws rate limit error', async () => {
+        const rateLimitError = new APICallError({
+          message: 'Rate limit exceeded',
+          url: 'https://api.example.com/v1/chat/completions',
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: true,
+          responseBody: 'Rate limit exceeded',
+        });
+
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw rateLimitError;
+          },
+          doStream: async () => {
+            throw rateLimitError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-rate-limit-generate',
+          name: 'Test Rate Limit Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let caughtError: Error | null = null;
+        try {
+          await agent.generate('Hello', { modelSettings: { maxRetries: 0 } });
+        } catch (err: any) {
+          caughtError = err;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError).toBeInstanceOf(APICallError);
+        expect(caughtError!.message).toBe('Rate limit exceeded');
+        expect((caughtError as InstanceType<typeof APICallError>).statusCode).toBe(429);
+      });
+
       it('should throw correct error in generate when model throws', async () => {
         const errorModel = new MockLanguageModelV2({
           doGenerate: async () => {
@@ -783,6 +823,301 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
         expect(onErrorCalled).toBe(true);
         expect(onErrorArg).toBeInstanceOf(Error);
         expect((onErrorArg as unknown as Error).message).toMatch(/Model stream failed/i);
+      });
+
+      describe('error chunk with non-error finishReason', () => {
+        // Tests for the bug where error chunks are emitted mid-stream but the finish chunk
+        // has a non-'error' finishReason. Previously, generate() only threw when
+        // `finishReason === 'error' && error`, silently swallowing errors in this case.
+        const finishReasons = ['stop', 'length', 'content-filter', 'tool-calls', 'other', 'unknown'] as const;
+
+        for (const reason of finishReasons) {
+          it(`should throw in generate when error chunk is present but finishReason is '${reason}'`, async () => {
+            const streamError = new Error(`Stream error with finishReason '${reason}'`);
+
+            const errorModel = new MockLanguageModelV2({
+              doGenerate: async () => {
+                throw streamError;
+              },
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'partial response' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'error', error: streamError },
+                  {
+                    type: 'finish',
+                    finishReason: reason,
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+              }),
+            });
+
+            const agent = new Agent({
+              id: `test-error-finish-reason-${reason}`,
+              name: `Test Error FinishReason ${reason}`,
+              model: errorModel,
+              instructions: 'You are a helpful assistant.',
+            });
+
+            await expect(agent.generate('Hello', { modelSettings: { maxRetries: 0 } })).rejects.toThrow();
+          });
+        }
+
+        it('should expose error in stream output when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Mid-stream error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'partial' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-error-stream-non-error-finish',
+            name: 'Test Error Stream NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+          let errorChunk: any;
+          for await (const chunk of output.fullStream) {
+            if (chunk.type === 'error') {
+              errorChunk = chunk;
+            }
+          }
+
+          expect(errorChunk).toBeDefined();
+          expect(errorChunk.payload.error).toBeInstanceOf(Error);
+          expect((errorChunk.payload.error as Error).message).toBe('Mid-stream error with stop finish');
+          expect(output.error).toBeInstanceOf(Error);
+          expect((output.error as Error).message).toBe('Mid-stream error with stop finish');
+        });
+
+        it('should call onError in generate when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-onerror-non-error-finish',
+            name: 'Test OnError NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          let onErrorCalled = false;
+          let onErrorArg: any = null;
+
+          try {
+            await agent.generate('Hello', {
+              onError: ({ error }) => {
+                onErrorCalled = true;
+                onErrorArg = error;
+              },
+              modelSettings: { maxRetries: 0 },
+            });
+          } catch {
+            // Expected to throw
+          }
+
+          expect(onErrorCalled).toBe(true);
+          expect(onErrorArg).toBeInstanceOf(Error);
+          expect((onErrorArg as Error).message).toBe('Error with stop finish');
+        });
+
+        // The error-chunk-with-mismatched-finishReason scenario requires bypassing the
+        // AISDKV5LanguageModel wrapper (which converts doGenerate results via
+        // createStreamFromGenerateResult and never inserts error chunks). We subclass
+        // AISDKV5LanguageModel so the model passes the instanceof check in resolveModel
+        // (avoiding re-wrapping), then override doGenerate to return a raw stream containing
+        // an error chunk with finishReason 'stop' — the exact scenario this fix addresses.
+        it('should throw in resumeGenerate when error chunk has non-error finishReason', async () => {
+          const { Mastra } = await import('../../mastra');
+          const { InMemoryStore } = await import('../../storage');
+          const { AISDKV5LanguageModel } = await import('../../llm/model/aisdk/v5/model');
+
+          const streamError = new Error('Resume model error with stop finish');
+          let generateCallCount = 0;
+
+          const suspendingTool = createTool({
+            id: 'suspend-tool',
+            description: 'A tool that suspends',
+            inputSchema: z.object({ input: z.string() }),
+            suspendSchema: z.object({ message: z.string() }),
+            resumeSchema: z.object({ data: z.string() }),
+            execute: async (_input, context) => {
+              if (!context?.agent?.resumeData) {
+                return await context?.agent?.suspend({ message: 'Need input' });
+              }
+              return { result: context.agent.resumeData.data };
+            },
+          });
+
+          const baseModel = new MockLanguageModelV2();
+
+          // Subclass to bypass resolveModel's instanceof check and return raw streams
+          class TestModel extends AISDKV5LanguageModel {
+            override async doGenerate(): Promise<any> {
+              generateCallCount++;
+              if (generateCallCount === 1) {
+                // First call: trigger tool suspension
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start' as const, warnings: [] },
+                    {
+                      type: 'response-metadata' as const,
+                      id: 'resp-1',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-input-start' as const,
+                      id: 'tc-1',
+                      toolName: 'suspendTool',
+                    },
+                    {
+                      type: 'tool-input-delta' as const,
+                      id: 'tc-1',
+                      delta: '{"input": "test"}',
+                    },
+                    {
+                      type: 'tool-input-end' as const,
+                      id: 'tc-1',
+                    },
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: 'tc-1',
+                      toolName: 'suspendTool',
+                      input: '{"input": "test"}',
+                    },
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'tool-calls' as const,
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ]),
+                  warnings: [],
+                  request: {},
+                  rawResponse: {},
+                };
+              }
+              // Second call (after resume): error chunk with non-error finishReason
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start' as const, warnings: [] },
+                  {
+                    type: 'response-metadata' as const,
+                    id: 'resp-2',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'error' as const, error: streamError },
+                  {
+                    type: 'finish' as const,
+                    finishReason: 'stop' as const,
+                    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                  },
+                ]),
+                warnings: [],
+                request: {},
+                rawResponse: {},
+              };
+            }
+          }
+
+          const model = new TestModel(baseModel);
+          const storage = new InMemoryStore();
+
+          const agent = new Agent({
+            id: 'test-resume-error',
+            name: 'Test Resume Error',
+            model: model as any,
+            instructions: 'You are a helpful assistant.',
+            tools: { suspendTool: suspendingTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { testResumeError: agent },
+            storage,
+            logger: false,
+          });
+
+          const registeredAgent = mastra.getAgent('testResumeError');
+
+          // First call suspends
+          const output = await registeredAgent.generate('test', {
+            maxSteps: 2,
+            modelSettings: { maxRetries: 0 },
+          });
+
+          expect(output.finishReason).toBe('suspended');
+
+          // Resume should throw because stream has error chunk despite finishReason 'stop'
+          await expect(
+            registeredAgent.resumeGenerate(
+              { data: 'resumed' },
+              { runId: output.runId!, modelSettings: { maxRetries: 0 } },
+            ),
+          ).rejects.toThrow();
+        });
       });
 
       // Helper to create a model that calls a tool which will throw during execution
@@ -1037,6 +1372,154 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
         expect(abortCalled).toBe(true);
         expect(abortEvent).toBeDefined();
+      });
+
+      it('should not persist full response to memory when stream is aborted mid-generation', async () => {
+        if (version === 'v1') return; // Only test for v2 (VNext) path
+
+        const abortController = new AbortController();
+        const totalChunks = 20;
+        const abortAfterChunks = 5;
+
+        // Simulate an LLM provider that does NOT respect the abort signal -
+        // it continues streaming all chunks even after the signal fires.
+        // This is realistic: many providers buffer data and continue sending
+        // even after the client signals cancellation.
+        const slowStreamModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+            content: [{ type: 'text', text: 'Full long response' }],
+            warnings: [],
+          }),
+          doStream: async () => {
+            // Build all chunks upfront - model does NOT check abort signal
+            const allChunks = [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start' as const, id: 'text-1' },
+              ...Array.from({ length: totalChunks }, (_, i) => ({
+                type: 'text-delta' as const,
+                id: 'text-1',
+                delta: `chunk-${i + 1} `,
+              })),
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+              },
+            ];
+
+            let index = 0;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: new ReadableStream({
+                pull(controller) {
+                  if (index < allChunks.length) {
+                    const chunk = allChunks[index++]!;
+
+                    // Fire abort after a few text-delta chunks, but keep streaming
+                    // This simulates the HTTP disconnect signal firing mid-stream
+                    const textDeltaCount = index - 3; // offset for header chunks
+                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
+                      abortController.abort();
+                    }
+
+                    controller.enqueue(chunk);
+                  } else {
+                    controller.close();
+                  }
+                },
+              }),
+            };
+          },
+        });
+
+        const mockMemory = new MockMemory();
+        let savedMessages: MastraDBMessage[] = [];
+        const origSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async function (args) {
+          savedMessages.push(...args.messages);
+          return origSaveMessages(args);
+        };
+
+        const agent = new Agent({
+          id: 'test-abort-no-persist-full',
+          name: 'Test Abort No Persist Full',
+          model: slowStreamModel,
+          instructions: 'You are a helpful assistant.',
+          memory: mockMemory,
+        });
+
+        const stream = await agent.stream('Write a very long essay', {
+          abortSignal: abortController.signal,
+          memory: {
+            thread: 'abort-test-thread',
+            resource: 'abort-test-resource',
+          },
+        });
+
+        // Consume the stream - it should end due to abort
+        try {
+          await stream.consumeStream();
+        } catch {
+          // Expected - abort error
+        }
+
+        // Wait a bit for any background persistence to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Collect all text that was persisted across all saved assistant messages
+        const assistantMessages = savedMessages.filter(m => m.role === 'assistant');
+        const savedText = assistantMessages
+          .map(m => {
+            if (typeof m.content === 'string') return m.content;
+            if (m.content.parts) {
+              return m.content.parts
+                .filter((p: any) => p.type === 'text')
+                .map((p: any) => p.text)
+                .join('');
+            }
+            return '';
+          })
+          .join('');
+
+        // Also check the memory store directly for messages on this thread
+        const recalled = await mockMemory.recall({
+          threadId: 'abort-test-thread',
+          count: 100,
+        });
+        const recalledAssistant = recalled.messages.filter(m => m.role === 'assistant');
+        const recalledText = recalledAssistant
+          .map(m => {
+            if (typeof m.content === 'string') return m.content;
+            if (m.content.parts) {
+              return m.content.parts
+                .filter((p: any) => p.type === 'text')
+                .map((p: any) => p.text)
+                .join('');
+            }
+            return '';
+          })
+          .join('');
+
+        const allPersistedText = savedText + recalledText;
+
+        // The persisted text should NOT contain the later chunks that were generated
+        // after the abort signal fired. The model produced all 20 chunks, but chunks
+        // after the abort point (chunk 5) should not be in memory.
+        // Using a generous buffer (checking chunks 10+) to account for buffering.
+        for (let i = 10; i <= totalChunks; i++) {
+          expect(allPersistedText).not.toContain(`chunk-${i} `);
+        }
       });
     });
   }

@@ -49,34 +49,35 @@ const store = new MongoDBVector({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this vector store instance",
-},
-{
-name: "uri",
-type: "string",
-description: "MongoDB connection string",
-},
-{
-name: "dbName",
-type: "string",
-description: "Name of the MongoDB database to use",
-},
-{
-name: "options",
-type: "MongoClientOptions",
-isOptional: true,
-description: "Optional MongoDB client options",
-},
-{
-name: "embeddingFieldPath",
-type: "string",
-isOptional: true,
-defaultValue: "embedding",
-description: "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'MongoDB connection string',
+  },
+  {
+    name: 'dbName',
+    type: 'string',
+    description: 'Name of the MongoDB database to use',
+  },
+  {
+    name: 'options',
+    type: 'MongoClientOptions',
+    isOptional: true,
+    description: 'Optional MongoDB client options',
+  },
+  {
+    name: 'embeddingFieldPath',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'embedding',
+    description:
+      "Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., 'text.contentEmbedding').",
+  },
 ]}
 />
 
@@ -88,23 +89,23 @@ Creates a new vector index (collection) in MongoDB.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection to create",
-},
-{
-name: "dimension",
-type: "number",
-description: "Vector dimension (must match your embedding model)",
-},
-{
-name: "metric",
-type: "'cosine' | 'euclidean' | 'dotproduct'",
-isOptional: true,
-defaultValue: "cosine",
-description: "Distance metric for similarity search",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection to create',
+  },
+  {
+    name: 'dimension',
+    type: 'number',
+    description: 'Vector dimension (must match your embedding model)',
+  },
+  {
+    name: 'metric',
+    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    isOptional: true,
+    defaultValue: 'cosine',
+    description: 'Distance metric for similarity search',
+  },
 ]}
 />
 
@@ -114,28 +115,28 @@ Adds or updates vectors and their metadata in the collection.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection to insert into",
-},
-{
-name: "vectors",
-type: "number[][]",
-description: "Array of embedding vectors",
-},
-{
-name: "metadata",
-type: "Record<string, any>[]",
-isOptional: true,
-description: "Metadata for each vector",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Optional vector IDs (auto-generated if not provided)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection to insert into',
+  },
+  {
+    name: 'vectors',
+    type: 'number[][]',
+    description: 'Array of embedding vectors',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>[]',
+    isOptional: true,
+    description: 'Metadata for each vector',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional vector IDs (auto-generated if not provided)',
+  },
 ]}
 />
 
@@ -145,49 +146,49 @@ Searches for similar vectors with optional metadata filtering.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection to search in",
-},
-{
-name: "queryVector",
-type: "number[]",
-description: "Query vector to find similar vectors for",
-},
-{
-name: "topK",
-type: "number",
-isOptional: true,
-defaultValue: "10",
-description: "Number of results to return",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filters (applies to the `metadata` field)",
-},
-{
-name: "documentFilter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Filters on original document fields (not just metadata)",
-},
-{
-name: "includeVector",
-type: "boolean",
-isOptional: true,
-defaultValue: "false",
-description: "Whether to include vector data in results",
-},
-{
-name: "minScore",
-type: "number",
-isOptional: true,
-defaultValue: "0",
-description: "Minimum similarity score threshold",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection to search in',
+  },
+  {
+    name: 'queryVector',
+    type: 'number[]',
+    description: 'Query vector to find similar vectors for',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Number of results to return',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filters (applies to the `metadata` field)',
+  },
+  {
+    name: 'documentFilter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Filters on original document fields (not just metadata)',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Whether to include vector data in results',
+  },
+  {
+    name: 'minScore',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '0',
+    description: 'Minimum similarity score threshold',
+  },
 ]}
 />
 
@@ -197,11 +198,11 @@ Returns information about the index (collection).
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection to describe",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection to describe',
+  },
 ]}
 />
 
@@ -221,11 +222,11 @@ Deletes a collection and all its data.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection to delete',
+  },
 ]}
 />
 
@@ -241,40 +242,40 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection containing the vector",
-},
-{
-name: "id",
-type: "string",
-isOptional: true,
-description: "ID of the vector entry to update (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vector(s) to update (mutually exclusive with id)",
-},
-{
-name: "update",
-type: "object",
-description: "Update data containing vector and/or metadata",
-},
-{
-name: "update.vector",
-type: "number[]",
-isOptional: true,
-description: "New vector data to update",
-},
-{
-name: "update.metadata",
-type: "Record<string, any>",
-isOptional: true,
-description: "New metadata to update",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the vector entry to update (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+  },
+  {
+    name: 'update',
+    type: 'object',
+    description: 'Update data containing vector and/or metadata',
+  },
+  {
+    name: 'update.vector',
+    type: 'number[]',
+    isOptional: true,
+    description: 'New vector data to update',
+  },
+  {
+    name: 'update.metadata',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'New metadata to update',
+  },
 ]}
 />
 
@@ -284,16 +285,16 @@ Deletes a specific vector entry from an index by its ID.
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection containing the vector",
-},
-{
-name: "id",
-type: "string",
-description: "ID of the vector entry to delete",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection containing the vector',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'ID of the vector entry to delete',
+  },
 ]}
 />
 
@@ -303,23 +304,23 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-{
-name: "indexName",
-type: "string",
-description: "Name of the collection containing the vectors to delete",
-},
-{
-name: "ids",
-type: "string[]",
-isOptional: true,
-description: "Array of vector IDs to delete (mutually exclusive with filter)",
-},
-{
-name: "filter",
-type: "Record<string, any>",
-isOptional: true,
-description: "Metadata filter to identify vectors to delete (mutually exclusive with ids)",
-},
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the collection containing the vectors to delete',
+  },
+  {
+    name: 'ids',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+  },
 ]}
 />
 
@@ -376,7 +377,11 @@ try {
 
 Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve related messages by meaning (not keywords).
 
-> Note: You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+:::note
+
+You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+
+:::
 
 This setup uses FastEmbed, a local embedding model, to generate vector embeddings.
 To use this, install `@mastra/fastembed`:

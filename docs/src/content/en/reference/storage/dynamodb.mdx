@@ -104,46 +104,44 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this storage instance.",
-isOptional: false,
-},
-{
-name: "config.tableName",
-type: "string",
-description: "The name of your DynamoDB table.",
-isOptional: false,
-},
-{
-name: "config.region",
-type: "string",
-description:
-"AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
-isOptional: true,
-},
-{
-name: "config.endpoint",
-type: "string",
-description:
-"Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
-isOptional: true,
-},
-{
-name: "config.credentials",
-type: "object",
-description:
-"AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.",
-isOptional: true,
-},
-{
-name: "config.ttl",
-type: "object",
-description:
-"TTL (Time To Live) configuration for automatic data expiration. Configure per entity type: thread, message, trace, eval, workflow_snapshot, resource, score. Each entity config includes: enabled (boolean), attributeName (string, default: 'ttl'), defaultTtlSeconds (number).",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'config.tableName',
+    type: 'string',
+    description: 'The name of your DynamoDB table.',
+    isOptional: false,
+  },
+  {
+    name: 'config.region',
+    type: 'string',
+    description: "AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
+    isOptional: true,
+  },
+  {
+    name: 'config.endpoint',
+    type: 'string',
+    description: "Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
+    isOptional: true,
+  },
+  {
+    name: 'config.credentials',
+    type: 'object',
+    description:
+      'AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.',
+    isOptional: true,
+  },
+  {
+    name: 'config.ttl',
+    type: 'object',
+    description:
+      "TTL (Time To Live) configuration for automatic data expiration. Configure per entity type: thread, message, trace, eval, workflow_snapshot, resource, score. Each entity config includes: enabled (boolean), attributeName (string, default: 'ttl'), defaultTtlSeconds (number).",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -217,24 +215,26 @@ Each entity type accepts the following configuration:
 
 <PropertiesTable
   content={[
-{
-name: "enabled",
-type: "boolean",
-description: "Whether TTL is enabled for this entity type.",
-isOptional: false,
-},
-{
-name: "attributeName",
-type: "string",
-description: "The DynamoDB attribute name to use for TTL. Must match the TTL attribute configured on your DynamoDB table. Defaults to 'ttl'.",
-isOptional: true,
-},
-{
-name: "defaultTtlSeconds",
-type: "number",
-description: "Default TTL in seconds from item creation time. Items will be automatically deleted by DynamoDB after this duration.",
-isOptional: true,
-},
+  {
+    name: 'enabled',
+    type: 'boolean',
+    description: 'Whether TTL is enabled for this entity type.',
+    isOptional: false,
+  },
+  {
+    name: 'attributeName',
+    type: 'string',
+    description:
+      "The DynamoDB attribute name to use for TTL. Must match the TTL attribute configured on your DynamoDB table. Defaults to 'ttl'.",
+    isOptional: true,
+  },
+  {
+    name: 'defaultTtlSeconds',
+    type: 'number',
+    description:
+      'Default TTL in seconds from item creation time. Items will be automatically deleted by DynamoDB after this duration.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -258,7 +258,11 @@ aws dynamodb update-time-to-live \
 1. Under "Time to Live (TTL)", click "Manage TTL"
 1. Enable TTL and specify the attribute name (default: `ttl`)
 
-> **Note**: DynamoDB deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
+:::note
+
+DynamoDB deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
+
+:::
 
 ## AWS IAM Permissions
 

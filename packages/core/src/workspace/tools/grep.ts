@@ -2,9 +2,11 @@ import { z } from 'zod';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { isTextFile } from '../filesystem/fs-utils';
+import { loadGitignore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
+import { applyTokenLimit } from './output-helpers';
 
 export const grepTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.GREP,
@@ -58,7 +60,7 @@ Usage:
     { pattern, path: inputPath = './', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
     context,
   ) => {
-    const { filesystem } = requireFilesystem(context);
+    const { workspace, filesystem } = requireFilesystem(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.FILESYSTEM.GREP);
 
     // Guard against excessively long patterns as a cheap ReDoS heuristic
@@ -87,6 +89,14 @@ Usage:
       searchPath = inputPath;
     }
 
+    // Load gitignore filter.
+    // If the user explicitly targets a gitignored path (e.g. "./dist"), skip
+    // filtering so they can still search there. Otherwise apply as normal.
+    const rawIgnoreFilter = await loadGitignore(filesystem);
+    const searchPathNormalized = searchPath.replace(/^\.\//, '').replace(/\/$/, '');
+    const targetIsIgnored = rawIgnoreFilter && searchPathNormalized && rawIgnoreFilter(searchPathNormalized + '/');
+    const ignoreFilter = targetIsIgnored ? undefined : rawIgnoreFilter;
+
     // Collect files to search
     let filePaths: string[];
 
@@ -112,6 +122,14 @@ Usage:
             if (!includeHidden && entry.name.startsWith('.')) continue;
 
             const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
+
+            // Skip gitignored paths
+            if (ignoreFilter) {
+              const relativePath = fullPath.replace(/^\.\//, '');
+              const checkPath = entry.type === 'directory' ? `${relativePath}/` : relativePath;
+              if (ignoreFilter(checkPath)) continue;
+            }
+
             if (entry.type === 'file') {
               // Skip non-text files
               if (!isTextFile(entry.name)) continue;
@@ -202,15 +220,19 @@ Usage:
       }
     }
 
-    // Summary line
-    outputLines.push('---');
-    const parts = [`${totalMatchCount} match${totalMatchCount !== 1 ? 'es' : ''}`];
-    parts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
+    // Summary line — placed at the top so it's always visible after truncation
+    const summaryParts = [`${totalMatchCount} match${totalMatchCount !== 1 ? 'es' : ''}`];
+    summaryParts.push(`across ${filesWithMatches.size} file${filesWithMatches.size !== 1 ? 's' : ''}`);
     if (truncated) {
-      parts.push(`(truncated at ${GLOBAL_CAP})`);
+      summaryParts.push(`(truncated at ${GLOBAL_CAP})`);
     }
-    outputLines.push(parts.join(' '));
+    const summary = summaryParts.join(' ');
+    outputLines.unshift(summary, '---');
 
-    return outputLines.join('\n');
+    return await applyTokenLimit(
+      outputLines.join('\n'),
+      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.FILESYSTEM.GREP]?.maxOutputTokens,
+      'end',
+    );
   },
 });

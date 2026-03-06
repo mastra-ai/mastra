@@ -6,15 +6,34 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'docs/**'
-      - '.github/scripts/check-deleted-pages.js'
-      - '.github/scripts/validate-redirects.js'
-      - '.github/workflows/lint-docs.yml'
 
 jobs:
+  changes:
+    name: Detect docs changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check for docs changes
+        id: filter
+        run: |
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^docs/|^\.github/scripts/(check-deleted-pages|validate-redirects)\.js$|^\.github/workflows/lint-docs\.yml$'; then
+            echo "docs=true" >> $GITHUB_OUTPUT
+          else
+            echo "docs=false" >> $GITHUB_OUTPUT
+          fi
+
   check-deleted-pages:
     name: Check for deleted pages without redirects
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout PR branch
@@ -94,6 +113,8 @@ jobs:
 
   validate-redirects:
     name: Validate redirects
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -152,15 +173,28 @@ jobs:
               console.error('Failed to post comment:', error);
             }
 
-  validate-frontmatter:
-    name: Validate MDX frontmatter
-    # Only run on the main repository, not on forks
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+  lint-docs:
+    name: Lint docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Check formatting
+        working-directory: ./docs
+        run: pnpm prettier --check .
+
+      - name: Lint with remark
+        working-directory: ./docs
+        run: pnpm lint:remark
 
       - name: Check for MDX changes
         id: mdx-changes
@@ -171,11 +205,16 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Setup pnpm and Node.js
-        if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: ./.github/actions/setup-pnpm-node
-
       - name: Validate frontmatter
         if: steps.mdx-changes.outputs.has_changes == 'true'
         working-directory: ./docs
         run: pnpm dlx tsx scripts/validate-frontmatter.ts
+
+      - name: Validate reference sidebar sort order
+        working-directory: ./docs
+        run: pnpm validate:reference-sidebar
+
+      - name: Check for docs not linked in sidebars
+        if: steps.mdx-changes.outputs.has_changes == 'true'
+        working-directory: ./docs
+        run: pnpm validate:sidebar-docs

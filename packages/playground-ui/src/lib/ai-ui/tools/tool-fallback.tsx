@@ -29,10 +29,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const { activateSkill } = useActivatedSkills();
 
   useEffect(() => {
-    if (toolName === 'skill-activate' && result?.success && args?.name) {
-      activateSkill(args.name);
-    }
-  }, [toolName, result, args, activateSkill]);
+    if (toolName !== 'skill') return;
+    if (!args?.name) return;
+    if (props.status?.type !== 'complete') return;
+    activateSkill(args.name);
+  }, [toolName, args?.name, props.status?.type, activateSkill]);
 
   useWorkflowStream(result);
 
@@ -49,6 +50,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
   const isNetwork = metadata?.mode === 'network';
+  const isComplete = props.status?.type === 'complete';
 
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
@@ -80,6 +82,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         isNetwork={isNetwork}
         suspendPayload={suspendedToolMetadata?.suspendPayload}
         toolCalled={toolCalled}
+        isComplete={isComplete}
       />
     );
   }
@@ -122,7 +125,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   }
 
   // Use custom terminal UI for sandbox execution tools
-  const isSandboxExecution = toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
+  const isSandboxExecution =
+    toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ||
+    toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT ||
+    toolName === WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS;
 
   if (isSandboxExecution) {
     return (

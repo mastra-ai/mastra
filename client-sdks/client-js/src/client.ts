@@ -16,6 +16,7 @@ import {
   AgentBuilder,
   Observability,
   StoredAgent,
+  StoredPromptBlock,
   StoredMCPClient,
   StoredScorer,
   StoredSkill,
@@ -60,6 +61,10 @@ import type {
   ListStoredAgentsResponse,
   CreateStoredAgentParams,
   StoredAgentResponse,
+  ListStoredPromptBlocksParams,
+  ListStoredPromptBlocksResponse,
+  CreateStoredPromptBlockParams,
+  StoredPromptBlockResponse,
   ListStoredScorersParams,
   ListStoredScorersResponse,
   CreateStoredScorerParams,
@@ -899,6 +904,67 @@ export class MastraClient extends BaseResource {
    */
   public getStoredAgent(storedAgentId: string): StoredAgent {
     return new StoredAgent(this.options, storedAgentId);
+  }
+
+  // ============================================================================
+  // Stored Prompt Blocks
+  // ============================================================================
+
+  /**
+   * Lists all stored prompt blocks with optional pagination
+   * @param params - Optional pagination and ordering parameters
+   * @returns Promise containing paginated list of stored prompt blocks
+   */
+  public listStoredPromptBlocks(params?: ListStoredPromptBlocksParams): Promise<ListStoredPromptBlocksResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.page !== undefined) {
+      searchParams.set('page', String(params.page));
+    }
+    if (params?.perPage !== undefined) {
+      searchParams.set('perPage', String(params.perPage));
+    }
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        searchParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        searchParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
+    if (params?.authorId) {
+      searchParams.set('authorId', params.authorId);
+    }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
+    if (params?.metadata) {
+      searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+
+    const queryString = searchParams.toString();
+    return this.request(`/stored/prompt-blocks${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Creates a new stored prompt block
+   * @param params - Prompt block configuration including name, content, rules, etc.
+   * @returns Promise containing the created stored prompt block
+   */
+  public createStoredPromptBlock(params: CreateStoredPromptBlockParams): Promise<StoredPromptBlockResponse> {
+    return this.request('/stored/prompt-blocks', {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
+   * Gets a stored prompt block instance by ID for further operations (details, update, delete)
+   * @param storedPromptBlockId - ID of the stored prompt block to retrieve
+   * @returns StoredPromptBlock instance
+   */
+  public getStoredPromptBlock(storedPromptBlockId: string): StoredPromptBlock {
+    return new StoredPromptBlock(this.options, storedPromptBlockId);
   }
 
   // ============================================================================

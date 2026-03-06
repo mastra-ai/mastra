@@ -104,6 +104,21 @@ const workspace = new Workspace({
 })
 ```
 
+## Custom index name
+
+By default, the search index name is derived from the workspace ID. To set a custom name, use `searchIndexName`:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  // highlight-next-line
+  searchIndexName: 'my_workspace_vectors',
+})
+```
+
+The index name must be a valid SQL identifier: start with a letter or underscore, contain only letters, numbers, or underscores, and be at most 63 characters long.
+
 ## Indexing content
 
 ### Manual indexing
@@ -131,7 +146,7 @@ Manual indexing is useful when:
 
 ### Auto-indexing
 
-Configure `autoIndexPaths` to automatically index files when the workspace initializes. Each path specifies a directory to index recursively.
+Configure `autoIndexPaths` to automatically index files when the workspace initializes. Each entry can be a directory path (indexed recursively) or a glob pattern for selective indexing.
 
 ```typescript
 const workspace = new Workspace({
@@ -143,11 +158,18 @@ const workspace = new Workspace({
 await workspace.init()
 ```
 
-When `init()` is called, all files in the specified directories are read and indexed for search. The file path becomes the document ID.
+When `init()` is called, all matching files are read and indexed for search. The file path becomes the document ID.
 
-:::note
-Paths must be directories, not glob patterns. Use `/docs` to index all files in the docs directory recursively. Glob patterns like `**/*.md` are not supported.
-:::
+Glob patterns let you index specific file types:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  // highlight-next-line
+  autoIndexPaths: ['/docs/**/*.md', '/support/**/*.txt'],
+})
+```
 
 ## Searching
 

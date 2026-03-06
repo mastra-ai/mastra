@@ -24,7 +24,7 @@ describe('workspace_delete', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/test.txt' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/test.txt' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toBe('Deleted /test.txt');
@@ -41,7 +41,7 @@ describe('workspace_delete', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/emptydir' });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({ path: '/emptydir' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toBe('Deleted /emptydir');
@@ -59,10 +59,13 @@ describe('workspace_delete', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute({
-      path: '/dirwithfiles',
-      recursive: true,
-    });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.DELETE].execute(
+      {
+        path: '/dirwithfiles',
+        recursive: true,
+      },
+      { workspace },
+    );
 
     expect(typeof result).toBe('string');
     expect(result).toBe('Deleted /dirwithfiles');

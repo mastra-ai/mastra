@@ -138,7 +138,7 @@ Usage notes:
 
         // Handle directory listing
         if (await isDirectory(absolutePath)) {
-          const { stdout, stderr } = await execAsync(`find "${absolutePath}" -maxdepth 2 -not -path '*/\\\\.*'`);
+          const { stdout, stderr } = await execAsync(`find "${absolutePath}" -maxdepth 2 -not -path '*/.*'`);
 
           if (stderr) {
             throw new Error(stderr);

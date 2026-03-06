@@ -15,7 +15,7 @@ import {
 import { Link } from 'react-router';
 
 function Workflows() {
-  const { data: workflows, isLoading } = useWorkflows();
+  const { data: workflows, isLoading, error } = useWorkflows();
 
   const isEmpty = !isLoading && Object.keys(workflows || {}).length === 0;
 
@@ -40,7 +40,7 @@ function Workflows() {
       </Header>
 
       <MainContentContent isCentered={isEmpty}>
-        <WorkflowTable workflows={workflows || {}} isLoading={isLoading} />
+        <WorkflowTable workflows={workflows || {}} isLoading={isLoading} error={error} />
       </MainContentContent>
     </MainContentLayout>
   );

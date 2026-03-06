@@ -1,12 +1,18 @@
 /**
  * Tracing interfaces
+ *
+ * Span types, attributes, span lifecycle, and tracing-specific types.
+ * For top-level observability infrastructure (instances, exporters, bridges, config),
+ * see observability.ts.
  */
 import type { MastraError } from '../../error';
-import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { LanguageModelUsage, ProviderMetadata, StepStartPayload } from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
+import type { CustomSamplerOptions, ObservabilityInstance } from './core';
+import type { FeedbackInput } from './feedback';
+import type { ScoreInput } from './scores';
 
 // ============================================================================
 // Span Types
@@ -555,9 +561,14 @@ export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
 }
 
 /**
- * Exported Span interface, used for tracing exporters
+ * Span data structure shared between exported and recorded spans.
+ * Contains all span fields in a serializable format (no object references).
+ *
+ * This is the common base for:
+ * - ExportedSpan: span data sent to exporters
+ * - RecordedSpan: span data loaded from storage with annotation methods
  */
-export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
+export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
@@ -568,6 +579,12 @@ export interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
    */
   tags?: string[];
 }
+
+/**
+ * Exported Span interface, used for tracing exporters.
+ * This is the format sent to ObservabilityExporter implementations.
+ */
+export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
 
 /**
  * Options for ending a model generation span
@@ -598,75 +615,87 @@ export type AnySpan = Span<keyof SpanTypeMap>;
 export type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>;
 
 // ============================================================================
-// Tracing Interfaces
+// Recorded Span & Trace Interfaces
 // ============================================================================
 
 /**
- * Primary interface for Observability
+ * A recorded span is span data that has been captured/persisted and can have
+ * scores and feedback attached post-hoc. Unlike live Span objects, RecordedSpan
+ * has immutable core data but supports annotation methods.
+ *
+ * Spans are organized in a tree structure via parent/children references,
+ * with all references pointing to the same objects in memory.
+ *
+ * Use cases:
+ * - Spans loaded from storage for evaluation
+ * - Spans from completed traces being annotated
+ * - Post-hoc quality scoring and user feedback
  */
-export interface ObservabilityInstance {
-  /**
-   * Get current configuration
-   */
-  getConfig(): Readonly<ObservabilityInstanceConfig>;
+export interface RecordedSpan<TType extends SpanType> extends SpanData<TType> {
+  /** Parent span reference (undefined for root spans) */
+  readonly parent?: AnyRecordedSpan;
+
+  /** Child spans in execution order */
+  readonly children: ReadonlyArray<AnyRecordedSpan>;
 
   /**
-   * Get all exporters
+   * Add a quality score to this recorded span.
+   * Scores are emitted via the ObservabilityBus and can be persisted/exported.
    */
-  getExporters(): readonly ObservabilityExporter[];
+  addScore(score: ScoreInput): void;
 
   /**
-   * Get all span output processors
+   * Add user feedback to this recorded span.
+   * Feedback is emitted via the ObservabilityBus and can be persisted/exported.
    */
-  getSpanOutputProcessors(): readonly SpanOutputProcessor[];
-
-  /**
-   * Get the logger instance (for exporters and other components)
-   */
-  getLogger(): IMastraLogger;
-
-  /**
-   * Get the bridge instance if configured
-   */
-  getBridge(): ObservabilityBridge | undefined;
-
-  /**
-   * Start a new span of a specific SpanType
-   */
-  startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>;
-
-  /**
-   * Rebuild a span from exported data for lifecycle operations.
-   * Used by durable execution engines (e.g., Inngest) to end/update spans
-   * that were created in a previous durable operation.
-   *
-   * @param cached - The exported span data to rebuild from
-   * @returns A span that can have end()/update()/error() called on it
-   */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
-
-  /**
-   * Force flush any buffered/queued spans from all exporters and the bridge
-   * without shutting down the observability instance.
-   *
-   * This is useful in serverless environments (like Vercel's fluid compute) where
-   * you need to ensure all spans are exported before the runtime instance is
-   * terminated, while keeping the observability system active for future requests.
-   *
-   * Unlike shutdown(), flush() does not release resources or prevent future tracing.
-   */
-  flush(): Promise<void>;
-
-  /**
-   * Shutdown tracing and clean up resources
-   */
-  shutdown(): Promise<void>;
-
-  /**
-   * Override setLogger to add tracing specific initialization log
-   */
-  __setLogger(logger: IMastraLogger): void;
+  addFeedback(feedback: FeedbackInput): void;
 }
+
+/**
+ * Union type for cases that need to handle any recorded span
+ */
+export type AnyRecordedSpan = RecordedSpan<keyof SpanTypeMap>;
+
+/**
+ * A recorded trace is a complete execution trace loaded from storage.
+ * Provides both tree access (via rootSpan) and flat access (via spans).
+ * All references point to the same span objects - no memory duplication.
+ *
+ * Obtained via mastra.getTrace(traceId) for post-execution annotation.
+ */
+export interface RecordedTrace {
+  /** The trace identifier */
+  readonly traceId: string;
+
+  /** Root span of the trace tree (entry point for tree traversal) */
+  readonly rootSpan: AnyRecordedSpan;
+
+  /** All spans in flat array for iteration (same objects as in tree) */
+  readonly spans: ReadonlyArray<AnyRecordedSpan>;
+
+  /**
+   * Get a specific recorded span by ID.
+   * @param spanId - The span identifier
+   * @returns The recorded span if found, null otherwise
+   */
+  getSpan(spanId: string): AnyRecordedSpan | null;
+
+  /**
+   * Add a score at the trace level.
+   * Uses root span's metadata for context inheritance.
+   */
+  addScore(score: ScoreInput): void;
+
+  /**
+   * Add feedback at the trace level.
+   * Uses root span's metadata for context inheritance.
+   */
+  addFeedback(feedback: FeedbackInput): void;
+}
+
+// ============================================================================
+// Tracing Interfaces
+// ============================================================================
 
 // ============================================================================
 // Span Create/Update/Error Option Types
@@ -802,30 +831,6 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   mastra?: Mastra;
 }
 
-// ============================================================================
-// Lifecycle Types
-// ============================================================================
-
-export interface ObservabilityEntrypoint {
-  shutdown(): Promise<void>;
-
-  setMastraContext(options: { mastra: Mastra }): void;
-
-  setLogger(options: { logger: IMastraLogger }): void;
-
-  getSelectedInstance(options: ConfigSelectorOptions): ObservabilityInstance | undefined;
-
-  // Registry management methods
-  registerInstance(name: string, instance: ObservabilityInstance, isDefault?: boolean): void;
-  getInstance(name: string): ObservabilityInstance | undefined;
-  getDefaultInstance(): ObservabilityInstance | undefined;
-  listInstances(): ReadonlyMap<string, ObservabilityInstance>;
-  unregisterInstance(name: string): boolean;
-  hasInstance(name: string): boolean;
-  setConfigSelector(selector: ConfigSelector): void;
-  clear(): void;
-}
-
 /**
  * Bitwise options to set different types of spans as internal in
  * a workflow or agent execution.
@@ -946,113 +951,6 @@ export type TracingProperties = {
 };
 
 // ============================================================================
-// Registry Config Interfaces
-// ============================================================================
-
-/**
- * Options for controlling serialization of span data.
- * These options control how input, output, and attributes are cleaned before export.
- */
-export interface SerializationOptions {
-  /**
-   * Maximum length for string values
-   * @default 1024
-   */
-  maxStringLength?: number;
-  /**
-   * Maximum depth for nested objects
-   * @default 6
-   */
-  maxDepth?: number;
-  /**
-   * Maximum number of items in arrays
-   * @default 50
-   */
-  maxArrayLength?: number;
-  /**
-   * Maximum number of keys in objects
-   * @default 50
-   */
-  maxObjectKeys?: number;
-}
-
-/**
- * Configuration for a single observability instance
- */
-export interface ObservabilityInstanceConfig {
-  /** Unique identifier for this config in the observability registry */
-  name: string;
-  /** Service name for observability */
-  serviceName: string;
-  /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
-  sampling?: SamplingStrategy;
-  /** Custom exporters */
-  exporters?: ObservabilityExporter[];
-  /** Custom processors */
-  spanOutputProcessors?: SpanOutputProcessor[];
-  /** OpenTelemetry bridge for integration with existing OTEL infrastructure */
-  bridge?: ObservabilityBridge;
-  /** Set to `true` if you want to see spans internal to the operation of mastra */
-  includeInternalSpans?: boolean;
-  /**
-   * RequestContext keys to automatically extract as metadata for all spans
-   * created with this observability configuration.
-   * Supports dot notation for nested values.
-   */
-  requestContextKeys?: string[];
-  /**
-   * Options for controlling serialization of span data (input/output/attributes).
-   * Use these to customize truncation limits for large payloads.
-   */
-  serializationOptions?: SerializationOptions;
-}
-
-/**
- * Complete Observability registry configuration
- */
-export interface ObservabilityRegistryConfig {
-  /** Enables default exporters, with sampling: always, and sensitive data filtering */
-  default?: {
-    enabled?: boolean;
-  };
-  /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>;
-  /** Optional selector function to choose which tracing instance to use */
-  configSelector?: ConfigSelector;
-}
-
-// ============================================================================
-// Sampling Strategy Interfaces
-// ============================================================================
-
-/**
- * Sampling strategy types
- */
-export enum SamplingStrategyType {
-  ALWAYS = 'always',
-  NEVER = 'never',
-  RATIO = 'ratio',
-  CUSTOM = 'custom',
-}
-
-/**
- * Sampling strategy configuration
- */
-export type SamplingStrategy =
-  | { type: SamplingStrategyType.ALWAYS }
-  | { type: SamplingStrategyType.NEVER }
-  | { type: SamplingStrategyType.RATIO; probability: number }
-  | { type: SamplingStrategyType.CUSTOM; sampler: (options?: CustomSamplerOptions) => boolean };
-
-/**
- * Options passed when using a custom sampler strategy
- */
-export interface CustomSamplerOptions {
-  requestContext?: RequestContext;
-  metadata?: Record<string, any>;
-}
-
-// ============================================================================
 // Exporter and Processor Interfaces
 // ============================================================================
 
@@ -1072,128 +970,6 @@ export type TracingEvent =
   | { type: TracingEventType.SPAN_STARTED; exportedSpan: AnyExportedSpan }
   | { type: TracingEventType.SPAN_UPDATED; exportedSpan: AnyExportedSpan }
   | { type: TracingEventType.SPAN_ENDED; exportedSpan: AnyExportedSpan };
-
-export interface InitExporterOptions {
-  mastra?: Mastra;
-  config?: ObservabilityInstanceConfig;
-}
-
-export interface InitBridgeOptions {
-  mastra?: Mastra;
-  config?: ObservabilityInstanceConfig;
-}
-
-/**
- * Interface for tracing exporters
- */
-export interface ObservabilityExporter {
-  /** Exporter name */
-  name: string;
-
-  /** Initialize exporter with tracing configuration and/or access to Mastra */
-  init?(options: InitExporterOptions): void;
-
-  /** Sets logger instance on the exporter.  */
-  __setLogger?(logger: IMastraLogger): void;
-
-  /** Export tracing events */
-  exportTracingEvent(event: TracingEvent): Promise<void>;
-
-  addScoreToTrace?({
-    traceId,
-    spanId,
-    score,
-    reason,
-    scorerName,
-    metadata,
-  }: {
-    traceId: string;
-    spanId?: string;
-    score: number;
-    reason?: string;
-    scorerName: string;
-    metadata?: Record<string, any>;
-  }): Promise<void>;
-
-  /**
-   * Force flush any buffered/queued spans without shutting down the exporter.
-   * This is useful in serverless environments where you need to ensure spans
-   * are exported before the runtime instance is terminated, while keeping
-   * the exporter active for future requests.
-   *
-   * Unlike shutdown(), flush() does not release resources or prevent future exports.
-   */
-  flush(): Promise<void>;
-
-  /** Shutdown exporter */
-  shutdown(): Promise<void>;
-}
-
-/**
- * Interface for observability bridges
- */
-export interface ObservabilityBridge {
-  /** Bridge name */
-  name: string;
-
-  /** Initialize bridge with observability configuration and/or access to Mastra */
-  init?(options: InitBridgeOptions): void;
-
-  /** Sets logger instance on the bridge  */
-  __setLogger?(logger: IMastraLogger): void;
-
-  /**
-   * Export Mastra tracing events to OTEL infrastructure
-   * Called for SPAN_STARTED, SPAN_UPDATED, SPAN_ENDED events
-   *
-   * @param event - Tracing event with exported span
-   */
-  exportTracingEvent(event: TracingEvent): Promise<void>;
-
-  /**
-   * Execute an async function within the tracing context of a Mastra span.
-   * This enables auto-instrumented operations (HTTP, DB) to have correct parent spans
-   * in the external tracing system (e.g., OpenTelemetry, DataDog, etc.).
-   *
-   * @param spanId - The ID of the Mastra span to use as context
-   * @param fn - The async function to execute within the span context
-   * @returns The result of the function execution
-   */
-  executeInContext?<T>(spanId: string, fn: () => Promise<T>): Promise<T>;
-
-  /**
-   * Execute a synchronous function within the tracing context of a Mastra span.
-   * This enables auto-instrumented operations (HTTP, DB) to have correct parent spans
-   * in the external tracing system (e.g., OpenTelemetry, DataDog, etc.).
-   *
-   * @param spanId - The ID of the Mastra span to use as context
-   * @param fn - The synchronous function to execute within the span context
-   * @returns The result of the function execution
-   */
-  executeInContextSync?<T>(spanId: string, fn: () => T): T;
-
-  /**
-   * Create a span in the bridge's tracing system.
-   * Called during Mastra span construction to get bridge-generated identifiers.
-   *
-   * @param options - Span creation options from Mastra
-   * @returns Span identifiers (spanId, traceId, parentSpanId) from bridge, or undefined if creation fails
-   */
-  createSpan(options: CreateSpanOptions<SpanType>): SpanIds | undefined;
-
-  /**
-   * Force flush any buffered/queued spans without shutting down the bridge.
-   * This is useful in serverless environments where you need to ensure spans
-   * are exported before the runtime instance is terminated, while keeping
-   * the bridge active for future requests.
-   *
-   * Unlike shutdown(), flush() does not release resources or prevent future exports.
-   */
-  flush(): Promise<void>;
-
-  /** Shutdown bridge and cleanup resources */
-  shutdown(): Promise<void>;
-}
 
 /**
  * Interface for span processors
@@ -1256,24 +1032,3 @@ export interface SpanOutputProcessor {
  * ```
  */
 export type CustomSpanFormatter = (span: AnyExportedSpan) => AnyExportedSpan | Promise<AnyExportedSpan>;
-
-// ============================================================================
-// Tracing Config Selector Interfaces
-// ============================================================================
-
-/**
- *  Options passed when using a custom tracing config selector
- */
-export interface ConfigSelectorOptions {
-  /** Request Context */
-  requestContext?: RequestContext;
-}
-
-/**
- * Function to select which tracing instance to use for a given span
- * Returns the name of the tracing instance, or undefined to use default
- */
-export type ConfigSelector = (
-  options: ConfigSelectorOptions,
-  availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
-) => string | undefined;
