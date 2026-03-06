@@ -677,6 +677,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        messageId,
+        rotateResponseMessageId,
         // Shared processor states map for accessing persisted state
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
@@ -687,6 +689,13 @@ function createStepFromProcessor<TProcessorId extends string>(
       const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
+      let currentMessageId = messageId;
+      const rotateCurrentResponseMessageId = rotateResponseMessageId
+        ? () => {
+            currentMessageId = rotateResponseMessageId();
+            return currentMessageId;
+          }
+        : undefined;
 
       // Early return if processor doesn't implement this phase - no span created
       // This prevents empty spans for phases the processor doesn't handle
@@ -767,6 +776,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         state: processorState,
         writer: processorWriter,
         abortSignal,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -799,6 +810,8 @@ function createStepFromProcessor<TProcessorId extends string>(
         modelSettings,
         structuredOutput,
         steps,
+        messageId: currentMessageId,
+        rotateResponseMessageId: rotateCurrentResponseMessageId,
       };
 
       // Helper to execute phase with proper span lifecycle management
@@ -926,6 +939,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 modelSettings,
                 structuredOutput,
                 steps: steps ?? [],
+                messageId: currentMessageId,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
               });
 
               const validatedResult = await ProcessorRunner.validateAndFormatProcessInputStepResult(result, {
@@ -948,8 +963,13 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
-              // so we must explicitly include it to avoid losing it for subsequent steps
-              return { ...passThrough, messages, ...validatedResult };
+              // so we must explicitly include it to avoid losing it for subsequent steps.
+              return {
+                ...passThrough,
+                messages,
+                ...validatedResult,
+                ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
+              };
             }
             return { ...passThrough, messages };
           }

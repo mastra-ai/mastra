@@ -1966,6 +1966,12 @@ Notes:
       );
     }
 
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
+      );
+    }
+
     // Dynamic import to avoid loading OM code when not needed and to prevent
     // import errors when paired with an older @mastra/core version
     const { ObservationalMemory } = await import('./processors/observational-memory');
