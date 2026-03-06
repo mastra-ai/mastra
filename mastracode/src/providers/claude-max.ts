@@ -30,8 +30,8 @@ export function getAuthStorage(): AuthStorage {
 /**
  * Set a custom AuthStorage instance (useful for TUI integration)
  */
-export function setAuthStorage(storage: AuthStorage): void {
-  authStorageInstance = storage;
+export function setAuthStorage(storage: AuthStorage | undefined): void {
+  authStorageInstance = storage ?? null;
 }
 
 /**
@@ -138,7 +138,7 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const anthropic = createAnthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || 'test-api-key',
+      apiKey: 'test-api-key',
     });
     return wrapLanguageModel({
       model: anthropic(modelId),
@@ -152,6 +152,13 @@ export function opencodeClaudeMaxProvider(modelId: string = 'claude-sonnet-4-202
 
     // Reload from disk to handle multi-instance refresh
     authStorage.reload();
+
+    const storedCred = authStorage.get('anthropic');
+    if (storedCred?.type === 'api_key') {
+      throw new Error(
+        'Anthropic API key credential is configured, but Claude Max OAuth provider requires OAuth credentials.',
+      );
+    }
 
     // Get access token (auto-refreshes if expired)
     const accessToken = await authStorage.getApiKey('anthropic');
