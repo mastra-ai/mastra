@@ -9,6 +9,7 @@ import type { TUI } from '@mariozechner/pi-tui';
 import type { TaskItem } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
+import { MC_TOOLS } from '../../tool-names.js';
 import { theme, mastra } from '../theme.js';
 import { CollapsibleComponent } from './collapsible.js';
 import { ErrorDisplayComponent } from './error-display.js';
@@ -55,6 +56,11 @@ function fileLink(displayText: string, filePath: string, line?: number): string 
   const lineFragment = line ? `#${line}` : '';
   // OSC 8: \x1b]8;params;URI\x07 ... \x1b]8;;\x07
   return `\x1b]8;;file://${absPath}${lineFragment}\x07${displayText}\x1b]8;;\x07`;
+}
+
+/** Check if a tool name is a web search provider tool (e.g. web_search, web_search_20250305) */
+function isWebSearchTool(name: string): boolean {
+  return name === 'web_search' || /^web_search_\d+$/.test(name);
 }
 
 /**
@@ -150,10 +156,9 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
    */
   appendStreamingOutput(output: string): void {
     if (
-      this.toolName !== 'execute_command' &&
-      this.toolName !== 'mastra_workspace_execute_command' &&
-      this.toolName !== 'mastra_workspace_get_process_output' &&
-      this.toolName !== 'mastra_workspace_kill_process'
+      this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
+      this.toolName !== MC_TOOLS.GET_PROCESS_OUTPUT &&
+      this.toolName !== MC_TOOLS.KILL_PROCESS
     ) {
       return;
     }
@@ -185,15 +190,23 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
   private updateBgColor(): void {
     // For shell, view, edit, and process commands, skip background - we use bordered box style instead
-    const isShellCommand = this.toolName === 'execute_command' || this.toolName === 'mastra_workspace_execute_command';
-    const isViewCommand = this.toolName === 'view' || this.toolName === 'mastra_workspace_read_file';
-    const isEditCommand = this.toolName === 'string_replace_lsp' || this.toolName === 'mastra_workspace_edit_file';
-    const isWriteCommand = this.toolName === 'write_file' || this.toolName === 'mastra_workspace_write_file';
-    const isProcessCommand =
-      this.toolName === 'mastra_workspace_get_process_output' || this.toolName === 'mastra_workspace_kill_process';
+    const isShellCommand = this.toolName === MC_TOOLS.EXECUTE_COMMAND;
+    const isViewCommand = this.toolName === MC_TOOLS.VIEW;
+    const isEditCommand = this.toolName === MC_TOOLS.STRING_REPLACE_LSP;
+    const isWriteCommand = this.toolName === MC_TOOLS.WRITE_FILE;
+    const isProcessCommand = this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT || this.toolName === MC_TOOLS.KILL_PROCESS;
     const isTaskWrite = this.toolName === 'task_write';
+    const isWebSearch = isWebSearchTool(this.toolName);
 
-    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite) {
+    if (
+      isShellCommand ||
+      isViewCommand ||
+      isEditCommand ||
+      isWriteCommand ||
+      isProcessCommand ||
+      isTaskWrite ||
+      isWebSearch
+    ) {
       // No background - let terminal colors show through
       this.contentBox.setBgFn((text: string) => text);
       return;
@@ -216,35 +229,34 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     this.collapsible = undefined;
 
     switch (this.toolName) {
-      case 'view':
-      case 'mastra_workspace_read_file':
+      case MC_TOOLS.VIEW:
         this.renderViewToolEnhanced();
         break;
-      case 'execute_command':
-      case 'mastra_workspace_execute_command':
+      case MC_TOOLS.EXECUTE_COMMAND:
         this.renderBashToolEnhanced();
         break;
-      case 'string_replace_lsp':
-      case 'mastra_workspace_edit_file':
+      case MC_TOOLS.STRING_REPLACE_LSP:
         this.renderEditToolEnhanced();
         break;
-      case 'write_file':
-      case 'mastra_workspace_write_file':
+      case MC_TOOLS.WRITE_FILE:
         this.renderWriteToolEnhanced();
         break;
-      case 'find_files':
-      case 'mastra_workspace_list_files':
+      case MC_TOOLS.FIND_FILES:
         this.renderListFilesEnhanced();
         break;
-      case 'mastra_workspace_get_process_output':
-      case 'mastra_workspace_kill_process':
+      case MC_TOOLS.GET_PROCESS_OUTPUT:
+      case MC_TOOLS.KILL_PROCESS:
         this.renderProcessToolEnhanced();
         break;
       case 'task_write':
         this.renderTaskWriteEnhanced();
         break;
       default:
-        this.renderGenericToolEnhanced();
+        if (isWebSearchTool(this.toolName)) {
+          this.renderWebSearchEnhanced();
+        } else {
+          this.renderGenericToolEnhanced();
+        }
     }
   }
 
@@ -434,7 +446,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private renderProcessToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
     const pid = argsObj?.pid ? Number(argsObj.pid) : 0;
-    const isKill = this.toolName === 'mastra_workspace_kill_process';
+    const isKill = this.toolName === MC_TOOLS.KILL_PROCESS;
     const isWait = !isKill && argsObj?.wait === true;
 
     const timeSuffix = this.isPartial ? '' : this.getDurationSuffix();
@@ -916,6 +928,113 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.contentBox.addChild(new Text(theme.fg('error', output), 0, 0));
       }
     }
+  }
+
+  private renderWebSearchEnhanced(): void {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const query = argsObj?.query ? String(argsObj.query) : '';
+    const status = this.getStatusIndicator();
+
+    const queryDisplay = query ? ` ${theme.fg('accent', `"${query}"`)}` : '';
+    const footerText = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
+
+    // Don't show border until we have a result
+    if (!this.result || this.isPartial) {
+      this.contentBox.addChild(new Text(footerText, 0, 0));
+      return;
+    }
+
+    if (this.result.isError) {
+      this.renderErrorResult(footerText);
+      return;
+    }
+
+    const border = (char: string) => theme.bold(theme.fg('accent', char));
+
+    // Parse search results and format as a clean list of titles + URLs
+    const output = this.formatWebSearchResults();
+    if (output) {
+      const termWidth = process.stdout.columns || 80;
+      const maxLineWidth = termWidth - 6;
+
+      // Empty line padding above
+      this.contentBox.addChild(new Text('', 0, 0));
+
+      // Top border
+      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+
+      let lines = output.split('\n');
+
+      // Limit lines when collapsed
+      const collapsedLines = 10;
+      const totalLines = lines.length;
+      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
+
+      if (hasMore) {
+        lines = lines.slice(0, collapsedLines);
+      }
+
+      const borderedLines = lines.map(line => {
+        const truncated = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + truncated;
+      });
+      this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
+
+      // Show truncation indicator
+      if (hasMore) {
+        const remaining = totalLines - collapsedLines;
+        this.contentBox.addChild(
+          new Text(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`), 0, 0),
+        );
+      }
+
+      // Bottom border with tool info
+      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    } else {
+      this.contentBox.addChild(new Text(footerText, 0, 0));
+    }
+  }
+
+  /**
+   * Format web search results as a clean list of titles + URLs.
+   * Handles both Anthropic provider results (JSON array with encryptedContent)
+   * and Tavily results (markdown-formatted text).
+   */
+  private formatWebSearchResults(): string {
+    const raw = this.getFormattedOutput();
+    if (!raw) return '';
+
+    // Try to parse as JSON array (Anthropic provider format)
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const lines: string[] = [];
+        for (const item of parsed) {
+          if (typeof item !== 'object' || item === null) continue;
+          const url = typeof item.url === 'string' ? item.url : '';
+          if (!url) continue;
+          const title = typeof item.title === 'string' && item.title ? item.title : url;
+          const age = typeof item.pageAge === 'string' && item.pageAge ? theme.fg('muted', ` (${item.pageAge})`) : '';
+          lines.push(`  ${theme.fg('accent', title)}${age}`);
+          lines.push(`  ${theme.fg('muted', url)}`);
+        }
+        if (lines.length > 0) return lines.join('\n');
+
+        // Parsed as JSON array but couldn't extract results — strip encryptedContent
+        // before falling through, so we never dump huge base64 blobs to the terminal
+        const stripped = parsed.map((item: unknown) => {
+          if (typeof item !== 'object' || item === null) return item;
+          const { encryptedContent, ...rest } = item as Record<string, unknown>;
+          return rest;
+        });
+        return JSON.stringify(stripped, null, 2);
+      }
+    } catch {
+      // Not JSON — fall through to raw text (Tavily format)
+    }
+
+    // Not JSON (e.g. Tavily format) — already readable text, return as-is
+    return raw;
   }
 
   private renderGenericToolEnhanced(): void {

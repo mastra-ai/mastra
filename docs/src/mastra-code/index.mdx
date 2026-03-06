@@ -8,7 +8,7 @@ slug: /
 
 import Steps from '@site/src/components/Steps';
 import StepItem from '@site/src/components/StepItem';
-import ThemedImage from "@theme/ThemedImage";
+import YouTube from '@site/src/components/YouTube';
 
 # Mastra Code
 
@@ -76,6 +76,7 @@ Mastra Code provides built-in slash commands for managing sessions and settings:
 | Command | Description |
 | - | - |
 | `/new` | Start a new conversation thread |
+| `/clone` | Clone the current thread (with optional rename) |
 | `/threads` | List all threads for this project |
 | `/models` | Select a different AI model |
 | `/mode` | Switch between Build, Plan, and Fast modes |
@@ -95,11 +96,15 @@ You can also define custom slash commands as markdown files. See [Configuration]
 
 | Shortcut | Action |
 | - | - |
-| `Ctrl+C` | Interrupt current operation |
+| `Ctrl+C` | Interrupt current operation or clear input |
+| `Ctrl+C` ×2 | Exit (double-tap) |
 | `Ctrl+D` | Exit (when editor is empty) |
+| `Ctrl+Z` | Suspend process (`fg` to resume) |
+| `Alt+Z` | Undo last clear |
 | `Ctrl+T` | Toggle thinking blocks visibility |
 | `Ctrl+E` | Expand/collapse all tool outputs |
 | `Ctrl+F` | Send a follow-up message while the agent is running |
+| `Ctrl+Y` | Toggle YOLO mode |
 
 ## Architecture
 
@@ -109,6 +114,12 @@ Mastra Code is built on four layers:
 1. **Harness**: Mode management, thread persistence, event system, state management
 1. **Mastra Agent**: Dynamic model selection, tool execution, memory integration, subagents
 1. **LibSQL Storage**: Thread persistence, message history, token usage tracking, observational memory
+
+## Demo Video
+
+In this demo, you'll see Mastra Code in action and learn how it came to be.
+
+<YouTube id="Hbgh3Iyd3Mk" />
 
 ## Next steps
 

@@ -35,36 +35,36 @@ Extends `BaseExporterConfig`, which includes:
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.",
-required: false,
-},
-{
-name: "endpoint",
-type: "string",
-description: "Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.",
-required: false,
-},
-{
-name: "projectName",
-type: "string",
-description: "Project name (default: 'mastra-tracing')",
-required: false,
-},
-{
-name: "logLevel",
-type: "'debug' | 'info' | 'warn' | 'error'",
-description: "Logger level (default: 'warn')",
-required: false,
-},
-{
-name: "tuningParameters",
-type: "Record<string, any>",
-description: "Tuning parameters for Braintrust",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.',
+    required: false,
+  },
+  {
+    name: 'projectName',
+    type: 'string',
+    description: "Project name (default: 'mastra-tracing')",
+    required: false,
+  },
+  {
+    name: 'logLevel',
+    type: "'debug' | 'info' | 'warn' | 'error'",
+    description: "Logger level (default: 'warn')",
+    required: false,
+  },
+  {
+    name: 'tuningParameters',
+    type: 'Record<string, any>',
+    description: 'Tuning parameters for Braintrust',
+    required: false,
+  },
 ]}
 />
 

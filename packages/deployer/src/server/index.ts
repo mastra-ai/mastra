@@ -10,13 +10,13 @@ import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
-import { normalizeStudioBase } from '../build/utils';
+import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -93,11 +93,25 @@ export async function createHonoServer(
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
+  // Pre-process routes: bake hono-openapi describeRoute into route middleware
+  // so the adapter handles it as normal middleware without needing to know about hono-openapi
+  const processedRoutes = routes?.map(route => {
+    if ('openapi' in route && route.openapi) {
+      const existingMiddleware = route.middleware
+        ? Array.isArray(route.middleware)
+          ? route.middleware
+          : [route.middleware]
+        : [];
+      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+    }
+    return route;
+  });
+
   // Store custom route auth configurations
   const customRouteAuthConfig = new Map<string, boolean>();
 
-  if (routes) {
-    for (const route of routes) {
+  if (processedRoutes) {
+    for (const route of processedRoutes) {
       // By default, routes require authentication unless explicitly set to false
       const requiresAuth = route.requiresAuth !== false;
       const routeKey = `${route.method}:${route.path}`;
@@ -129,7 +143,7 @@ export async function createHonoServer(
     bodyLimitOptions,
     openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
-    customApiRoutes: routes,
+    customApiRoutes: processedRoutes,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -149,10 +163,27 @@ export async function createHonoServer(
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
+    // Check if auth is configured - if so, we need credentials for cookie-based sessions
+    const hasAuth = !!server?.auth;
+
+    // When auth + credentials are enabled, origin cannot be '*'.
+    // Use user-configured cors.origin if provided; otherwise fall back to
+    // reflecting the request origin (required for dev/Studio but users should
+    // set an explicit origin in production).
+    let corsOrigin: string | string[] | ((origin: string) => string | undefined | null);
+    if (server?.cors && typeof server.cors === 'object' && 'origin' in server.cors && server.cors.origin) {
+      corsOrigin = server.cors.origin as string | string[] | ((origin: string) => string | undefined | null);
+    } else if (hasAuth) {
+      corsOrigin = (origin: string) => origin || undefined;
+    } else {
+      corsOrigin = '*';
+    }
+
     const corsConfig = {
-      origin: '*',
+      origin: corsOrigin,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      credentials: false,
+      // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
+      credentials: hasAuth ? true : false,
       maxAge: 3600,
       ...server?.cors,
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
@@ -192,6 +223,9 @@ export async function createHonoServer(
     );
   }
 
+  // Validate EE license before starting (checks RBAC config vs license)
+  await honoServerAdapter.validateEELicense();
+
   // Register auth middleware (authentication and authorization)
   // This is handled by the server adapter now
   honoServerAdapter.registerAuthMiddleware();
@@ -214,30 +248,8 @@ export async function createHonoServer(
     }
   }
 
-  if (routes) {
-    for (const route of routes) {
-      const middlewares: MiddlewareHandler[] = [];
-
-      if (route.middleware) {
-        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
-      }
-      if (route.openapi) {
-        middlewares.push(describeRoute(route.openapi));
-      }
-
-      const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
-
-      // Register route using app.on() which supports dynamic method/path registration
-      // Hono's H type (Handler | MiddlewareHandler) is internal, so we use Handler
-      // which is compatible at runtime since both accept (context, next)
-      const allHandlers = [...middlewares, handler] as const;
-      if (route.method === 'ALL') {
-        app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      } else {
-        app.on(route.method, route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      }
-    }
-  }
+  // Register custom API routes via the adapter (auth + middleware handled uniformly)
+  await honoServerAdapter.registerCustomApiRoutes();
 
   if (server?.build?.apiReqLogs) {
     app.use(logger());
@@ -367,7 +379,7 @@ export async function createHonoServer(
       const studioPath = getStudioPath();
       let indexHtml = await readFile(join(studioPath, 'index.html'), 'utf-8');
 
-      // Inject the server configuration information
+      // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
@@ -396,21 +408,21 @@ export async function createHonoServer(
           .replace(/\u2029/g, '\\u2029');
       };
 
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_API_PREFIX%%'`, `'${serverOptions?.apiPrefix ?? '/api'}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, `'${cloudApiEndpoint}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, `'${experimentalFeatures}'`);
-      indexHtml = indexHtml.replace(
-        `'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`,
-        `'${escapeForHtml(requestContextPresets)}'`,
-      );
+      const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
-      // Inject the base path for frontend routing
-      // The <base href> tag uses this to resolve all relative URLs correctly
-      indexHtml = indexHtml.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', studioBasePath);
+      indexHtml = injectStudioHtmlConfig(indexHtml, {
+        host: `'${host}'`,
+        port: `'${port}'`,
+        protocol: `'${protocol}'`,
+        apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
+        basePath: studioBasePath,
+        hideCloudCta: `'${hideCloudCta}'`,
+        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        experimentalFeatures: `'${experimentalFeatures}'`,
+        telemetryDisabled: `''`,
+        requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        autoDetectUrl: `'${autoDetectUrl}'`,
+      });
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }

@@ -82,67 +82,68 @@ const filesystem = new GCSFilesystem({
 
 <PropertiesTable
   content={[
-{
-name: "bucket",
-type: "string",
-description: "GCS bucket name",
-},
-{
-name: "projectId",
-type: "string",
-description: "GCS project ID. Required when using service account credentials.",
-isOptional: true,
-},
-{
-name: "credentials",
-type: "object | string",
-description: "Service account key JSON object or path to key file. If not provided, uses Application Default Credentials.",
-isOptional: true,
-},
-{
-name: "prefix",
-type: "string",
-description: "Optional prefix for all keys (acts like a subdirectory)",
-isOptional: true,
-},
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this filesystem instance",
-isOptional: true,
-defaultValue: "Auto-generated",
-},
-{
-name: "displayName",
-type: "string",
-description: "Human-friendly display name for the UI",
-isOptional: true,
-},
-{
-name: "icon",
-type: "FilesystemIcon",
-description: "Icon identifier for the UI",
-isOptional: true,
-},
-{
-name: "description",
-type: "string",
-description: "Short description of this filesystem for the UI",
-isOptional: true,
-},
-{
-name: "readOnly",
-type: "boolean",
-description: "When true, all write operations are blocked",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "endpoint",
-type: "string",
-description: "Custom API endpoint URL. Used for local development with emulators.",
-isOptional: true,
-},
+  {
+    name: 'bucket',
+    type: 'string',
+    description: 'GCS bucket name',
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description: 'GCS project ID. Required when using service account credentials.',
+    isOptional: true,
+  },
+  {
+    name: 'credentials',
+    type: 'object | string',
+    description:
+      'Service account key JSON object or path to key file. If not provided, uses Application Default Credentials.',
+    isOptional: true,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Optional prefix for all keys (acts like a subdirectory)',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this filesystem instance',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'displayName',
+    type: 'string',
+    description: 'Human-friendly display name for the UI',
+    isOptional: true,
+  },
+  {
+    name: 'icon',
+    type: 'FilesystemIcon',
+    description: 'Icon identifier for the UI',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description of this filesystem for the UI',
+    isOptional: true,
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean',
+    description: 'When true, all write operations are blocked',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Custom API endpoint URL. Used for local development with emulators.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -150,31 +151,31 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Filesystem instance identifier",
-},
-{
-name: "name",
-type: "string",
-description: "Provider name ('GCSFilesystem')",
-},
-{
-name: "provider",
-type: "string",
-description: "Provider identifier ('gcs')",
-},
-{
-name: "bucket",
-type: "string",
-description: "The GCS bucket name",
-},
-{
-name: "readOnly",
-type: "boolean | undefined",
-description: "Whether the filesystem is in read-only mode",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Filesystem instance identifier',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('GCSFilesystem')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('gcs')",
+  },
+  {
+    name: 'bucket',
+    type: 'string',
+    description: 'The GCS bucket name',
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean | undefined',
+    description: 'Whether the filesystem is in read-only mode',
+  },
 ]}
 />
 

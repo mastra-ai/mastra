@@ -19,6 +19,17 @@ async function getModelCachePath() {
   return cachePath;
 }
 
+/**
+ * Pre-download fastembed models without creating ONNX sessions.
+ * Call this before running tests in parallel to avoid concurrent download races.
+ */
+export async function warmup() {
+  const cacheDir = await getModelCachePath();
+  const retrieve = (FlagEmbedding as any).retrieveModel.bind(FlagEmbedding);
+  await retrieve(EmbeddingModel.BGESmallENV15, cacheDir, false);
+  await retrieve(EmbeddingModel.BGEBaseENV15, cacheDir, false);
+}
+
 // Shared function to generate embeddings using fastembed
 async function generateEmbeddings(values: string[], modelType: 'BGESmallENV15' | 'BGEBaseENV15') {
   const model = await FlagEmbedding.init({

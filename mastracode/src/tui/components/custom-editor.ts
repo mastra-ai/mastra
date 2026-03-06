@@ -4,7 +4,7 @@
 
 import { Editor, matchesKey } from '@mariozechner/pi-tui';
 import type { EditorTheme, TUI } from '@mariozechner/pi-tui';
-import { getClipboardImage } from '../../clipboard/index.js';
+import { getClipboardImage, getClipboardText } from '../../clipboard/index.js';
 import type { ClipboardImage } from '../../clipboard/index.js';
 
 const PASTE_START = '\x1b[200~';
@@ -12,7 +12,8 @@ const PASTE_END = '\x1b[201~';
 export type AppAction =
   | 'clear' // Ctrl+C or Escape - interrupt
   | 'exit' // Ctrl+D - exit when empty
-  | 'undo' // Ctrl+Z - undo last clear
+  | 'suspend' // Ctrl+Z - suspend process (SIGTSTP)
+  | 'undo' // Alt+Z - undo last clear
   | 'toggleThinking' // Ctrl+T
   | 'expandTools' // Ctrl+E
   | 'followUp' // Alt+Enter - queue follow-up while streaming
@@ -76,6 +77,28 @@ export class CustomEditor extends Editor {
       }
     }
 
+    // Ctrl+V - explicit paste (handles image-only clipboard where terminals
+    // don't generate a bracketed paste event, and text clipboard)
+    if (matchesKey(data, 'ctrl+v')) {
+      // Check for image first
+      if (this.onImagePaste) {
+        const clipboardImage = getClipboardImage();
+        if (clipboardImage) {
+          this.onImagePaste(clipboardImage);
+          return;
+        }
+      }
+      // No image — read text and synthesize a bracketed paste so the parent
+      // Editor.handlePaste() logic kicks in (large paste condensation, etc.)
+      const clipboardText = getClipboardText();
+      if (clipboardText) {
+        const syntheticPaste = `${PASTE_START}${clipboardText}${PASTE_END}`;
+        super.handleInput(syntheticPaste);
+        return;
+      }
+      return;
+    }
+
     // Ctrl+C - interrupt
     if (matchesKey(data, 'ctrl+c')) {
       const handler = this.actionHandlers.get('clear');
@@ -101,8 +124,16 @@ export class CustomEditor extends Editor {
       }
       return; // Always consume
     }
-    // Ctrl+Z - undo last clear
+    // Ctrl+Z - suspend process
     if (matchesKey(data, 'ctrl+z')) {
+      const handler = this.actionHandlers.get('suspend');
+      if (handler) {
+        handler();
+        return;
+      }
+    }
+    // Alt+Z - undo last clear
+    if (matchesKey(data, 'alt+z')) {
       const handler = this.actionHandlers.get('undo');
       if (handler) {
         handler();

@@ -68,6 +68,7 @@ import { createWorkflow, createStep, isProcessor } from '../workflows';
 import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
+import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import { zodToJsonSchema } from '../zod-to-json';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -1509,8 +1510,8 @@ export class Agent<
    * Updates the agent's instructions.
    * @internal
    */
-  __updateInstructions(newInstructions: string) {
-    this.#instructions = newInstructions;
+  __updateInstructions(newInstructions: DynamicArgument<AgentInstructions, any>) {
+    this.#instructions = newInstructions as DynamicArgument<AgentInstructions, TRequestContext>;
     this.logger.debug(`[Agents:${this.name}] Instructions updated.`, { model: this.model, name: this.name });
   }
 
@@ -1518,7 +1519,7 @@ export class Agent<
    * Updates the agent's model configuration.
    * @internal
    */
-  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> }) {
+  __updateModel({ model }: { model: DynamicArgument<MastraModelConfig> | ModelFallbacks }) {
     this.model = model;
     this.logger.debug(`[Agents:${this.name}] Model updated.`, { model: this.model, name: this.name });
   }
@@ -1531,6 +1532,20 @@ export class Agent<
   __resetToOriginalModel() {
     this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
     this.logger.debug(`[Agents:${this.name}] Model reset to original.`, { model: this.model, name: this.name });
+  }
+
+  /**
+   * Returns a snapshot of the raw field values that may be overridden by stored config.
+   * Used by the editor to save/restore code defaults externally.
+   * @internal
+   */
+  __getOverridableFields() {
+    return {
+      instructions: this.#instructions,
+      model: this.model,
+      tools: this.#tools,
+      workspace: this.#workspace,
+    };
   }
 
   reorderModels(modelIds: string[]) {
@@ -1672,8 +1687,8 @@ export class Agent<
    * @param tools
    * @internal
    */
-  __setTools(tools: TTools) {
-    this.#tools = tools;
+  __setTools(tools: DynamicArgument<TTools, any>) {
+    this.#tools = tools as DynamicArgument<TTools, TRequestContext>;
     this.logger.debug(`[Agents:${this.name}] Tools set for agent ${this.name}`, { model: this.model, name: this.name });
   }
 
@@ -1693,7 +1708,7 @@ export class Agent<
     // need to use text, not object output or it will error for models that don't support structured output (eg Deepseek R1)
     const llm = await this.getLLM({ requestContext, model });
 
-    const normMessage = new MessageList().add(message, 'user').get.all.ui().at(-1);
+    const normMessage = new MessageList().add(message, 'user').get.all.aiV5.ui().at(-1);
     if (!normMessage) {
       throw new Error(`Could not generate title from input ${JSON.stringify(message)}`);
     }
@@ -1702,15 +1717,15 @@ export class Agent<
     for (const part of normMessage.parts) {
       if (part.type === `text`) {
         partsToGen.push(part);
-      } else if (part.type === `source`) {
+      } else if (part.type === `source-url`) {
         partsToGen.push({
           type: 'text',
-          text: `User added URL: ${part.source.url.substring(0, 100)}`,
+          text: `User added URL: ${part.url.substring(0, 100)}`,
         });
       } else if (part.type === `file`) {
         partsToGen.push({
           type: 'text',
-          text: `User added ${part.mimeType} file: ${part.data.substring(0, 100)}`,
+          text: `User added ${part.mediaType} file: ${part.url.slice(0, 100)}`,
         });
       }
     }
@@ -1961,6 +1976,72 @@ export class Agent<
     }
 
     return convertedWorkspaceTools;
+  }
+
+  /**
+   * Returns skill tools (skill, skill_search, skill_read) when the workspace
+   * has skills configured. These are added at the Agent level (like workspace
+   * tools) rather than inside a processor, so they persist across turns and
+   * survive serialization across tool-approval pauses.
+   * @internal
+   */
+  private async listSkillTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+    ...rest
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    let convertedSkillTools: Record<string, CoreTool> = {};
+
+    if (this._agentNetworkAppend) {
+      return convertedSkillTools;
+    }
+
+    const workspace = await this.getWorkspace({ requestContext });
+    if (!workspace?.skills) {
+      return convertedSkillTools;
+    }
+
+    const skillTools = createSkillTools(workspace.skills);
+
+    if (Object.keys(skillTools).length > 0) {
+      this.logger.debug(`[Agent:${this.name}] - Adding skill tools: ${Object.keys(skillTools).join(', ')}`, {
+        runId,
+      });
+
+      for (const [toolName, tool] of Object.entries(skillTools)) {
+        const toolObj = tool;
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          agentName: this.name,
+          requestContext,
+          ...observabilityContext,
+          model: await this.getModel({ requestContext }),
+          tracingPolicy: this.#options?.tracingPolicy,
+          requireApproval: false, // Skill tools never require approval
+        };
+        const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
+        convertedSkillTools[toolName] = convertedToCoreTool;
+      }
+    }
+
+    return convertedSkillTools;
   }
 
   /**
@@ -3178,6 +3259,7 @@ export class Agent<
           // current tool span onto the workflow to maintain continuity of the trace
           // @ts-expect-error - context type mismatch in workflow tool
           execute: async (inputData, context) => {
+            const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
               // Use a unique runId for each workflow tool call to prevent parallel calls
@@ -3252,6 +3334,10 @@ export class Agent<
                 result = await streamResult.result;
               }
 
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               if (result?.status === 'success') {
                 const workflowOutput = result?.result || result;
                 return { result: workflowOutput, runId: run.runId };
@@ -3294,6 +3380,10 @@ export class Agent<
                 };
               }
             } catch (err) {
+              if (savedMastraMemory !== undefined) {
+                requestContext.set('MastraMemory', savedMastraMemory);
+              }
+
               const mastraError = new MastraError(
                 {
                   id: 'AGENT_WORKFLOW_TOOL_EXECUTION_FAILED',
@@ -3456,6 +3546,16 @@ export class Agent<
       autoResumeSuspendedTools,
     });
 
+    const skillTools = await this.listSkillTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      autoResumeSuspendedTools,
+    });
+
     const allTools = {
       ...assignedTools,
       ...memoryTools,
@@ -3464,6 +3564,7 @@ export class Agent<
       ...agentTools,
       ...workflowTools,
       ...workspaceTools,
+      ...skillTools,
     };
     return this.formatTools(allTools);
   }
@@ -4199,6 +4300,8 @@ export class Agent<
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
       structuredOutput: mergedOptions?.structuredOutput as OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never,
+      onStepFinish: mergedOptions?.onStepFinish as NetworkOptions<OUTPUT>['onStepFinish'],
+      onError: mergedOptions?.onError,
       onAbort: mergedOptions?.onAbort,
       abortSignal: mergedOptions?.abortSignal,
     });
@@ -4273,6 +4376,8 @@ export class Agent<
       onIterationComplete: mergedOptions?.onIterationComplete,
       autoResumeSuspendedTools: mergedOptions?.autoResumeSuspendedTools,
       mastra: this.#mastra,
+      onStepFinish: mergedOptions?.onStepFinish,
+      onError: mergedOptions?.onError,
       onAbort: mergedOptions?.onAbort,
       abortSignal: mergedOptions?.abortSignal,
     });
@@ -4408,7 +4513,7 @@ export class Agent<
 
     const error = fullOutput.error;
 
-    if (fullOutput.finishReason === 'error' && error) {
+    if (error) {
       throw error;
     }
 
@@ -4707,7 +4812,7 @@ export class Agent<
 
     const error = fullOutput.error;
 
-    if (fullOutput.finishReason === 'error' && error) {
+    if (error) {
       throw error;
     }
 

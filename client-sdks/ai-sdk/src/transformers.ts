@@ -1,8 +1,14 @@
 import { TransformStream } from 'node:stream/web';
+import type {
+  InferUIMessageChunk,
+  TextStreamPart,
+  ToolSet,
+  UIMessage,
+  UIMessageStreamOptions,
+} from '@internal/ai-sdk-v5';
 import type { LLMStepResult } from '@mastra/core/agent';
 import type { AgentChunkType, ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowRunStatus, WorkflowStepStatus, WorkflowStreamEvent } from '@mastra/core/workflows';
-import type { InferUIMessageChunk, TextStreamPart, ToolSet, UIMessage, UIMessageStreamOptions } from 'ai';
 import { convertMastraChunkToAISDKv5, convertFullStreamChunkToUIMessageStream } from './helpers';
 import type { ToolAgentChunkType, ToolWorkflowChunkType, ToolNetworkChunkType } from './helpers';
 import {

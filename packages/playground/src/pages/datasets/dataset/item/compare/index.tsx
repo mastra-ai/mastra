@@ -1,6 +1,4 @@
-import { Fragment, useState } from 'react';
-import { useParams, useSearchParams, Link } from 'react-router';
-import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
+import type { DatasetItem } from '@mastra/client-js';
 import {
   Header,
   MainContentLayout,
@@ -24,7 +22,9 @@ import {
   Column,
   ButtonsGroup,
 } from '@mastra/playground-ui';
-import type { DatasetItem } from '@mastra/client-js';
+import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
+import { Fragment, useState } from 'react';
+import { useParams, useSearchParams, Link } from 'react-router';
 import { cn } from '@/lib/utils';
 
 function itemToText(item: DatasetItem): string {

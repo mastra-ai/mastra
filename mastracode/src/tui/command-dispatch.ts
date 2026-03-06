@@ -15,6 +15,7 @@ import {
   handleModeCommand,
   handleSkillsCommand,
   handleNewCommand,
+  handleCloneCommand,
   handleResourceCommand,
   handleDiffCommand,
   handleThreadsCommand,
@@ -30,6 +31,7 @@ import {
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
   handleThemeCommand,
+  handleUpdateCommand,
 } from './commands/index.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
@@ -65,6 +67,9 @@ export async function dispatchSlashCommand(
   switch (command) {
     case 'new':
       handleNewCommand(buildCtx());
+      return true;
+    case 'clone':
+      await handleCloneCommand(buildCtx());
       return true;
     case 'threads':
       await handleThreadsCommand(buildCtx());
@@ -146,6 +151,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'theme':
       await handleThemeCommand(buildCtx(), args);
+      return true;
+    case 'update':
+      await handleUpdateCommand(buildCtx());
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

@@ -388,6 +388,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/perplexity-agent',
+          label: 'Perplexity Agent',
+        },
+        {
+          type: 'doc',
           id: 'providers/poe',
           label: 'Poe',
         },
