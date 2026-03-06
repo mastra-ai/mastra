@@ -1,25 +1,32 @@
 /**
  * LLM Mocking
  *
- * Wrap a real model instance to record/replay its API calls.
- * No global state — returns a self-contained mock you control.
+ * Record/replay LLM API calls in tests. Two factories:
+ *
+ * - `createLLMMock(model)` — wrap a real AI SDK model instance
+ * - `createGatewayMock()` — mock all LLM traffic (for gateway/string models)
+ *
+ * Both return self-contained instances with no global state.
  *
  * @example
  * ```typescript
+ * // With a real model instance
  * import { createLLMMock } from '@internal/test-utils';
  * import { openai } from '@ai-sdk/openai';
  *
- * describe('My Agent Tests', () => {
- *   const mock = createLLMMock(openai('gpt-4o'));
+ * const mock = createLLMMock(openai('gpt-4o'));
+ * beforeAll(() => mock.start());
+ * afterAll(() => mock.saveAndStop());
+ * ```
  *
- *   beforeAll(() => mock.start());
- *   afterAll(() => mock.saveAndStop());
+ * @example
+ * ```typescript
+ * // With gateway string models like 'openai/gpt-4o'
+ * import { createGatewayMock } from '@internal/test-utils';
  *
- *   it('generates a response', async () => {
- *     const result = await agent.generate('Hello');
- *     expect(result.text).toBeDefined();
- *   });
- * });
+ * const mock = createGatewayMock();
+ * beforeAll(() => mock.start());
+ * afterAll(() => mock.saveAndStop());
  * ```
  */
 
@@ -41,8 +48,8 @@ export interface ModelLike {
   readonly modelId: string;
 }
 
-export interface LLMMockOptions {
-  /** Explicit recording name. Auto-derived from test file + model if omitted. */
+export interface MockOptions {
+  /** Explicit recording name. Auto-derived from test file if omitted. */
   name?: string;
   /** Directory for recording files (default: `__recordings__` in cwd) */
   recordingsDir?: string;
@@ -87,15 +94,21 @@ function getVitestFilePath(): string | null {
 }
 
 /**
+ * Get the base name from the test file path.
+ */
+function getTestBaseName(): string {
+  const testPath = getVitestFilePath();
+  return testPath ? defaultNameGenerator(testPath) : 'unknown-test';
+}
+
+/**
  * Derive a recording name from the test file path and model identity.
  *
  * `createLLMMock(openai('gpt-4o'))` in `packages/core/src/agent/my-test.e2e.test.ts`
- * → `core-src-agent-my-test.e2e--openai.chat--gpt-4o`
+ * → `core-src-agent-my-test.e2e--openai-chat--gpt-4o`
  */
-function deriveRecordingName(provider: string, modelId: string): string {
-  const testPath = getVitestFilePath();
-  const baseName = testPath ? defaultNameGenerator(testPath) : 'unknown-test';
-  // Normalize dots and slashes to dashes for safe filenames
+function deriveModelRecordingName(provider: string, modelId: string): string {
+  const baseName = getTestBaseName();
   const providerSlug = provider.replace(/[./]/g, '-');
   const modelSlug = modelId.replace(/[./]/g, '-');
   return `${baseName}--${providerSlug}--${modelSlug}`;
@@ -126,11 +139,11 @@ function deriveRecordingName(provider: string, modelId: string): string {
  * });
  * ```
  */
-export function createLLMMock(model: ModelLike, options: LLMMockOptions = {}): LLMMock {
+export function createLLMMock(model: ModelLike, options: MockOptions = {}): LLMMock {
   const { name, recordingsDir, debug, ...recorderOptions } = options;
 
   const { provider, modelId } = model;
-  const recordingName = name ?? deriveRecordingName(provider, modelId);
+  const recordingName = name ?? deriveModelRecordingName(provider, modelId);
 
   const recorder = setupLLMRecording({
     name: recordingName,
@@ -147,6 +160,78 @@ export function createLLMMock(model: ModelLike, options: LLMMockOptions = {}): L
   return {
     provider,
     modelId,
+    recordingName,
+    get mode() {
+      return recorder.mode;
+    },
+    start() {
+      recorder.start();
+    },
+    async saveAndStop() {
+      await recorder.save();
+      recorder.stop();
+    },
+    recorder,
+  };
+}
+
+/**
+ * Self-contained gateway mock. Just start/stop — no model info needed.
+ */
+export interface GatewayMock {
+  /** The recording name used for this mock */
+  readonly recordingName: string;
+  /** Current test mode (record, replay, auto, live) */
+  readonly mode: LLMRecorderInstance['mode'];
+  /** Start intercepting requests */
+  start(): void;
+  /** Save recordings (if in record mode) and stop intercepting */
+  saveAndStop(): Promise<void>;
+  /** The underlying recorder instance for advanced use */
+  readonly recorder: LLMRecorderInstance;
+}
+
+/**
+ * Create a gateway mock that records/replays all LLM API traffic.
+ *
+ * Use this when your agent uses gateway string models like `'openai/gpt-4o'`
+ * and you don't have a model instance to pass in.
+ *
+ * @param options - Recording options
+ *
+ * @example
+ * ```typescript
+ * import { createGatewayMock } from '@internal/test-utils';
+ *
+ * describe('my agent', () => {
+ *   const mock = createGatewayMock();
+ *   beforeAll(() => mock.start());
+ *   afterAll(() => mock.saveAndStop());
+ *
+ *   it('works', async () => {
+ *     const agent = new Agent({ model: 'openai/gpt-4o', ... });
+ *     const result = await agent.generate('Hello');
+ *     expect(result.text).toBeDefined();
+ *   });
+ * });
+ * ```
+ */
+export function createGatewayMock(options: MockOptions = {}): GatewayMock {
+  const { name, recordingsDir, debug, ...recorderOptions } = options;
+
+  const recordingName = name ?? getTestBaseName();
+
+  const recorder = setupLLMRecording({
+    name: recordingName,
+    recordingsDir,
+    debug,
+    metaContext: {
+      testFile: getVitestFilePath() ?? undefined,
+    },
+    ...recorderOptions,
+  });
+
+  return {
     recordingName,
     get mode() {
       return recorder.mode;
