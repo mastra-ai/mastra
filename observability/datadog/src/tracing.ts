@@ -301,14 +301,14 @@ export class DatadogExporter extends BaseExporter {
 
     // Convert span.tags (string[]) to object format
     // Tags in "key:value" format (e.g. "instance_name:career-scout-api") are split into { key: "value" }
-    // Tags without a colon (e.g. "production") are set as { tag: "" }
+    // Tags without a colon (e.g. "production") are set as { tag: true } (preserving existing behavior)
     if (span.tags?.length) {
       for (const tag of span.tags) {
         const colonIndex = tag.indexOf(':');
         if (colonIndex > 0) {
           tags[tag.substring(0, colonIndex)] = tag.substring(colonIndex + 1);
         } else {
-          tags[tag] = '';
+          tags[tag] = true;
         }
       }
     }

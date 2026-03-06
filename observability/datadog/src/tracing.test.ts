@@ -318,8 +318,8 @@ describe('DatadogExporter', () => {
         expect.anything(),
         expect.objectContaining({
           tags: {
-            production: '',
-            'experiment-v2': '',
+            production: true,
+            'experiment-v2': true,
             instance_name: 'career-scout-api',
           },
         }),
@@ -342,8 +342,8 @@ describe('DatadogExporter', () => {
         expect.anything(),
         expect.objectContaining({
           tags: {
-            production: '',
-            critical: '',
+            production: true,
+            critical: true,
             error: true,
             errorInfo: {
               message: 'Something failed',
