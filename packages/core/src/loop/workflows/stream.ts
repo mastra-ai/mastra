@@ -32,7 +32,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
-        if (chunk.type.startsWith('data-') && messageId) {
+        // Transient chunks are streamed to the client but not saved to the DB
+        if (chunk.type.startsWith('data-') && messageId && !('transient' in chunk && chunk.transient)) {
           const dataPart = {
             type: chunk.type as `data-${string}`,
             data: 'data' in chunk ? chunk.data : undefined,
