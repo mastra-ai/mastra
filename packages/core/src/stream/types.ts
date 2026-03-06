@@ -220,6 +220,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     request?: LanguageModelRequestMetadata;
     [key: string]: unknown;
   };
+  providerMetadata?: ProviderMetadata;
   messages: {
     all: ModelMessage[];
     user: ModelMessage[];
