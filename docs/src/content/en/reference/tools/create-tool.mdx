@@ -135,16 +135,14 @@ export const weatherTool = createTool({
   },
   {
     name: 'inputSchema',
-    type: 'Zod schema | JSON Schema',
-    description:
-      "A schema defining the expected input parameters for the tool's `execute` function. You can pass a Zod schema or a plain JSON Schema object.",
+    type: 'Zod schema',
+    description: "A Zod schema defining the expected input parameters for the tool's `execute` function.",
     isOptional: true,
   },
   {
     name: 'outputSchema',
-    type: 'Zod schema | JSON Schema',
-    description:
-      "A schema defining the expected output structure of the tool's `execute` function. You can pass a Zod schema or a plain JSON Schema object.",
+    type: 'Zod schema',
+    description: "A Zod schema defining the expected output structure of the tool's `execute` function.",
     isOptional: true,
   },
   {
@@ -184,9 +182,9 @@ export const weatherTool = createTool({
   },
   {
     name: 'requestContextSchema',
-    type: 'Zod schema | JSON Schema',
+    type: 'Zod schema',
     description:
-      'A schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
+      'A Zod schema for validating request context values. When provided, the context is validated before execute() runs, returning an error object if validation fails.',
     isOptional: true,
   },
   {
