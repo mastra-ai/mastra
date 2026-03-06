@@ -1,5 +1,61 @@
 # @mastra/editor
 
+## 0.7.0
+
+### Minor Changes
+
+- Added `FilesystemStore`, a file-based storage adapter for editor domains. Stores agent configurations, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, and skills as JSON files in a local directory (default: `.mastra-storage/`). Only published snapshots are written to disk — version history is kept in memory. Use with `MastraCompositeStore`'s `editor` shorthand to enable Git-friendly editor configurations. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
+  import { PostgresStore } from '@mastra/pg';
+
+  export const mastra = new Mastra({
+    storage: new MastraCompositeStore({
+      id: 'composite',
+      default: new PostgresStore({ id: 'pg', connectionString: process.env.DATABASE_URL }),
+      editor: new FilesystemStore({ dir: '.mastra-storage' }),
+    }),
+  });
+  ```
+
+  Added `applyStoredOverrides` to the editor agent namespace. When a stored configuration exists for a code-defined agent, the editor merges the stored **instructions** and **tools** on top of the code agent's values at runtime. Model, memory, workspace, and other code-defined fields are never overridden — they may contain SDK instances or dynamic functions that cannot be safely serialized. Original code-defined values are preserved via a WeakMap and restored if the stored override is deleted.
+
+### Patch Changes
+
+- Updated dependencies [[`41e48c1`](https://github.com/mastra-ai/mastra/commit/41e48c198eee846478e60c02ec432c19d322a517), [`82469d3`](https://github.com/mastra-ai/mastra/commit/82469d3135d5a49dd8dc8feec0ff398b4e0225a0), [`33e2fd5`](https://github.com/mastra-ai/mastra/commit/33e2fd5088f83666df17401e2da68c943dbc0448), [`7ef6e2c`](https://github.com/mastra-ai/mastra/commit/7ef6e2c61be5a42e26f55d15b5902866fc76634f), [`08072ec`](https://github.com/mastra-ai/mastra/commit/08072ec54b5dfe810ed66c0d583ae9d1a9103c11), [`ef9d0f0`](https://github.com/mastra-ai/mastra/commit/ef9d0f0fa98ff225b17afe071f5b84a9258dc142), [`b12d2a5`](https://github.com/mastra-ai/mastra/commit/b12d2a59a48be0477cabae66eb6cf0fc94a7d40d), [`9e21667`](https://github.com/mastra-ai/mastra/commit/9e2166746df81da8f1f933a918741fc52f922c70), [`fa37d39`](https://github.com/mastra-ai/mastra/commit/fa37d39910421feaf8847716292e3d65dd4f30c2), [`b12d2a5`](https://github.com/mastra-ai/mastra/commit/b12d2a59a48be0477cabae66eb6cf0fc94a7d40d), [`1391f22`](https://github.com/mastra-ai/mastra/commit/1391f227ff197080de185ac1073c1d1568c0631f), [`71c38bf`](https://github.com/mastra-ai/mastra/commit/71c38bf905905148ecd0e75c07c1f9825d299b76), [`f993c38`](https://github.com/mastra-ai/mastra/commit/f993c3848c97479b813231be872443bedeced6ab), [`f51849a`](https://github.com/mastra-ai/mastra/commit/f51849a568935122b5100b7ee69704e6d680cf7b), [`3ceb231`](https://github.com/mastra-ai/mastra/commit/3ceb2317aad7da36df5053e7c84f9381eeb68d11), [`9bf3a0d`](https://github.com/mastra-ai/mastra/commit/9bf3a0dac602787925f1762f1f0387d7b4a59620), [`cafa045`](https://github.com/mastra-ai/mastra/commit/cafa0453c9de141ad50c09a13894622dffdd9978), [`1fd9ddb`](https://github.com/mastra-ai/mastra/commit/1fd9ddbb3fe83b281b12bd2e27e426ae86288266), [`1391f22`](https://github.com/mastra-ai/mastra/commit/1391f227ff197080de185ac1073c1d1568c0631f), [`ef888d2`](https://github.com/mastra-ai/mastra/commit/ef888d23c77f85f4c202228b63f8fd9b6d9361af), [`e7a567c`](https://github.com/mastra-ai/mastra/commit/e7a567cfb3e65c955a07d0167cb1b4141f5bda01), [`3626623`](https://github.com/mastra-ai/mastra/commit/36266238eb7db78fce2ac34187194613f6f53733), [`6135ef4`](https://github.com/mastra-ai/mastra/commit/6135ef4f5288652bf45f616ec590607e4c95f443), [`d9d228c`](https://github.com/mastra-ai/mastra/commit/d9d228c0c6ae82ae6ce3b540a3a56b2b1c2b8d98), [`5576507`](https://github.com/mastra-ai/mastra/commit/55765071e360fb97e443aa0a91ccf7e1cd8d92aa), [`79d69c9`](https://github.com/mastra-ai/mastra/commit/79d69c9d5f842ff1c31352fb6026f04c1f6190f3), [`94f44b8`](https://github.com/mastra-ai/mastra/commit/94f44b827ce57b179e50f4916a84c0fa6e7f3b8c), [`13187db`](https://github.com/mastra-ai/mastra/commit/13187dbac880174232dedc5a501ff6c5d0fe59bc), [`2ae5311`](https://github.com/mastra-ai/mastra/commit/2ae531185fff66a80fa165c0999e3d801900e89d), [`6135ef4`](https://github.com/mastra-ai/mastra/commit/6135ef4f5288652bf45f616ec590607e4c95f443)]:
+  - @mastra/core@1.10.0
+  - @mastra/memory@1.6.1
+  - @mastra/mcp@1.1.0
+
+## 0.7.0-alpha.0
+
+### Minor Changes
+
+- Added `FilesystemStore`, a file-based storage adapter for editor domains. Stores agent configurations, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, and skills as JSON files in a local directory (default: `.mastra-storage/`). Only published snapshots are written to disk — version history is kept in memory. Use with `MastraCompositeStore`'s `editor` shorthand to enable Git-friendly editor configurations. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
+  import { PostgresStore } from '@mastra/pg';
+
+  export const mastra = new Mastra({
+    storage: new MastraCompositeStore({
+      id: 'composite',
+      default: new PostgresStore({ id: 'pg', connectionString: process.env.DATABASE_URL }),
+      editor: new FilesystemStore({ dir: '.mastra-storage' }),
+    }),
+  });
+  ```
+
+  Added `applyStoredOverrides` to the editor agent namespace. When a stored configuration exists for a code-defined agent, the editor merges the stored **instructions** and **tools** on top of the code agent's values at runtime. Model, memory, workspace, and other code-defined fields are never overridden — they may contain SDK instances or dynamic functions that cannot be safely serialized. Original code-defined values are preserved via a WeakMap and restored if the stored override is deleted.
+
+### Patch Changes
+
+- Updated dependencies [[`41e48c1`](https://github.com/mastra-ai/mastra/commit/41e48c198eee846478e60c02ec432c19d322a517), [`82469d3`](https://github.com/mastra-ai/mastra/commit/82469d3135d5a49dd8dc8feec0ff398b4e0225a0), [`33e2fd5`](https://github.com/mastra-ai/mastra/commit/33e2fd5088f83666df17401e2da68c943dbc0448), [`7ef6e2c`](https://github.com/mastra-ai/mastra/commit/7ef6e2c61be5a42e26f55d15b5902866fc76634f), [`08072ec`](https://github.com/mastra-ai/mastra/commit/08072ec54b5dfe810ed66c0d583ae9d1a9103c11), [`ef9d0f0`](https://github.com/mastra-ai/mastra/commit/ef9d0f0fa98ff225b17afe071f5b84a9258dc142), [`b12d2a5`](https://github.com/mastra-ai/mastra/commit/b12d2a59a48be0477cabae66eb6cf0fc94a7d40d), [`9e21667`](https://github.com/mastra-ai/mastra/commit/9e2166746df81da8f1f933a918741fc52f922c70), [`fa37d39`](https://github.com/mastra-ai/mastra/commit/fa37d39910421feaf8847716292e3d65dd4f30c2), [`b12d2a5`](https://github.com/mastra-ai/mastra/commit/b12d2a59a48be0477cabae66eb6cf0fc94a7d40d), [`1391f22`](https://github.com/mastra-ai/mastra/commit/1391f227ff197080de185ac1073c1d1568c0631f), [`71c38bf`](https://github.com/mastra-ai/mastra/commit/71c38bf905905148ecd0e75c07c1f9825d299b76), [`f993c38`](https://github.com/mastra-ai/mastra/commit/f993c3848c97479b813231be872443bedeced6ab), [`f51849a`](https://github.com/mastra-ai/mastra/commit/f51849a568935122b5100b7ee69704e6d680cf7b), [`3ceb231`](https://github.com/mastra-ai/mastra/commit/3ceb2317aad7da36df5053e7c84f9381eeb68d11), [`9bf3a0d`](https://github.com/mastra-ai/mastra/commit/9bf3a0dac602787925f1762f1f0387d7b4a59620), [`cafa045`](https://github.com/mastra-ai/mastra/commit/cafa0453c9de141ad50c09a13894622dffdd9978), [`1fd9ddb`](https://github.com/mastra-ai/mastra/commit/1fd9ddbb3fe83b281b12bd2e27e426ae86288266), [`1391f22`](https://github.com/mastra-ai/mastra/commit/1391f227ff197080de185ac1073c1d1568c0631f), [`ef888d2`](https://github.com/mastra-ai/mastra/commit/ef888d23c77f85f4c202228b63f8fd9b6d9361af), [`e7a567c`](https://github.com/mastra-ai/mastra/commit/e7a567cfb3e65c955a07d0167cb1b4141f5bda01), [`3626623`](https://github.com/mastra-ai/mastra/commit/36266238eb7db78fce2ac34187194613f6f53733), [`6135ef4`](https://github.com/mastra-ai/mastra/commit/6135ef4f5288652bf45f616ec590607e4c95f443), [`d9d228c`](https://github.com/mastra-ai/mastra/commit/d9d228c0c6ae82ae6ce3b540a3a56b2b1c2b8d98), [`5576507`](https://github.com/mastra-ai/mastra/commit/55765071e360fb97e443aa0a91ccf7e1cd8d92aa), [`79d69c9`](https://github.com/mastra-ai/mastra/commit/79d69c9d5f842ff1c31352fb6026f04c1f6190f3), [`94f44b8`](https://github.com/mastra-ai/mastra/commit/94f44b827ce57b179e50f4916a84c0fa6e7f3b8c), [`13187db`](https://github.com/mastra-ai/mastra/commit/13187dbac880174232dedc5a501ff6c5d0fe59bc), [`2ae5311`](https://github.com/mastra-ai/mastra/commit/2ae531185fff66a80fa165c0999e3d801900e89d), [`6135ef4`](https://github.com/mastra-ai/mastra/commit/6135ef4f5288652bf45f616ec590607e4c95f443)]:
+  - @mastra/core@1.10.0-alpha.0
+  - @mastra/memory@1.6.1-alpha.0
+  - @mastra/mcp@1.1.0-alpha.0
+
 ## 0.6.3
 
 ### Patch Changes

@@ -49,23 +49,36 @@ Each voice provider may support additional options specific to their implementat
 <PropertiesTable
   content={[
   {
-    name: 'options.filetype',
-    type: 'string',
-    description: "Audio file format (e.g., 'mp3', 'wav', 'm4a')",
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "'mp3'",
-  },
-  {
-    name: 'options.prompt',
-    type: 'string',
-    description: "Text to guide the model's transcription",
-    isOptional: true,
-  },
-  {
-    name: 'options.language',
-    type: 'string',
-    description: "Language code (e.g., 'en', 'fr', 'de')",
-    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'filetype',
+            type: 'string',
+            description: "Audio file format (e.g., 'mp3', 'wav', 'm4a')",
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+          {
+            name: 'prompt',
+            type: 'string',
+            description: "Text to guide the model's transcription",
+            isOptional: true,
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: "Language code (e.g., 'en', 'fr', 'de')",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -75,18 +88,31 @@ Each voice provider may support additional options specific to their implementat
 <PropertiesTable
   content={[
   {
-    name: 'options.stream',
-    type: 'boolean',
-    description: 'Whether to use streaming recognition',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'options.config',
-    type: 'object',
-    description: 'Recognition configuration from Google Cloud Speech-to-Text API',
-    isOptional: true,
-    defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'stream',
+            type: 'boolean',
+            description: 'Whether to use streaming recognition',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'config',
+            type: 'object',
+            description: 'Recognition configuration from Google Cloud Speech-to-Text API',
+            isOptional: true,
+            defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -96,18 +122,31 @@ Each voice provider may support additional options specific to their implementat
 <PropertiesTable
   content={[
   {
-    name: 'options.model',
-    type: 'string',
-    description: 'Deepgram model to use for transcription',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "'nova-2'",
-  },
-  {
-    name: 'options.language',
-    type: 'string',
-    description: 'Language code for transcription',
-    isOptional: true,
-    defaultValue: "'en'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'model',
+            type: 'string',
+            description: 'Deepgram model to use for transcription',
+            isOptional: true,
+            defaultValue: "'nova-2'",
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: 'Language code for transcription',
+            isOptional: true,
+            defaultValue: "'en'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

@@ -4674,6 +4674,43 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
     "reasoningText": "",
     "request": {},
     "response": {
+      "dbMessages": [
+        {
+          "content": {
+            "content": "Hello!",
+            "format": 2,
+            "parts": [
+              {
+                "data": "Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "data": "QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+              {
+                "data": "data:text/plain;base64,Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "data": "data:image/jpeg;base64,QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+            ],
+          },
+          "createdAt": 2024-01-01T00:00:00.001Z,
+          "id": "msg-0",
+          "role": "assistant",
+        },
+      ],
       "headers": undefined,
       "id": "id-0",
       "messages": [
@@ -10525,6 +10562,43 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
     "reasoningText": "",
     "request": {},
     "response": {
+      "dbMessages": [
+        {
+          "content": {
+            "content": "Hello!",
+            "format": 2,
+            "parts": [
+              {
+                "data": "Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "text": "Hello!",
+                "type": "text",
+              },
+              {
+                "data": "QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+              {
+                "data": "data:text/plain;base64,Hello World",
+                "mimeType": "text/plain",
+                "type": "file",
+              },
+              {
+                "data": "data:image/jpeg;base64,QkFVRw==",
+                "mimeType": "image/jpeg",
+                "type": "file",
+              },
+            ],
+          },
+          "createdAt": 2024-01-01T00:00:00.001Z,
+          "id": "msg-0",
+          "role": "assistant",
+        },
+      ],
       "headers": undefined,
       "id": "id-0",
       "messages": [
