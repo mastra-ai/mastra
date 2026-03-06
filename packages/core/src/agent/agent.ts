@@ -4058,11 +4058,11 @@ export class Agent<
         if (isZodType(options.structuredOutput.schema)) {
           const modelInfo: ModelInformation = {
             provider: targetProvider,
-            modelId: targetModelId,
+            modelId: targetModelId ?? '',
             supportsStructuredOutputs: false, // Set to false to enable transform
           };
 
-          const isReasoningModel = /^o[1-5]/.test(targetModelId);
+          const isReasoningModel = /^o[1-5]/.test(targetModelId ?? '');
           const compatLayer = isReasoningModel
             ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
             : new OpenAISchemaCompatLayer(modelInfo);
