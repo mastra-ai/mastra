@@ -54,6 +54,20 @@ type ImageTokenEstimate = {
   cachePayload: string;
 };
 
+const IMAGE_FILE_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
+  'gif',
+  'bmp',
+  'tiff',
+  'tif',
+  'heic',
+  'heif',
+  'avif',
+]);
+
 const TOKEN_ESTIMATE_CACHE_VERSION = 2;
 
 const DEFAULT_IMAGE_ESTIMATOR: ImageTokenEstimatorConfig = {
@@ -289,6 +303,38 @@ function resolveImageSourceStats(image: unknown): { source: 'url' | 'data-uri' |
   return { source: 'binary' };
 }
 
+function getPathnameExtension(value: string): string | undefined {
+  const normalized = value.split('#', 1)[0]?.split('?', 1)[0] ?? value;
+  const match = normalized.match(/\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase();
+}
+
+function hasImageFilenameExtension(filename: unknown): boolean {
+  return typeof filename === 'string' && IMAGE_FILE_EXTENSIONS.has(getPathnameExtension(filename) ?? '');
+}
+
+function isImageLikeFilePart(part: CacheablePart): boolean {
+  if (getObjectValue(part, 'type') !== 'file') {
+    return false;
+  }
+
+  const mimeType = getObjectValue(part, 'mimeType');
+  if (typeof mimeType === 'string' && mimeType.toLowerCase().startsWith('image/')) {
+    return true;
+  }
+
+  const data = getObjectValue(part, 'data');
+  if (typeof data === 'string' && data.startsWith('data:image/')) {
+    return true;
+  }
+
+  if (data instanceof URL && hasImageFilenameExtension(data.pathname)) {
+    return true;
+  }
+
+  return hasImageFilenameExtension(getObjectValue(part, 'filename'));
+}
+
 function resolveImageEstimatorConfig(modelContext?: TokenCounterModelContext): ImageTokenEstimatorConfig {
   const provider = modelContext?.provider?.toLowerCase();
   const modelId = modelContext?.modelId?.toLowerCase() ?? '';
@@ -486,10 +532,10 @@ export class TokenCounter {
     };
   }
 
-  private estimateImageTokens(part: CacheablePart): ImageTokenEstimate {
+  private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
     const detail = resolveImageDetail(part);
     const dimensions = resolveImageDimensions(part);
-    const sourceStats = resolveImageSourceStats(part.image);
+    const sourceStats = resolveImageSourceStats(asset);
     const estimator = resolveImageEstimatorConfig(this.modelContext);
     const effectiveDetail = resolveEffectiveImageDetail(detail, dimensions, sourceStats);
     const tiles = effectiveDetail === 'high' ? estimateHighDetailTiles(dimensions, sourceStats, estimator) : 0;
@@ -498,6 +544,7 @@ export class TokenCounter {
     return {
       tokens,
       cachePayload: JSON.stringify({
+        kind,
         provider: this.modelContext?.provider ?? null,
         modelId: this.modelContext?.modelId ?? null,
         detail,
@@ -506,8 +553,18 @@ export class TokenCounter {
         height: dimensions.height ?? null,
         source: sourceStats.source,
         sizeBytes: sourceStats.sizeBytes ?? null,
+        mimeType: getObjectValue(part, 'mimeType') ?? null,
+        filename: getObjectValue(part, 'filename') ?? null,
       }),
     };
+  }
+
+  private estimateImageTokens(part: CacheablePart): ImageTokenEstimate {
+    return this.estimateImageAssetTokens(part, part.image, 'image');
+  }
+
+  private estimateImageLikeFileTokens(part: CacheablePart): ImageTokenEstimate {
+    return this.estimateImageAssetTokens(part, part.data, 'file');
   }
 
   /**
@@ -530,6 +587,14 @@ export class TokenCounter {
           } else if (part.type === 'image') {
             const estimate = this.estimateImageTokens(part);
             payloadTokens += this.readOrPersistFixedPartEstimate(part, 'image', estimate.cachePayload, estimate.tokens);
+          } else if (part.type === 'file' && isImageLikeFilePart(part)) {
+            const estimate = this.estimateImageLikeFileTokens(part);
+            payloadTokens += this.readOrPersistFixedPartEstimate(
+              part,
+              'image-like-file',
+              estimate.cachePayload,
+              estimate.tokens,
+            );
           } else if (part.type === 'tool-invocation') {
             const invocation = part.toolInvocation;
             if (invocation.state === 'call' || invocation.state === 'partial-call') {

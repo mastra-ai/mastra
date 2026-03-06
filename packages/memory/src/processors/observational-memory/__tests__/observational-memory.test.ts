@@ -1569,6 +1569,76 @@ describe('ObservationalMemory Integration', () => {
     expect(imageTokens).toBeGreaterThan(threshold);
   });
 
+  it('should treat image-like file parts as image-heavy for threshold checks', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageLikeFileMessage = {
+      id: 'image-file-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'https://example.com/reference-board.png',
+            mimeType: 'image/png',
+            filename: 'reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-file-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageLikeFileTokens = multimodalOm.getTokenCounter().countMessage(imageLikeFileMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageLikeFileTokens).toBeGreaterThan(threshold);
+  });
+
   describe('cursor-based message loading (lastObservedAt)', () => {
     it('should load only messages created after lastObservedAt', async () => {
       // 1. Create some "old" messages (before observation)

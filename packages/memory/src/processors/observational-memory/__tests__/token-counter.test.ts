@@ -144,6 +144,43 @@ describe('TokenCounter', () => {
       expect(cachedEntry.tokens).toBe(765);
     });
 
+    it('counts image-like file parts by mime type instead of serializing the full payload', () => {
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'file', data: dataUriImage, mimeType: 'image/png', filename: 'cat.png' }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(700);
+      expect(tokens).toBeLessThan(1000);
+      expect(cachedEntry.tokens).toBe(765);
+    });
+
+    it('counts image-like file parts by filename when mime type is missing or generic', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: new URL('https://example.com/reference-board.png'),
+            mimeType: 'application/octet-stream',
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(tokens).toBeLessThan(200);
+      expect(cachedEntry.tokens).toBe(85);
+    });
+
     it('reuses cached image estimates without re-encoding text payloads', () => {
       const counter = new TokenCounter();
       const message = createMessage({
