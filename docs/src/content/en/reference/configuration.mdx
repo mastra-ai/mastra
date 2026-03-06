@@ -735,6 +735,7 @@ Custom handler called when a request fails Zod schema validation. Use this to cu
 Return a `{ status, body }` object to override the default `400` response, or `undefined` to fall through to the default behavior. This hook is supported by all server adapters (Hono, Express, Fastify, Koa).
 
 The `context` parameter indicates which part of the request failed validation:
+
 - `'query'` — query parameters
 - `'body'` — request body
 - `'path'` — path parameters
