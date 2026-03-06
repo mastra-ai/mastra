@@ -195,6 +195,13 @@ export async function createHonoServer(
 
   // Enable gzip/deflate compression for all responses
   app.use('*', compress());
+  // Ensure Vary: Accept-Encoding is set for proper caching behavior
+  app.use('*', async (c, next) => {
+    await next();
+    if (c.res.headers.get('Content-Encoding')) {
+      c.res.headers.append('Vary', 'Accept-Encoding');
+    }
+  });
 
   // Health check endpoint (before auth middleware so it's publicly accessible)
   app.get(

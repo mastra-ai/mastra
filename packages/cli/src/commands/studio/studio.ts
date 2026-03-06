@@ -136,7 +136,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
 
     const acceptEncoding = req.headers['accept-encoding'] || '';
-    const supportsGzip = typeof acceptEncoding === 'string' && acceptEncoding.includes('gzip');
+    const supportsGzip = Array.isArray(acceptEncoding)
+      ? acceptEncoding.some(enc => enc.includes('gzip'))
+      : acceptEncoding.includes('gzip');
 
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {
@@ -145,10 +147,11 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
           'Content-Type': 'text/html',
           'Content-Encoding': 'gzip',
           'Content-Length': compressedHtml.length,
+          Vary: 'Accept-Encoding',
         });
         return res.end(compressedHtml);
       }
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(200, { 'Content-Type': 'text/html', Vary: 'Accept-Encoding' });
       return res.end(html);
     }
 
