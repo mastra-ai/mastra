@@ -150,11 +150,25 @@ Converts text to speech using Azure's neural text-to-speech service.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'string',
-    description: "Voice ID to use for speech synthesis (e.g., 'en-US-JennyNeural'). Overrides the default voice.",
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description:
+              "Voice ID to use for speech synthesis (e.g., 'en-US-JennyNeural'). Overrides the default voice.",
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
