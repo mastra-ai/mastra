@@ -98,6 +98,13 @@ const GOOGLE_MEDIA_RESOLUTION_VALUES = new Set<GoogleMediaResolution>([
   'unspecified',
 ]);
 
+const ATTACHMENT_COUNT_TIMEOUT_MS = 20_000;
+const PROVIDER_API_KEY_ENV_VARS: Record<string, string[]> = {
+  openai: ['OPENAI_API_KEY'],
+  google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
+  anthropic: ['ANTHROPIC_API_KEY'],
+};
+
 type CacheablePart = any;
 
 function buildEstimateKey(kind: string, text: string): string {
@@ -558,6 +565,283 @@ function estimateGoogleImageTokens(
   };
 }
 
+function getProviderApiKey(provider: string): string | undefined {
+  for (const envVar of PROVIDER_API_KEY_ENV_VARS[provider] ?? []) {
+    const value = process.env[envVar];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function getAttachmentFilename(part: CacheablePart): string | undefined {
+  const explicitFilename = getObjectValue(part, 'filename');
+  if (typeof explicitFilename === 'string' && explicitFilename.trim().length > 0) {
+    return explicitFilename.trim();
+  }
+
+  return getFilenameFromAttachmentData(getObjectValue(part, 'data') ?? getObjectValue(part, 'image'));
+}
+
+function getAttachmentMimeType(part: CacheablePart, fallback: string): string {
+  const mimeType = getObjectValue(part, 'mimeType');
+  if (typeof mimeType === 'string' && mimeType.trim().length > 0) {
+    return mimeType.trim();
+  }
+
+  const asset = getObjectValue(part, 'data') ?? getObjectValue(part, 'image');
+  if (typeof asset === 'string' && asset.startsWith('data:')) {
+    const semicolonIndex = asset.indexOf(';');
+    const commaIndex = asset.indexOf(',');
+    const endIndex = semicolonIndex === -1 ? commaIndex : Math.min(semicolonIndex, commaIndex);
+    if (endIndex > 5) {
+      return asset.slice(5, endIndex);
+    }
+  }
+
+  return fallback;
+}
+
+function getAttachmentUrl(asset: unknown): string | undefined {
+  if (asset instanceof URL) {
+    return asset.toString();
+  }
+
+  if (typeof asset === 'string' && /^(https?:\/\/|data:)/i.test(asset)) {
+    return asset;
+  }
+
+  return undefined;
+}
+
+function encodeAttachmentBase64(asset: unknown): string | undefined {
+  if (typeof asset === 'string') {
+    if (asset.startsWith('data:')) {
+      const commaIndex = asset.indexOf(',');
+      return commaIndex === -1 ? undefined : asset.slice(commaIndex + 1);
+    }
+
+    if (/^https?:\/\//i.test(asset)) {
+      return undefined;
+    }
+
+    return asset;
+  }
+
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(asset)) {
+    return asset.toString('base64');
+  }
+
+  if (asset instanceof Uint8Array) {
+    return Buffer.from(asset).toString('base64');
+  }
+
+  if (asset instanceof ArrayBuffer) {
+    return Buffer.from(asset).toString('base64');
+  }
+
+  if (ArrayBuffer.isView(asset)) {
+    return Buffer.from(asset.buffer, asset.byteOffset, asset.byteLength).toString('base64');
+  }
+
+  return undefined;
+}
+
+function createTimeoutSignal(timeoutMs: number): AbortSignal {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new Error(`Attachment token counting timed out after ${timeoutMs}ms`)),
+    timeoutMs,
+  );
+  controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
+  return controller.signal;
+}
+
+function getNumericResponseField(value: unknown, paths: string[][]): number | undefined {
+  for (const path of paths) {
+    let current: unknown = value;
+    for (const segment of path) {
+      current = getObjectValue(current, segment);
+      if (current === undefined) break;
+    }
+
+    if (typeof current === 'number' && Number.isFinite(current)) {
+      return current;
+    }
+  }
+
+  return undefined;
+}
+
+function toOpenAIInputPart(part: CacheablePart): Record<string, unknown> | undefined {
+  if (getObjectValue(part, 'type') === 'image' || isImageLikeFilePart(part)) {
+    const asset = getObjectValue(part, 'image') ?? getObjectValue(part, 'data');
+    const imageUrl = getAttachmentUrl(asset);
+    if (imageUrl) {
+      return { type: 'input_image', image_url: imageUrl, detail: resolveImageDetail(part) };
+    }
+
+    const base64 = encodeAttachmentBase64(asset);
+    if (!base64) return undefined;
+    return {
+      type: 'input_image',
+      image_url: `data:${getAttachmentMimeType(part, 'image/png')};base64,${base64}`,
+      detail: resolveImageDetail(part),
+    };
+  }
+
+  if (getObjectValue(part, 'type') === 'file') {
+    const asset = getObjectValue(part, 'data');
+    const fileUrl = getAttachmentUrl(asset);
+    return fileUrl
+      ? {
+          type: 'input_file',
+          file_url: fileUrl,
+          filename: getAttachmentFilename(part) ?? 'attachment',
+        }
+      : (() => {
+          const base64 = encodeAttachmentBase64(asset);
+          if (!base64) return undefined;
+          return {
+            type: 'input_file',
+            file_data: `data:${getAttachmentMimeType(part, 'application/octet-stream')};base64,${base64}`,
+            filename: getAttachmentFilename(part) ?? 'attachment',
+          };
+        })();
+  }
+
+  return undefined;
+}
+
+function toAnthropicContentPart(part: CacheablePart): Record<string, unknown> | undefined {
+  const asset = getObjectValue(part, 'image') ?? getObjectValue(part, 'data');
+  const url = getAttachmentUrl(asset);
+
+  if (getObjectValue(part, 'type') === 'image' || isImageLikeFilePart(part)) {
+    return url && /^https?:\/\//i.test(url)
+      ? { type: 'image', source: { type: 'url', url } }
+      : (() => {
+          const base64 = encodeAttachmentBase64(asset);
+          if (!base64) return undefined;
+          return {
+            type: 'image',
+            source: { type: 'base64', media_type: getAttachmentMimeType(part, 'image/png'), data: base64 },
+          };
+        })();
+  }
+
+  if (getObjectValue(part, 'type') === 'file') {
+    return url && /^https?:\/\//i.test(url)
+      ? { type: 'document', source: { type: 'url', url } }
+      : (() => {
+          const base64 = encodeAttachmentBase64(asset);
+          if (!base64) return undefined;
+          return {
+            type: 'document',
+            source: { type: 'base64', media_type: getAttachmentMimeType(part, 'application/pdf'), data: base64 },
+          };
+        })();
+  }
+
+  return undefined;
+}
+
+function toGooglePart(part: CacheablePart): Record<string, unknown> | undefined {
+  const asset = getObjectValue(part, 'image') ?? getObjectValue(part, 'data');
+  const url = getAttachmentUrl(asset);
+  const mimeType = getAttachmentMimeType(
+    part,
+    getObjectValue(part, 'type') === 'file' && !isImageLikeFilePart(part) ? 'application/pdf' : 'image/png',
+  );
+
+  if (url && !url.startsWith('data:')) {
+    return { fileData: { mimeType, fileUri: url } };
+  }
+
+  const base64 = encodeAttachmentBase64(asset);
+  if (!base64) return undefined;
+  return { inlineData: { mimeType, data: base64 } };
+}
+
+async function fetchOpenAIAttachmentTokenEstimate(modelId: string, part: CacheablePart): Promise<number | undefined> {
+  const apiKey = getProviderApiKey('openai');
+  const inputPart = toOpenAIInputPart(part);
+  if (!apiKey || !inputPart) return undefined;
+
+  const response = await fetch('https://api.openai.com/v1/responses/input_tokens', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: modelId,
+      input: [{ role: 'user', content: [inputPart] }],
+    }),
+    signal: createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS),
+  });
+
+  if (!response.ok) return undefined;
+  const body = await response.json();
+  return getNumericResponseField(body, [
+    ['input_tokens'],
+    ['total_tokens'],
+    ['usage', 'input_tokens'],
+    ['usage', 'total_tokens'],
+  ]);
+}
+
+async function fetchAnthropicAttachmentTokenEstimate(
+  modelId: string,
+  part: CacheablePart,
+): Promise<number | undefined> {
+  const apiKey = getProviderApiKey('anthropic');
+  const contentPart = toAnthropicContentPart(part);
+  if (!apiKey || !contentPart) return undefined;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages/count_tokens', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: [{ role: 'user', content: [contentPart] }],
+    }),
+    signal: createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS),
+  });
+
+  if (!response.ok) return undefined;
+  const body = await response.json();
+  return getNumericResponseField(body, [['input_tokens']]);
+}
+
+async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: CacheablePart): Promise<number | undefined> {
+  const apiKey = getProviderApiKey('google');
+  const googlePart = toGooglePart(part);
+  if (!apiKey || !googlePart) return undefined;
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:countTokens`, {
+    method: 'POST',
+    headers: {
+      'x-goog-api-key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [googlePart] }],
+    }),
+    signal: createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS),
+  });
+
+  if (!response.ok) return undefined;
+  const body = await response.json();
+  return getNumericResponseField(body, [['totalTokens'], ['total_tokens']]);
+}
+
 /**
  * Token counting utility using tiktoken.
  * Uses o200k_base (GPT-4o encoding) as a reasonable default for text and
@@ -743,6 +1027,199 @@ export class TokenCounter {
     return this.estimateImageAssetTokens(part, part.data, 'file');
   }
 
+  private countAttachmentPartSync(part: CacheablePart): number | undefined {
+    if (part.type === 'image') {
+      const estimate = this.estimateImageTokens(part);
+      return this.readOrPersistFixedPartEstimate(part, 'image', estimate.cachePayload, estimate.tokens);
+    }
+
+    if (part.type === 'file' && isImageLikeFilePart(part)) {
+      const estimate = this.estimateImageLikeFileTokens(part);
+      return this.readOrPersistFixedPartEstimate(part, 'image-like-file', estimate.cachePayload, estimate.tokens);
+    }
+
+    if (part.type === 'file') {
+      return this.readOrPersistPartEstimate(part, 'file-descriptor', serializeNonImageFilePartForTokenCounting(part));
+    }
+
+    return undefined;
+  }
+
+  private buildRemoteAttachmentCachePayload(part: CacheablePart): string | undefined {
+    const provider = resolveProviderId(this.modelContext);
+    const modelId = this.modelContext?.modelId ?? null;
+    if (!provider || !modelId || !['openai', 'google', 'anthropic'].includes(provider)) {
+      return undefined;
+    }
+
+    const asset = getObjectValue(part, 'image') ?? getObjectValue(part, 'data');
+    const sourceStats = resolveImageSourceStats(asset);
+    return JSON.stringify({
+      strategy: 'provider-endpoint',
+      provider,
+      modelId,
+      type: getObjectValue(part, 'type') ?? null,
+      detail: part.type === 'image' || isImageLikeFilePart(part) ? resolveImageDetail(part) : null,
+      mediaResolution: provider === 'google' ? resolveGoogleMediaResolution(part) : null,
+      mimeType: getAttachmentMimeType(
+        part,
+        part.type === 'file' && !isImageLikeFilePart(part) ? 'application/pdf' : 'image/png',
+      ),
+      filename: getAttachmentFilename(part) ?? null,
+      width: resolveImageDimensions(part).width ?? null,
+      height: resolveImageDimensions(part).height ?? null,
+      source: sourceStats.source,
+      sizeBytes: sourceStats.sizeBytes ?? null,
+    });
+  }
+
+  private async fetchProviderAttachmentTokenEstimate(part: CacheablePart): Promise<number | undefined> {
+    const provider = resolveProviderId(this.modelContext);
+    const modelId = this.modelContext?.modelId;
+    if (!provider || !modelId) return undefined;
+
+    try {
+      if (provider === 'openai') {
+        return await fetchOpenAIAttachmentTokenEstimate(modelId, part);
+      }
+
+      if (provider === 'google') {
+        return await fetchGoogleAttachmentTokenEstimate(modelId, part);
+      }
+
+      if (provider === 'anthropic') {
+        return await fetchAnthropicAttachmentTokenEstimate(modelId, part);
+      }
+    } catch {
+      return undefined;
+    }
+
+    return undefined;
+  }
+
+  private async countAttachmentPartAsync(part: CacheablePart): Promise<number | undefined> {
+    const localTokens = this.countAttachmentPartSync(part);
+    const remotePayload = this.buildRemoteAttachmentCachePayload(part);
+
+    if (localTokens === undefined || !remotePayload) {
+      return localTokens;
+    }
+
+    const remoteKey = buildEstimateKey('attachment-provider', remotePayload);
+    const cachedRemote = getPartCacheEntry(part, remoteKey);
+    if (isValidCacheEntry(cachedRemote, remoteKey, this.cacheSource)) {
+      return cachedRemote.tokens;
+    }
+
+    const fallbackPayload = JSON.stringify({ ...JSON.parse(remotePayload), strategy: 'local-fallback' });
+    const fallbackKey = buildEstimateKey('attachment-provider', fallbackPayload);
+    const cachedFallback = getPartCacheEntry(part, fallbackKey);
+    if (isValidCacheEntry(cachedFallback, fallbackKey, this.cacheSource)) {
+      return cachedFallback.tokens;
+    }
+
+    const remoteTokens = await this.fetchProviderAttachmentTokenEstimate(part);
+    if (typeof remoteTokens === 'number' && Number.isFinite(remoteTokens) && remoteTokens > 0) {
+      setPartCacheEntry(part, remoteKey, {
+        v: TOKEN_ESTIMATE_CACHE_VERSION,
+        source: this.cacheSource,
+        key: remoteKey,
+        tokens: remoteTokens,
+      });
+      return remoteTokens;
+    }
+
+    setPartCacheEntry(part, fallbackKey, {
+      v: TOKEN_ESTIMATE_CACHE_VERSION,
+      source: this.cacheSource,
+      key: fallbackKey,
+      tokens: localTokens,
+    });
+    return localTokens;
+  }
+
+  private countNonAttachmentPart(part: CacheablePart): {
+    tokens: number;
+    overheadDelta: number;
+    toolResultDelta: number;
+  } {
+    let overheadDelta = 0;
+    let toolResultDelta = 0;
+
+    if (part.type === 'text') {
+      return { tokens: this.readOrPersistPartEstimate(part, 'text', part.text), overheadDelta, toolResultDelta };
+    }
+
+    if (part.type === 'tool-invocation') {
+      const invocation = part.toolInvocation;
+      let tokens = 0;
+
+      if (invocation.state === 'call' || invocation.state === 'partial-call') {
+        if (invocation.toolName) {
+          tokens += this.readOrPersistPartEstimate(part, `tool-${invocation.state}-name`, invocation.toolName);
+        }
+        if (invocation.args) {
+          if (typeof invocation.args === 'string') {
+            tokens += this.readOrPersistPartEstimate(part, `tool-${invocation.state}-args`, invocation.args);
+          } else {
+            const argsJson = JSON.stringify(invocation.args);
+            tokens += this.readOrPersistPartEstimate(part, `tool-${invocation.state}-args-json`, argsJson);
+            overheadDelta -= 12;
+          }
+        }
+
+        return { tokens, overheadDelta, toolResultDelta };
+      }
+
+      if (invocation.state === 'result') {
+        toolResultDelta++;
+        const { value: resultForCounting, usingStoredModelOutput } = this.resolveToolResultForTokenCounting(
+          part,
+          invocation.result,
+        );
+
+        if (resultForCounting !== undefined) {
+          if (typeof resultForCounting === 'string') {
+            tokens += this.readOrPersistPartEstimate(
+              part,
+              usingStoredModelOutput ? 'tool-result-model-output' : 'tool-result',
+              resultForCounting,
+            );
+          } else {
+            const resultJson = JSON.stringify(resultForCounting);
+            tokens += this.readOrPersistPartEstimate(
+              part,
+              usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
+              resultJson,
+            );
+            overheadDelta -= 12;
+          }
+        }
+
+        return { tokens, overheadDelta, toolResultDelta };
+      }
+
+      throw new Error(
+        `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
+      );
+    }
+
+    if (typeof part.type === 'string' && part.type.startsWith('data-')) {
+      return { tokens: 0, overheadDelta, toolResultDelta };
+    }
+
+    if (part.type === 'reasoning') {
+      return { tokens: 0, overheadDelta, toolResultDelta };
+    }
+
+    const serialized = serializePartForTokenCounting(part);
+    return {
+      tokens: this.readOrPersistPartEstimate(part, `part-${part.type}`, serialized),
+      overheadDelta,
+      toolResultDelta,
+    };
+  }
+
   /**
    * Count tokens in a single message
    */
@@ -758,94 +1235,53 @@ export class TokenCounter {
         payloadTokens += this.readOrPersistMessageEstimate(message, 'content-content', message.content.content);
       } else if (Array.isArray(message.content.parts)) {
         for (const part of message.content.parts as CacheablePart[]) {
-          if (part.type === 'text') {
-            payloadTokens += this.readOrPersistPartEstimate(part, 'text', part.text);
-          } else if (part.type === 'image') {
-            const estimate = this.estimateImageTokens(part);
-            payloadTokens += this.readOrPersistFixedPartEstimate(part, 'image', estimate.cachePayload, estimate.tokens);
-          } else if (part.type === 'file' && isImageLikeFilePart(part)) {
-            const estimate = this.estimateImageLikeFileTokens(part);
-            payloadTokens += this.readOrPersistFixedPartEstimate(
-              part,
-              'image-like-file',
-              estimate.cachePayload,
-              estimate.tokens,
-            );
-          } else if (part.type === 'file') {
-            payloadTokens += this.readOrPersistPartEstimate(
-              part,
-              'file-descriptor',
-              serializeNonImageFilePartForTokenCounting(part),
-            );
-          } else if (part.type === 'tool-invocation') {
-            const invocation = part.toolInvocation;
-            if (invocation.state === 'call' || invocation.state === 'partial-call') {
-              if (invocation.toolName) {
-                payloadTokens += this.readOrPersistPartEstimate(
-                  part,
-                  `tool-${invocation.state}-name`,
-                  invocation.toolName,
-                );
-              }
-              if (invocation.args) {
-                if (typeof invocation.args === 'string') {
-                  payloadTokens += this.readOrPersistPartEstimate(
-                    part,
-                    `tool-${invocation.state}-args`,
-                    invocation.args,
-                  );
-                } else {
-                  const argsJson = JSON.stringify(invocation.args);
-                  payloadTokens += this.readOrPersistPartEstimate(part, `tool-${invocation.state}-args-json`, argsJson);
-                  // JSON.stringify adds ~12 tokens of structural overhead (braces, quotes, colons)
-                  // that the model's native tool encoding doesn't use, so subtract to compensate.
-                  overhead -= 12;
-                }
-              }
-            } else if (invocation.state === 'result') {
-              toolResultCount++;
-
-              const { value: resultForCounting, usingStoredModelOutput } = this.resolveToolResultForTokenCounting(
-                part,
-                invocation.result,
-              );
-
-              if (resultForCounting !== undefined) {
-                if (typeof resultForCounting === 'string') {
-                  payloadTokens += this.readOrPersistPartEstimate(
-                    part,
-                    usingStoredModelOutput ? 'tool-result-model-output' : 'tool-result',
-                    resultForCounting,
-                  );
-                } else {
-                  const resultJson = JSON.stringify(resultForCounting);
-                  payloadTokens += this.readOrPersistPartEstimate(
-                    part,
-                    usingStoredModelOutput ? 'tool-result-model-output-json' : 'tool-result-json',
-                    resultJson,
-                  );
-                  overhead -= 12;
-                }
-              }
-            } else {
-              throw new Error(
-                `Unhandled tool-invocation state '${(part as any).toolInvocation?.state}' in token counting for part type '${part.type}'`,
-              );
-            }
-          } else if (typeof part.type === 'string' && part.type.startsWith('data-')) {
-            // Skip data-* parts (e.g. data-om-activation, data-om-buffering-start, etc.)
-            // These are OM metadata parts that are never sent to the LLM.
-          } else if (part.type === 'reasoning') {
-            // Skip reasoning parts (not sent to the model context).
-          } else {
-            const serialized = serializePartForTokenCounting(part);
-            payloadTokens += this.readOrPersistPartEstimate(part, `part-${part.type}`, serialized);
+          const attachmentTokens = this.countAttachmentPartSync(part);
+          if (attachmentTokens !== undefined) {
+            payloadTokens += attachmentTokens;
+            continue;
           }
+
+          const result = this.countNonAttachmentPart(part);
+          payloadTokens += result.tokens;
+          overhead += result.overheadDelta;
+          toolResultCount += result.toolResultDelta;
         }
       }
     }
 
-    // Add overhead for tool results
+    if (toolResultCount > 0) {
+      overhead += toolResultCount * TokenCounter.TOKENS_PER_MESSAGE;
+    }
+
+    return Math.round(payloadTokens + overhead);
+  }
+
+  async countMessageAsync(message: MastraDBMessage): Promise<number> {
+    let payloadTokens = this.countString(message.role);
+    let overhead = TokenCounter.TOKENS_PER_MESSAGE;
+    let toolResultCount = 0;
+
+    if (typeof message.content === 'string') {
+      payloadTokens += this.readOrPersistMessageEstimate(message, 'message-content', message.content);
+    } else if (message.content && typeof message.content === 'object') {
+      if (message.content.content && !Array.isArray(message.content.parts)) {
+        payloadTokens += this.readOrPersistMessageEstimate(message, 'content-content', message.content.content);
+      } else if (Array.isArray(message.content.parts)) {
+        for (const part of message.content.parts as CacheablePart[]) {
+          const attachmentTokens = await this.countAttachmentPartAsync(part);
+          if (attachmentTokens !== undefined) {
+            payloadTokens += attachmentTokens;
+            continue;
+          }
+
+          const result = this.countNonAttachmentPart(part);
+          payloadTokens += result.tokens;
+          overhead += result.overheadDelta;
+          toolResultCount += result.toolResultDelta;
+        }
+      }
+    }
+
     if (toolResultCount > 0) {
       overhead += toolResultCount * TokenCounter.TOKENS_PER_MESSAGE;
     }
@@ -862,6 +1298,16 @@ export class TokenCounter {
     let total = TokenCounter.TOKENS_PER_CONVERSATION;
     for (const message of messages) {
       total += this.countMessage(message);
+    }
+    return total;
+  }
+
+  async countMessagesAsync(messages: MastraDBMessage[]): Promise<number> {
+    if (!messages || messages.length === 0) return 0;
+
+    let total = TokenCounter.TOKENS_PER_CONVERSATION;
+    for (const message of messages) {
+      total += await this.countMessageAsync(message);
     }
     return total;
   }
