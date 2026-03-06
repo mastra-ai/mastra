@@ -3,5 +3,3 @@
 ---
 
 fix(harness): use type 'image' and mimeType for image parts in convertToHarnessMessage to fix Gemini image recognition
-
-# Please enter your changeset message above this line.
