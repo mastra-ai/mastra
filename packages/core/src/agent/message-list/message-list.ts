@@ -825,7 +825,7 @@ export class MessageList {
       }
     }
 
-    const replacementTarget = shouldReplace ? this.messages.find(m => m.id === id) : undefined;
+    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
     const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
 
     // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().

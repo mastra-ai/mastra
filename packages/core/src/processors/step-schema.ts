@@ -513,6 +513,11 @@ export const ProcessorInputStepPhaseSchema = z.object({
   stepNumber: z.number().describe('The current step number (0-indexed)'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
+  messageId: z.string().optional().describe('The active assistant response message ID for this step'),
+  rotateResponseMessageId: z
+    .custom<() => string>()
+    .optional()
+    .describe('Rotate the active assistant response message ID when supported by the caller'),
   // Model and tools configuration (can be modified by processors)
   model: z.custom<ProcessorStepModelConfig>().optional().describe('Current model for this step'),
   tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Current tools available for this step'),

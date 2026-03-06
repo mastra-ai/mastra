@@ -146,8 +146,10 @@ describe('processInputStep', () => {
       const rotateProcessor: Processor = {
         id: 'rotate-processor',
         processInputStep: async ({ messageId, rotateResponseMessageId }) => {
-          seenMessageIds.push(messageId);
-          rotateResponseMessageId();
+          if (messageId) {
+            seenMessageIds.push(messageId);
+          }
+          rotateResponseMessageId?.();
           return {};
         },
       };
@@ -155,7 +157,9 @@ describe('processInputStep', () => {
       const observeProcessor: Processor = {
         id: 'observe-processor',
         processInputStep: async ({ messageId }) => {
-          seenMessageIds.push(messageId);
+          if (messageId) {
+            seenMessageIds.push(messageId);
+          }
           return {};
         },
       };

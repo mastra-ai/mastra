@@ -841,7 +841,13 @@ export class ProcessorRunner {
             messageList,
             stepNumber,
             systemMessages: currentSystemMessages,
-            rotateResponseMessageId: args.rotateResponseMessageId,
+            rotateResponseMessageId: args.rotateResponseMessageId
+              ? () => {
+                  const nextMessageId = args.rotateResponseMessageId!();
+                  stepInput.messageId = nextMessageId;
+                  return nextMessageId;
+                }
+              : undefined,
             ...stepInput,
           },
           observabilityContext,
