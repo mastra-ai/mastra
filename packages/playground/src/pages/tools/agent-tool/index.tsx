@@ -8,8 +8,8 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  AgentToolPanel,
 } from '@mastra/playground-ui';
+import { AgentToolPanel } from '@mastra/playground-ui/agents';
 import { Link, useParams } from 'react-router';
 
 const AgentTool = () => {

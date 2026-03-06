@@ -9,9 +9,9 @@ import {
   ApiIcon,
   WorkflowIcon,
   DocsIcon,
-  WorkflowCombobox,
   Truncate,
 } from '@mastra/playground-ui';
+import { WorkflowCombobox } from '@mastra/playground-ui/workflows';
 import { EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 

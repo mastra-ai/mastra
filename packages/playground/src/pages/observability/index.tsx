@@ -1,14 +1,10 @@
 import { EntityType } from '@mastra/core/observability';
-import type { EntityOptions } from '@mastra/playground-ui';
+import type { EntityOptions } from '@mastra/playground-ui/observability';
 import {
   HeaderTitle,
   Header,
   MainContentLayout,
-  TracesList,
-  tracesListColumns,
   PageHeader,
-  TracesTools,
-  TraceDialog,
   parseError,
   Icon,
   HeaderAction,
@@ -17,12 +13,18 @@ import {
   EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
-  useAgents,
-  useWorkflows,
-  useScorers,
   PermissionDenied,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import {
+  TracesList,
+  tracesListColumns,
+  TracesTools,
+  TraceDialog,
+} from '@mastra/playground-ui/observability';
+import { useAgents } from '@mastra/playground-ui/agents';
+import { useWorkflows } from '@mastra/playground-ui/workflows';
+import { useScorers } from '@mastra/playground-ui/scores';
 
 import { EyeIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';

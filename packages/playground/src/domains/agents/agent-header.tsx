@@ -8,9 +8,9 @@ import {
   Icon,
   DocsIcon,
   AgentIcon,
-  AgentCombobox,
-  useIsCmsAvailable,
 } from '@mastra/playground-ui';
+import { AgentCombobox } from '@mastra/playground-ui/agents';
+import { useIsCmsAvailable } from '@mastra/playground-ui/cms';
 import { EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 

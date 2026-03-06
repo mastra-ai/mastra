@@ -1,12 +1,5 @@
 import {
   useLinkComponent,
-  useAgent,
-  useStoredAgent,
-  useAgentVersion,
-  useAgentVersions,
-  useAgentCmsForm,
-  AgentCmsFormShell,
-  AgentVersionPanel,
   Header,
   HeaderTitle,
   HeaderAction,
@@ -19,10 +12,19 @@ import {
   Button,
   AlertTitle,
   Badge,
-  mapAgentResponseToDataSource,
   AlertDescription,
 } from '@mastra/playground-ui';
-import type { AgentDataSource } from '@mastra/playground-ui';
+import {
+  useAgent,
+  useStoredAgent,
+  useAgentVersion,
+  useAgentVersions,
+  useAgentCmsForm,
+  AgentCmsFormShell,
+  AgentVersionPanel,
+  mapAgentResponseToDataSource,
+} from '@mastra/playground-ui/agents';
+import type { AgentDataSource } from '@mastra/playground-ui/agents';
 import { Check, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
