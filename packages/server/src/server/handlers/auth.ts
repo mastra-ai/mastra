@@ -218,8 +218,33 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
 
       // Encode the post-login redirect in state (where user goes after auth completes)
       // State format: uuid|postLoginRedirect
+      // Validate redirect_uri to prevent open-redirect attacks: allow relative paths,
+      // same-origin URLs, and localhost URLs (for dev setups where Studio runs on a
+      // different port).
+      let postLoginRedirect = '/';
+      if (redirect_uri) {
+        if (!redirect_uri.startsWith('http')) {
+          // Relative path — always safe
+          postLoginRedirect = redirect_uri;
+        } else {
+          try {
+            const redirectUrl = new URL(redirect_uri);
+            const requestOrigin = new URL(origin);
+            const isHttps = redirectUrl.protocol === 'http:' || redirectUrl.protocol === 'https:';
+            const isSameOrigin = redirectUrl.origin === requestOrigin.origin;
+            const isLocalhost =
+              redirectUrl.hostname === 'localhost' ||
+              redirectUrl.hostname === '127.0.0.1' ||
+              redirectUrl.hostname === '[::1]';
+            if (isHttps && (isSameOrigin || isLocalhost)) {
+              postLoginRedirect = redirect_uri;
+            }
+          } catch {
+            // Malformed URL — fall back to /
+          }
+        }
+      }
       const stateId = crypto.randomUUID();
-      const postLoginRedirect = redirect_uri || '/';
       const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
       const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
@@ -277,16 +302,19 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
     }
 
     // Build absolute redirect URL.
-    // Cross-origin redirects are allowed because the redirect_uri originates from
-    // the Studio that initiated the login flow (encoded in state). When Studio and
-    // the API server run on different origins (e.g. different ports), the redirect
-    // must be honoured — but only for http(s) URLs to prevent open-redirect abuse
-    // via javascript:, data:, or other dangerous schemes.
+    // The redirect_uri was validated at the login endpoint (same-origin or localhost
+    // only), so the state should only contain safe URLs. We still apply defense-in-depth
+    // checks here: allow http(s) same-origin or localhost, reject everything else.
     let absoluteRedirect: string;
     if (redirectTo.startsWith('http')) {
       try {
         const parsed = new URL(redirectTo);
-        absoluteRedirect = parsed.protocol === 'http:' || parsed.protocol === 'https:' ? redirectTo : `${baseUrl}/`;
+        const baseOrigin = new URL(baseUrl);
+        const isHttps = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        const isSameOrigin = parsed.origin === baseOrigin.origin;
+        const isLocalhost =
+          parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+        absoluteRedirect = isHttps && (isSameOrigin || isLocalhost) ? redirectTo : `${baseUrl}/`;
       } catch {
         absoluteRedirect = `${baseUrl}/`;
       }

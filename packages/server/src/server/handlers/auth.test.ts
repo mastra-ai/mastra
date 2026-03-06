@@ -113,6 +113,45 @@ describe('GET /auth/sso/login — callback URI prefix', () => {
     const callbackUri = (mockAuth.getLoginUrl as any).mock.calls[0][0];
     expect(callbackUri).toBe('http://localhost:4000/custom-api/auth/sso/callback');
   });
+
+  it('should reject external redirect_uri to prevent open-redirect attacks', async () => {
+    const mockAuth = createMockSSOProvider();
+    const mastra = createMastraWithAuth(mockAuth);
+
+    const request = new Request('http://localhost:4000/api/auth/sso/login');
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request,
+      redirect_uri: 'https://evil.com/phish',
+    };
+
+    await GET_SSO_LOGIN_ROUTE.handler(ctx as any);
+
+    // The state should encode '/' (fallback) not the evil URL
+    const stateArg = (mockAuth.getLoginUrl as any).mock.calls[0][1] as string;
+    const [, encodedRedirect] = stateArg.split('|', 2);
+    const decodedRedirect = decodeURIComponent(encodedRedirect);
+    expect(decodedRedirect).toBe('/');
+  });
+
+  it('should allow localhost redirect_uri on different port', async () => {
+    const mockAuth = createMockSSOProvider();
+    const mastra = createMastraWithAuth(mockAuth);
+
+    const request = new Request('http://localhost:4000/api/auth/sso/login');
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request,
+      redirect_uri: 'http://localhost:4111/agents',
+    };
+
+    await GET_SSO_LOGIN_ROUTE.handler(ctx as any);
+
+    const stateArg = (mockAuth.getLoginUrl as any).mock.calls[0][1] as string;
+    const [, encodedRedirect] = stateArg.split('|', 2);
+    const decodedRedirect = decodeURIComponent(encodedRedirect);
+    expect(decodedRedirect).toBe('http://localhost:4111/agents');
+  });
 });
 
 // =============================================================================
@@ -158,6 +197,30 @@ describe('GET /auth/sso/callback — cross-origin redirect', () => {
     const response = (await GET_SSO_CALLBACK_ROUTE.handler(ctx as any)) as Response;
 
     expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe('http://localhost:4000/');
+  });
+
+  it('should reject redirect to external origin (open-redirect prevention)', async () => {
+    const mockAuth = createMockSSOProvider();
+    const mastra = createMastraWithAuth(mockAuth);
+
+    const externalRedirect = 'https://evil.com/phish';
+    const state = `some-uuid|${encodeURIComponent(externalRedirect)}`;
+
+    const request = new Request(
+      `http://localhost:4000/api/auth/sso/callback?code=auth-code-123&state=${encodeURIComponent(state)}`,
+    );
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request,
+      code: 'auth-code-123',
+      state,
+    };
+
+    const response = (await GET_SSO_CALLBACK_ROUTE.handler(ctx as any)) as Response;
+
+    expect(response.status).toBe(302);
+    // Should fall back to baseUrl, NOT redirect to evil.com
     expect(response.headers.get('Location')).toBe('http://localhost:4000/');
   });
 });
