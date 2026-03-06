@@ -65,7 +65,10 @@ function createToolCallStream(toolName: string, args: string) {
   });
 }
 
-function createHarnessWithAgent(opts: { doStream: () => Promise<{ stream: ReadableStream }>; tools?: Record<string, any> }) {
+function createHarnessWithAgent(opts: {
+  doStream: () => Promise<{ stream: ReadableStream }>;
+  tools?: Record<string, any>;
+}) {
   const agent = new Agent({
     id: 'test-agent',
     name: 'Test Agent',

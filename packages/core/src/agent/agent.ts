@@ -4101,17 +4101,17 @@ export class Agent<
       // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
       // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
       // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
-      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
-        if (isZodType(options.structuredOutput.schema) && targetModelId) {
+      if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
+        if (isZodType(options.structuredOutput.schema)) {
           const modelInfo: ModelInformation = {
             provider: targetProvider,
-            modelId: targetModelId,
+            modelId: targetModelId ?? '',
             supportsStructuredOutputs: false, // Set to false to enable transform
           };
 
-          const isReasoningModel = /^o[1-5]/.test(targetModelId);
-          const compatLayer = isReasoningModel
-            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+          const reasoningLayer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+          const compatLayer = reasoningLayer.isReasoningModel()
+            ? reasoningLayer
             : new OpenAISchemaCompatLayer(modelInfo);
 
           if (compatLayer.shouldApply() && options.structuredOutput.schema) {
