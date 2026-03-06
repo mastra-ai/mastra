@@ -2718,12 +2718,7 @@ export class Agent<
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
 
-            // Strip agent-* and workflow-* tool call/result parts from the context.
-            // The parent's conversation history includes tool_call parts for its own
-            // agent-*/workflow-* tools that the sub-agent doesn't have. Sending these
-            // to the sub-agent's model causes providers to reject or mishandle the
-            // request because the tool references are undefined in the sub-agent's
-            // tool list.
+            // Strip tool call/result parts from the context.
             const sanitizedMessages = this.stripParentToolParts(contextMessages);
 
             let fullSubAgentMessages: MastraDBMessage[] = sanitizedMessages;
