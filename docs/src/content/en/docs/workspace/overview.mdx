@@ -206,6 +206,51 @@ const workspace = new Workspace({
 | `enabled` | `boolean` | Whether the tool is available (default: `true`) |
 | `requireApproval` | `boolean` | Whether the tool requires user approval before execution (default: `false`) |
 | `requireReadBeforeWrite` | `boolean` | For write tools: require reading the file first (default: `false`) |
+| `name` | `string` | Custom name for the tool. Replaces the default `mastra_workspace_*` name. |
+| `maxOutputTokens` | `number` | Maximum tokens for tool output (default: `2000`). Output exceeding this limit is truncated using tiktoken. |
+
+### Tool name remapping
+
+Rename workspace tools to match the conventions your agent expects. The config key remains the original `WORKSPACE_TOOLS` constant — only the exposed name changes.
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
+    [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
+    [WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]: { name: 'find_files' },
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { name: 'execute_command' },
+  },
+})
+```
+
+The agent sees `view`, `search_content`, `find_files`, and `execute_command` instead of the default `mastra_workspace_*` names. Tool names must be unique — duplicate names or conflicts with other default names throw an error.
+
+### Output truncation
+
+Workspace tools automatically truncate large outputs to avoid exceeding LLM context limits. Two layers of truncation apply:
+
+1. **Line-based tail**: Command output is limited to the last 200 lines by default (configurable per-command via the `tail` parameter)
+1. **Token-based limit**: Tool output is capped at 2000 tokens by default
+
+Set `maxOutputTokens` per tool to adjust the token limit:
+
+```typescript
+const workspace = new Workspace({
+  // ...
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      maxOutputTokens: 5000,
+    },
+  },
+})
+```
+
+ANSI escape codes (colors, cursor sequences) are automatically stripped from command output before it reaches the model.
 
 ### Read-before-write
 
