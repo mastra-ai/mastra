@@ -5,8 +5,6 @@
  * Tracks processes in-memory since there's no server to query.
  */
 
-import { execSync } from 'node:child_process';
-
 import type { ResultPromise, Options as ExecaOptions } from 'execa';
 
 import { getExeca } from './execa';
@@ -46,7 +44,7 @@ class LocalProcessHandle extends ProcessHandle {
           // Kill the entire process tree so child processes are also terminated.
           // We handle timeout ourselves rather than using execa's timeout option
           // because execa only kills the direct subprocess, not the process tree.
-          killProcessTree(this.pid, subprocess, 'SIGTERM');
+          void killProcessTree(this.pid, subprocess, 'SIGTERM');
         }, options.timeout)
       : undefined;
 
@@ -103,7 +101,7 @@ class LocalProcessHandle extends ProcessHandle {
     // Kill the entire process tree to ensure child processes spawned by the
     // shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
-    killProcessTree(this.pid, this.subprocess, 'SIGKILL');
+    await killProcessTree(this.pid, this.subprocess, 'SIGKILL');
     return true;
   }
 
@@ -134,11 +132,12 @@ class LocalProcessHandle extends ProcessHandle {
  * `detached: true` opens a new console window. Instead we use `taskkill /T`
  * which recursively kills the process tree by PID.
  */
-function killProcessTree(pid: number, subprocess: ResultPromise, signal: NodeJS.Signals): void {
+async function killProcessTree(pid: number, subprocess: ResultPromise, signal: NodeJS.Signals): Promise<void> {
   if (isWindows) {
     try {
       // /T = kill child processes, /F = force, /PID = target process
-      execSync(`taskkill /T /F /PID ${pid}`, { stdio: 'ignore' });
+      const execa = await getExeca();
+      await execa('taskkill', ['/T', '/F', '/PID', String(pid)], { reject: false, stdio: 'ignore' });
     } catch {
       // Process may have already exited
       subprocess.kill(signal);
@@ -185,18 +184,15 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
 
     if (isWindows) {
       // On Windows, `detached: true` opens a new console window (visible cmd.exe
-      // popup) and breaks stdout/stderr piping. Instead we spawn without detached
-      // and use `taskkill /T` for process tree killing.
+      // popup) and breaks stdout/stderr piping. `shell: true` without `detached`
+      // works correctly — it uses cmd.exe for shell interpretation and pipes
+      // stdout/stderr back to the parent process without any visible window.
       //
-      // For shell interpretation (isolation=none), we explicitly invoke cmd.exe
-      // rather than using execa's `shell: true` which also triggers the console
-      // window issue when combined with detached.
-      if (this.sandbox.isolation === 'none') {
-        // Wrap the command for cmd.exe: /d disables AutoRun, /s /c handles quoting
-        wrapped.command = process.env.COMSPEC || 'cmd.exe';
-        wrapped.args = ['/d', '/s', '/c', `"${command}"`];
-      }
-      execaOptions = baseOptions;
+      // Process tree killing uses `taskkill /T` instead of Unix process groups.
+      execaOptions = {
+        ...baseOptions,
+        shell: this.sandbox.isolation === 'none',
+      };
     } else {
       // On Unix, `detached: true` creates a new process group so we can kill the
       // entire tree via `process.kill(-pid, signal)`.
