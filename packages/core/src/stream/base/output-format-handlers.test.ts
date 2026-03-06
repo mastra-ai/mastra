@@ -851,6 +851,50 @@ describe('output-format-handlers', () => {
       expect(objectResultChunk).toBeDefined();
       expect(objectResultChunk?.object).toEqual({ title: 'Test', count: 5 });
     });
+
+    it('should preserve ```json fences inside valid JSON string values', async () => {
+      const schema = z.object({
+        response: z.string(),
+        status: z.string(),
+      });
+
+      const transformer = createObjectStreamTransformer({
+        structuredOutput: { schema },
+      });
+
+      const response = 'API example:\n```json\nPOST /v1/payments\n{\n  "customerId": "cust_123"\n}\n```';
+
+      const streamParts: ChunkType<typeof schema>[] = [
+        {
+          type: 'text-delta',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            id: '1',
+            text: JSON.stringify({ response, status: 'ok' }),
+          },
+        },
+        {
+          type: 'finish',
+          runId: 'test-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            metadata: {},
+            messages: { all: [], user: [], nonUser: [] },
+          },
+        },
+      ];
+
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream(streamParts).pipeThrough(transformer);
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const objectResultChunk = chunks.find(c => c?.type === 'object-result');
+      expect(objectResultChunk).toBeDefined();
+      expect(objectResultChunk?.object).toEqual({ response, status: 'ok' });
+    });
   });
 
   describe('unescaped newlines in JSON strings', () => {
