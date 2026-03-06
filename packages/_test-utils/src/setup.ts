@@ -19,26 +19,40 @@
 import { vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Deterministic crypto.randomUUID — counter resets before each test
+// Deterministic crypto.randomUUID — counter resets before each test.
+// Covers both global `crypto.randomUUID()` and
+// `import { randomUUID } from 'node:crypto'` / `'crypto'`.
 // ---------------------------------------------------------------------------
 let uuidCounter = 0;
 
+function deterministicUUID() {
+  uuidCounter++;
+  const hex = uuidCounter.toString(16).padStart(12, '0');
+  return `00000000-0000-4000-8000-${hex}`;
+}
+
+// Global crypto object
 vi.stubGlobal(
   'crypto',
   new Proxy(crypto, {
     get(target, prop, receiver) {
-      if (prop === 'randomUUID') {
-        return () => {
-          uuidCounter++;
-          // Pad counter into last 12 hex chars, keeping a valid v4 UUID shape
-          const hex = uuidCounter.toString(16).padStart(12, '0');
-          return `00000000-0000-4000-8000-${hex}`;
-        };
-      }
+      if (prop === 'randomUUID') return deterministicUUID;
       return Reflect.get(target, prop, receiver);
     },
   }),
 );
+
+// Module imports: `import { randomUUID } from 'node:crypto'`
+vi.mock('node:crypto', async importOriginal => {
+  const original: any = await importOriginal();
+  return { ...original, randomUUID: deterministicUUID };
+});
+
+// Module imports: `import { randomUUID } from 'crypto'`
+vi.mock('crypto', async importOriginal => {
+  const original: any = await importOriginal();
+  return { ...original, randomUUID: deterministicUUID };
+});
 
 beforeEach(() => {
   uuidCounter = 0;
