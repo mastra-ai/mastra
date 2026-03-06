@@ -189,18 +189,25 @@ Converts text to speech using Murf's API.
     type: 'object',
     description: 'Speech synthesis options',
     isOptional: true,
-  },
-  {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Override the default speaker for this request',
-    isOptional: true,
-  },
-  {
-    name: 'options.properties',
-    type: 'object',
-    description: 'Override default speech properties for this request',
-    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Override the default speaker for this request',
+            isOptional: true,
+          },
+          {
+            name: 'properties',
+            type: 'object',
+            description: 'Override default speech properties for this request',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
