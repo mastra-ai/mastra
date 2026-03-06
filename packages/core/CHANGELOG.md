@@ -1,5 +1,207 @@
 # @mastra/core
 
+## 1.10.0
+
+### Minor Changes
+
+- Added `editor` shorthand to `MastraCompositeStore` for routing all editor-related domains (agents, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, skills) to a single storage backend. Priority: `domains` > `editor` > `default`. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { MastraCompositeStore } from '@mastra/core/storage';
+
+  new MastraCompositeStore({
+    id: 'composite',
+    default: postgresStore,
+    editor: filesystemStore,
+  });
+  ```
+
+  Improved code-agent editing so editor overrides can be applied and reverted without losing original dynamic values for fields like instructions, model, and tools.
+
+- Added `FilesystemStore`, a file-based storage adapter for editor domains. Stores agent configurations, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, and skills as JSON files in a local directory (default: `.mastra-storage/`). Only published snapshots are written to disk — version history is kept in memory. Use with `MastraCompositeStore`'s `editor` shorthand to enable Git-friendly editor configurations. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
+  import { PostgresStore } from '@mastra/pg';
+
+  export const mastra = new Mastra({
+    storage: new MastraCompositeStore({
+      id: 'composite',
+      default: new PostgresStore({ id: 'pg', connectionString: process.env.DATABASE_URL }),
+      editor: new FilesystemStore({ dir: '.mastra-storage' }),
+    }),
+  });
+  ```
+
+  Added `applyStoredOverrides` to the editor agent namespace. When a stored configuration exists for a code-defined agent, the editor merges the stored **instructions** and **tools** on top of the code agent's values at runtime. Model, memory, workspace, and other code-defined fields are never overridden — they may contain SDK instances or dynamic functions that cannot be safely serialized. Original code-defined values are preserved via a WeakMap and restored if the stored override is deleted.
+
+- Add `inputExamples` support on tool definitions to show AI models what valid tool inputs look like. Models that support this (e.g., Anthropic's `input_examples`) will receive the examples alongside the tool schema, improving tool call accuracy. ([#12932](https://github.com/mastra-ai/mastra/pull/12932))
+  - Added optional `inputExamples` field to `ToolAction`, `CoreTool`, and `Tool` class
+
+  ```ts
+  const weatherTool = createTool({
+    id: 'get-weather',
+    description: 'Get weather for a location',
+    inputSchema: z.object({
+      city: z.string(),
+      units: z.enum(['celsius', 'fahrenheit']),
+    }),
+    inputExamples: [
+      { input: { city: 'New York', units: 'fahrenheit' } },
+      { input: { city: 'Tokyo', units: 'celsius' } },
+    ],
+    execute: async ({ city, units }) => {
+      return await fetchWeather(city, units);
+    },
+  });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#13209](https://github.com/mastra-ai/mastra/pull/13209))
+  - Updated dependency [`p-map@^7.0.4` ↗︎](https://www.npmjs.com/package/p-map/v/7.0.4) (from `^7.0.3`, in `dependencies`)
+
+- dependencies updates: ([#13210](https://github.com/mastra-ai/mastra/pull/13210))
+  - Updated dependency [`p-retry@^7.1.1` ↗︎](https://www.npmjs.com/package/p-retry/v/7.1.1) (from `^7.1.0`, in `dependencies`)
+
+- Update provider registry and model documentation with latest models and providers ([`33e2fd5`](https://github.com/mastra-ai/mastra/commit/33e2fd5088f83666df17401e2da68c943dbc0448))
+
+- Fixed execute_command tool timeout parameter to accept seconds instead of milliseconds, preventing agents from accidentally setting extremely short timeouts ([#13799](https://github.com/mastra-ai/mastra/pull/13799))
+
+- **Skill tools are now stable across conversation turns and prompt-cache friendly.** ([#13744](https://github.com/mastra-ai/mastra/pull/13744))
+  - Renamed `skill-activate` → `skill` — returns full skill instructions directly in the tool result
+  - Consolidated `skill-read-reference`, `skill-read-script`, `skill-read-asset` → `skill_read`
+  - Renamed `skill-search` → `skill_search`
+  - `<available_skills>` in the system message is now sorted deterministically
+
+- Fixed Cloudflare Workers build failures when using `@mastra/core`. Local process execution now loads its runtime dependency lazily, preventing incompatible Node-only modules from being bundled during worker builds. ([#13813](https://github.com/mastra-ai/mastra/pull/13813))
+
+- Fix `mimeType` → `mediaType` typo in `sendMessage` file part construction. This caused file attachments to be routed through the V4 adapter instead of V5, preventing them from being correctly processed by AI SDK v5 providers. ([#13833](https://github.com/mastra-ai/mastra/pull/13833))
+
+- Fixed onIterationComplete feedback being discarded when it returns `{ continue: false }` — feedback is now added to the conversation and the model gets one final turn to produce a text response before the loop stops. ([#13759](https://github.com/mastra-ai/mastra/pull/13759))
+
+- Fixed `generate()` and `resumeGenerate()` to always throw provider stream errors. Previously, certain provider errors were silently swallowed, returning false "successful" empty responses. Now errors are always surfaced to the caller, making retry logic reliable when providers fail transiently. ([#13802](https://github.com/mastra-ai/mastra/pull/13802))
+
+- Remove the default maxSteps limit so stopWhen can control sub-agent execution ([#13764](https://github.com/mastra-ai/mastra/pull/13764))
+
+- Fix suspendedToolRunId required error when it shouldn't be required ([#13722](https://github.com/mastra-ai/mastra/pull/13722))
+
+- Fixed subagent tool defaulting maxSteps to 50 when no stop condition is configured, preventing unbounded execution loops. When stopWhen is set, maxSteps is left to the caller. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
+- Fixed prompt failures by removing assistant messages that only contain sources before model calls. ([#13790](https://github.com/mastra-ai/mastra/pull/13790))
+
+- - Fixed experiment pending count showing negative values when experiments are triggered from the Studio ([#13831](https://github.com/mastra-ai/mastra/pull/13831))
+  - Fixed scorer prompt metadata (analysis context, generated prompts) being lost when saving experiment scores
+
+- Fixed RequestContext constructor crashing when constructed from a deserialized plain object. ([#13856](https://github.com/mastra-ai/mastra/pull/13856))
+
+- Fixed LLM errors (generateText, generateObject, streamText, streamObject) being swallowed by the AI SDK's default handler instead of being routed through the Mastra logger. Errors now appear with structured context (runId, modelId, provider, etc.) in your logger, and streaming errors are captured via onError callbacks. ([#13857](https://github.com/mastra-ai/mastra/pull/13857))
+
+- Fixed workspace tool output truncation so it no longer gets prematurely cut off when short lines precede a very long line (e.g. minified JSON). Output now uses the full token budget instead of stopping at line boundaries, resulting in more complete tool results. ([#13828](https://github.com/mastra-ai/mastra/pull/13828))
+
+- Fixed subagent tool to default maxSteps to 50 when no stopWhen condition is configured, preventing unbounded agent loops. When stopWhen is set, maxSteps remains unset so the stop condition controls termination. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
+## 1.10.0-alpha.0
+
+### Minor Changes
+
+- Added `editor` shorthand to `MastraCompositeStore` for routing all editor-related domains (agents, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, skills) to a single storage backend. Priority: `domains` > `editor` > `default`. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { MastraCompositeStore } from '@mastra/core/storage';
+
+  new MastraCompositeStore({
+    id: 'composite',
+    default: postgresStore,
+    editor: filesystemStore,
+  });
+  ```
+
+  Improved code-agent editing so editor overrides can be applied and reverted without losing original dynamic values for fields like instructions, model, and tools.
+
+- Added `FilesystemStore`, a file-based storage adapter for editor domains. Stores agent configurations, prompt blocks, scorer definitions, MCP clients, MCP servers, workspaces, and skills as JSON files in a local directory (default: `.mastra-storage/`). Only published snapshots are written to disk — version history is kept in memory. Use with `MastraCompositeStore`'s `editor` shorthand to enable Git-friendly editor configurations. ([#13727](https://github.com/mastra-ai/mastra/pull/13727))
+
+  ```typescript
+  import { FilesystemStore, MastraCompositeStore } from '@mastra/core/storage';
+  import { PostgresStore } from '@mastra/pg';
+
+  export const mastra = new Mastra({
+    storage: new MastraCompositeStore({
+      id: 'composite',
+      default: new PostgresStore({ id: 'pg', connectionString: process.env.DATABASE_URL }),
+      editor: new FilesystemStore({ dir: '.mastra-storage' }),
+    }),
+  });
+  ```
+
+  Added `applyStoredOverrides` to the editor agent namespace. When a stored configuration exists for a code-defined agent, the editor merges the stored **instructions** and **tools** on top of the code agent's values at runtime. Model, memory, workspace, and other code-defined fields are never overridden — they may contain SDK instances or dynamic functions that cannot be safely serialized. Original code-defined values are preserved via a WeakMap and restored if the stored override is deleted.
+
+- Add `inputExamples` support on tool definitions to show AI models what valid tool inputs look like. Models that support this (e.g., Anthropic's `input_examples`) will receive the examples alongside the tool schema, improving tool call accuracy. ([#12932](https://github.com/mastra-ai/mastra/pull/12932))
+  - Added optional `inputExamples` field to `ToolAction`, `CoreTool`, and `Tool` class
+
+  ```ts
+  const weatherTool = createTool({
+    id: 'get-weather',
+    description: 'Get weather for a location',
+    inputSchema: z.object({
+      city: z.string(),
+      units: z.enum(['celsius', 'fahrenheit']),
+    }),
+    inputExamples: [
+      { input: { city: 'New York', units: 'fahrenheit' } },
+      { input: { city: 'Tokyo', units: 'celsius' } },
+    ],
+    execute: async ({ city, units }) => {
+      return await fetchWeather(city, units);
+    },
+  });
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#13209](https://github.com/mastra-ai/mastra/pull/13209))
+  - Updated dependency [`p-map@^7.0.4` ↗︎](https://www.npmjs.com/package/p-map/v/7.0.4) (from `^7.0.3`, in `dependencies`)
+
+- dependencies updates: ([#13210](https://github.com/mastra-ai/mastra/pull/13210))
+  - Updated dependency [`p-retry@^7.1.1` ↗︎](https://www.npmjs.com/package/p-retry/v/7.1.1) (from `^7.1.0`, in `dependencies`)
+
+- Update provider registry and model documentation with latest models and providers ([`33e2fd5`](https://github.com/mastra-ai/mastra/commit/33e2fd5088f83666df17401e2da68c943dbc0448))
+
+- Fixed execute_command tool timeout parameter to accept seconds instead of milliseconds, preventing agents from accidentally setting extremely short timeouts ([#13799](https://github.com/mastra-ai/mastra/pull/13799))
+
+- **Skill tools are now stable across conversation turns and prompt-cache friendly.** ([#13744](https://github.com/mastra-ai/mastra/pull/13744))
+  - Renamed `skill-activate` → `skill` — returns full skill instructions directly in the tool result
+  - Consolidated `skill-read-reference`, `skill-read-script`, `skill-read-asset` → `skill_read`
+  - Renamed `skill-search` → `skill_search`
+  - `<available_skills>` in the system message is now sorted deterministically
+
+- Fixed Cloudflare Workers build failures when using `@mastra/core`. Local process execution now loads its runtime dependency lazily, preventing incompatible Node-only modules from being bundled during worker builds. ([#13813](https://github.com/mastra-ai/mastra/pull/13813))
+
+- Fix `mimeType` → `mediaType` typo in `sendMessage` file part construction. This caused file attachments to be routed through the V4 adapter instead of V5, preventing them from being correctly processed by AI SDK v5 providers. ([#13833](https://github.com/mastra-ai/mastra/pull/13833))
+
+- Fixed onIterationComplete feedback being discarded when it returns `{ continue: false }` — feedback is now added to the conversation and the model gets one final turn to produce a text response before the loop stops. ([#13759](https://github.com/mastra-ai/mastra/pull/13759))
+
+- Fixed `generate()` and `resumeGenerate()` to always throw provider stream errors. Previously, certain provider errors were silently swallowed, returning false "successful" empty responses. Now errors are always surfaced to the caller, making retry logic reliable when providers fail transiently. ([#13802](https://github.com/mastra-ai/mastra/pull/13802))
+
+- Remove the default maxSteps limit so stopWhen can control sub-agent execution ([#13764](https://github.com/mastra-ai/mastra/pull/13764))
+
+- Fix suspendedToolRunId required error when it shouldn't be required ([#13722](https://github.com/mastra-ai/mastra/pull/13722))
+
+- Fixed subagent tool defaulting maxSteps to 50 when no stop condition is configured, preventing unbounded execution loops. When stopWhen is set, maxSteps is left to the caller. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
+- Fixed prompt failures by removing assistant messages that only contain sources before model calls. ([#13790](https://github.com/mastra-ai/mastra/pull/13790))
+
+- - Fixed experiment pending count showing negative values when experiments are triggered from the Studio ([#13831](https://github.com/mastra-ai/mastra/pull/13831))
+  - Fixed scorer prompt metadata (analysis context, generated prompts) being lost when saving experiment scores
+
+- Fixed RequestContext constructor crashing when constructed from a deserialized plain object. ([#13856](https://github.com/mastra-ai/mastra/pull/13856))
+
+- Fixed LLM errors (generateText, generateObject, streamText, streamObject) being swallowed by the AI SDK's default handler instead of being routed through the Mastra logger. Errors now appear with structured context (runId, modelId, provider, etc.) in your logger, and streaming errors are captured via onError callbacks. ([#13857](https://github.com/mastra-ai/mastra/pull/13857))
+
+- Fixed workspace tool output truncation so it no longer gets prematurely cut off when short lines precede a very long line (e.g. minified JSON). Output now uses the full token budget instead of stopping at line boundaries, resulting in more complete tool results. ([#13828](https://github.com/mastra-ai/mastra/pull/13828))
+
+- Fixed subagent tool to default maxSteps to 50 when no stopWhen condition is configured, preventing unbounded agent loops. When stopWhen is set, maxSteps remains unset so the stop condition controls termination. ([#13777](https://github.com/mastra-ai/mastra/pull/13777))
+
 ## 1.9.0
 
 ### Minor Changes
