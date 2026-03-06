@@ -58,7 +58,7 @@ describe('ModelsLabVoice', () => {
       const voice = new ModelsLabVoice({ speechModel: { apiKey: 'my-secret-key' } });
       await voice.speak('Hello world');
 
-      const [ttsUrl, ttsInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const [, ttsInit] = fetchMock.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(ttsInit.body as string);
 
       expect(body.key).toBe('my-secret-key');

@@ -36,7 +36,7 @@ const speakers = await voice.getSpeakers();
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `speechModel.apiKey` | `string` | `MODELSLAB_API_KEY` env | ModelsLab API key |
-| `speaker` | `string` | `'1'` | Default voice ID (1–10) or OpenAI voice name |
+| `speaker` | `string` | `'1'` | Default voice ID (1–6) or OpenAI voice name |
 
 ## Voice IDs
 

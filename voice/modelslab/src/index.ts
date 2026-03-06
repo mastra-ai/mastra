@@ -15,11 +15,7 @@ export type ModelsLabVoiceId =
   | '3'  // Warm
   | '4'  // Deep Male
   | '5'  // Female
-  | '6'  // Clear Female
-  | '7'
-  | '8'
-  | '9'
-  | '10';
+  | '6'; // Clear Female
 
 export const MODELSLAB_VOICES: { voiceId: ModelsLabVoiceId; name: string; language: string; gender: string }[] = [
   { voiceId: '1', name: 'Neutral', language: 'en', gender: 'neutral' },
