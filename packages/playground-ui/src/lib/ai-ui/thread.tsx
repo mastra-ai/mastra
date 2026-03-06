@@ -4,6 +4,7 @@ import {
   ThreadPrimitive,
   ToolCallMessagePartComponent,
   useComposerRuntime,
+  useThread,
 } from '@assistant-ui/react';
 import { ArrowUp, Mic, PlusIcon } from 'lucide-react';
 
@@ -100,10 +101,11 @@ const Composer = ({ hasMemory, agentId, hasModelList }: ComposerProps) => {
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
   const composerRuntime = useComposerRuntime();
+  const isRunning = useThread(s => s.isRunning);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !isRunning) {
       e.preventDefault();
       composerRuntime.send();
     }
