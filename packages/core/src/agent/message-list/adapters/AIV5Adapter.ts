@@ -175,7 +175,7 @@ export class AIV5Adapter {
               return p;
             }, '') ??
               '');
-          if (text || part.details?.length) {
+          if (text || part.details?.length || part.providerMetadata) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,
               text: text || '',
