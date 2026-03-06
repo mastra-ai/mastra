@@ -135,10 +135,14 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
     const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
 
-    const acceptEncoding = req.headers['accept-encoding'] || '';
-    const supportsGzip = Array.isArray(acceptEncoding)
-      ? acceptEncoding.some(enc => enc.includes('gzip'))
-      : acceptEncoding.includes('gzip');
+    const rawEncoding = req.headers['accept-encoding'] ?? '';
+    const encodings = (Array.isArray(rawEncoding) ? rawEncoding : [rawEncoding]).flatMap((v: string) => v.split(','));
+    const supportsGzip = encodings.some((entry: string) => {
+      const [coding, ...params] = entry.trim().toLowerCase().split(';').map((p: string) => p.trim());
+      if (coding !== 'gzip') return false;
+      const q = params.find((p: string) => p.startsWith('q='));
+      return q ? Number(q.slice(2)) > 0 : true;
+    });
 
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {
