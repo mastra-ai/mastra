@@ -26,10 +26,11 @@ import { vi, beforeEach } from 'vitest';
 // `import { randomUUID } from 'node:crypto'` / `'crypto'`.
 // ---------------------------------------------------------------------------
 const uuidStore = new AsyncLocalStorage<{ counter: number }>();
+let fallbackCounter = 0;
 
 function deterministicUUID() {
   const ctx = uuidStore.getStore();
-  const count = ctx ? ++ctx.counter : 0;
+  const count = ctx ? ++ctx.counter : ++fallbackCounter;
   const hex = count.toString(16).padStart(12, '0');
   return `00000000-0000-4000-8000-${hex}`;
 }
