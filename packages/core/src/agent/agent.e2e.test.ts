@@ -4,8 +4,9 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { stepCountIs, tool } from '@internal/ai-sdk-v5';
+import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { TestIntegration } from '../integration/openapi-toolset.mock';
 import { ModelRouterLanguageModel } from '../llm';
@@ -34,6 +35,10 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
   const integration = new TestIntegration();
