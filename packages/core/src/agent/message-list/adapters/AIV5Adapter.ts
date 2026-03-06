@@ -5,6 +5,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart, MessageSource } from '../state/types';
 import type { AIV5Type } from '../types';
+import { sanitizeToolName } from '../utils/tool-name';
 
 /**
  * Filter out empty text parts from message parts array.
@@ -41,7 +42,7 @@ function getToolName(type: string | { type: string }): string {
 
   // Ensure type is a string
   if (typeof type !== 'string') {
-    return 'unknown';
+    return sanitizeToolName(type);
   }
 
   if (type === 'dynamic-tool') {
@@ -50,11 +51,11 @@ function getToolName(type: string | { type: string }): string {
 
   // Extract tool name from "tool-${toolName}" format
   if (type.startsWith('tool-')) {
-    return type.slice('tool-'.length); // Remove "tool-" prefix
+    return sanitizeToolName(type.slice('tool-'.length)); // Remove "tool-" prefix
   }
 
   // Fallback for unexpected formats
-  return type;
+  return sanitizeToolName(type);
 }
 
 export interface AIV5AdapterContext {
@@ -568,7 +569,7 @@ export class AIV5Adapter {
           type: 'tool-invocation' as const,
           toolInvocation: {
             toolCallId: toolCallPart.toolCallId,
-            toolName: toolCallPart.toolName,
+            toolName: sanitizeToolName(toolCallPart.toolName),
             args: toolCallPart.input,
             state: 'call',
           },
@@ -579,7 +580,7 @@ export class AIV5Adapter {
         mastraDBParts.push(toolInvocationPart);
         toolInvocations.push({
           toolCallId: toolCallPart.toolCallId,
-          toolName: toolCallPart.toolName,
+          toolName: sanitizeToolName(toolCallPart.toolName),
           args: toolCallPart.input,
           state: 'call',
         });
@@ -608,7 +609,7 @@ export class AIV5Adapter {
           const call: any = {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
-            toolName: toolResultPart.toolName || 'unknown',
+            toolName: sanitizeToolName(toolResultPart.toolName),
             args: {},
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
@@ -622,7 +623,7 @@ export class AIV5Adapter {
             type: 'tool-invocation' as const,
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
-              toolName: toolResultPart.toolName || 'unknown',
+              toolName: sanitizeToolName(toolResultPart.toolName),
               args: {},
               state: 'call',
             },

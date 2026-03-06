@@ -42,36 +42,36 @@ const updated2 = await dataset.update({
 
 <PropertiesTable
   content={[
-{
-name: "name",
-type: "string",
-isOptional: true,
-description: "New display name.",
-},
-{
-name: "description",
-type: "string",
-isOptional: true,
-description: "New description.",
-},
-{
-name: "metadata",
-type: "Record<string, unknown>",
-isOptional: true,
-description: "Updated metadata.",
-},
-{
-name: "inputSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item inputs.",
-},
-{
-name: "groundTruthSchema",
-type: "unknown",
-isOptional: true,
-description: "JSON Schema or Zod schema for item ground truths.",
-},
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: 'New display name.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'New description.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description: 'Updated metadata.',
+  },
+  {
+    name: 'inputSchema',
+    type: 'unknown',
+    isOptional: true,
+    description: 'JSON Schema or Zod schema for item inputs.',
+  },
+  {
+    name: 'groundTruthSchema',
+    type: 'unknown',
+    isOptional: true,
+    description: 'JSON Schema or Zod schema for item ground truths.',
+  },
 ]}
 />
 
@@ -79,10 +79,10 @@ description: "JSON Schema or Zod schema for item ground truths.",
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<DatasetRecord>",
-description: "The updated dataset record. See dataset.getDetails() for the full shape.",
-},
+  {
+    name: 'result',
+    type: 'Promise<DatasetRecord>',
+    description: 'The updated dataset record. See dataset.getDetails() for the full shape.',
+  },
 ]}
 />

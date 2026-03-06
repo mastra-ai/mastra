@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "type": "module",
   "files": [
@@ -32,8 +32,8 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "jsonwebtoken": "^9.0.2",
-    "jwks-rsa": "^3.2.0"
+    "jsonwebtoken": "^9.0.3",
+    "jwks-rsa": "^3.2.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

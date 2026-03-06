@@ -1272,12 +1272,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Clone messages with new IDs
       const clonedMessages: MastraDBMessage[] = [];
+      const messageIdMap: Record<string, string> = {};
       const targetResourceId = resourceId || sourceThread.resourceId;
       const newThreadMessagesKey = getThreadMessagesKey(newThreadId);
 
       for (let i = 0; i < sourceMessages.length; i++) {
         const sourceMsg = sourceMessages[i]!;
         const newMessageId = crypto.randomUUID();
+        messageIdMap[sourceMsg.id] = newMessageId;
         const { _index, ...restMsg } = sourceMsg as MastraDBMessage & { _index?: number };
 
         const newMessage: MastraDBMessage = {
@@ -1309,6 +1311,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       return {
         thread: newThread,
         clonedMessages,
+        messageIdMap,
       };
     } catch (error) {
       if (error instanceof MastraError) {

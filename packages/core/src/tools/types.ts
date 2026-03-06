@@ -207,6 +207,19 @@ export type CoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+  onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
+  onInputDelta?: (options: { inputTextDelta: string } & ToolCallOptions) => void | PromiseLike<void>;
+  onInputAvailable?: (options: { input: any } & ToolCallOptions) => void | PromiseLike<void>;
+  onOutput?: (
+    options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
+  ) => void | PromiseLike<void>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -245,6 +258,19 @@ export type InternalCoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+  onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
+  onInputDelta?: (options: { inputTextDelta: string } & ToolCallOptions) => void | PromiseLike<void>;
+  onInputAvailable?: (options: { input: any } & ToolCallOptions) => void | PromiseLike<void>;
+  onOutput?: (
+    options: { output: any; toolName: string } & Omit<ToolCallOptions, 'messages'>,
+  ) => void | PromiseLike<void>;
 } & (
   | {
       type?: 'function' | undefined;
@@ -348,6 +374,13 @@ export interface ToolAction<
    * ```
    */
   providerOptions?: Record<string, Record<string, unknown>>;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {
