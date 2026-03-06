@@ -1,5 +1,23 @@
 # create-mastra
 
+## 1.3.7
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.1
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.0
+
+## 1.3.6
+
+## 1.3.6-alpha.0
+
 ## 1.3.5
 
 ## 1.3.5-alpha.0

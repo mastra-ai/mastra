@@ -19,13 +19,12 @@ workflow.sleep(5000)
 
 <PropertiesTable
   content={[
-{
-name: "milliseconds",
-type: "number | ((context: { inputData: any }) => number | Promise<number>)",
-description:
-"The number of milliseconds to pause execution, or a callback that returns the delay",
-isOptional: false,
-},
+  {
+    name: 'milliseconds',
+    type: 'number | ((context: { inputData: any }) => number | Promise<number>)',
+    description: 'The number of milliseconds to pause execution, or a callback that returns the delay',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -33,11 +32,11 @@ isOptional: false,
 
 <PropertiesTable
   content={[
-{
-name: "workflow",
-type: "Workflow",
-description: "The workflow instance for method chaining",
-},
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: 'The workflow instance for method chaining',
+  },
 ]}
 />
 

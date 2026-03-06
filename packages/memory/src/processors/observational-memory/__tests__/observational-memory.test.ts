@@ -21,6 +21,7 @@ import {
   validateCompression,
   buildReflectorSystemPrompt,
 } from '../reflector-agent';
+import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -2523,6 +2524,31 @@ describe('Scenario: Observation quality checks', () => {
     `);
     expect(observations).toBeGreaterThan(20);
     expect(observations).toBeLessThan(100);
+  });
+
+  it('reuses cached part token metadata across repeated counting and message lifecycle copy', () => {
+    const counter = new TokenCounter();
+    const message = createTestMessage('ignored-content', 'assistant');
+    message.content = {
+      format: 2,
+      parts: [{ type: 'text', text: 'Persistent tiktoken estimate on part metadata' } as any],
+    } as any;
+
+    const firstCount = counter.countMessage(message);
+    const firstCache = (message.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(firstCache).toBeTruthy();
+
+    const reloaded = {
+      ...JSON.parse(JSON.stringify(message)),
+      createdAt: new Date(message.createdAt),
+    } as MastraDBMessage;
+
+    const secondCount = counter.countMessage(reloaded);
+    const secondCache = (reloaded.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(secondCount).toBe(firstCount);
+    expect(secondCache).toEqual(firstCache);
   });
 });
 
@@ -6041,43 +6067,60 @@ describe('Full Async Buffering Flow', () => {
   });
 
   it('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
-    const { storage, threadId, resourceId, step } = await setupAsyncBufferingScenario({
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 1000,
       bufferTokens: 500,
       bufferActivation: 0.7,
       reflectionObservationTokens: 50000,
-      blockAfter: 0,
       messageCount: 10,
       observerResponses: [
-        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>Implement sync path</current-task>\n<suggested-response>Continue with step 2</suggested-response>',
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
         '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
       ],
     });
 
+    // Step 0 triggers async buffering; step 1 activates the buffered chunk,
+    // propagating the continuation hints to thread metadata.
     await step(0);
+    await waitForAsyncOps();
+    await step(1);
+    await waitForAsyncOps();
     const threadAfterFirstObservation = await storage.getThreadById({ threadId });
     const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
     expect(firstOM.currentTask).toBe('Implement sync path');
     expect(firstOM.suggestedResponse).toBe('Continue with step 2');
 
-    await storage.saveMessages({
-      messages: [
-        {
-          id: 'sync-clear-msg-1',
-          threadId,
-          resourceId,
-          role: 'user',
-          content: {
-            format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'New message to trigger observation' }],
-          },
-          type: 'text',
-          createdAt: new Date('2025-01-01T12:30:00Z'),
-        },
-      ],
-    });
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
 
-    await step(1);
+    // Step 2 starts a new async buffering round (observer call 2, no hints).
+    // Step 3 activates the new chunk, clearing the stale hints.
+    await step(2, { freshState: true });
+    await waitForAsyncOps();
+    await step(3);
+    await waitForAsyncOps();
     const threadAfterSecondObservation = await storage.getThreadById({ threadId });
     const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
     expect(secondOM.currentTask).toBeUndefined();
@@ -6085,15 +6128,18 @@ describe('Full Async Buffering Flow', () => {
   });
 
   it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
-    const { storage, threadId, resourceId, step } = await setupAsyncBufferingScenario({
+    // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).
+    // With 20 messages at ~112 tokens each ≈ 2240 tokens, forceMaxActivation triggers.
+    const { storage, threadId, resourceId, step, om, waitForAsyncOps } = await setupAsyncBufferingScenario({
       messageTokens: 1000,
       bufferTokens: 200,
       bufferActivation: 1,
       reflectionObservationTokens: 50000,
-      messageCount: 10,
+      messageCount: 20,
     });
 
-    const record = await storage.getObservationalMemory(threadId, resourceId);
+    // Create the OM record (the helper does not initialize one automatically).
+    const record = await (om as any).getOrCreateRecord(threadId, resourceId);
     expect(record).toBeDefined();
 
     await storage.updateBufferedObservations({
@@ -6140,6 +6186,7 @@ describe('Full Async Buffering Flow', () => {
     });
 
     await step(0, { freshState: true });
+    await waitForAsyncOps();
 
     const threadAfterActivation = await storage.getThreadById({ threadId });
     const omAfterActivation = ((threadAfterActivation?.metadata as any)?.mastra?.om ?? {}) as any;
@@ -7587,6 +7634,73 @@ describe('Full Async Buffering Flow', () => {
     expect(callsAfterActivation).toBeGreaterThan(1); // buffered once before, buffered again after activation
   });
 
+  it('should retain at least the configured absolute bufferActivation floor after chunk activation', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999,
+      bufferTokens: 999998,
+      bufferActivation: 0.5,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 20,
+    });
+
+    const messageListAfterStep0 = await step(0);
+    await waitForAsyncOps();
+
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const tokensBeforeActivation = new TokenCounter().countMessages(contextMsgs);
+    expect(tokensBeforeActivation).toBeGreaterThan(0);
+
+    const chunkMsgIds = contextMsgs.slice(0, 6).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(6);
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+
+    await storage.updateBufferedObservations({
+      id: recordId,
+      chunk: {
+        observations: 'Manual chunk floor observations',
+        tokenCount: 80,
+        messageIds: chunkMsgIds,
+        messageTokens: 1200,
+        lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+        cycleId: 'manual-cycle-floor',
+      },
+    });
+
+    (om as any).observationConfig.messageTokens = 1000;
+    (om as any).observationConfig.bufferTokens = 500;
+    (om as any).observationConfig.blockAfter = 1200;
+    (om as any).observationConfig.bufferActivation = 2000;
+
+    const originalCleanup = (om as any).cleanupAfterObservation.bind(om);
+    let capturedMinRemaining: number | undefined;
+    (om as any).cleanupAfterObservation = async (...args: any[]) => {
+      capturedMinRemaining = args[6];
+      return originalCleanup(...args);
+    };
+
+    const messageListAfterStep1 = await step(1);
+    await waitForAsyncOps();
+
+    const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk floor observations');
+
+    const expectedFloor = resolveRetentionFloor(
+      (om as any).observationConfig.bufferActivation,
+      (om as any).observationConfig.messageTokens,
+    );
+    expect(capturedMinRemaining).toBe(expectedFloor);
+
+    const remainingMessages = messageListAfterStep1.get.all.db();
+    const remainingTokens = new TokenCounter().countMessages(remainingMessages);
+    expect(remainingTokens).toBeGreaterThanOrEqual(Math.floor(expectedFloor * 0.9));
+
+    const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
+    expect(chunkMsgIds.some(id => !remainingIds.has(id))).toBe(true);
+  });
+
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {
     // Regression test: without the lastBufferedAtTime cursor, sequential buffer
     // triggers would re-observe the same messages because getUnobservedMessages
@@ -7854,5 +7968,351 @@ describe('threadId validation in thread scope', () => {
     expect(record).toBeDefined();
     expect(record.threadId).toBeNull();
     expect(record.resourceId).toBe('resource-1');
+  });
+});
+
+// =============================================================================
+// Per-step save: sealed message deduplication
+// =============================================================================
+describe('Per-step save deduplication', () => {
+  async function setupMultiStepScenario(opts: { messageTokens: number }) {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    (ObservationalMemory as any).asyncBufferingOps.clear();
+    (ObservationalMemory as any).lastBufferedBoundary.clear();
+    (ObservationalMemory as any).lastBufferedAtTime.clear();
+    (ObservationalMemory as any).reflectionBufferCycleIds.clear();
+    (ObservationalMemory as any).sealedMessageIds.clear();
+
+    const storage = createInMemoryStorage();
+    const threadId = 'dedup-thread';
+    const resourceId = 'dedup-resource';
+
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [
+          {
+            type: 'text' as const,
+            text: '<observations>\nDate: Jan 1, 2025\n* Observed user request\n</observations>',
+          },
+        ],
+        warnings: [],
+      }),
+    });
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: opts.messageTokens },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const state: Record<string, unknown> = {};
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+
+    const runStep = async (stepNumber: number) => {
+      await om.processInputStep({
+        messageList,
+        messages: [],
+        requestContext: makeCtx(),
+        stepNumber,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: mockModel as any,
+        retryCount: 0,
+        abort,
+      });
+    };
+
+    const addToolResponse = (id: string, toolName: string, callId: string, ms: number) => {
+      messageList.add(
+        {
+          id,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'result', toolName, toolCallId: callId, args: {}, result: {} },
+              },
+            ],
+          },
+          createdAt: new Date(`2025-01-01T10:00:0${ms}Z`),
+        } as any,
+        'response',
+      );
+    };
+
+    const finalize = async () => {
+      await om.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        requestContext: makeCtx(),
+        state,
+        abort,
+      });
+    };
+
+    async function waitForAsyncOps(timeoutMs = 5000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const ops = (ObservationalMemory as any).asyncBufferingOps as Map<string, Promise<void>>;
+        if (ops.size === 0) return;
+        await Promise.allSettled([...ops.values()]);
+        await new Promise(r => setTimeout(r, 50));
+      }
+    }
+
+    return {
+      storage,
+      threadId,
+      resourceId,
+      om,
+      state,
+      messageList,
+      runStep,
+      addToolResponse,
+      finalize,
+      waitForAsyncOps,
+    };
+  }
+
+  it('should save each user message exactly once across a multi-step turn', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize } = await setupMultiStepScenario({
+      messageTokens: 100000,
+    });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Help me with something' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    addToolResponse('resp-0', 'search', 'c1', 1);
+    await runStep(1);
+    addToolResponse('resp-1', 'lookup', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Done.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not duplicate sealed-for-buffering messages during per-step save', async () => {
+    // Low threshold triggers async buffering at step 0, which seals the user message.
+    // handlePerStepSave at step 1 must skip the already-persisted sealed message.
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'text',
+              text: 'Help me debug a distributed system issue involving multiple microservices communicating over gRPC.',
+            },
+          ],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'The root cause is DNS resolution.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    const userMessages = messages.filter(m => m.role === 'user');
+
+    expect(userMessages.length).toBe(1);
+    expect(userMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should not insert the same logical user message with different IDs across steps', async () => {
+    const { storage, threadId, messageList, runStep, addToolResponse, finalize, waitForAsyncOps } =
+      await setupMultiStepScenario({ messageTokens: 50 });
+
+    messageList.add(
+      {
+        id: 'user-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Track this exact user message identity across agent steps' }],
+        },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+      } as any,
+      'input',
+    );
+
+    await runStep(0);
+    await waitForAsyncOps();
+    addToolResponse('resp-0', 'debug_service', 'c1', 1);
+    await runStep(1);
+    await waitForAsyncOps();
+    addToolResponse('resp-1', 'check_network', 'c2', 2);
+    await runStep(2);
+
+    messageList.add(
+      {
+        id: 'resp-2',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Finished analysis.' }] },
+        createdAt: new Date('2025-01-01T10:00:03Z'),
+      } as any,
+      'response',
+    );
+
+    await finalize();
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const logicalUserKey = (m: any) => {
+      const text = m?.content?.parts?.find((p: any) => p?.type === 'text')?.text ?? '';
+      const createdAt = new Date(m.createdAt).toISOString();
+      return `${m.role}|${createdAt}|${text}`;
+    };
+
+    const matchingUserMessages = messages.filter(
+      m =>
+        logicalUserKey(m) === 'user|2025-01-01T10:00:00.000Z|Track this exact user message identity across agent steps',
+    );
+
+    expect(matchingUserMessages.length).toBe(1);
+    expect(new Set(matchingUserMessages.map(m => m.id)).size).toBe(1);
+    expect(matchingUserMessages[0]!.id).toBe('user-1');
+  });
+
+  it('should upsert sealed messages with completed boundaries instead of inserting new IDs', async () => {
+    const { storage, threadId, resourceId, om, state } = await setupMultiStepScenario({ messageTokens: 50 });
+
+    const messageWithCompletedBoundary = {
+      id: 'user-1',
+      threadId,
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'same logical message' },
+          { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+        ],
+      },
+      createdAt: new Date('2025-01-01T10:00:00Z'),
+      resourceId,
+    } as any;
+
+    state.sealedIds = new Set(['user-1']);
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    await (om as any).saveMessagesWithSealedIdTracking(
+      [{ ...messageWithCompletedBoundary }],
+      state.sealedIds,
+      threadId,
+      resourceId,
+      state,
+    );
+
+    const { messages } = await storage.listMessages({
+      threadId,
+      perPage: 100,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    const sameLogical = messages.filter(
+      m =>
+        m.role === 'user' &&
+        new Date(m.createdAt).toISOString() === '2025-01-01T10:00:00.000Z' &&
+        m.content?.parts?.some((p: any) => p?.type === 'text' && p?.text === 'same logical message'),
+    );
+
+    expect(sameLogical.length).toBe(1);
+    expect(sameLogical[0]!.id).toBe('user-1');
   });
 });

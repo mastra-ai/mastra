@@ -1,10 +1,10 @@
-import { ElementType, useState } from 'react';
-import { EntityProvider, useEntity } from './context';
-import { Icon } from '../Icon/Icon';
 import { ChevronDownIcon } from 'lucide-react';
-
+import { useState } from 'react';
 import { twMerge } from 'tailwind-merge';
-import { EntityVariant } from './types';
+import { Icon } from '../Icon/Icon';
+import { EntityProvider, useEntity } from './context';
+
+import type { EntityVariant } from './types';
 
 export interface EntityProps extends React.ComponentPropsWithoutRef<'div'> {
   variant?: EntityVariant;
