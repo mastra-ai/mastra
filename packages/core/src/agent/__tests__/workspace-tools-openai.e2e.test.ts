@@ -1,19 +1,8 @@
 /**
- * E2E test for Issue #12284: OpenAI strict mode rejecting schemas when
- * structured output is used alongside workspace tools.
+ * E2E test: OpenAI strict mode with workspace tools and structured output.
  *
- * Slack user Carlos reported using GPT 5.2 with:
- *   - Workspace tools
- *   - Structured output
- *   - Native AI search (OpenAI web search provider tool)
- * and getting conflicts between workspace tools and structured output.
- *
- * The original issue (#12284) error was:
- *   "Invalid schema for response_format 'response': In context=(),
- *    'required' is required to be supplied and to be an array including
- *    every key in properties. Missing 'finalResult'."
- *
- * This test reproduces the scenario with real OpenAI calls.
+ * Verifies that schemas with optional fields work correctly when using
+ * workspace tools + structured output + web search with real OpenAI calls.
  */
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
@@ -64,7 +53,7 @@ const structuredOutputSchema = z.object({
   details: z.string().optional().describe('Optional additional details'),
 });
 
-describe('Issue #12284: Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => {
+describe('Workspace tools with OpenAI strict mode', { timeout: 300_000 }, () => {
   const models = [
     { name: 'gpt-5.2 (v5)', model: openai_v5('gpt-5.2'), sdk: openai_v5 },
     { name: 'gpt-4o (v5)', model: openai_v5('gpt-4o'), sdk: openai_v5 },
@@ -138,7 +127,7 @@ describe('Issue #12284: Workspace tools with OpenAI strict mode', { timeout: 300
         expect(result.object).toBeDefined();
       });
 
-      // ---- Web search + workspace tools + structured output (Carlos's full setup) ----
+      // ---- Web search + workspace tools + structured output ----
 
       it('web search + workspace tools (no structured output)', { timeout: 60_000 }, async () => {
         const agent = createWorkspaceAgent(model, { search: sdk.tools.webSearch({}) });

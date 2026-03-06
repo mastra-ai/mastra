@@ -952,18 +952,11 @@ describe('OpenAISchemaCompatLayer - Passthrough/LooseObject Schemas', () => {
 });
 
 // =============================================================================
-// Issue #12284: Invalid schema for response_format 'response'
-// https://github.com/mastra-ai/mastra/issues/12284
+// OpenAI strict mode: all properties must be in the `required` array.
 //
-// OpenAI strict mode requires ALL properties in the `required` array.
-//
-// Two bugs found:
-//   Bug 1 (agent.ts:2812): `&& targetModelId` guard skips compat layer when modelId is falsy
-//   Bug 2 (schema-compatibility.ts:315): processToJSONSchema() doesn't call processZodType(),
-//          so tool schemas never get the optional->nullable transformation
-//
-// These tests assert DESIRED behavior. They should FAIL on main (proving the bugs)
-// and PASS once the fixes are applied.
+// Two bugs fixed:
+//   1. agent.ts guard skipped compat layer when modelId was falsy
+//   2. processToJSONSchema() didn't ensure all properties were required
 // =============================================================================
 
 /** processZodType (structured output path) -> zodToJsonSchema */
@@ -993,7 +986,7 @@ const defaultCompletionSchema = z.object({
   finalResult: z.string().optional().describe('The final result text to return to the user'),
 });
 
-describe('OpenAISchemaCompatLayer - Issue #12284: defaultCompletionSchema', () => {
+describe('OpenAISchemaCompatLayer - defaultCompletionSchema', () => {
   it('processZodType should put all properties in required', () => {
     const json = toJsonViaCompat(defaultCompletionSchema);
     const check = allPropsRequired(json);
@@ -1010,7 +1003,7 @@ describe('OpenAISchemaCompatLayer - Issue #12284: defaultCompletionSchema', () =
   });
 });
 
-describe('OpenAISchemaCompatLayer - Issue #12284 Bug 1: shouldApply with undefined modelId', () => {
+describe('OpenAISchemaCompatLayer - shouldApply with undefined modelId', () => {
   it('should not crash and should apply when provider is OpenAI', () => {
     const compat = new OpenAISchemaCompatLayer({
       provider: 'openai.responses',
@@ -1030,7 +1023,7 @@ describe('OpenAISchemaCompatLayer - Issue #12284 Bug 1: shouldApply with undefin
   });
 });
 
-describe('OpenAISchemaCompatLayer - Issue #12284 Bug 2: processToJSONSchema should put all props in required', () => {
+describe('OpenAISchemaCompatLayer - processToJSONSchema should put all props in required', () => {
   const openaiCompat = new OpenAISchemaCompatLayer({
     provider: 'openai.responses',
     modelId: 'gpt-4o',
@@ -1077,7 +1070,7 @@ describe('OpenAISchemaCompatLayer - Issue #12284 Bug 2: processToJSONSchema shou
   });
 });
 
-describe('OpenAISchemaCompatLayer - Issue #12284: Workspace tool schemas', () => {
+describe('OpenAISchemaCompatLayer - Workspace tool schemas', () => {
   it('file_stat - no optional fields', () => {
     const schema = z.object({ path: z.string() });
     expect(allPropsRequired(toJsonViaCompat(schema)).valid).toBe(true);
@@ -1138,7 +1131,7 @@ describe('OpenAISchemaCompatLayer - Issue #12284: Workspace tool schemas', () =>
   });
 });
 
-describe('OpenAISchemaCompatLayer - Issue #12284: Zod pattern coverage', () => {
+describe('OpenAISchemaCompatLayer - Zod pattern coverage', () => {
   const patterns: Array<{ name: string; schema: any }> = [
     { name: '.optional()', schema: z.object({ f: z.string().optional() }) },
     { name: '.default()', schema: z.object({ f: z.string().default('x') }) },
@@ -1162,7 +1155,7 @@ describe('OpenAISchemaCompatLayer - Issue #12284: Zod pattern coverage', () => {
   });
 });
 
-describe('OpenAISchemaCompatLayer - Issue #12284: Responses API via LiteLLM proxy (netbrah #13361)', () => {
+describe('OpenAISchemaCompatLayer - Responses API via LiteLLM proxy', () => {
   it('compat layer applies for openai.responses provider', () => {
     const compat = new OpenAISchemaCompatLayer({
       provider: 'openai.responses',
@@ -1217,19 +1210,13 @@ describe('OpenAISchemaCompatLayer - Issue #12284: Responses API via LiteLLM prox
 });
 
 // =============================================================================
-// Issue #12284: ghassen's bug — defaultCompletionSchema in agent networks
+// Agent network structured output flow simulation
 //
-// ghassen reported: "Missing 'finalResult'" when using agent networks with OpenAI.
-// The defaultCompletionSchema (validation.ts:370-377) has finalResult: z.string().optional().
-//
-// Root cause: agent.ts:3813 gates compat layer on `&& targetModelId`. When modelId
-// is falsy, processZodType() is never called, but execute.ts:119 still enables
-// strictJsonSchema: true. The schema goes to OpenAI unprocessed → rejected.
-//
-// These tests assert DESIRED behavior and should FAIL until the bug is fixed.
+// When modelId is falsy (e.g., agent networks), the compat layer must still run.
+// execute.ts enables strictJsonSchema independently, so unprocessed schemas get rejected.
 // =============================================================================
 
-describe('OpenAISchemaCompatLayer - Issue #12284: ghassen — agent network defaultCompletionSchema', () => {
+describe('OpenAISchemaCompatLayer - agent network defaultCompletionSchema with falsy modelId', () => {
   // Exact schema from packages/core/src/loop/network/validation.ts:370-377
   const defaultCompletionSchemaNetwork = z.object({
     isComplete: z.boolean().describe('Whether the task is complete'),
@@ -1241,21 +1228,19 @@ describe('OpenAISchemaCompatLayer - Issue #12284: ghassen — agent network defa
   });
 
   /**
-   * Simulates the full agent.ts structured output flow:
-   *   1. agent.ts:3812 — check if provider/modelId includes 'openai'
-   *   2. agent.ts:3813 — check isZodType(schema) && targetModelId
-   *   3. If both pass — construct compat layer, call processZodType()
+   * Simulates the agent.ts structured output flow:
+   *   1. Check if provider/modelId includes 'openai'
+   *   2. Check isZodType(schema)
+   *   3. Construct compat layer, call processZodType()
    *   4. zodToJsonSchema() converts the (possibly transformed) schema
-   *   5. execute.ts:119 — strictJsonSchema: true if provider.startsWith('openai')
-   *
-   * Returns the JSON Schema that would be sent to OpenAI.
+   *   5. strict mode enabled if provider.startsWith('openai')
    */
   function simulateAgentStructuredOutputFlow(schema: any, targetProvider: string, targetModelId: string | undefined) {
     let processedSchema = schema;
 
-    // agent.ts:3812 — fixed: optional chaining on targetModelId
+    // Optional chaining on targetModelId
     if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
-      // agent.ts:3813 — fixed: removed `&& targetModelId` guard so compat runs even with falsy modelId
+      // Compat runs even with falsy modelId (no targetModelId guard)
       if (isZodType(schema)) {
         const modelInfo = {
           provider: targetProvider,
@@ -1275,7 +1260,7 @@ describe('OpenAISchemaCompatLayer - Issue #12284: ghassen — agent network defa
     // zodToJsonSchema runs regardless
     const jsonSchema = zodToJsonSchema(processedSchema);
 
-    // execute.ts:119 — strict mode check is independent
+    // Strict mode check is independent of compat layer
     const strictModeEnabled = targetProvider.startsWith('openai');
 
     return { jsonSchema, strictModeEnabled };
@@ -1291,9 +1276,8 @@ describe('OpenAISchemaCompatLayer - Issue #12284: ghassen — agent network defa
     expect(allPropsRequired(jsonSchema).valid).toBe(true);
   });
 
-  it('FIXED: undefined modelId → compat layer still runs → schema is strict-mode compliant', () => {
-    // ghassen's scenario: agent network with OpenAI, modelId is falsy.
-    // After fix: removing `&& targetModelId` lets the compat layer run.
+  it('undefined modelId → compat layer still runs → schema is strict-mode compliant', () => {
+    // Agent network with OpenAI, modelId is falsy.
     const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
       defaultCompletionSchemaNetwork,
       'openai.responses',
@@ -1304,7 +1288,7 @@ describe('OpenAISchemaCompatLayer - Issue #12284: ghassen — agent network defa
     expect(allPropsRequired(jsonSchema).valid).toBe(true);
   });
 
-  it('FIXED: empty string modelId → compat layer still runs → schema is strict-mode compliant', () => {
+  it('empty string modelId → compat layer still runs → schema is strict-mode compliant', () => {
     const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
       defaultCompletionSchemaNetwork,
       'openai.responses',
