@@ -2,7 +2,37 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { StorageDomain } from '../base';
 import type { CreateFeedbackArgs, ListFeedbackArgs, ListFeedbackResponse } from './feedback';
 import type { BatchCreateLogsArgs, ListLogsArgs, ListLogsResponse } from './logs';
-import type { BatchRecordMetricsArgs, ListMetricsArgs, ListMetricsResponse } from './metrics';
+import type {
+  BatchRecordMetricsArgs,
+  GetMetricAggregateArgs,
+  GetMetricAggregateResponse,
+  GetMetricBreakdownArgs,
+  GetMetricBreakdownResponse,
+  GetMetricTimeSeriesArgs,
+  GetMetricTimeSeriesResponse,
+  GetMetricHistogramArgs,
+  GetMetricHistogramResponse,
+  GetMetricPercentilesArgs,
+  GetMetricPercentilesResponse,
+  GetUsageReportArgs,
+  GetUsageReportResponse,
+  GetMetricNamesArgs,
+  GetMetricNamesResponse,
+  GetMetricLabelKeysArgs,
+  GetMetricLabelKeysResponse,
+  GetLabelValuesArgs,
+  GetLabelValuesResponse,
+  GetEntityTypesArgs,
+  GetEntityTypesResponse,
+  GetEntityNamesArgs,
+  GetEntityNamesResponse,
+  GetServiceNamesArgs,
+  GetServiceNamesResponse,
+  GetEnvironmentsArgs,
+  GetEnvironmentsResponse,
+  GetTraceTagsArgs,
+  GetTraceTagsResponse,
+} from './metrics';
 import type { CreateScoreArgs, ListScoresArgs, ListScoresResponse } from './scores';
 import type {
   BatchCreateSpansArgs,
@@ -203,15 +233,137 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
-  /**
-   * Retrieves a list of metrics with optional filtering.
-   */
-  async listMetrics(_args: ListMetricsArgs): Promise<ListMetricsResponse> {
+  // ============================================================================
+  // OLAP Query Methods
+  // ============================================================================
+
+  async getMetricAggregate(_args: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
     throw new MastraError({
-      id: 'OBSERVABILITY_STORAGE_LIST_METRICS_NOT_IMPLEMENTED',
+      id: 'OBSERVABILITY_STORAGE_GET_METRIC_AGGREGATE_NOT_IMPLEMENTED',
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
-      text: 'This storage provider does not support listing metrics',
+      text: 'This storage provider does not support metric aggregation',
+    });
+  }
+
+  async getMetricBreakdown(_args: GetMetricBreakdownArgs): Promise<GetMetricBreakdownResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_METRIC_BREAKDOWN_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support metric breakdown',
+    });
+  }
+
+  async getMetricTimeSeries(_args: GetMetricTimeSeriesArgs): Promise<GetMetricTimeSeriesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_METRIC_TIME_SERIES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support metric time series',
+    });
+  }
+
+  async getMetricHistogram(_args: GetMetricHistogramArgs): Promise<GetMetricHistogramResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_METRIC_HISTOGRAM_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support metric histograms',
+    });
+  }
+
+  async getMetricPercentiles(_args: GetMetricPercentilesArgs): Promise<GetMetricPercentilesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_METRIC_PERCENTILES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support metric percentiles',
+    });
+  }
+
+  async getUsageReport(_args: GetUsageReportArgs): Promise<GetUsageReportResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_USAGE_REPORT_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support usage reports',
+    });
+  }
+
+  // ============================================================================
+  // Discovery / Metadata Methods
+  // ============================================================================
+
+  async getMetricNames(_args: GetMetricNamesArgs): Promise<GetMetricNamesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_METRIC_NAMES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support metric name discovery',
+    });
+  }
+
+  async getMetricLabelKeys(_args: GetMetricLabelKeysArgs): Promise<GetMetricLabelKeysResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_METRIC_LABEL_KEYS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support metric label key discovery',
+    });
+  }
+
+  async getLabelValues(_args: GetLabelValuesArgs): Promise<GetLabelValuesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_LABEL_VALUES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support label value discovery',
+    });
+  }
+
+  async getEntityTypes(_args: GetEntityTypesArgs): Promise<GetEntityTypesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_ENTITY_TYPES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support entity type discovery',
+    });
+  }
+
+  async getEntityNames(_args: GetEntityNamesArgs): Promise<GetEntityNamesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_ENTITY_NAMES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support entity name discovery',
+    });
+  }
+
+  async getServiceNames(_args: GetServiceNamesArgs): Promise<GetServiceNamesResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_SERVICE_NAMES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support service name discovery',
+    });
+  }
+
+  async getEnvironments(_args: GetEnvironmentsArgs): Promise<GetEnvironmentsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_ENVIRONMENTS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support environment discovery',
+    });
+  }
+
+  async getTraceTags(_args: GetTraceTagsArgs): Promise<GetTraceTagsResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_GET_TRACE_TAGS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace tag discovery',
     });
   }
 

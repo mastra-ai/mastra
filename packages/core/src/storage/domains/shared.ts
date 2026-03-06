@@ -89,3 +89,16 @@ export const environmentField = z.string().describe(`Environment (e.g., "product
 export const sourceField = z.string().describe(`Source of execution (e.g., "local" | "cloud" | "ci")`);
 
 export const serviceNameField = z.string().describe('Name of the service');
+
+// Parent entity hierarchy fields
+export const parentEntityTypeField = z.nativeEnum(EntityType).describe('Entity type of the parent entity');
+export const parentEntityIdField = z.string().describe('ID of the parent entity');
+export const parentEntityNameField = z.string().describe('Name of the parent entity');
+
+// Root entity hierarchy fields
+export const rootEntityTypeField = z.nativeEnum(EntityType).describe('Entity type of the root entity');
+export const rootEntityIdField = z.string().describe('ID of the root entity');
+export const rootEntityNameField = z.string().describe('Name of the root entity');
+
+// Experimentation
+export const experimentIdField = z.string().describe('Experiment or eval run identifier');

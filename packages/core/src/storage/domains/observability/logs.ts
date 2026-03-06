@@ -6,11 +6,18 @@ import {
   entityNameField,
   entityTypeField,
   environmentField,
+  experimentIdField,
   organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
+  parentEntityIdField,
+  parentEntityNameField,
+  parentEntityTypeField,
   requestIdField,
   resourceIdField,
+  rootEntityIdField,
+  rootEntityNameField,
+  rootEntityTypeField,
   runIdField,
   serviceNameField,
   sessionIdField,
@@ -54,6 +61,16 @@ const contextFields = {
   entityId: entityIdField.nullish(),
   entityName: entityNameField.nullish(),
 
+  // Parent entity hierarchy
+  parentEntityType: parentEntityTypeField.nullish(),
+  parentEntityId: parentEntityIdField.nullish(),
+  parentEntityName: parentEntityNameField.nullish(),
+
+  // Root entity hierarchy
+  rootEntityType: rootEntityTypeField.nullish(),
+  rootEntityId: rootEntityIdField.nullish(),
+  rootEntityName: rootEntityNameField.nullish(),
+
   // Identity & tenancy
   userId: userIdField.nullish(),
   organizationId: organizationIdField.nullish(),
@@ -70,6 +87,9 @@ const contextFields = {
   source: sourceField.nullish(),
   serviceName: serviceNameField.nullish(),
   scope: scopeField.nullish(),
+
+  // Experimentation
+  experimentId: experimentIdField.nullish(),
 } as const;
 
 // ============================================================================
@@ -174,6 +194,15 @@ export const logsFilterSchema = z
     // Entity filters
     entityType: entityTypeField.optional(),
     entityName: entityNameField.optional(),
+
+    // Parent/root entity filters
+    parentEntityType: parentEntityTypeField.optional(),
+    parentEntityName: parentEntityNameField.optional(),
+    rootEntityType: rootEntityTypeField.optional(),
+    rootEntityName: rootEntityNameField.optional(),
+
+    // Experimentation
+    experimentId: experimentIdField.optional(),
 
     // Multi-tenancy filters
     userId: userIdField.optional(),

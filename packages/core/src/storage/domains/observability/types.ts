@@ -3,7 +3,7 @@
 // ============================================================================
 
 /** Strategy for how tracing data is persisted to storage */
-export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only';
+export type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only' | 'span-events';
 
 /** Strategy for how log data is persisted to storage */
 export type LogsStorageStrategy = 'realtime' | 'batch';

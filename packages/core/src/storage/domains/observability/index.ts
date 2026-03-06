@@ -1,5 +1,6 @@
 export * from './base';
 export * from './feedback';
+export * from './histogram-buckets';
 export * from './inmemory';
 export * from './logs';
 export * from './metrics';

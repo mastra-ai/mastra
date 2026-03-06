@@ -4,8 +4,19 @@ import {
   aggregationTypeSchema,
   batchRecordMetricsArgsSchema,
   createMetricRecordSchema,
-  listMetricsArgsSchema,
-  listMetricsResponseSchema,
+  getMetricAggregateArgsSchema,
+  getMetricAggregateResponseSchema,
+  getMetricBreakdownArgsSchema,
+  getMetricTimeSeriesArgsSchema,
+  getMetricHistogramArgsSchema,
+  getMetricPercentilesArgsSchema,
+  getUsageReportArgsSchema,
+  getMetricNamesArgsSchema,
+  getMetricLabelKeysArgsSchema,
+  getLabelValuesArgsSchema,
+  getEntityTypesArgsSchema,
+  getEntityNamesArgsSchema,
+  getTraceTagsArgsSchema,
   metricInputSchema,
   metricRecordSchema,
   metricTypeSchema,
@@ -56,6 +67,31 @@ describe('Metric Schemas', () => {
         updatedAt: null,
       });
       expect(record.labels).toEqual({});
+    });
+
+    it('accepts context fields', () => {
+      const record = metricRecordSchema.parse({
+        id: 'metric-3',
+        timestamp: now,
+        name: 'test',
+        metricType: 'counter',
+        value: 1,
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        entityType: 'agent',
+        entityName: 'myAgent',
+        parentEntityType: 'workflow_run',
+        parentEntityName: 'myWorkflow',
+        rootEntityType: 'workflow_run',
+        rootEntityName: 'rootWorkflow',
+        userId: 'user-1',
+        experimentId: 'exp-1',
+        createdAt: now,
+        updatedAt: null,
+      });
+      expect(record.traceId).toBe('trace-1');
+      expect(record.parentEntityType).toBe('workflow_run');
+      expect(record.experimentId).toBe('exp-1');
     });
 
     it('rejects missing required fields', () => {
@@ -111,8 +147,8 @@ describe('Metric Schemas', () => {
   });
 
   describe('aggregation schemas', () => {
-    it('accepts valid aggregation types', () => {
-      for (const type of ['sum', 'avg', 'min', 'max', 'count'] as const) {
+    it('accepts valid aggregation types including last and rate', () => {
+      for (const type of ['sum', 'avg', 'min', 'max', 'count', 'last', 'rate'] as const) {
         expect(aggregationTypeSchema.parse(type)).toBe(type);
       }
     });
@@ -148,9 +184,14 @@ describe('Metric Schemas', () => {
         metricType: 'histogram',
         labels: { agent: 'weatherAgent' },
         environment: 'production',
+        traceId: 'trace-1',
+        entityType: 'agent',
+        experimentId: 'exp-1',
       });
       expect(filter.name).toHaveLength(2);
       expect(filter.metricType).toBe('histogram');
+      expect(filter.traceId).toBe('trace-1');
+      expect(filter.experimentId).toBe('exp-1');
     });
 
     it('accepts single name as string', () => {
@@ -164,39 +205,101 @@ describe('Metric Schemas', () => {
     });
   });
 
-  describe('listMetricsArgsSchema', () => {
-    it('applies defaults', () => {
-      const args = listMetricsArgsSchema.parse({});
-      expect(args.pagination).toEqual({ page: 0, perPage: 10 });
-      expect(args.orderBy).toEqual({ field: 'timestamp', direction: 'DESC' });
+  describe('OLAP query schemas', () => {
+    it('getMetricAggregateArgsSchema validates', () => {
+      const args = getMetricAggregateArgsSchema.parse({
+        name: 'test',
+        aggregation: 'sum',
+        comparePeriod: 'previous_period',
+      });
+      expect(args.aggregation).toBe('sum');
+      expect(args.comparePeriod).toBe('previous_period');
     });
 
-    it('accepts aggregation config', () => {
-      const args = listMetricsArgsSchema.parse({
-        aggregation: { type: 'avg', interval: '1h' },
+    it('getMetricAggregateResponseSchema validates', () => {
+      const response = getMetricAggregateResponseSchema.parse({
+        value: 42,
+        previousValue: 35,
+        changePercent: 20,
       });
-      expect(args.aggregation!.type).toBe('avg');
+      expect(response.value).toBe(42);
+    });
+
+    it('getMetricBreakdownArgsSchema validates', () => {
+      const args = getMetricBreakdownArgsSchema.parse({
+        name: 'test',
+        groupBy: ['entityType'],
+        aggregation: 'avg',
+      });
+      expect(args.groupBy).toEqual(['entityType']);
+    });
+
+    it('getMetricTimeSeriesArgsSchema validates', () => {
+      const args = getMetricTimeSeriesArgsSchema.parse({
+        name: ['test1', 'test2'],
+        interval: '1h',
+        aggregation: 'sum',
+        groupBy: ['entityType'],
+      });
+      expect(args.interval).toBe('1h');
+    });
+
+    it('getMetricHistogramArgsSchema validates', () => {
+      const args = getMetricHistogramArgsSchema.parse({
+        name: 'test',
+        bucketBoundaries: [0, 100, 500, 1000],
+      });
+      expect(args.bucketBoundaries).toHaveLength(4);
+    });
+
+    it('getMetricPercentilesArgsSchema validates', () => {
+      const args = getMetricPercentilesArgsSchema.parse({
+        name: 'test',
+        percentiles: [0.5, 0.95, 0.99],
+        interval: '1h',
+      });
+      expect(args.percentiles).toHaveLength(3);
+    });
+
+    it('getUsageReportArgsSchema validates', () => {
+      const args = getUsageReportArgsSchema.parse({
+        name: 'test',
+        groupBy: ['userId'],
+        aggregation: 'sum',
+      });
+      expect(args.groupBy).toEqual(['userId']);
     });
   });
 
-  describe('listMetricsResponseSchema', () => {
-    it('validates a response', () => {
-      const response = listMetricsResponseSchema.parse({
-        pagination: { total: 50, page: 0, perPage: 10, hasMore: true },
-        metrics: [
-          {
-            id: 'metric-1',
-            timestamp: now,
-            name: 'test',
-            metricType: 'counter',
-            value: 1,
-            labels: {},
-            createdAt: now,
-            updatedAt: null,
-          },
-        ],
-      });
-      expect(response.metrics).toHaveLength(1);
+  describe('Discovery schemas', () => {
+    it('getMetricNamesArgsSchema validates', () => {
+      const args = getMetricNamesArgsSchema.parse({ prefix: 'mastra_', limit: 100 });
+      expect(args.prefix).toBe('mastra_');
+    });
+
+    it('getMetricLabelKeysArgsSchema validates', () => {
+      const args = getMetricLabelKeysArgsSchema.parse({ metricName: 'test' });
+      expect(args.metricName).toBe('test');
+    });
+
+    it('getLabelValuesArgsSchema validates', () => {
+      const args = getLabelValuesArgsSchema.parse({ metricName: 'test', labelKey: 'agent' });
+      expect(args.labelKey).toBe('agent');
+    });
+
+    it('getEntityTypesArgsSchema validates', () => {
+      const args = getEntityTypesArgsSchema.parse({});
+      expect(args).toEqual({});
+    });
+
+    it('getEntityNamesArgsSchema validates', () => {
+      const args = getEntityNamesArgsSchema.parse({ entityType: 'agent' });
+      expect(args.entityType).toBe('agent');
+    });
+
+    it('getTraceTagsArgsSchema validates', () => {
+      const args = getTraceTagsArgsSchema.parse({ entityType: 'agent' });
+      expect(args.entityType).toBe('agent');
     });
   });
 });

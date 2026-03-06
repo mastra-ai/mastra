@@ -47,7 +47,7 @@ export class AutoExtractedMetrics {
     }
   }
 
-  /** Emit a `mastra_scores_total` counter for a score event. */
+  /** Emit `mastra_scores_total` counter and `mastra_score_value` gauge for a score event. */
   processScoreEvent(event: ScoreEvent): void {
     const labels: Record<string, string> = {
       scorer: event.score.scorerName,
@@ -59,9 +59,10 @@ export class AutoExtractedMetrics {
       labels.experiment = event.score.experimentId;
     }
     this.emit('mastra_scores_total', 'counter', 1, labels);
+    this.emit('mastra_score_value', 'gauge', event.score.score, labels);
   }
 
-  /** Emit a `mastra_feedback_total` counter for a feedback event. */
+  /** Emit `mastra_feedback_total` counter and `mastra_feedback_value` gauge for a feedback event. */
   processFeedbackEvent(event: FeedbackEvent): void {
     const labels: Record<string, string> = {
       feedback_type: event.feedback.feedbackType,
@@ -74,6 +75,10 @@ export class AutoExtractedMetrics {
       labels.experiment = event.feedback.experimentId;
     }
     this.emit('mastra_feedback_total', 'counter', 1, labels);
+    const numericValue = typeof event.feedback.value === 'number' ? event.feedback.value : NaN;
+    if (Number.isFinite(numericValue)) {
+      this.emit('mastra_feedback_value', 'gauge', numericValue, labels);
+    }
   }
 
   /** Emit a started counter (e.g. `mastra_agent_runs_started`) for the span type. */

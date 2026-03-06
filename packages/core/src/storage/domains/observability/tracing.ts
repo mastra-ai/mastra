@@ -154,6 +154,9 @@ export const spanRecordSchema = z
     parentSpanId: parentSpanIdField.nullish(),
     ...sharedFields,
 
+    // Experimentation
+    experimentId: z.string().nullish().describe('Experiment or eval run identifier'),
+
     // Additional span-specific nullish fields
     attributes: attributesField.nullish(),
     links: linksField.nullish(),

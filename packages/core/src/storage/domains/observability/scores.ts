@@ -3,6 +3,7 @@ import {
   dateRangeSchema,
   dbTimestamps,
   environmentField,
+  experimentIdField,
   organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
@@ -28,7 +29,6 @@ const omitDbTimestamps = createOmitKeys(dbTimestamps);
 const scorerNameField = z.string().describe('Name of the scorer (e.g., relevance, accuracy)');
 const scoreValueField = z.number().describe('Score value (range defined by scorer)');
 const scoreReasonField = z.string().describe('Explanation for the score');
-const experimentIdField = z.string().describe('Experiment or eval run identifier');
 
 // ============================================================================
 // ScoreRecord Schema (Storage Format)

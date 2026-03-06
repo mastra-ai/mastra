@@ -3,6 +3,7 @@ import {
   dateRangeSchema,
   dbTimestamps,
   environmentField,
+  experimentIdField,
   organizationIdField,
   paginationArgsSchema,
   paginationInfoSchema,
@@ -31,7 +32,6 @@ const feedbackValueField = z
   .union([z.number(), z.string()])
   .describe('Feedback value (rating number or correction text)');
 const feedbackCommentField = z.string().describe('Additional comment or context');
-const experimentIdField = z.string().describe('Experiment or eval run identifier');
 
 // ============================================================================
 // FeedbackRecord Schema (Storage Format)

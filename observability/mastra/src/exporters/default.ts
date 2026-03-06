@@ -1,12 +1,21 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  MetricEvent,
+  LogEvent,
+  ScoreEvent,
+  FeedbackEvent,
+} from '@mastra/core/observability';
+import { EntityType, TracingEventType } from '@mastra/core/observability';
 import type {
   MastraStorage,
   CreateSpanRecord,
   UpdateSpanRecord,
   ObservabilityStorage,
   TracingStorageStrategy,
+  CreateMetricRecord,
 } from '@mastra/core/storage';
 import type { BaseExporterConfig } from './base';
 import { BaseExporter } from './base';
@@ -20,6 +29,9 @@ interface DefaultExporterConfig extends BaseExporterConfig {
 
   // Strategy selection (optional)
   strategy?: TracingStorageStrategy | 'auto';
+
+  // Whether to emit metric events for scores and feedback
+  emitScoreFeedbackMetrics?: boolean;
 }
 
 interface BatchBuffer {
@@ -29,6 +41,9 @@ interface BatchBuffer {
 
   // For insert-only strategy
   insertOnly: CreateSpanRecord[];
+
+  // For span-events strategy (all events become creates)
+  spanEvents: CreateSpanRecord[];
 
   // Ordering enforcement (batch-with-updates only)
   seenSpans: Set<string>; // "traceId:spanId" combinations we've seen creates for
@@ -87,6 +102,24 @@ function getObjectOrNull(value: unknown): Record<string, any> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, any>) : null;
 }
 
+// Helper to extract a key from a labels record and remove it
+function extractAndRemove(labels: Record<string, string>, key: string): string | undefined {
+  const value = labels[key];
+  if (value !== undefined) {
+    delete labels[key];
+  }
+  return value;
+}
+
+// Helper to safely cast string to EntityType
+const entityTypeValues = new Set(Object.values(EntityType));
+function toEntityType(value: string | undefined | null): EntityType | null {
+  if (value && entityTypeValues.has(value as EntityType)) {
+    return value as EntityType;
+  }
+  return null;
+}
+
 type Resolve = (value: void | PromiseLike<void>) => void;
 
 export class DefaultExporter extends BaseExporter {
@@ -128,6 +161,7 @@ export class DefaultExporter extends BaseExporter {
       creates: [],
       updates: [],
       insertOnly: [],
+      spanEvents: [],
       seenSpans: new Set(),
       spanSequences: new Map(),
       completedSpans: new Set(),
@@ -234,6 +268,55 @@ export class DefaultExporter extends BaseExporter {
       this.buffer.firstEventTime = new Date();
     }
 
+    // Handle span-events strategy — routes lifecycle events to creates/updates
+    // so that DuckDB adapter correctly sets eventType ('start', 'update', 'end').
+    // Unlike batch-with-updates, no out-of-order checking is needed because
+    // all operations are append-only INSERTs in DuckDB.
+    if (this.#resolvedStrategy === 'span-events') {
+      switch (event.type) {
+        case TracingEventType.SPAN_STARTED: {
+          const createRecord = this.buildCreateRecord(event.exportedSpan);
+          this.buffer.spanEvents.push(createRecord);
+          this.allCreatedSpans.add(spanKey);
+          break;
+        }
+        case TracingEventType.SPAN_UPDATED: {
+          this.buffer.updates.push({
+            traceId: event.exportedSpan.traceId,
+            spanId: event.exportedSpan.id,
+            updates: this.buildUpdateRecord(event.exportedSpan),
+            sequenceNumber: this.getNextSequence(spanKey),
+          });
+          break;
+        }
+        case TracingEventType.SPAN_ENDED: {
+          if (event.exportedSpan.isEvent) {
+            // Event-type spans only emit SPAN_ENDED (no SPAN_STARTED)
+            const createRecord = this.buildCreateRecord(event.exportedSpan);
+            this.buffer.spanEvents.push(createRecord);
+            this.allCreatedSpans.add(spanKey);
+          } else {
+            this.buffer.updates.push({
+              traceId: event.exportedSpan.traceId,
+              spanId: event.exportedSpan.id,
+              updates: this.buildUpdateRecord(event.exportedSpan),
+              sequenceNumber: this.getNextSequence(spanKey),
+            });
+          }
+          this.buffer.completedSpans.add(spanKey);
+          this.allCreatedSpans.add(spanKey);
+          break;
+        }
+      }
+      // Update total size and return
+      this.buffer.totalSize =
+        this.buffer.creates.length +
+        this.buffer.updates.length +
+        this.buffer.insertOnly.length +
+        this.buffer.spanEvents.length;
+      return;
+    }
+
     switch (event.type) {
       case TracingEventType.SPAN_STARTED:
         if (this.#resolvedStrategy === 'batch-with-updates') {
@@ -303,7 +386,11 @@ export class DefaultExporter extends BaseExporter {
     }
 
     // Update total size
-    this.buffer.totalSize = this.buffer.creates.length + this.buffer.updates.length + this.buffer.insertOnly.length;
+    this.buffer.totalSize =
+      this.buffer.creates.length +
+      this.buffer.updates.length +
+      this.buffer.insertOnly.length +
+      this.buffer.spanEvents.length;
   }
 
   /**
@@ -338,6 +425,7 @@ export class DefaultExporter extends BaseExporter {
     this.buffer.creates = [];
     this.buffer.updates = [];
     this.buffer.insertOnly = [];
+    this.buffer.spanEvents = [];
     this.buffer.seenSpans.clear();
     this.buffer.spanSequences.clear();
     this.buffer.completedSpans.clear();
@@ -530,6 +618,23 @@ export class DefaultExporter extends BaseExporter {
   }
 
   /**
+   * Handles span-events strategy - buffers ALL lifecycle events as creates (append-only)
+   */
+  private handleSpanEventsEvent(event: TracingEvent): void {
+    this.addToBuffer(event);
+
+    if (this.shouldFlush()) {
+      this.flushBuffer().catch(error => {
+        this.logger.error('Batch flush failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    } else if (this.buffer.totalSize === 1) {
+      this.scheduleFlush();
+    }
+  }
+
+  /**
    * Handles insert-only strategy - only processes SPAN_ENDED events in batches
    */
   private handleInsertOnlyEvent(event: TracingEvent): void {
@@ -591,6 +696,7 @@ export class DefaultExporter extends BaseExporter {
       creates: [...this.buffer.creates],
       updates: [...this.buffer.updates],
       insertOnly: [...this.buffer.insertOnly],
+      spanEvents: [...this.buffer.spanEvents],
       seenSpans: new Set(this.buffer.seenSpans),
       spanSequences: new Map(this.buffer.spanSequences),
       completedSpans: new Set(this.buffer.completedSpans),
@@ -647,6 +753,22 @@ export class DefaultExporter extends BaseExporter {
         // Simple batch insert for insert-only strategy
         if (buffer.insertOnly.length > 0) {
           await observability.batchCreateSpans({ records: buffer.insertOnly });
+        }
+      } else if (this.#resolvedStrategy === 'span-events') {
+        // Span-events strategy: creates go via batchCreateSpans (eventType='start'),
+        // updates/ends go via batchUpdateSpans (eventType='update'/'end')
+        if (buffer.spanEvents.length > 0) {
+          await observability.batchCreateSpans({ records: buffer.spanEvents });
+        }
+        if (buffer.updates.length > 0) {
+          const sortedUpdates = buffer.updates.sort((a, b) => {
+            const spanCompare = this.buildSpanKey(a.traceId, a.spanId).localeCompare(
+              this.buildSpanKey(b.traceId, b.spanId),
+            );
+            if (spanCompare !== 0) return spanCompare;
+            return a.sequenceNumber - b.sequenceNumber;
+          });
+          await observability.batchUpdateSpans({ records: sortedUpdates });
         }
       }
 
@@ -705,6 +827,9 @@ export class DefaultExporter extends BaseExporter {
       case 'insert-only':
         this.handleInsertOnlyEvent(event);
         break;
+      case 'span-events':
+        this.handleSpanEventsEvent(event);
+        break;
     }
   }
 
@@ -718,6 +843,162 @@ export class DefaultExporter extends BaseExporter {
     return new Promise(resolve => {
       this.#initPromises.add(resolve);
     });
+  }
+
+  // ============================================================================
+  // Non-tracing signal handlers
+  // ============================================================================
+
+  /**
+   * Handle metric events — convert ExportedMetric to CreateMetricRecord,
+   * extracting entity hierarchy from labels to first-class columns.
+   */
+  async onMetricEvent(event: MetricEvent): Promise<void> {
+    await this.waitForInit();
+    if (!this.#observability) return;
+
+    const m = event.metric;
+    const labels = { ...m.labels };
+
+    // Extract entity hierarchy fields from labels to first-class columns
+    const entityType = extractAndRemove(labels, 'entity_type');
+    const entityName = extractAndRemove(labels, 'entity_name');
+    const parentType = extractAndRemove(labels, 'parent_type');
+    const parentName = extractAndRemove(labels, 'parent_name');
+    const rootType = extractAndRemove(labels, 'root_type');
+    const rootName = extractAndRemove(labels, 'root_name');
+    const serviceName = extractAndRemove(labels, 'service_name');
+
+    const record: CreateMetricRecord = {
+      id: crypto.randomUUID(),
+      timestamp: m.timestamp,
+      name: m.name,
+      metricType: m.metricType,
+      value: m.value,
+      labels,
+      entityType: toEntityType(entityType),
+      entityName: entityName ?? null,
+      parentEntityType: toEntityType(parentType),
+      parentEntityName: parentName ?? null,
+      rootEntityType: toEntityType(rootType),
+      rootEntityName: rootName ?? null,
+      serviceName: serviceName ?? null,
+    };
+
+    try {
+      await this.#observability.batchRecordMetrics({ metrics: [record] });
+    } catch (error) {
+      this.logger.error('Failed to store metric event', {
+        name: m.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Handle log events — forward to storage.
+   */
+  async onLogEvent(event: LogEvent): Promise<void> {
+    await this.waitForInit();
+    if (!this.#observability) return;
+
+    const log = event.log;
+    const metadata = log.metadata ?? {};
+
+    try {
+      await this.#observability.batchCreateLogs({
+        logs: [
+          {
+            id: crypto.randomUUID(),
+            timestamp: log.timestamp,
+            level: log.level,
+            message: log.message,
+            data: log.data ?? null,
+            traceId: log.traceId ?? null,
+            spanId: log.spanId ?? null,
+            tags: log.tags ?? null,
+            entityType: toEntityType(getStringOrNull(metadata.entity_type)),
+            entityId: getStringOrNull(metadata.entity_id),
+            entityName: getStringOrNull(metadata.entity_name),
+            parentEntityType: toEntityType(getStringOrNull(metadata.parent_type)),
+            parentEntityName: getStringOrNull(metadata.parent_name),
+            rootEntityType: toEntityType(getStringOrNull(metadata.root_type)),
+            rootEntityName: getStringOrNull(metadata.root_name),
+            userId: getStringOrNull(metadata.userId),
+            organizationId: getStringOrNull(metadata.organizationId),
+            runId: getStringOrNull(metadata.runId),
+            sessionId: getStringOrNull(metadata.sessionId),
+            environment: getStringOrNull(metadata.environment),
+            serviceName: getStringOrNull(metadata.serviceName),
+            experimentId: getStringOrNull(metadata.experimentId),
+            metadata: log.metadata ?? null,
+          },
+        ],
+      });
+    } catch (error) {
+      this.logger.error('Failed to store log event', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Handle score events — forward to storage.
+   */
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    await this.waitForInit();
+    if (!this.#observability) return;
+
+    const s = event.score;
+    try {
+      await this.#observability.createScore({
+        score: {
+          id: crypto.randomUUID(),
+          timestamp: s.timestamp,
+          traceId: s.traceId,
+          spanId: s.spanId ?? null,
+          scorerName: s.scorerName,
+          score: s.score,
+          reason: s.reason ?? null,
+          experimentId: s.experimentId ?? null,
+          metadata: s.metadata ?? null,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Failed to store score event', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Handle feedback events — forward to storage.
+   */
+  async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
+    await this.waitForInit();
+    if (!this.#observability) return;
+
+    const fb = event.feedback;
+    try {
+      await this.#observability.createFeedback({
+        feedback: {
+          id: crypto.randomUUID(),
+          timestamp: fb.timestamp,
+          traceId: fb.traceId,
+          spanId: fb.spanId ?? null,
+          source: fb.source,
+          feedbackType: fb.feedbackType,
+          value: fb.value,
+          comment: fb.comment ?? null,
+          experimentId: fb.experimentId ?? null,
+          metadata: fb.metadata ?? null,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Failed to store feedback event', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
