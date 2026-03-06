@@ -63,40 +63,53 @@ const handle = await sandbox.processes.spawn('npm run dev', {
     description: 'The command to run. Interpreted by the shell.',
   },
   {
-    name: 'options.timeout',
-    type: 'number',
-    description: 'Timeout in milliseconds. Kills the process if exceeded.',
+    name: 'options',
+    type: 'SpawnProcessOptions',
+    description: 'Optional settings for the spawned process.',
     isOptional: true,
-  },
-  {
-    name: 'options.env',
-    type: 'NodeJS.ProcessEnv',
-    description: 'Environment variables for the process.',
-    isOptional: true,
-  },
-  {
-    name: 'options.cwd',
-    type: 'string',
-    description: 'Working directory for the process.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStdout',
-    type: '(data: string) => void',
-    description: 'Callback for stdout chunks. Called as data arrives.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStderr',
-    type: '(data: string) => void',
-    description: 'Callback for stderr chunks. Called as data arrives.',
-    isOptional: true,
-  },
-  {
-    name: 'options.abortSignal',
-    type: 'AbortSignal',
-    description: 'Signal to abort the process. When aborted, the process is killed.',
-    isOptional: true,
+    properties: [
+      {
+        type: 'SpawnProcessOptions',
+        parameters: [
+          {
+            name: 'timeout',
+            type: 'number',
+            description: 'Timeout in milliseconds. Kills the process if exceeded.',
+            isOptional: true,
+          },
+          {
+            name: 'env',
+            type: 'NodeJS.ProcessEnv',
+            description: 'Environment variables for the process.',
+            isOptional: true,
+          },
+          {
+            name: 'cwd',
+            type: 'string',
+            description: 'Working directory for the process.',
+            isOptional: true,
+          },
+          {
+            name: 'onStdout',
+            type: '(data: string) => void',
+            description: 'Callback for stdout chunks. Called as data arrives.',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string) => void',
+            description: 'Callback for stderr chunks. Called as data arrives.',
+            isOptional: true,
+          },
+          {
+            name: 'abortSignal',
+            type: 'AbortSignal',
+            description: 'Signal to abort the process. When aborted, the process is killed.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -267,16 +280,29 @@ const result = await handle.wait({
 <PropertiesTable
   content={[
   {
-    name: 'options.onStdout',
-    type: '(data: string) => void',
-    description: 'Callback for stdout chunks while waiting.',
+    name: 'options',
+    type: 'WaitOptions',
+    description: 'Optional settings for waiting.',
     isOptional: true,
-  },
-  {
-    name: 'options.onStderr',
-    type: '(data: string) => void',
-    description: 'Callback for stderr chunks while waiting.',
-    isOptional: true,
+    properties: [
+      {
+        type: 'WaitOptions',
+        parameters: [
+          {
+            name: 'onStdout',
+            type: '(data: string) => void',
+            description: 'Callback for stdout chunks while waiting.',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string) => void',
+            description: 'Callback for stderr chunks while waiting.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
