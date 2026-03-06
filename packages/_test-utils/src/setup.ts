@@ -1,5 +1,6 @@
 /**
- * Vitest setup file that silences Mastra logging by default.
+ * Vitest setup file that silences Mastra logging and provides
+ * deterministic UUIDs by default.
  *
  * Add to your vitest config:
  * ```ts
@@ -15,8 +16,37 @@
  * const m = new Mastra({ logger: new ConsoleLogger({ name: 'test' }) });
  * ```
  */
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
 
+// ---------------------------------------------------------------------------
+// Deterministic crypto.randomUUID — counter resets before each test
+// ---------------------------------------------------------------------------
+let uuidCounter = 0;
+
+vi.stubGlobal(
+  'crypto',
+  new Proxy(crypto, {
+    get(target, prop, receiver) {
+      if (prop === 'randomUUID') {
+        return () => {
+          uuidCounter++;
+          // Pad counter into last 12 hex chars, keeping a valid v4 UUID shape
+          const hex = uuidCounter.toString(16).padStart(12, '0');
+          return `00000000-0000-4000-8000-${hex}`;
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }),
+);
+
+beforeEach(() => {
+  uuidCounter = 0;
+});
+
+// ---------------------------------------------------------------------------
+// Silent Mastra logger
+// ---------------------------------------------------------------------------
 function wrapMastraModule(original: any) {
   const OriginalMastra = original.Mastra;
   if (!OriginalMastra) return original;
