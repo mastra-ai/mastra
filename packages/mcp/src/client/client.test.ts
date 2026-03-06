@@ -47,7 +47,10 @@ async function setupTestServer(withSessionManagement: boolean) {
       input: z.string().describe('Input to simulate work').default('test'),
     },
     async (): Promise<CallToolResult> => {
-      await new Promise(resolve => setTimeout(resolve, 60000));
+      await new Promise<void>(resolve => {
+        const t = setTimeout(resolve, 10000);
+        t.unref();
+      });
       return {
         content: [{ type: 'text', text: 'Done' }],
       };
@@ -1610,16 +1613,21 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
       const timeoutId = setTimeout(() => abortController.abort(), 100);
 
       const start = Date.now();
+      let error: unknown;
       try {
-        await expect(
-          slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal }),
-        ).rejects.toThrow();
+        await slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal });
+      } catch (err) {
+        error = err;
       } finally {
         clearTimeout(timeoutId);
       }
       const elapsed = Date.now() - start;
 
-      // The abort signal should cancel the request well before the full 60s sleep
+      expect(abortController.signal.aborted).toBe(true);
+      expect(error).toBeDefined();
+      expect(error).toBeInstanceOf(DOMException);
+      expect((error as DOMException).name).toBe('AbortError');
+      // The abort signal should cancel the request well before the full sleep
       expect(elapsed).toBeLessThan(5000);
     } finally {
       await client.disconnect().catch(() => {});
