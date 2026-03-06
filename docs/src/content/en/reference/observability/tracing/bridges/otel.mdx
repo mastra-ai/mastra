@@ -38,18 +38,18 @@ Executes an async function within the OTEL context of a Mastra span. OTEL-instru
 
 <PropertiesTable
   props={[
-{
-name: "spanId",
-type: "string",
-description: "The ID of the Mastra span to use as context",
-required: true,
-},
-{
-name: "fn",
-type: "() => Promise<T>",
-description: "The async function to execute within the span context",
-required: true,
-},
+  {
+    name: 'spanId',
+    type: 'string',
+    description: 'The ID of the Mastra span to use as context',
+    required: true,
+  },
+  {
+    name: 'fn',
+    type: '() => Promise<T>',
+    description: 'The async function to execute within the span context',
+    required: true,
+  },
 ]}
 />
 
@@ -65,18 +65,18 @@ Executes a synchronous function within the OTEL context of a Mastra span.
 
 <PropertiesTable
   props={[
-{
-name: "spanId",
-type: "string",
-description: "The ID of the Mastra span to use as context",
-required: true,
-},
-{
-name: "fn",
-type: "() => T",
-description: "The synchronous function to execute within the span context",
-required: true,
-},
+  {
+    name: 'spanId',
+    type: 'string',
+    description: 'The ID of the Mastra span to use as context',
+    required: true,
+  },
+  {
+    name: 'fn',
+    type: '() => T',
+    description: 'The synchronous function to execute within the span context',
+    required: true,
+  },
 ]}
 />
 

@@ -39,29 +39,31 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
-{
-name: "mastra",
-type: "Mastra",
-description: "The Mastra instance to use for agent lookup and execution.",
-isOptional: false,
-},
-{
-name: "agentId",
-type: "string",
-description: "The ID of the routing agent to execute as a network.",
-isOptional: false,
-},
-{
-name: "params",
-type: "NetworkStreamHandlerParams",
-description: "The request parameters containing messages and execution options. Includes `messages` (required) and any AgentExecutionOptions like `memory`, `maxSteps`, `runId`, etc.",
-isOptional: false,
-},
-{
-name: "defaultOptions",
-type: "AgentExecutionOptions",
-description: "Default options passed to agent execution. These are merged with params, with params taking precedence.",
-isOptional: true,
-},
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'The Mastra instance to use for agent lookup and execution.',
+    isOptional: false,
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'The ID of the routing agent to execute as a network.',
+    isOptional: false,
+  },
+  {
+    name: 'params',
+    type: 'NetworkStreamHandlerParams',
+    description:
+      'The request parameters containing messages and execution options. Includes `messages` (required) and any AgentExecutionOptions like `memory`, `maxSteps`, `runId`, etc.',
+    isOptional: false,
+  },
+  {
+    name: 'defaultOptions',
+    type: 'AgentExecutionOptions',
+    description:
+      'Default options passed to agent execution. These are merged with params, with params taking precedence.',
+    isOptional: true,
+  },
 ]}
 />

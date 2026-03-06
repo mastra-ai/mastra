@@ -38,54 +38,54 @@ Extends `BaseExporterConfig`, which includes:
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "PostHog project API key. Falls back to POSTHOG_API_KEY env var.",
-required: false,
-},
-{
-name: "host",
-type: "string",
-description: "PostHog host URL. Falls back to POSTHOG_HOST env var. (default: 'https://us.i.posthog.com')",
-required: false,
-},
-{
-name: "flushAt",
-type: "number",
-description: "Batch size before auto-flush (default: 20, serverless: 10)",
-required: false,
-},
-{
-name: "flushInterval",
-type: "number",
-description: "Flush interval in milliseconds (default: 10000, serverless: 2000)",
-required: false,
-},
-{
-name: "serverless",
-type: "boolean",
-description: "Auto-configure for serverless environments (default: false)",
-required: false,
-},
-{
-name: "defaultDistinctId",
-type: "string",
-description: "Fallback user identifier if no userId in metadata (default: 'anonymous')",
-required: false,
-},
-{
-name: "enablePrivacyMode",
-type: "boolean",
-description: "Exclude input/output from generation events (default: false)",
-required: false,
-},
-{
-name: "logLevel",
-type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
-description: "Logger level (default: 'info')",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'PostHog project API key. Falls back to POSTHOG_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'host',
+    type: 'string',
+    description: "PostHog host URL. Falls back to POSTHOG_HOST env var. (default: 'https://us.i.posthog.com')",
+    required: false,
+  },
+  {
+    name: 'flushAt',
+    type: 'number',
+    description: 'Batch size before auto-flush (default: 20, serverless: 10)',
+    required: false,
+  },
+  {
+    name: 'flushInterval',
+    type: 'number',
+    description: 'Flush interval in milliseconds (default: 10000, serverless: 2000)',
+    required: false,
+  },
+  {
+    name: 'serverless',
+    type: 'boolean',
+    description: 'Auto-configure for serverless environments (default: false)',
+    required: false,
+  },
+  {
+    name: 'defaultDistinctId',
+    type: 'string',
+    description: "Fallback user identifier if no userId in metadata (default: 'anonymous')",
+    required: false,
+  },
+  {
+    name: 'enablePrivacyMode',
+    type: 'boolean',
+    description: 'Exclude input/output from generation events (default: false)',
+    required: false,
+  },
+  {
+    name: 'logLevel',
+    type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+    description: "Logger level (default: 'info')",
+    required: false,
+  },
 ]}
 />
 
