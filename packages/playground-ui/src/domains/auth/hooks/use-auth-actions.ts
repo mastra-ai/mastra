@@ -42,7 +42,8 @@ export async function makeSSOLoginRequest(
   { redirectUri }: { redirectUri?: string },
 ): Promise<SSOLoginResponse> {
   const { baseUrl = '', apiPrefix } = client.options || {};
-  const prefix = (apiPrefix || '/api').replace(/\/+$/, '');
+  const raw = (apiPrefix || '/api').trim();
+  const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
   const params = new URLSearchParams();
   if (redirectUri) {
@@ -116,7 +117,8 @@ export function useSSOLogin() {
  */
 export async function makeLogoutRequest(client: { options: any }): Promise<LogoutResponse> {
   const { baseUrl = '', apiPrefix } = client.options || {};
-  const prefix = (apiPrefix || '/api').replace(/\/+$/, '');
+  const raw = (apiPrefix || '/api').trim();
+  const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
   const response = await fetch(`${baseUrl}${prefix}/auth/logout`, {
     method: 'POST',

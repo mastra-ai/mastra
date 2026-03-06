@@ -31,7 +31,7 @@ import {
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
-type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any }) => Promise<any>;
+type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any; apiPrefix?: string }) => Promise<any>;
 let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
 function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
   if (!_buildCapabilitiesPromise) {
@@ -211,7 +211,8 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
 
       // Build OAuth callback URI using the configured route prefix
       const origin = getPublicOrigin(request);
-      const prefix = ((routePrefix as string) || '/api').replace(/\/+$/, '');
+      const rawPrefix = (routePrefix as string) || '/api';
+      const prefix = rawPrefix.endsWith('/') ? rawPrefix.slice(0, -1) : rawPrefix;
       const oauthCallbackUri = `${origin}${prefix}/auth/sso/callback`;
 
       // Encode the post-login redirect in state (where user goes after auth completes)
@@ -278,10 +279,16 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
     // Cross-origin redirects are allowed because the redirect_uri originates from
     // the Studio that initiated the login flow (encoded in state). When Studio and
     // the API server run on different origins (e.g. different ports), the redirect
-    // must be honoured as-is.
+    // must be honoured — but only for http(s) URLs to prevent open-redirect abuse
+    // via javascript:, data:, or other dangerous schemes.
     let absoluteRedirect: string;
     if (redirectTo.startsWith('http')) {
-      absoluteRedirect = redirectTo;
+      try {
+        const parsed = new URL(redirectTo);
+        absoluteRedirect = parsed.protocol === 'http:' || parsed.protocol === 'https:' ? redirectTo : `${baseUrl}/`;
+      } catch {
+        absoluteRedirect = `${baseUrl}/`;
+      }
     } else {
       absoluteRedirect = `${baseUrl}${redirectTo}`;
     }

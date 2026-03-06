@@ -188,7 +188,8 @@ export async function buildCapabilities(
   const hasCredentials = implementsInterface<ICredentialsProvider>(auth, 'signIn') && isLicensedOrCloud;
 
   // Build SSO login URL using the configured prefix (default: /api)
-  const prefix = (options?.apiPrefix || '/api').replace(/\/+$/, '');
+  const rawPrefix = (options?.apiPrefix || '/api').trim();
+  const prefix = rawPrefix.endsWith('/') ? rawPrefix.slice(0, -1) : rawPrefix;
   const ssoLoginUrl = `${prefix}/auth/sso/login`;
 
   // Check if sign-up is enabled (defaults to true)
