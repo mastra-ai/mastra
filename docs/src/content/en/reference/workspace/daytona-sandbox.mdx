@@ -5,6 +5,9 @@ packages:
   - "@mastra/daytona"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # DaytonaSandbox
 
 Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, filesystem mounting (S3, GCS), and network isolation.
@@ -17,26 +20,31 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install @mastra/daytona
 ```
 
-Set your Daytona API key in one of three ways:
+Set your Daytona API key in one of three ways.
 
-```bash
-# Shell export
-export DAYTONA_API_KEY=your-api-key
-```
+<Tabs>
+  <TabItem value="shell-export" label="Shell export">
+    ```bash
+    export DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
 
-```bash
-# .env file
-DAYTONA_API_KEY=your-api-key
-```
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
 
-```typescript
-// Passed directly as constructor argument
-new DaytonaSandbox({ apiKey: 'your-api-key' })
-```
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new DaytonaSandbox({ apiKey: 'your-api-key' })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Usage
 
@@ -500,34 +508,47 @@ await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; 
     isOptional: true,
   },
   {
-    name: 'options.timeout',
-    type: 'number',
-    description: 'Execution timeout in milliseconds. Overrides the instance default.',
+    name: 'options',
+    type: 'Options',
+    description: 'executeCommand options.',
     isOptional: true,
-  },
-  {
-    name: 'options.cwd',
-    type: 'string',
-    description: 'Working directory for the command.',
-    isOptional: true,
-  },
-  {
-    name: 'options.env',
-    type: 'Record<string, string>',
-    description: 'Additional environment variables for this command. Merged with instance-level env.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStdout',
-    type: '(data: string) => void',
-    description: 'Callback for stdout streaming.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStderr',
-    type: '(data: string) => void',
-    description: 'Callback for stderr streaming.',
-    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'timeout',
+            type: 'number',
+            description: 'Execution timeout in milliseconds. Overrides the instance default.',
+            isOptional: true,
+          },
+          {
+            name: 'cwd',
+            type: 'string',
+            description: 'Working directory for the command.',
+            isOptional: true,
+          },
+          {
+            name: 'env',
+            type: 'Record<string, string>',
+            description: 'Additional environment variables for this command. Merged with instance-level env.',
+            isOptional: true,
+          },
+          {
+            name: 'onStdout',
+            type: '(data: string) => void',
+            description: 'Callback for stdout streaming.',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string) => void',
+            description: 'Callback for stderr streaming.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

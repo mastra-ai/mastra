@@ -32,11 +32,24 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
     description: 'File path relative to basePath',
   },
   {
-    name: 'options.encoding',
-    type: "'utf-8' | 'binary'",
-    description: 'Text or binary encoding',
+    name: 'options',
+    type: 'Options',
+    description: 'readFile options.',
     isOptional: true,
-    defaultValue: "'utf-8'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'encoding',
+            type: "'utf-8' | 'binary'",
+            description: 'Text or binary encoding',
+            isOptional: true,
+            defaultValue: "'utf-8'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
