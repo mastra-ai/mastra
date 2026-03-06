@@ -22,7 +22,7 @@ const voice = new ModelsLabVoice({
 
 // Text to speech
 const audioStream = await voice.speak('Hello, world!', {
-  speaker: 'nova',  // OpenAI-style voices also work: alloy, echo, fable, onyx, nova, shimmer
+  speaker: 'nova', // OpenAI-style voices also work: alloy, echo, fable, onyx, nova, shimmer
   language: 'english',
   speed: 1.0,
 });
@@ -33,21 +33,21 @@ const speakers = await voice.getSpeakers();
 
 ## Configuration
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `speechModel.apiKey` | `string` | `MODELSLAB_API_KEY` env | ModelsLab API key |
-| `speaker` | `string` | `'1'` | Default voice ID (1–6) or OpenAI voice name |
+| Option               | Type     | Default                 | Description                                 |
+| -------------------- | -------- | ----------------------- | ------------------------------------------- |
+| `speechModel.apiKey` | `string` | `MODELSLAB_API_KEY` env | ModelsLab API key                           |
+| `speaker`            | `string` | `'1'`                   | Default voice ID (1–6) or OpenAI voice name |
 
 ## Voice IDs
 
-| ID | Name | Gender |
-|----|------|--------|
-| 1 | Neutral | neutral |
-| 2 | Male | male |
-| 3 | Warm | male |
-| 4 | Deep Male | male |
-| 5 | Female | female |
-| 6 | Clear Female | female |
+| ID  | Name         | Gender  |
+| --- | ------------ | ------- |
+| 1   | Neutral      | neutral |
+| 2   | Male         | male    |
+| 3   | Warm         | male    |
+| 4   | Deep Male    | male    |
+| 5   | Female       | female  |
+| 6   | Clear Female | female  |
 
 OpenAI voice names are also accepted: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`.
 

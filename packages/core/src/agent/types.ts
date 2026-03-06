@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, ToolSet } from '@internal/ai-sdk-v4';
+import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -29,7 +29,7 @@ import type { ObservabilityContext, Span, SpanType, TracingOptions, TracingPolic
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
-import type { ModelManagerModelConfig } from '../stream/types';
+import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -499,7 +499,7 @@ export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boole
 
 export type AgentExecuteOnFinishOptions = {
   runId: string;
-  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
+  result: MastraOnFinishCallbackArgs & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;

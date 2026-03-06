@@ -181,7 +181,9 @@ function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): vo
  */
 export async function runHeadless(harness: Harness, args: HeadlessArgs & { prompt: string }): Promise<number> {
   const emit =
-    args.format === 'json' ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n') : null;
+    args.format === 'json'
+      ? (data: Record<string, unknown>) => process.stdout.write(JSON.stringify(data) + '\n')
+      : null;
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let timedOut = false;
@@ -284,10 +286,10 @@ export async function headlessMain(): Promise<never> {
   await harness.init();
 
   const exitCode = await runHeadless(harness, { ...args, prompt });
-  
+
   // Cleanup
   releaseAllThreadLocks();
   await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
-  
+
   process.exit(exitCode);
 }
