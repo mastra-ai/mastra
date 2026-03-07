@@ -14,10 +14,14 @@
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "hono": "^4.11.7",
     "get-port": "^7.1.0",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "zod": "^3.24.0 || ^4.0.0"
   },
   "devDependencies": {
     "typescript": "catalog:"
