@@ -589,8 +589,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
-    if (this.customApiRoutes && this.customApiRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(this.customApiRoutes);
+    const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (allCustomRoutes && allCustomRoutes.length > 0) {
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
       if (prefix) {
         for (const pathKey of Object.keys(customPaths)) {
           if (!customPaths[pathKey].servers) {

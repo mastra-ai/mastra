@@ -608,7 +608,7 @@ describe('Hono Server Adapter', () => {
       expect(spec.servers).toBeUndefined();
     });
 
-    it('should respect custom servers already set on a custom route', async () => {
+    it('should enforce root-level servers override on custom routes', async () => {
       const customRoutes = [
         registerApiRoute('/external', {
           method: 'GET',
