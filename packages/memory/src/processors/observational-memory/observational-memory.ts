@@ -2544,9 +2544,11 @@ ${suggestedResponse}
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
     } else {
-      // No marker found — fall back to source-based clearing
-      const newInput = messageList.clear.input.db();
-      const newOutput = messageList.clear.response.db();
+      // No marker found — save current input/response messages first, then clear.
+      // Keeping them in MessageList until save finishes avoids brief under-inclusion windows
+      // where fresh-next-turn context can disappear during async persistence.
+      const newInput = messageList.get.input.db();
+      const newOutput = messageList.get.response.db();
       const messagesToSave = [...newInput, ...newOutput];
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
