@@ -31,6 +31,15 @@ const TOKEN_ESTIMATE_CACHE_VERSION = 1;
 
 type CacheablePart = any;
 
+const TEXT_LIKE_FILE_MEDIA_TYPES = new Set([
+  'application/json',
+  'application/ld+json',
+  'application/xml',
+  'application/javascript',
+  'application/typescript',
+  'application/x-typescript',
+]);
+
 function buildEstimateKey(kind: string, text: string): string {
   const payloadHash = createHash('sha1').update(text).digest('hex');
   return `${kind}:${payloadHash}`;
@@ -105,6 +114,43 @@ function setMessageCacheEntry(message: MastraDBMessage, _key: string, entry: Tok
 }
 
 function serializePartForTokenCounting(part: CacheablePart): string {
+  if (part?.type === 'image') {
+    return JSON.stringify({
+      type: 'image',
+      mimeType: typeof part.mimeType === 'string' ? part.mimeType : undefined,
+      source: summarizeMediaReference(part.image),
+    });
+  }
+
+  if (part?.type === 'file') {
+    const mediaType = typeof part.mediaType === 'string' ? part.mediaType : undefined;
+    const filename = typeof part.filename === 'string' ? part.filename : undefined;
+    const filePayload =
+      typeof part.data === 'string'
+        ? part.data
+        : typeof part.url === 'string'
+          ? part.url
+          : typeof part.base64 === 'string'
+            ? part.base64
+            : undefined;
+
+    if (isTextLikeFileMediaType(mediaType)) {
+      return JSON.stringify({
+        type: 'file',
+        mediaType,
+        filename,
+        data: filePayload ?? '',
+      });
+    }
+
+    return JSON.stringify({
+      type: 'file',
+      mediaType,
+      filename,
+      source: summarizeMediaReference(filePayload),
+    });
+  }
+
   const hasTokenEstimate = Boolean((part as any)?.providerMetadata?.mastra?.tokenEstimate);
   if (!hasTokenEstimate) {
     return JSON.stringify(part);
@@ -131,6 +177,35 @@ function serializePartForTokenCounting(part: CacheablePart): string {
   }
 
   return JSON.stringify(clonedPart);
+}
+
+function isTextLikeFileMediaType(mediaType: unknown): mediaType is string {
+  return typeof mediaType === 'string' && (mediaType.startsWith('text/') || TEXT_LIKE_FILE_MEDIA_TYPES.has(mediaType));
+}
+
+function summarizeMediaReference(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    return '[binary]';
+  }
+
+  if (/^data:[^;]+;base64,/i.test(value)) {
+    const mediaType = value.slice(5, value.indexOf(';')) || 'unknown';
+    return `[data-uri:${mediaType}]`;
+  }
+
+  if (/^(https?|file|blob):/i.test(value)) {
+    return '[url]';
+  }
+
+  if (looksLikeBase64(value)) {
+    return '[base64]';
+  }
+
+  return value;
+}
+
+function looksLikeBase64(value: string): boolean {
+  return value.length >= 64 && /^[A-Za-z0-9+/=\s]+$/.test(value);
 }
 
 function isValidCacheEntry(
