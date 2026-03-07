@@ -224,26 +224,32 @@ export class CustomEditor extends Editor {
     return IMAGE_MIME_TYPES_BY_EXTENSION[extname(extensionSource).toLowerCase()] ?? null;
   }
 
+  private handleExplicitPaste(): boolean {
+    if (this.onImagePaste) {
+      const clipboardImage = getClipboardImage();
+      if (clipboardImage) {
+        this.onImagePaste(clipboardImage);
+        return true;
+      }
+    }
+
+    const clipboardText = getClipboardText();
+    if (clipboardText) {
+      const syntheticPaste = `${PASTE_START}${clipboardText}${PASTE_END}`;
+      super.handleInput(syntheticPaste);
+      return true;
+    }
+
+    return true;
+  }
+
   handleInput(data: string): void {
     if (this.maybeHandleBracketedPaste(data)) {
       return;
     }
 
-    if (matchesKey(data, 'ctrl+v')) {
-      if (this.onImagePaste) {
-        const clipboardImage = getClipboardImage();
-        if (clipboardImage) {
-          this.onImagePaste(clipboardImage);
-          return;
-        }
-      }
-
-      const clipboardText = getClipboardText();
-      if (clipboardText) {
-        const syntheticPaste = `${PASTE_START}${clipboardText}${PASTE_END}`;
-        super.handleInput(syntheticPaste);
-        return;
-      }
+    if (matchesKey(data, 'ctrl+v') || matchesKey(data, 'alt+v')) {
+      this.handleExplicitPaste();
       return;
     }
 

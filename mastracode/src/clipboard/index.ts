@@ -76,34 +76,39 @@ export function getClipboardImage(): ClipboardImage | null {
 // =============================================================================
 
 function getMacClipboardImage(): ClipboardImage | null {
-  // Check clipboard types
-  let clipInfo: string;
-  try {
-    clipInfo = execSync("osascript -e 'clipboard info'", {
-      encoding: 'utf-8',
-      timeout: 3000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-  } catch {
-    return null;
-  }
+  return (
+    tryReadMacClipboardImage({
+      coercion: '«class PNGf»',
+      extension: 'png',
+      mimeType: 'image/png',
+    }) ??
+    tryReadMacClipboardImage({
+      coercion: 'TIFF picture',
+      extension: 'tiff',
+      mimeType: 'image/tiff',
+    }) ??
+    tryReadMacClipboardImage({
+      coercion: '«class TIFF»',
+      extension: 'tiff',
+      mimeType: 'image/tiff',
+    })
+  );
+}
 
-  // Look for image types: PNGf/public.png, TIFF/public.tiff
-  const hasPng = clipInfo.includes('PNGf') || clipInfo.includes('public.png');
-  const hasTiff = clipInfo.includes('TIFF') || clipInfo.includes('public.tiff');
-
-  if (!hasPng && !hasTiff) {
-    return null;
-  }
-
-  // Prefer PNG if available, otherwise use TIFF
-  const clipboardClass = hasPng ? 'PNGf' : 'TIFF';
-  const tmpExtension = clipboardClass === 'PNGf' ? 'png' : 'tiff';
-  const tmpFile = join(tmpdir(), `mastra-clipboard-${Date.now()}.${tmpExtension}`);
+function tryReadMacClipboardImage({
+  coercion,
+  extension,
+  mimeType,
+}: {
+  coercion: string;
+  extension: string;
+  mimeType: string;
+}): ClipboardImage | null {
+  const tmpFile = join(tmpdir(), `mastra-clipboard-${Date.now()}.${extension}`);
 
   try {
     const script = `
-			set theImage to the clipboard as «class ${clipboardClass}»
+			set theImage to the clipboard as ${coercion}
 			set theFile to open for access POSIX file "${tmpFile}" with write permission
 			write theImage to theFile
 			close access theFile
@@ -113,13 +118,14 @@ function getMacClipboardImage(): ClipboardImage | null {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Read the file as base64
     const buffer = readFileSync(tmpFile);
-    const base64 = buffer.toString('base64');
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+      return null;
+    }
 
     return {
-      data: base64,
-      mimeType: hasPng ? 'image/png' : 'image/tiff',
+      data: buffer.toString('base64'),
+      mimeType,
     };
   } catch {
     return null;

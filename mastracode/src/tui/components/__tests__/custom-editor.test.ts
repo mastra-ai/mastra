@@ -152,4 +152,20 @@ describe('CustomEditor image paste handling', () => {
     expect(onImagePaste).toHaveBeenCalledWith(pastedImage);
     expect(mocks.superHandleInput).not.toHaveBeenCalled();
   });
+
+  it('supports alt+v as an explicit clipboard paste shortcut', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'alt+v');
+    const pastedImage = { data: 'clipboard-image', mimeType: 'image/png' };
+    mocks.getClipboardImage.mockReturnValue(pastedImage);
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const onImagePaste = vi.fn();
+    editor.onImagePaste = onImagePaste;
+
+    editor.handleInput('ignored');
+
+    expect(onImagePaste).toHaveBeenCalledWith(pastedImage);
+    expect(mocks.getClipboardText).not.toHaveBeenCalled();
+    expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
 });

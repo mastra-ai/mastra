@@ -31,9 +31,7 @@ describe('getClipboardImage', () => {
   });
 
   it('reads png clipboard images on macOS', () => {
-    mocks.execSync
-      .mockReturnValueOnce('«class PNGf» 1234')
-      .mockReturnValueOnce(undefined);
+    mocks.execSync.mockReturnValueOnce(undefined);
 
     expect(getClipboardImage()).toEqual({
       data: Buffer.from('clipboard-image-binary').toString('base64'),
@@ -41,10 +39,11 @@ describe('getClipboardImage', () => {
     });
   });
 
-  it('reads public.tiff clipboard images on macOS screenshots', () => {
-    mocks.execSync
-      .mockReturnValueOnce('public.tiff 5678')
-      .mockReturnValueOnce(undefined);
+  it('falls back to TIFF clipboard coercion for macOS screenshots', () => {
+    mocks.execSync.mockImplementationOnce(() => {
+      throw new Error('PNG clipboard coercion failed');
+    });
+    mocks.execSync.mockReturnValueOnce(undefined);
 
     expect(getClipboardImage()).toEqual({
       data: Buffer.from('clipboard-image-binary').toString('base64'),
@@ -52,10 +51,13 @@ describe('getClipboardImage', () => {
     });
   });
 
-  it('returns null when macOS clipboard has no image types', () => {
-    mocks.execSync.mockReturnValueOnce('public.utf8-plain-text 15');
+  it('returns null when direct macOS image coercions all fail', () => {
+    mocks.execSync.mockImplementation(() => {
+      throw new Error('clipboard coercion failed');
+    });
 
     expect(getClipboardImage()).toBeNull();
     expect(mocks.readFileSync).not.toHaveBeenCalled();
+    expect(mocks.execSync).toHaveBeenCalledTimes(3);
   });
 });
