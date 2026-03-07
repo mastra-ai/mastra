@@ -72,7 +72,7 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
 
-const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
+const isZodObject = (v: ZodTypeAny): v is ZodObject<any> => v instanceof ZodObject;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -961,12 +961,13 @@ ${workingMemory}`;
     if (config.workingMemory?.schema) {
       try {
         const schema = config.workingMemory.schema;
+        const zodSchema = schema as unknown as ZodTypeAny;
         let convertedSchema: JSONSchema7;
 
-        if (isZodObject(schema as ZodTypeAny)) {
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
+        if (isZodObject(zodSchema)) {
+          convertedSchema = zodToJsonSchema(zodSchema);
         } else {
-          convertedSchema = schema as JSONSchema7;
+          convertedSchema = schema as unknown as JSONSchema7;
         }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };

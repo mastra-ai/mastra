@@ -1,7 +1,12 @@
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
-import { describe, it, expect } from 'vitest';
+import probeImageSize from 'probe-image-size';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { TokenCounter } from '../token-counter';
+
+vi.mock('probe-image-size', () => ({
+  default: vi.fn(),
+}));
 
 let sharedCustomCounter: TokenCounter | undefined;
 
@@ -54,6 +59,19 @@ async function createToolResultPartFromExecutedTool({
 }
 
 describe('TokenCounter', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.mocked(probeImageSize as any).mockReset();
+    globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
+  });
+
   describe('shared default encoder', () => {
     it('two default TokenCounter instances share the same encoder reference', () => {
       const a = new TokenCounter();
@@ -127,6 +145,168 @@ describe('TokenCounter', () => {
       expect(tokens).toBeGreaterThan(80);
       expect(Number.isInteger(tokens)).toBe(true);
       expect(cachedEntry.tokens).toBe(85);
+    });
+
+    it('treats http image strings as urls instead of base64 payloads', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(tokens).toBeLessThan(200);
+      expect(cachedEntry.tokens).toBe(85);
+    });
+
+    it('probes remote image url dimensions during async local fallback when metadata is missing', async () => {
+      vi.mocked(probeImageSize as any).mockResolvedValue({ width: 2048, height: 1024 });
+
+      const counter = new TokenCounter(undefined, { model: 'test-model' as any });
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const tokens = await counter.countMessageAsync(message);
+      const part = message.content.parts[0];
+
+      expect(probeImageSize).toHaveBeenCalledWith(
+        'https://example.com/cat.png',
+        expect.objectContaining({
+          open_timeout: 2500,
+          response_timeout: 2500,
+          read_timeout: 2500,
+          follow_max: 2,
+        }),
+      );
+      expect(part.providerMetadata.mastra.imageDimensions).toEqual({ width: 2048, height: 1024 });
+      expect(part.providerMetadata.mastra.tokenEstimate.tokens).toBe(1105);
+      expect(tokens).toBeGreaterThan(1100);
+    });
+
+    it('uses the provider endpoint before probing remote image dimensions', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ input_tokens: 1851 }),
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const tokens = await counter.countMessageAsync(message);
+
+      expect(tokens).toBeGreaterThan(1800);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(probeImageSize).not.toHaveBeenCalled();
+    });
+
+    it('reuses cached remote attachment counts on async recounts', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      vi.mocked(probeImageSize as any).mockResolvedValue({ width: 2048, height: 1024 });
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ input_tokens: 1851 }),
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const firstTokens = await counter.countMessageAsync(message);
+      const secondTokens = await counter.countMessageAsync(message);
+
+      expect(firstTokens).toBe(secondTokens);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('dedupes in-flight remote attachment counts for identical attachments', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn(
+        () =>
+          new Promise(resolve => {
+            setTimeout(() => {
+              resolve({
+                ok: true,
+                json: async () => ({ input_tokens: 130 }),
+              });
+            }, 10);
+          }),
+      );
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const createPdfMessage = () =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'file',
+              data: 'https://example.com/specs/floorplan.pdf',
+              mimeType: 'application/pdf',
+              filename: 'floorplan.pdf',
+            },
+          ],
+        });
+
+      const [firstTokens, secondTokens] = await Promise.all([
+        counter.countMessageAsync(createPdfMessage()),
+        counter.countMessageAsync(createPdfMessage()),
+      ]);
+
+      expect(firstTokens).toBe(secondTokens);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not treat non-attachment parts as remote-count eligible', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          { type: 'text', text: 'hello world' },
+          { type: 'data-om-status', data: { active: true } },
+        ],
+      });
+
+      await counter.countMessageAsync(message);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('extracts inline image dimensions from image bytes when metadata is missing', () => {
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image:
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==',
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const part = message.content.parts[0];
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(part.providerMetadata.mastra.imageDimensions).toEqual({ width: 1, height: 1 });
+      expect(part.providerMetadata.mastra.tokenEstimate.tokens).toBe(85);
     });
 
     it('counts data-uri image parts with deterministic fallback sizing', () => {
@@ -270,16 +450,19 @@ describe('TokenCounter', () => {
       const miniCounter = new TokenCounter(undefined, { model: 'openai/gpt-4o-mini' });
 
       const defaultTokens = defaultCounter.countMessage(message);
-      const defaultCachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const defaultCache = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
+      const defaultCachedEntry = (Object.values(defaultCache).find((entry: any) => entry?.tokens === 765) ??
+        defaultCache) as any;
 
       const miniTokens = miniCounter.countMessage(message);
-      const miniCachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+      const miniCache = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
+      const miniCachedEntry = Object.values(miniCache).find((entry: any) => entry?.tokens === 25501) as any;
 
       expect(defaultTokens).toBeGreaterThan(765);
       expect(defaultCachedEntry.tokens).toBe(765);
       expect(miniTokens).toBeGreaterThan(defaultTokens);
-      expect(miniCachedEntry.tokens).toBe(25501);
-      expect(miniCachedEntry.key).not.toBe(defaultCachedEntry.key);
+      expect(miniCachedEntry?.tokens).toBe(25501);
+      expect(miniCachedEntry?.key).not.toBe(defaultCachedEntry.key);
     });
 
     it('uses google media resolution when the provider is google', () => {

@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import imageSize from 'image-size';
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import probeImageSize from 'probe-image-size';
 
 /**
  * Shared default encoder singleton.
@@ -70,7 +72,7 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-const TOKEN_ESTIMATE_CACHE_VERSION = 3;
+const TOKEN_ESTIMATE_CACHE_VERSION = 5;
 
 const DEFAULT_IMAGE_ESTIMATOR: ImageTokenEstimatorConfig = {
   baseTokens: 85,
@@ -99,6 +101,7 @@ const GOOGLE_MEDIA_RESOLUTION_VALUES = new Set<GoogleMediaResolution>([
 ]);
 
 const ATTACHMENT_COUNT_TIMEOUT_MS = 20_000;
+const REMOTE_IMAGE_PROBE_TIMEOUT_MS = 2_500;
 const PROVIDER_API_KEY_ENV_VARS: Record<string, string[]> = {
   openai: ['OPENAI_API_KEY'],
   google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
@@ -139,7 +142,34 @@ function getCacheEntry(cache: unknown, key: string): TokenEstimateCacheEntry | u
     return cache.key === key ? cache : undefined;
   }
 
-  return undefined;
+  const keyedEntry = (cache as Record<string, unknown>)[key];
+  return isTokenEstimateEntry(keyedEntry) ? keyedEntry : undefined;
+}
+
+function mergeCacheEntry(
+  cache: unknown,
+  key: string,
+  entry: TokenEstimateCacheEntry,
+): TokenEstimateCacheEntry | Record<string, TokenEstimateCacheEntry> {
+  if (isTokenEstimateEntry(cache)) {
+    if (cache.key === key) {
+      return entry;
+    }
+
+    return {
+      [cache.key]: cache,
+      [key]: entry,
+    };
+  }
+
+  if (cache && typeof cache === 'object') {
+    return {
+      ...(cache as Record<string, TokenEstimateCacheEntry>),
+      [key]: entry,
+    };
+  }
+
+  return entry;
 }
 
 function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCacheEntry | undefined {
@@ -147,11 +177,15 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
   return getCacheEntry(cache, key);
 }
 
-function setPartCacheEntry(part: CacheablePart, _key: string, entry: TokenEstimateCacheEntry): void {
+function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mutablePart = part as any;
   mutablePart.providerMetadata ??= {};
   mutablePart.providerMetadata.mastra ??= {};
-  mutablePart.providerMetadata.mastra.tokenEstimate = entry;
+  mutablePart.providerMetadata.mastra.tokenEstimate = mergeCacheEntry(
+    mutablePart.providerMetadata.mastra.tokenEstimate,
+    key,
+    entry,
+  );
 }
 
 function getMessageCacheEntry(message: MastraDBMessage, key: string): TokenEstimateCacheEntry | undefined {
@@ -166,18 +200,26 @@ function getMessageCacheEntry(message: MastraDBMessage, key: string): TokenEstim
   return getCacheEntry(messageLevelCache, key);
 }
 
-function setMessageCacheEntry(message: MastraDBMessage, _key: string, entry: TokenEstimateCacheEntry): void {
+function setMessageCacheEntry(message: MastraDBMessage, key: string, entry: TokenEstimateCacheEntry): void {
   const content = message.content as any;
   if (content && typeof content === 'object') {
     content.metadata ??= {};
     (content.metadata as any).mastra ??= {};
-    (content.metadata as any).mastra.tokenEstimate = entry;
+    (content.metadata as any).mastra.tokenEstimate = mergeCacheEntry(
+      (content.metadata as any).mastra.tokenEstimate,
+      key,
+      entry,
+    );
     return;
   }
 
   (message as any).metadata ??= {};
   (message as any).metadata.mastra ??= {};
-  (message as any).metadata.mastra.tokenEstimate = entry;
+  (message as any).metadata.mastra.tokenEstimate = mergeCacheEntry(
+    (message as any).metadata.mastra.tokenEstimate,
+    key,
+    entry,
+  );
 }
 
 function serializePartForTokenCounting(part: CacheablePart): string {
@@ -213,7 +255,7 @@ function getFilenameFromAttachmentData(data: unknown): string | undefined {
   const pathname =
     data instanceof URL
       ? data.pathname
-      : typeof data === 'string' && /^https?:\/\//i.test(data)
+      : typeof data === 'string' && isHttpUrlString(data)
         ? (() => {
             try {
               return new URL(data).pathname;
@@ -319,20 +361,142 @@ function getFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+function isHttpUrlString(value: unknown): boolean {
+  return typeof value === 'string' && /^https?:\/\//i.test(value);
+}
+
+function decodeImageBuffer(value: unknown): Buffer | undefined {
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
+    return value;
+  }
+
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value);
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return Buffer.from(value);
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+
+  if (typeof value !== 'string' || isHttpUrlString(value)) {
+    return undefined;
+  }
+
+  if (value.startsWith('data:')) {
+    const commaIndex = value.indexOf(',');
+    if (commaIndex === -1) return undefined;
+
+    const header = value.slice(0, commaIndex);
+    const payload = value.slice(commaIndex + 1);
+    if (/;base64/i.test(header)) {
+      return Buffer.from(payload, 'base64');
+    }
+
+    return Buffer.from(decodeURIComponent(payload), 'utf8');
+  }
+
+  return Buffer.from(value, 'base64');
+}
+
+function persistImageDimensions(part: CacheablePart, dimensions: { width: number; height: number }): void {
+  const mutablePart = part as any;
+  mutablePart.providerMetadata ??= {};
+  mutablePart.providerMetadata.mastra ??= {};
+  mutablePart.providerMetadata.mastra.imageDimensions = dimensions;
+}
+
+function resolveHttpAssetUrl(value: unknown): string | undefined {
+  if (value instanceof URL) {
+    return value.toString();
+  }
+
+  if (typeof value === 'string' && isHttpUrlString(value)) {
+    return value;
+  }
+
+  return undefined;
+}
+
+async function resolveImageDimensionsAsync(part: CacheablePart): Promise<{ width?: number; height?: number }> {
+  const existing = resolveImageDimensions(part);
+  if (existing.width && existing.height) {
+    return existing;
+  }
+
+  const asset = getObjectValue(part, 'image') ?? getObjectValue(part, 'data');
+  const url = resolveHttpAssetUrl(asset);
+  if (!url) {
+    return existing;
+  }
+
+  try {
+    const probed = await probeImageSize(url, {
+      open_timeout: REMOTE_IMAGE_PROBE_TIMEOUT_MS,
+      response_timeout: REMOTE_IMAGE_PROBE_TIMEOUT_MS,
+      read_timeout: REMOTE_IMAGE_PROBE_TIMEOUT_MS,
+      follow_max: 2,
+    });
+    const width = existing.width ?? getFiniteNumber(probed.width);
+    const height = existing.height ?? getFiniteNumber(probed.height);
+
+    if (!width || !height) {
+      return existing;
+    }
+
+    const resolved = { width, height };
+    persistImageDimensions(part, resolved);
+    return resolved;
+  } catch {
+    return existing;
+  }
+}
+
 function resolveImageDimensions(part: CacheablePart): { width?: number; height?: number } {
   const mastraMetadata = getObjectValue(getObjectValue(part, 'providerMetadata'), 'mastra');
   const dimensions = getObjectValue(mastraMetadata, 'imageDimensions');
 
-  return {
-    width:
-      getFiniteNumber(getObjectValue(part, 'width')) ??
-      getFiniteNumber(getObjectValue(part, 'imageWidth')) ??
-      getFiniteNumber(getObjectValue(dimensions, 'width')),
-    height:
-      getFiniteNumber(getObjectValue(part, 'height')) ??
-      getFiniteNumber(getObjectValue(part, 'imageHeight')) ??
-      getFiniteNumber(getObjectValue(dimensions, 'height')),
-  };
+  const width =
+    getFiniteNumber(getObjectValue(part, 'width')) ??
+    getFiniteNumber(getObjectValue(part, 'imageWidth')) ??
+    getFiniteNumber(getObjectValue(dimensions, 'width'));
+  const height =
+    getFiniteNumber(getObjectValue(part, 'height')) ??
+    getFiniteNumber(getObjectValue(part, 'imageHeight')) ??
+    getFiniteNumber(getObjectValue(dimensions, 'height'));
+
+  if (width && height) {
+    return { width, height };
+  }
+
+  const asset = getObjectValue(part, 'image') ?? getObjectValue(part, 'data');
+  const buffer = decodeImageBuffer(asset);
+  if (!buffer) {
+    return { width, height };
+  }
+
+  try {
+    const measured = imageSize(buffer);
+    const measuredWidth = getFiniteNumber(measured.width);
+    const measuredHeight = getFiniteNumber(measured.height);
+
+    if (!measuredWidth || !measuredHeight) {
+      return { width, height };
+    }
+
+    const resolved = {
+      width: width ?? measuredWidth,
+      height: height ?? measuredHeight,
+    };
+
+    persistImageDimensions(part, resolved as { width: number; height: number });
+    return resolved;
+  } catch {
+    return { width, height };
+  }
 }
 
 function getBase64Size(base64: string): number {
@@ -347,6 +511,10 @@ function resolveImageSourceStats(image: unknown): { source: 'url' | 'data-uri' |
   }
 
   if (typeof image === 'string') {
+    if (isHttpUrlString(image)) {
+      return { source: 'url' };
+    }
+
     if (image.startsWith('data:')) {
       const commaIndex = image.indexOf(',');
       const encoded = commaIndex === -1 ? '' : image.slice(commaIndex + 1);
@@ -616,6 +784,20 @@ function getAttachmentUrl(asset: unknown): string | undefined {
   return undefined;
 }
 
+function getAttachmentFingerprint(asset: unknown): { url?: string; contentHash?: string } {
+  const url = getAttachmentUrl(asset);
+  if (url) {
+    return { url };
+  }
+
+  const base64 = encodeAttachmentBase64(asset);
+  if (base64) {
+    return { contentHash: createHash('sha1').update(base64).digest('hex') };
+  }
+
+  return {};
+}
+
 function encodeAttachmentBase64(asset: unknown): string | undefined {
   if (typeof asset === 'string') {
     if (asset.startsWith('data:')) {
@@ -852,6 +1034,7 @@ export class TokenCounter {
   private encoder: Tiktoken;
   private readonly cacheSource: string;
   private modelContext?: TokenCounterModelContext;
+  private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
   // Empirically derived from OpenAI's token counting guide (3 tokens per message base +
@@ -1046,6 +1229,12 @@ export class TokenCounter {
   }
 
   private buildRemoteAttachmentCachePayload(part: CacheablePart): string | undefined {
+    const isImageAttachment = part.type === 'image' || (part.type === 'file' && isImageLikeFilePart(part));
+    const isNonImageFileAttachment = part.type === 'file' && !isImageAttachment;
+    if (!isImageAttachment && !isNonImageFileAttachment) {
+      return undefined;
+    }
+
     const provider = resolveProviderId(this.modelContext);
     const modelId = this.modelContext?.modelId ?? null;
     if (!provider || !modelId || !['openai', 'google', 'anthropic'].includes(provider)) {
@@ -1054,22 +1243,20 @@ export class TokenCounter {
 
     const asset = getObjectValue(part, 'image') ?? getObjectValue(part, 'data');
     const sourceStats = resolveImageSourceStats(asset);
+    const fingerprint = getAttachmentFingerprint(asset);
     return JSON.stringify({
       strategy: 'provider-endpoint',
       provider,
       modelId,
       type: getObjectValue(part, 'type') ?? null,
-      detail: part.type === 'image' || isImageLikeFilePart(part) ? resolveImageDetail(part) : null,
-      mediaResolution: provider === 'google' ? resolveGoogleMediaResolution(part) : null,
-      mimeType: getAttachmentMimeType(
-        part,
-        part.type === 'file' && !isImageLikeFilePart(part) ? 'application/pdf' : 'image/png',
-      ),
+      detail: isImageAttachment ? resolveImageDetail(part) : null,
+      mediaResolution: provider === 'google' && isImageAttachment ? resolveGoogleMediaResolution(part) : null,
+      mimeType: getAttachmentMimeType(part, isNonImageFileAttachment ? 'application/pdf' : 'image/png'),
       filename: getAttachmentFilename(part) ?? null,
-      width: resolveImageDimensions(part).width ?? null,
-      height: resolveImageDimensions(part).height ?? null,
       source: sourceStats.source,
       sizeBytes: sourceStats.sizeBytes ?? null,
+      assetUrl: fingerprint.url ?? null,
+      assetHash: fingerprint.contentHash ?? null,
     });
   }
 
@@ -1098,43 +1285,84 @@ export class TokenCounter {
   }
 
   private async countAttachmentPartAsync(part: CacheablePart): Promise<number | undefined> {
-    const localTokens = this.countAttachmentPartSync(part);
+    const isImageAttachment = part.type === 'image' || (part.type === 'file' && isImageLikeFilePart(part));
     const remotePayload = this.buildRemoteAttachmentCachePayload(part);
 
-    if (localTokens === undefined || !remotePayload) {
+    if (remotePayload) {
+      const remoteKey = buildEstimateKey('attachment-provider', remotePayload);
+      const cachedRemote = getPartCacheEntry(part, remoteKey);
+      if (isValidCacheEntry(cachedRemote, remoteKey, this.cacheSource)) {
+        return cachedRemote.tokens;
+      }
+
+      const existingRequest = this.inFlightAttachmentCounts.get(remoteKey);
+      if (existingRequest) {
+        const remoteTokens = await existingRequest;
+        if (typeof remoteTokens === 'number' && Number.isFinite(remoteTokens) && remoteTokens > 0) {
+          setPartCacheEntry(part, remoteKey, {
+            v: TOKEN_ESTIMATE_CACHE_VERSION,
+            source: this.cacheSource,
+            key: remoteKey,
+            tokens: remoteTokens,
+          });
+          return remoteTokens;
+        }
+      } else {
+        const remoteRequest = this.fetchProviderAttachmentTokenEstimate(part);
+        this.inFlightAttachmentCounts.set(remoteKey, remoteRequest);
+
+        let remoteTokens: number | undefined;
+        try {
+          remoteTokens = await remoteRequest;
+        } finally {
+          this.inFlightAttachmentCounts.delete(remoteKey);
+        }
+
+        if (typeof remoteTokens === 'number' && Number.isFinite(remoteTokens) && remoteTokens > 0) {
+          setPartCacheEntry(part, remoteKey, {
+            v: TOKEN_ESTIMATE_CACHE_VERSION,
+            source: this.cacheSource,
+            key: remoteKey,
+            tokens: remoteTokens,
+          });
+          return remoteTokens;
+        }
+      }
+
+      if (isImageAttachment) {
+        await resolveImageDimensionsAsync(part);
+      }
+
+      const fallbackPayload = JSON.stringify({
+        ...JSON.parse(remotePayload),
+        strategy: 'local-fallback',
+        ...(isImageAttachment ? resolveImageDimensions(part) : {}),
+      });
+      const fallbackKey = buildEstimateKey('attachment-provider', fallbackPayload);
+      const cachedFallback = getPartCacheEntry(part, fallbackKey);
+      if (isValidCacheEntry(cachedFallback, fallbackKey, this.cacheSource)) {
+        return cachedFallback.tokens;
+      }
+
+      const localTokens = this.countAttachmentPartSync(part);
+      if (localTokens === undefined) {
+        return undefined;
+      }
+
+      setPartCacheEntry(part, fallbackKey, {
+        v: TOKEN_ESTIMATE_CACHE_VERSION,
+        source: this.cacheSource,
+        key: fallbackKey,
+        tokens: localTokens,
+      });
       return localTokens;
     }
 
-    const remoteKey = buildEstimateKey('attachment-provider', remotePayload);
-    const cachedRemote = getPartCacheEntry(part, remoteKey);
-    if (isValidCacheEntry(cachedRemote, remoteKey, this.cacheSource)) {
-      return cachedRemote.tokens;
+    if (isImageAttachment) {
+      await resolveImageDimensionsAsync(part);
     }
 
-    const fallbackPayload = JSON.stringify({ ...JSON.parse(remotePayload), strategy: 'local-fallback' });
-    const fallbackKey = buildEstimateKey('attachment-provider', fallbackPayload);
-    const cachedFallback = getPartCacheEntry(part, fallbackKey);
-    if (isValidCacheEntry(cachedFallback, fallbackKey, this.cacheSource)) {
-      return cachedFallback.tokens;
-    }
-
-    const remoteTokens = await this.fetchProviderAttachmentTokenEstimate(part);
-    if (typeof remoteTokens === 'number' && Number.isFinite(remoteTokens) && remoteTokens > 0) {
-      setPartCacheEntry(part, remoteKey, {
-        v: TOKEN_ESTIMATE_CACHE_VERSION,
-        source: this.cacheSource,
-        key: remoteKey,
-        tokens: remoteTokens,
-      });
-      return remoteTokens;
-    }
-
-    setPartCacheEntry(part, fallbackKey, {
-      v: TOKEN_ESTIMATE_CACHE_VERSION,
-      source: this.cacheSource,
-      key: fallbackKey,
-      tokens: localTokens,
-    });
+    const localTokens = this.countAttachmentPartSync(part);
     return localTokens;
   }
 
