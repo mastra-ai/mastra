@@ -3087,6 +3087,7 @@ ${suggestedResponse}
     // ════════════════════════════════════════════════════════════════════════
     // STEP 2: CHECK THRESHOLD AND OBSERVE IF NEEDED
     // ════════════════════════════════════════════════════════════════════════
+    let didThresholdCleanup = false;
     if (!readOnly) {
       let allMessages = messageList.get.all.db();
       let unobservedMessages = this.getUnobservedMessages(allMessages, record);
@@ -3221,6 +3222,7 @@ ${suggestedResponse}
             observedIds,
             minRemaining,
           );
+          didThresholdCleanup = true;
 
           // Clean up sealed IDs for activated messages (prevents memory leak)
           if (activatedMessageIds?.length) {
@@ -3255,10 +3257,14 @@ ${suggestedResponse}
     );
 
     // ════════════════════════════════════════════════════════════════════════
-    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES (step 0 only)
+    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES
+    // - step 0: use marker-boundary pruning + record fallback (historical resume)
+    // - step >0: use record fallback only (avoid position-based marker over-pruning mid-loop)
     // ════════════════════════════════════════════════════════════════════════
-    if (stepNumber === 0) {
-      await this.filterAlreadyObservedMessages(messageList, record);
+    // If step-level cleanup already ran after threshold handling, skip this pass to avoid
+    // a second timestamp-based prune that can undercut retention-floor guarantees.
+    if (!didThresholdCleanup) {
+      await this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
     }
 
     // ════════════════════════════════════════════════════════════════════════
