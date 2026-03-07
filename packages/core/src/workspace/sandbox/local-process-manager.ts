@@ -139,7 +139,7 @@ async function killProcessTree(pid: number, subprocess: ResultPromise, signal: N
       const execa = await getExeca();
       await execa('taskkill', ['/T', '/F', '/PID', String(pid)], { reject: false, stdio: 'ignore' });
     } catch {
-      // Process may have already exited
+      // taskkill binary not found — fall back to direct kill
       subprocess.kill(signal);
     }
   } else {
