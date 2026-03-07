@@ -1023,6 +1023,21 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return chunk.payload;
       });
 
+      // Correlate provider-executed tool results back to their tool calls.
+      // Without this, provider-executed tools lose their results in tool-call-step
+      // because inputData.output is undefined and falls back to a sentinel value.
+      const toolResults = outputStream._getImmediateToolResults();
+      if (toolResults && toolResults.length > 0) {
+        const resultsByCallId = new Map(
+          toolResults.map(r => [r.payload.toolCallId, r.payload.result]),
+        );
+        for (const tc of toolCalls) {
+          if (tc.providerExecuted && resultsByCallId.has(tc.toolCallId)) {
+            tc.output = resultsByCallId.get(tc.toolCallId);
+          }
+        }
+      }
+
       if (toolCalls.length > 0) {
         const message: MastraDBMessage = {
           id: outputStream.messageId,
