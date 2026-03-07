@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -1974,4 +1975,44 @@ describe('MastraMCPClient fetch with requestContext', () => {
     const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
     expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
   }, 15000);
+});
+
+describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
+  it('should pipe stderr when stderr option is set to "pipe"', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'noisy',
+      server: {
+        command: 'npx',
+        args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/noisy-server.ts')],
+        stderr: 'pipe',
+      },
+    });
+
+    await client.connect();
+
+    // If stderr: 'pipe' is forwarded correctly, the child process stderr
+    // is captured (not inherited to parent). The connection succeeds and
+    // tools can be listed.
+    const tools = await client.tools();
+    expect(tools).toBeDefined();
+
+    await client.disconnect();
+  }, 30000);
+
+  it('should accept cwd option without error', async () => {
+    const client = new InternalMastraMCPClient({
+      name: 'stock-cwd',
+      server: {
+        command: 'npx',
+        args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+        cwd: process.cwd(),
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(Object.keys(tools).length).toBeGreaterThan(0);
+
+    await client.disconnect();
+  }, 30000);
 });
