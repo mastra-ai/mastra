@@ -125,10 +125,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
       'An object where keys are registry keys (used for getMCPServer()) and values are instances of MCPServer or classes extending MCPServerBase. Each MCPServer must have an id property. Servers can be retrieved by registry key using getMCPServer() or by their intrinsic id using getMCPServerById().',
   },
   {
-    name: 'bundler',
-    type: 'BundlerConfig',
-    description: 'Configuration for the asset bundler with options for externals, sourcemap, and transpilePackages.',
+    name: "bundler",
+    type: "BundlerConfig",
+    description:
+      "Configuration for the asset bundler with options for externals, sourcemap, transpilePackages, and dynamicPackages.",
     isOptional: true,
+    defaultValue:
+      "{ externals: [], sourcemap: false, transpilePackages: [], dynamicPackages: [] }",
   },
   {
     name: 'scorers',
