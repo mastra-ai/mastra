@@ -66,22 +66,26 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // Update streaming message to show it was interrupted
+  const hasQueuedMessages = state.harness.getFollowUpCount() > 0;
+
   if (state.streamingComponent && state.streamingMessage) {
     state.streamingMessage.stopReason = 'aborted';
-    state.streamingMessage.errorMessage = 'Interrupted';
+    if (!hasQueuedMessages) {
+      state.streamingMessage.errorMessage = 'Interrupted';
+    }
     state.streamingComponent.updateContent(state.streamingMessage);
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
-  } else if (state.userInitiatedAbort) {
-    // Show standalone "Interrupted" if user pressed Ctrl+C but no streaming component
+  } else if (state.userInitiatedAbort && !hasQueuedMessages) {
     state.chatContainer.addChild(new Spacer(1));
     state.chatContainer.addChild(new Text(theme.fg('error', 'Interrupted'), 1, 0));
   }
   state.userInitiatedAbort = false;
 
   state.followUpComponents = [];
-  state.pendingSlashCommands = [];
+  if (!hasQueuedMessages) {
+    state.pendingSlashCommands = [];
+  }
   state.pendingTools.clear();
   // Keep allToolComponents so Ctrl+E continues to work after interruption
   state.ui.requestRender();
