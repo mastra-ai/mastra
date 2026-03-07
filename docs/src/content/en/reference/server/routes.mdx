@@ -17,6 +17,11 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `GET` | `/api/agents/:agentId` | Get agent by ID |
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
+| `POST` | `/api/agents/:agentId/send` | Send message with event streaming (SSE) |
+| `GET` | `/api/agents/:agentId/modes` | List agent modes and current mode |
+| `POST` | `/api/agents/:agentId/modes/switch` | Switch agent mode |
+| `GET` | `/api/agents/:agentId/state` | Get agent state |
+| `POST` | `/api/agents/:agentId/state` | Update agent state |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
 
@@ -51,6 +56,53 @@ Server adapters register these routes when you call `server.init()`. All routes 
     promptTokens: number;
     completionTokens: number;
   };
+}
+```
+
+### Send request body
+
+```typescript prettier:false
+{
+  messages: string | CoreMessage[];   // Required
+  threadId: string;                   // Required — thread for memory
+  resourceId: string;                 // Required — resource for memory
+  maxSteps?: number;                  // Max tool steps (default: 100)
+  bodyRequestContext?: Record<string, unknown>; // Additional request context
+}
+```
+
+The response is an SSE stream of agent events (`send_start`, `message_start`, `message_update`, `message_end`, `tool_start`, `tool_end`, `usage_update`, `error`, `send_end`).
+
+### Modes response
+
+```typescript prettier:false
+{
+  modes: Array<{ id: string; name?: string; default?: boolean }>;
+  currentModeId?: string;
+}
+```
+
+### Switch mode request body
+
+```typescript prettier:false
+{
+  modeId: string;   // The mode ID to switch to
+}
+```
+
+### State response
+
+```typescript prettier:false
+{
+  state: Record<string, unknown>;
+}
+```
+
+### Update state request body
+
+```typescript prettier:false
+{
+  state: Record<string, unknown>;   // Partial state update to merge
 }
 ```
 

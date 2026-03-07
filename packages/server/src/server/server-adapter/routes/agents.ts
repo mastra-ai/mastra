@@ -24,6 +24,11 @@ import {
   APPROVE_NETWORK_TOOL_CALL_ROUTE,
   DECLINE_NETWORK_TOOL_CALL_ROUTE,
   GET_AGENT_SKILL_ROUTE,
+  LIST_MODES_ROUTE,
+  SWITCH_MODE_ROUTE,
+  GET_STATE_ROUTE,
+  UPDATE_STATE_ROUTE,
+  SEND_MESSAGE_ROUTE,
 } from '../../handlers/agents';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
@@ -107,6 +112,15 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   TRANSCRIBE_SPEECH_ROUTE,
   TRANSCRIBE_SPEECH_DEPRECATED_ROUTE,
   GET_LISTENER_ROUTE,
+
+  // ============================================================================
+  // Orchestration Routes (Modes, State, Send)
+  // ============================================================================
+  LIST_MODES_ROUTE,
+  SWITCH_MODE_ROUTE,
+  GET_STATE_ROUTE,
+  UPDATE_STATE_ROUTE,
+  SEND_MESSAGE_ROUTE,
 
   // ============================================================================
   // Deprecated Routes

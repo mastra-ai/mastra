@@ -442,3 +442,67 @@ export const enhanceInstructionsResponseSchema = z.object({
   explanation: z.string().describe('Explanation of the changes made'),
   new_prompt: z.string().describe('The enhanced instructions'),
 });
+
+// ============================================================================
+// Orchestration Schemas (Modes, State, Send)
+// ============================================================================
+
+/**
+ * Response schema for listing agent modes
+ */
+export const agentModeSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  default: z.boolean().optional(),
+});
+
+export const listModesResponseSchema = z.object({
+  modes: z.array(agentModeSchema),
+  currentModeId: z.string().optional(),
+});
+
+/**
+ * Body schema for switching agent mode
+ */
+export const switchModeBodySchema = z.object({
+  modeId: z.string().describe('The mode ID to switch to'),
+});
+
+export const switchModeResponseSchema = z.object({
+  modeId: z.string(),
+  previousModeId: z.string().optional(),
+});
+
+/**
+ * Response schema for agent state
+ */
+export const agentStateResponseSchema = z.object({
+  state: z.record(z.unknown()),
+});
+
+/**
+ * Body schema for updating agent state
+ */
+export const updateStateBodySchema = z.object({
+  state: z.record(z.unknown()).describe('Partial state update to merge'),
+});
+
+/**
+ * Body schema for agent send
+ */
+export const agentSendBodySchema = z.object({
+  messages: z.union([z.string(), z.array(z.any())]).describe('Message(s) to send to the agent'),
+  threadId: z.string().describe('Thread ID for memory persistence'),
+  resourceId: z.string().describe('Resource ID for memory persistence'),
+  maxSteps: z.number().optional().describe('Maximum number of LLM steps'),
+  bodyRequestContext: z.record(z.unknown()).optional().describe('Additional request context values'),
+});
+
+/**
+ * Response schema for send events (SSE)
+ */
+export const sendEventSchema = z
+  .object({
+    type: z.string(),
+  })
+  .passthrough();
