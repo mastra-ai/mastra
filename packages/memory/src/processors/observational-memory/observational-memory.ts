@@ -2720,11 +2720,24 @@ ${suggestedResponse}
   }
 
   /**
-   * Filter out already-observed messages from message list (step 0 only).
-   * Historical messages loaded from DB may contain observation markers from previous sessions.
+   * Filter out already-observed messages from the in-memory context.
+   *
+   * Marker-boundary pruning is safest at step 0 (historical resume/rebuild), where
+   * list ordering mirrors persisted history.
+   * For step > 0, the list may include mid-loop mutations (sealing/splitting/trim),
+   * so we prefer record-based fallback pruning over position-based marker pruning.
    */
-  private filterAlreadyObservedMessages(messageList: MessageList, record?: ObservationalMemoryRecord): void {
+  private async filterAlreadyObservedMessages(
+    messageList: MessageList,
+    record?: ObservationalMemoryRecord,
+    options?: { useMarkerBoundaryPruning?: boolean },
+  ): Promise<void> {
     const allMessages = messageList.get.all.db();
+    const useMarkerBoundaryPruning = options?.useMarkerBoundaryPruning ?? true;
+    const fallbackCursor = record?.threadId
+      ? getThreadOMMetadata((await this.storage.getThreadById({ threadId: record.threadId }))?.metadata)
+          ?.lastObservedMessageCursor
+      : undefined;
 
     // Find the message with the last observation end marker
     let markerMessageIndex = -1;
@@ -2740,7 +2753,7 @@ ${suggestedResponse}
       }
     }
 
-    if (markerMessage && markerMessageIndex !== -1) {
+    if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
       const messagesToRemove: string[] = [];
       for (let i = 0; i < markerMessageIndex; i++) {
         const msg = allMessages[i];
@@ -2773,14 +2786,47 @@ ${suggestedResponse}
       // for the LLM to see. Only observedMessageIds and lastObservedAt determine what's
       // been truly observed.
 
+      const derivedCursor =
+        fallbackCursor ??
+        this.getLastObservedMessageCursor(
+          allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt),
+        );
       const lastObservedAt = record.lastObservedAt;
       const messagesToRemove: string[] = [];
 
       for (const msg of allMessages) {
         if (!msg?.id || msg.id === 'om-continuation') continue;
 
-        // Remove if explicitly tracked in observedMessageIds or buffered chunks
         if (observedIds.has(msg.id)) {
+          messagesToRemove.push(msg.id);
+          continue;
+        }
+
+        const parts = Array.isArray(msg.content?.parts) ? msg.content.parts : [];
+        if (derivedCursor && parts.length > 0) {
+          let observedPrefixPartCount = 0;
+          for (const part of parts as Array<{ metadata?: { mastra?: { sealedAt?: string | number | Date } } }>) {
+            const sealedAt = part?.metadata?.mastra?.sealedAt;
+            if (!sealedAt) break;
+            const sealedAtIso = new Date(sealedAt).toISOString();
+            if (sealedAtIso <= derivedCursor.createdAt) {
+              observedPrefixPartCount += 1;
+              continue;
+            }
+            break;
+          }
+
+          if (observedPrefixPartCount >= parts.length) {
+            messagesToRemove.push(msg.id);
+            continue;
+          }
+
+          if (observedPrefixPartCount > 0) {
+            msg.content.parts = parts.slice(observedPrefixPartCount);
+          }
+        }
+
+        if (derivedCursor && this.isMessageAtOrBeforeCursor(msg, derivedCursor)) {
           messagesToRemove.push(msg.id);
           continue;
         }
@@ -3212,7 +3258,7 @@ ${suggestedResponse}
     // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES (step 0 only)
     // ════════════════════════════════════════════════════════════════════════
     if (stepNumber === 0) {
-      this.filterAlreadyObservedMessages(messageList, record);
+      await this.filterAlreadyObservedMessages(messageList, record);
     }
 
     // ════════════════════════════════════════════════════════════════════════
