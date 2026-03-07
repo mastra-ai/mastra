@@ -3827,6 +3827,7 @@ ${formattedMessages}
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: result.suggestedContinuation,
           currentTask: result.currentTask,
+          lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
         });
         await this.storage.updateThread({
           id: threadId,
@@ -5102,6 +5103,7 @@ ${formattedMessages}
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
             currentTask: result.currentTask,
+            lastObservedMessageCursor: this.getLastObservedMessageCursor(threadMessages),
           });
           await this.storage.updateThread({
             id: threadId,
