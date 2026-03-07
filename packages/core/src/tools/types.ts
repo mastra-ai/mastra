@@ -375,6 +375,15 @@ export interface ToolAction<
    */
   providerOptions?: Record<string, Record<string, unknown>>;
   /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+   */
+  mcpMetadata?: {
+    serverName: string;
+    serverVersion?: string;
+  };
+  /**
    * Examples of valid tool inputs. Each example contains an `input` object
    * showing what valid arguments look like.
    * Passed through to the AI SDK which forwards them to model providers
