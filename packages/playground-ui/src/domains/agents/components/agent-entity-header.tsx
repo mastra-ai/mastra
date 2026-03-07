@@ -48,56 +48,58 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
         title={agentName}
         isLoading={isLoading}
       >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button onClick={handleCopy} className="h-badge-default shrink-0">
-              <Badge icon={<CopyIcon />} variant="default">
-                {showStoredAgentBadge ? (
-                  <Truncate untilChar="-" withTooltip={false}>
-                    {agentId}
-                  </Truncate>
-                ) : (
-                  agentId
-                )}
-              </Badge>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Copy Agent ID for use in code</TooltipContent>
-        </Tooltip>
-        {canWriteAgents && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-3">
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0 ml-2">
-                <Badge icon={<Pencil />} variant="default">
-                  Edit
+              <button onClick={handleCopy} className="h-badge-default shrink-0">
+                <Badge icon={<CopyIcon />} variant="default">
+                  {showStoredAgentBadge ? (
+                    <Truncate untilChar="-" withTooltip={false}>
+                      {agentId}
+                    </Truncate>
+                  ) : (
+                    agentId
+                  )}
                 </Badge>
               </button>
             </TooltipTrigger>
-            <TooltipContent>{isStoredAgent ? 'Edit agent configuration' : 'Edit agent overrides'}</TooltipContent>
+            <TooltipContent>Copy Agent ID for use in code</TooltipContent>
           </Tooltip>
-        )}
-        {canWriteAgents && (
+          {canWriteAgents && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0">
+                  <Badge icon={<Pencil />} variant="default">
+                    Edit
+                  </Badge>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{isStoredAgent ? 'Edit agent configuration' : 'Edit agent overrides'}</TooltipContent>
+            </Tooltip>
+          )}
+          {canWriteAgents && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button onClick={handleClone} disabled={isCloning} className="h-badge-default shrink-0">
+                  <Badge icon={<CopyPlus />} variant="default">
+                    {isCloning ? 'Cloning...' : 'Clone'}
+                  </Badge>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Clone agent to a new stored agent</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
-              <button onClick={handleClone} disabled={isCloning} className="h-badge-default shrink-0 ml-2">
-                <Badge icon={<CopyPlus />} variant="default">
-                  {isCloning ? 'Cloning...' : 'Clone'}
+              <button onClick={handleShareLink} className="h-badge-default shrink-0">
+                <Badge icon={isShareCopied ? <Check /> : <Link2 />} variant="default">
+                  Share
                 </Badge>
               </button>
             </TooltipTrigger>
-            <TooltipContent>Clone agent to a new stored agent</TooltipContent>
+            <TooltipContent>Copy session URL to share with your team</TooltipContent>
           </Tooltip>
-        )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button onClick={handleShareLink} className="h-badge-default shrink-0 ml-2">
-              <Badge icon={isShareCopied ? <Check /> : <Link2 />} variant="default">
-                Share
-              </Badge>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Copy session URL to share with your team</TooltipContent>
-        </Tooltip>
+        </div>
       </EntityHeader>
     </TooltipProvider>
   );
