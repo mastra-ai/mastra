@@ -935,6 +935,11 @@ export class InMemoryMemory extends MemoryStorage {
       throw new Error(`Observational memory record not found: ${id}`);
     }
 
+    // Use caller-provided refreshed chunks (with up-to-date token weights) when
+    // available, falling back to persisted chunks otherwise.
+    if (input.bufferedChunks) {
+      record.bufferedObservationChunks = input.bufferedChunks;
+    }
     const chunks = Array.isArray(record.bufferedObservationChunks) ? record.bufferedObservationChunks : [];
     if (chunks.length === 0) {
       return {

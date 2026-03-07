@@ -562,6 +562,51 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   /**
+   * Refresh per-chunk messageTokens from the current in-memory message list.
+   *
+   * Buffered chunks store a messageTokens snapshot from when they were created,
+   * but messages can be edited/sealed between buffering and activation, changing
+   * their token weight. Using stale weights causes projected-removal math to
+   * over- or under-estimate, leading to skipped activations or over-activation.
+   *
+   * Token recount only runs when the full chunk is present in the message list.
+   * Partial recount is skipped because it would undercount and could cause
+   * over-activation of buffered chunks.
+   */
+  private refreshBufferedChunkMessageTokens(
+    chunks: BufferedObservationChunk[],
+    messageList: MessageList,
+  ): BufferedObservationChunk[] {
+    const allMessages = messageList.get.all.db();
+    const messageMap = new Map(allMessages.filter(m => m?.id).map(m => [m.id, m]));
+
+    return chunks.map(chunk => {
+      const chunkMessages = chunk.messageIds.map(id => messageMap.get(id)).filter((m): m is MastraDBMessage => !!m);
+
+      // Only recount when ALL chunk messages are present — partial recount
+      // would undercount and could over-activate buffered chunks.
+      if (chunkMessages.length !== chunk.messageIds.length) {
+        return chunk;
+      }
+
+      const refreshedTokens = this.tokenCounter.countMessages(chunkMessages);
+      const refreshedMessageTokens = chunk.messageIds.reduce<Record<string, number>>((acc, id) => {
+        const msg = messageMap.get(id);
+        if (msg) {
+          acc[id] = this.tokenCounter.countMessages([msg]);
+        }
+        return acc;
+      }, {});
+
+      return {
+        ...chunk,
+        messageTokens: refreshedTokens,
+        messageTokenCounts: refreshedMessageTokens,
+      };
+    });
+  }
+
+  /**
    * Check if we've crossed a new bufferTokens interval boundary.
    * Returns true if async buffering should be triggered.
    *
@@ -2468,16 +2513,27 @@ ${suggestedResponse}
       // floors are enforced during buffered activation.
       const observedSet = new Set(observedMessageIds);
       const idsToRemove = new Set<string>();
-      const retentionCounter = new TokenCounter();
+      const removalOrder: string[] = [];
       let skipped = 0;
       let backoffTriggered = false;
+      const retentionCounter = typeof minRemaining === 'number' ? new TokenCounter() : null;
 
       for (const msg of allMsgs) {
         if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
           continue;
         }
 
-        if (typeof minRemaining === 'number') {
+        const unobservedParts = this.getUnobservedParts(msg);
+        const totalParts = msg.content?.parts?.length ?? 0;
+
+        // Activation can target a message ID whose observed boundary is inside the same message.
+        // In that case, keep the fresh tail visible to the model instead of removing the whole message.
+        if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
+          msg.content.parts = unobservedParts;
+          continue;
+        }
+
+        if (retentionCounter && typeof minRemaining === 'number') {
           const nextRemainingMessages = allMsgs.filter(
             m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
           );
@@ -2490,6 +2546,21 @@ ${suggestedResponse}
         }
 
         idsToRemove.add(msg.id);
+        removalOrder.push(msg.id);
+      }
+
+      if (retentionCounter && typeof minRemaining === 'number' && idsToRemove.size > 0) {
+        let remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+        let remainingTokens = retentionCounter.countMessages(remainingMessages);
+
+        while (remainingTokens < minRemaining && removalOrder.length > 0) {
+          const restoreId = removalOrder.pop()!;
+          idsToRemove.delete(restoreId);
+          skipped += 1;
+          backoffTriggered = true;
+          remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+          remainingTokens = retentionCounter.countMessages(remainingMessages);
+        }
       }
 
       omDebug(
@@ -2556,7 +2627,6 @@ ${suggestedResponse}
     }
 
     // Clear any remaining input/response tracking
-    // (only reached for marker-based and fallback paths, NOT activation path)
     messageList.clear.input.db();
     messageList.clear.response.db();
   }
@@ -3187,17 +3257,7 @@ ${suggestedResponse}
       );
 
       // Persist the computed token count so the UI can display it on page load
-      await this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens);
-
-      let postCaptureRecord = freshRecord;
-      if (reproCaptureEnabled) {
-        const captureStorageIds = this.getStorageIds(threadId, resourceId);
-        const captureRecordHistory = await this.storage.getObservationalMemoryHistory(
-          captureStorageIds.threadId,
-          captureStorageIds.resourceId,
-        );
-        postCaptureRecord = captureRecordHistory.find(record => record.id === freshRecord.id) ?? freshRecord;
-      }
+      this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
 
       if (reproCaptureEnabled && preRecordSnapshot && preMessagesSnapshot && preSerializedMessageList) {
         writeProcessInputStepReproCapture({
@@ -3206,12 +3266,12 @@ ${suggestedResponse}
           stepNumber,
           args,
           preRecord: preRecordSnapshot,
-          postRecord: postCaptureRecord,
+          postRecord: freshRecord,
           preMessages: preMessagesSnapshot,
           preBufferedChunks: this.getBufferedChunks(preRecordSnapshot),
           preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
           preSerializedMessageList,
-          postBufferedChunks: this.getBufferedChunks(postCaptureRecord),
+          postBufferedChunks: this.getBufferedChunks(freshRecord),
           postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
           messageList,
           details: {
@@ -4226,8 +4286,8 @@ ${formattedMessages}
     if (!freshRecord) {
       return { success: false };
     }
-    const freshChunks = this.getBufferedChunks(freshRecord);
-    if (!freshChunks.length) {
+    const rawFreshChunks = this.getBufferedChunks(freshRecord);
+    if (!rawFreshChunks.length) {
       return { success: false };
     }
 
@@ -4246,6 +4306,12 @@ ${formattedMessages}
         return { success: false };
       }
     }
+
+    // Refresh chunk token weights from the current message list so projection
+    // math uses accurate values instead of stale buffering-time snapshots.
+    const freshChunks = messageList
+      ? this.refreshBufferedChunkMessageTokens(rawFreshChunks, messageList)
+      : rawFreshChunks;
 
     // Perform partial swap with bufferActivation
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
@@ -4284,6 +4350,7 @@ ${formattedMessages}
       messageTokensThreshold,
       currentPendingTokens: effectivePendingTokens,
       forceMaxActivation,
+      bufferedChunks: freshChunks,
     });
     omDebug(
       `[OM:tryActivate] swapResult: chunksActivated=${activationResult.chunksActivated}, tokensActivated=${activationResult.messageTokensActivated}, obsTokensActivated=${activationResult.observationTokensActivated}, activatedCycleIds=${activationResult.activatedCycleIds.join(',')}`,
