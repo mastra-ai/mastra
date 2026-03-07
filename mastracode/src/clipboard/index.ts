@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export interface ClipboardImage {
-  data: string; // base64-encoded image data
+  data: string; // base64-encoded image data or a remote image URL
   mimeType: string;
 }
 
@@ -88,20 +88,20 @@ function getMacClipboardImage(): ClipboardImage | null {
     return null;
   }
 
-  // Look for image types: PNGf (PNG), TIFF, or public.png
+  // Look for image types: PNGf/public.png, TIFF/public.tiff
   const hasPng = clipInfo.includes('PNGf') || clipInfo.includes('public.png');
-  const hasTiff = clipInfo.includes('TIFF');
+  const hasTiff = clipInfo.includes('TIFF') || clipInfo.includes('public.tiff');
 
   if (!hasPng && !hasTiff) {
     return null;
   }
 
-  // Extract image data to temp file
-  const tmpFile = join(tmpdir(), `mastra-clipboard-${Date.now()}.png`);
+  // Prefer PNG if available, otherwise use TIFF
+  const clipboardClass = hasPng ? 'PNGf' : 'TIFF';
+  const tmpExtension = clipboardClass === 'PNGf' ? 'png' : 'tiff';
+  const tmpFile = join(tmpdir(), `mastra-clipboard-${Date.now()}.${tmpExtension}`);
 
   try {
-    // Prefer PNG if available, otherwise convert TIFF
-    const clipboardClass = hasPng ? 'PNGf' : 'TIFF';
     const script = `
 			set theImage to the clipboard as «class ${clipboardClass}»
 			set theFile to open for access POSIX file "${tmpFile}" with write permission
