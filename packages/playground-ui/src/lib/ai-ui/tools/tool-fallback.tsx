@@ -50,7 +50,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
   const isNetwork = metadata?.mode === 'network';
-  const isComplete = props.status?.type === 'complete';
+  const isComplete = props.status?.type === 'complete' && result?._mastraStreaming !== true;
 
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
