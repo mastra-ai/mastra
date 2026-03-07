@@ -109,9 +109,52 @@ export const mastra = new Mastra({
 
 ### Authorization (User Isolation)
 
-Authentication verifies who the user is. Authorization controls what they can access. Without authorization middleware, an authenticated user could access other users' threads by guessing IDs or manipulating the `resourceId` parameter.
+Authentication verifies who the user is. Authorization controls what they can access. Without resource ID scoping, an authenticated user could access other users' threads by guessing IDs or manipulating the `resourceId` parameter.
 
-Mastra provides reserved context keys that, when set by middleware, take precedence over client-provided values. The server automatically enforces these keys across memory and agent endpoints:
+The simplest way to scope memory and threads to the authenticated user is the `mapUserToResourceId` callback in the auth config:
+
+```typescript
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async token => {
+        return verifyToken(token) // { id: 'user-123', orgId: 'org-456', ... }
+      },
+      mapUserToResourceId: user => user.id,
+    },
+  },
+})
+```
+
+After successful authentication, `mapUserToResourceId` is called with the authenticated user object. The returned value is set as `MASTRA_RESOURCE_ID_KEY` on the request context, which works across all server adapters (Hono, Express, Next.js, etc.).
+
+The resource ID doesn't have to be `user.id`. Common patterns:
+
+```typescript
+// Org-scoped
+mapUserToResourceId: user => `${user.orgId}:${user.id}`
+
+// From a JWT claim
+mapUserToResourceId: user => user.tenantId
+
+// Composite key
+mapUserToResourceId: user => `${user.workspaceId}:${user.projectId}:${user.id}`
+```
+
+With a resource ID set, the server automatically:
+
+- **Filters thread listing** to only return threads owned by the user
+- **Validates thread access** and returns 403 if accessing another user's thread
+- **Forces thread creation** to use the authenticated user's ID
+- **Validates message operations** including deletion, ensuring messages belong to owned threads
+
+Even if a client passes `?resourceId=other-user-id`, the auth-set value takes precedence. Attempts to access threads or messages owned by other users will return a 403 error.
+
+#### Advanced: Setting resource ID in middleware
+
+For more complex scenarios (e.g., looking up the resource ID from a database), you can set `MASTRA_RESOURCE_ID_KEY` directly in middleware:
 
 ```typescript
 import { Mastra } from '@mastra/core'
@@ -120,10 +163,7 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
 export const mastra = new Mastra({
   server: {
     auth: {
-      authenticateToken: async token => {
-        // Your auth logic returns the user
-        return verifyToken(token) // { id: 'user-123', ... }
-      },
+      authenticateToken: async token => verifyToken(token),
     },
     middleware: [
       {
@@ -132,13 +172,9 @@ export const mastra = new Mastra({
           const requestContext = c.get('requestContext')
           const user = requestContext.get('user')
 
-          if (!user) {
-            return c.json({ error: 'Unauthorized' }, 401)
+          if (user) {
+            requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
           }
-
-          // Force all API operations to use this user's ID
-          // This takes precedence over any client-provided resourceId
-          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
 
           return next()
         },
@@ -147,15 +183,6 @@ export const mastra = new Mastra({
   },
 })
 ```
-
-With this middleware, the server automatically:
-
-- **Filters thread listing** to only return threads owned by the user
-- **Validates thread access** and returns 403 if accessing another user's thread
-- **Forces thread creation** to use the authenticated user's ID
-- **Validates message operations** including deletion, ensuring messages belong to owned threads
-
-Even if a client passes `?resourceId=other-user-id`, the middleware-set value takes precedence. Attempts to access threads or messages owned by other users will return a 403 error.
 
 #### Using `MASTRA_THREAD_ID_KEY`
 

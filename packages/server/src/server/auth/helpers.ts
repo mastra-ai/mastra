@@ -1,5 +1,6 @@
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
 
 import { defaultAuthConfig } from './defaults';
@@ -276,6 +277,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     requestContext.set('user', user);
+
+    if (typeof authConfig.mapUserToResourceId === 'function') {
+      const resourceId = authConfig.mapUserToResourceId(user);
+      if (resourceId) {
+        requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+      }
+    }
 
     try {
       const serverConfig = mastra.getServer();
