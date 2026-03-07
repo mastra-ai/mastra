@@ -1,6 +1,9 @@
 import { MockLanguageModelV1, simulateReadableStream } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+
+import { MockMemory } from '../memory/mock';
 
 import type { AgentEvent } from './events';
 import { Agent } from './index';
@@ -18,6 +21,33 @@ function createDummyModel() {
         chunks: [{ type: 'text-delta' as const, textDelta: 'Dummy response' }],
       }),
       rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  });
+}
+
+function createV2StreamModel(text = 'Hello from send') {
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop' as const,
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text' as const, text }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: text },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        },
+      ]),
     }),
   });
 }
@@ -380,5 +410,198 @@ describe('Agent Orchestration Integration', () => {
     expect(events).toHaveLength(2);
     expect(events[0]!.type).toBe('mode_changed');
     expect(events[1]!.type).toBe('state_changed');
+  });
+});
+
+describe('Agent .send()', () => {
+  it('emits send_start, message events, and send_end', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'send-agent',
+      name: 'Send Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel('Hello world'),
+      memory: mockMemory,
+    });
+
+    const events: AgentEvent[] = [];
+    agent.subscribe(e => events.push(e));
+
+    await agent.send({
+      messages: 'Hi there',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+    });
+
+    const eventTypes = events.map(e => e.type);
+    expect(eventTypes).toContain('send_start');
+    expect(eventTypes).toContain('message_start');
+    expect(eventTypes).toContain('message_update');
+    expect(eventTypes).toContain('message_end');
+    expect(eventTypes).toContain('send_end');
+
+    const sendEnd = events.find(e => e.type === 'send_end');
+    expect(sendEnd).toBeDefined();
+    if (sendEnd && sendEnd.type === 'send_end') {
+      expect(sendEnd.reason).toBe('complete');
+    }
+  });
+
+  it('returns the assembled message', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'send-agent',
+      name: 'Send Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel('Test response'),
+      memory: mockMemory,
+    });
+
+    const { message } = await agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+    });
+
+    expect(message.role).toBe('assistant');
+    expect(message.content.length).toBeGreaterThan(0);
+    const textContent = message.content.find(c => c.type === 'text');
+    expect(textContent).toBeDefined();
+    expect(textContent!.text).toContain('Test response');
+  });
+
+  it('abort() cancels the stream and emits aborted', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'abort-agent',
+      name: 'Abort Agent',
+      instructions: 'You are helpful.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text' as const, text: 'response' }],
+          warnings: [],
+        }),
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'slow' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      memory: mockMemory,
+    });
+
+    const events: AgentEvent[] = [];
+    agent.subscribe(e => events.push(e));
+
+    setTimeout(() => agent.abort(), 10);
+
+    await agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+    });
+
+    const eventTypes = events.map(e => e.type);
+    expect(eventTypes).toContain('send_start');
+    expect(eventTypes).toContain('send_end');
+    const sendEnd = events.find(e => e.type === 'send_end');
+    if (sendEnd && sendEnd.type === 'send_end') {
+      expect(sendEnd.reason).toBe('aborted');
+    }
+  });
+
+  it('emits error event when stream contains an error chunk', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'error-agent',
+      name: 'Error Agent',
+      instructions: 'You are helpful.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          content: [{ type: 'text' as const, text: '' }],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'error', error: new Error('Stream error') },
+            {
+              type: 'finish',
+              finishReason: 'error' as const,
+              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            },
+          ]),
+        }),
+      }),
+      memory: mockMemory,
+    });
+
+    const events: AgentEvent[] = [];
+    agent.subscribe(e => events.push(e));
+
+    await agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+    });
+
+    const eventTypes = events.map(e => e.type);
+    expect(eventTypes).toContain('send_start');
+    expect(eventTypes).toContain('error');
+    expect(eventTypes).toContain('send_end');
+
+    const errorEvent = events.find(e => e.type === 'error');
+    if (errorEvent && errorEvent.type === 'error') {
+      expect(errorEvent.error.message).toBe('Stream error');
+    }
+  });
+
+  it('emits usage_update event with token counts', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'usage-agent',
+      name: 'Usage Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel('Token test'),
+      memory: mockMemory,
+    });
+
+    const events: AgentEvent[] = [];
+    agent.subscribe(e => events.push(e));
+
+    await agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+    });
+
+    const usageEvents = events.filter(e => e.type === 'usage_update');
+    expect(usageEvents.length).toBeGreaterThanOrEqual(1);
+
+    const usage = usageEvents[0]!;
+    if (usage.type === 'usage_update') {
+      expect(usage.usage.totalTokens).toBeGreaterThan(0);
+    }
   });
 });

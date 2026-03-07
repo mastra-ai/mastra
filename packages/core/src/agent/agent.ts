@@ -82,7 +82,7 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
-import type { AgentEvent, AgentEventListener, AgentEventMap } from './events';
+import type { AgentEvent, AgentEventListener, AgentEventMap, AgentMessage } from './events';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import type { AgentMode } from './modes';
@@ -183,6 +183,13 @@ export class Agent<
   #stateSchema?: z.ZodObject<z.ZodRawShape>;
   #state: Record<string, unknown> = {};
   #eventListeners: AgentEventListener[] = [];
+  #abortController: AbortController | null = null;
+  #abortRequested = false;
+  #sendOperationId = 0;
+  #followUpQueue: Array<{ content: string; requestContext?: RequestContext }> = [];
+  #pendingApprovalResolve:
+    | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
+    | null = null;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -504,6 +511,347 @@ export class Agent<
     }
 
     return defaults;
+  }
+
+  // ===========================================================================
+  // Send (orchestration loop)
+  // ===========================================================================
+
+  /**
+   * Send a message to the agent and stream the response, emitting events
+   * for the full lifecycle (text deltas, tool calls, tool results, errors).
+   *
+   * Requires `memory` to be configured on the agent. The thread and resource
+   * are specified via `memory` on each call, or you can let it use the
+   * existing memory configuration.
+   *
+   * @example
+   * ```typescript
+   * agent.subscribe((event) => {
+   *   if (event.type === 'message_update') console.log(event.message);
+   * });
+   *
+   * await agent.send({
+   *   messages: 'Hello!',
+   *   threadId: 'thread-1',
+   *   resourceId: 'user-1',
+   * });
+   * ```
+   */
+  async send({
+    messages,
+    threadId,
+    resourceId,
+    maxSteps = 100,
+    requestContext,
+    toolsets,
+    onStepFinish,
+    abortSignal,
+  }: {
+    messages: MessageListInput;
+    threadId: string;
+    resourceId: string;
+    maxSteps?: number;
+    requestContext?: RequestContext;
+    toolsets?: ToolsetsInput;
+    onStepFinish?: (step: unknown) => void | Promise<void>;
+    abortSignal?: AbortSignal;
+  }): Promise<{ message: AgentMessage }> {
+    const operationId = ++this.#sendOperationId;
+    this.#abortController = new AbortController();
+    this.#abortRequested = false;
+
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', () => this.abort(), { once: true });
+    }
+
+    this.emitEvent({ type: 'send_start' });
+
+    try {
+      const streamOptions: Record<string, unknown> = {
+        memory: { thread: threadId, resource: resourceId },
+        abortSignal: this.#abortController.signal,
+        maxSteps,
+        ...(requestContext && { requestContext }),
+        ...(toolsets && { toolsets }),
+        ...(onStepFinish && { onStepFinish }),
+      };
+
+      const response = await this.stream(messages, streamOptions as any);
+      const result = await this.#processStreamEvents(response);
+
+      if (this.#sendOperationId === operationId) {
+        const reason = this.#abortRequested ? 'aborted' : 'complete';
+        this.emitEvent({ type: 'send_end', reason });
+      }
+
+      return result;
+    } catch (error) {
+      if (this.#sendOperationId !== operationId) {
+        return { message: this.#emptyMessage() };
+      }
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        this.emitEvent({ type: 'send_end', reason: 'aborted' });
+      } else if (error instanceof Error && error.message.match(/^Tool .+ not found$/)) {
+        const badTool = error.message.replace('Tool ', '').replace(' not found', '');
+        this.emitEvent({
+          type: 'error',
+          error: new Error(`Unknown tool "${badTool}".`),
+          retryable: true,
+        });
+        this.#followUpQueue.push({
+          content: `[System] Your previous tool call used "${badTool}" which is not a valid tool. Please retry with the correct tool name.`,
+          requestContext,
+        });
+        this.emitEvent({ type: 'send_end', reason: 'error' });
+      } else {
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.emitEvent({ type: 'error', error: err });
+        this.emitEvent({ type: 'send_end', reason: 'error' });
+      }
+
+      return { message: this.#emptyMessage() };
+    } finally {
+      if (this.#sendOperationId === operationId) {
+        this.#abortController = null;
+        this.#abortRequested = false;
+      }
+
+      if (this.#sendOperationId === operationId && this.#followUpQueue.length > 0) {
+        const next = this.#followUpQueue.shift()!;
+        await this.send({
+          messages: next.content,
+          threadId,
+          resourceId,
+          maxSteps,
+          requestContext: next.requestContext,
+          toolsets,
+        });
+      }
+    }
+  }
+
+  /**
+   * Abort the current `.send()` operation.
+   * The in-progress stream will be cancelled and a `send_end` event with
+   * reason `'aborted'` will be emitted.
+   */
+  abort(): void {
+    if (this.#abortController) {
+      this.#abortRequested = true;
+      this.#abortController.abort();
+    }
+  }
+
+  /**
+   * Respond to a pending tool approval request.
+   * Only meaningful when a `tool_approval_required` event has been emitted.
+   */
+  respondToToolApproval(decision: 'approve' | 'decline', requestContext?: RequestContext): void {
+    if (this.#pendingApprovalResolve) {
+      this.#pendingApprovalResolve({ decision, requestContext });
+      this.#pendingApprovalResolve = null;
+    }
+  }
+
+  /**
+   * Process the full stream from a `stream()` call, emitting events for
+   * each chunk type (text, reasoning, tool calls, tool results, etc.).
+   */
+  async #processStreamEvents(response: { fullStream: AsyncIterable<any> }): Promise<{ message: AgentMessage }> {
+    const currentMessage: AgentMessage = {
+      id: randomUUID(),
+      role: 'assistant',
+      content: [],
+      createdAt: new Date(),
+    };
+
+    const textContentById = new Map<string, { index: number; text: string }>();
+    const thinkingContentById = new Map<string, { index: number; text: string }>();
+
+    for await (const chunk of response.fullStream) {
+      switch (chunk.type) {
+        case 'text-start': {
+          const textIndex = currentMessage.content.length;
+          currentMessage.content.push({ type: 'text', text: '' });
+          textContentById.set(chunk.payload.id, { index: textIndex, text: '' });
+          this.emitEvent({ type: 'message_start', message: { ...currentMessage } });
+          break;
+        }
+
+        case 'text-delta': {
+          const textState = textContentById.get(chunk.payload.id);
+          if (textState) {
+            textState.text += chunk.payload.text;
+            const textContent = currentMessage.content[textState.index];
+            if (textContent && textContent.type === 'text') {
+              textContent.text = textState.text;
+            }
+            this.emitEvent({ type: 'message_update', message: { ...currentMessage } });
+          }
+          break;
+        }
+
+        case 'reasoning-start': {
+          const thinkingIndex = currentMessage.content.length;
+          currentMessage.content.push({ type: 'thinking', thinking: '' });
+          thinkingContentById.set(chunk.payload.id, { index: thinkingIndex, text: '' });
+          this.emitEvent({ type: 'message_update', message: { ...currentMessage } });
+          break;
+        }
+
+        case 'reasoning-delta': {
+          const thinkingState = thinkingContentById.get(chunk.payload.id);
+          if (thinkingState) {
+            thinkingState.text += chunk.payload.text;
+            const thinkingContent = currentMessage.content[thinkingState.index];
+            if (thinkingContent && thinkingContent.type === 'thinking') {
+              thinkingContent.thinking = thinkingState.text;
+            }
+            this.emitEvent({ type: 'message_update', message: { ...currentMessage } });
+          }
+          break;
+        }
+
+        case 'tool-call-input-streaming-start': {
+          const { toolCallId, toolName } = chunk.payload;
+          this.emitEvent({ type: 'tool_input_start', toolCallId, toolName });
+          break;
+        }
+
+        case 'tool-call-delta': {
+          const { toolCallId, argsTextDelta, toolName } = chunk.payload;
+          this.emitEvent({ type: 'tool_input_delta', toolCallId, argsTextDelta, toolName });
+          break;
+        }
+
+        case 'tool-call-input-streaming-end': {
+          const { toolCallId } = chunk.payload;
+          this.emitEvent({ type: 'tool_input_end', toolCallId });
+          break;
+        }
+
+        case 'tool-call': {
+          const toolCall = chunk.payload;
+          currentMessage.content.push({
+            type: 'tool_call',
+            id: toolCall.toolCallId,
+            name: toolCall.toolName,
+            args: toolCall.args,
+          });
+          this.emitEvent({
+            type: 'tool_start',
+            toolCallId: toolCall.toolCallId,
+            toolName: toolCall.toolName,
+            args: toolCall.args,
+          });
+          this.emitEvent({ type: 'message_update', message: { ...currentMessage } });
+          break;
+        }
+
+        case 'tool-result': {
+          const toolResult = chunk.payload;
+          currentMessage.content.push({
+            type: 'tool_result',
+            id: toolResult.toolCallId,
+            name: toolResult.toolName,
+            result: toolResult.result,
+            isError: toolResult.isError ?? false,
+          });
+          this.emitEvent({
+            type: 'tool_end',
+            toolCallId: toolResult.toolCallId,
+            result: toolResult.result,
+            isError: toolResult.isError ?? false,
+          });
+          this.emitEvent({ type: 'message_update', message: { ...currentMessage } });
+          break;
+        }
+
+        case 'tool-error': {
+          const toolError = chunk.payload;
+          this.emitEvent({
+            type: 'tool_end',
+            toolCallId: toolError.toolCallId,
+            result: toolError.error,
+            isError: true,
+          });
+          break;
+        }
+
+        case 'tool-call-approval': {
+          const { toolCallId, toolName, args: toolArgs } = chunk.payload;
+          this.emitEvent({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
+
+          const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+            resolve => {
+              this.#pendingApprovalResolve = resolve;
+            },
+          );
+          this.#pendingApprovalResolve = null;
+
+          if (approval.decision === 'approve') {
+            const approveResult = await (response as any).approveToolExecution(toolCallId);
+            if (approveResult?.fullStream) {
+              const subResult = await this.#processStreamEvents(approveResult);
+              currentMessage.content.push(...subResult.message.content);
+            }
+          } else {
+            const declineResult = await (response as any).declineToolExecution(toolCallId);
+            if (declineResult?.fullStream) {
+              const subResult = await this.#processStreamEvents(declineResult);
+              currentMessage.content.push(...subResult.message.content);
+            }
+          }
+          return { message: currentMessage };
+        }
+
+        case 'error': {
+          const streamError =
+            chunk.payload.error instanceof Error ? chunk.payload.error : new Error(String(chunk.payload.error));
+          this.emitEvent({ type: 'error', error: streamError });
+          break;
+        }
+
+        case 'step-finish': {
+          const usage = chunk.payload?.output?.usage;
+          if (usage) {
+            const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
+            const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
+            const totalTokens = promptTokens + completionTokens;
+            this.emitEvent({ type: 'usage_update', usage: { promptTokens, completionTokens, totalTokens } });
+          }
+          break;
+        }
+
+        case 'finish': {
+          const finishReason = chunk.payload.stepResult?.reason;
+          if (finishReason === 'stop' || finishReason === 'end-turn') {
+            currentMessage.stopReason = 'complete';
+          } else if (finishReason === 'tool-calls') {
+            currentMessage.stopReason = 'tool_use';
+          } else {
+            currentMessage.stopReason = 'complete';
+          }
+          break;
+        }
+
+        // Skip data parts we don't handle yet — future phases will add OM events etc.
+      }
+    }
+
+    this.emitEvent({ type: 'message_end', message: { ...currentMessage } });
+    return { message: currentMessage };
+  }
+
+  #emptyMessage(): AgentMessage {
+    return {
+      id: randomUUID(),
+      role: 'assistant',
+      content: [],
+      createdAt: new Date(),
+    };
   }
 
   /**

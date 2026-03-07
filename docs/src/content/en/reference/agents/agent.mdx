@@ -392,6 +392,96 @@ Update agent state with a partial update. Validates against `stateSchema` if pro
 agent.setState({ counter: agent.getState().counter + 1 })
 ```
 
+### Orchestration
+
+#### `send({ messages, threadId, resourceId, ... })`
+
+Send a message and stream the response, emitting events for the full lifecycle. This is a higher-level method that wraps `stream()` with event emission, abort handling, and error recovery.
+
+Requires `memory` to be configured on the agent.
+
+```typescript
+agent.subscribe(event => {
+  if (event.type === 'message_update') {
+    console.log(event.message.content)
+  }
+})
+
+const { message } = await agent.send({
+  messages: 'Hello!',
+  threadId: 'thread-1',
+  resourceId: 'user-1',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'messages',
+    type: 'MessageListInput',
+    description: 'The message(s) to send. Can be a string or structured message input.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'The thread ID for memory persistence.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The resource ID for memory persistence.',
+  },
+  {
+    name: 'maxSteps',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '100',
+    description: 'Maximum number of LLM steps allowed.',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    isOptional: true,
+    description: 'Request context for dependency injection.',
+  },
+  {
+    name: 'toolsets',
+    type: 'ToolsetsInput',
+    isOptional: true,
+    description: 'Additional tool sets available during this send.',
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    isOptional: true,
+    description: 'External abort signal. When aborted, cancels the stream.',
+  },
+]}
+/>
+
+**Returns:** `Promise<{ message: AgentMessage }>`
+
+#### `abort()`
+
+Abort the current `.send()` operation. The in-progress stream is cancelled and a `send_end` event with reason `'aborted'` is emitted.
+
+```typescript
+agent.abort()
+```
+
+#### `respondToToolApproval(decision, requestContext?)`
+
+Respond to a pending tool approval request. Only meaningful when a `tool_approval_required` event has been emitted.
+
+```typescript
+agent.on('tool_approval_required', event => {
+  // Auto-approve read tools, ask for others
+  if (event.toolName.startsWith('read')) {
+    agent.respondToToolApproval('approve')
+  }
+})
+```
+
 ## Related
 
 - [Agents overview](/docs/agents/overview)
