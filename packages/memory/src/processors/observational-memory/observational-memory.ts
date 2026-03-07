@@ -2802,30 +2802,6 @@ ${suggestedResponse}
           continue;
         }
 
-        const parts = Array.isArray(msg.content?.parts) ? msg.content.parts : [];
-        if (derivedCursor && parts.length > 0) {
-          let observedPrefixPartCount = 0;
-          for (const part of parts as Array<{ metadata?: { mastra?: { sealedAt?: string | number | Date } } }>) {
-            const sealedAt = part?.metadata?.mastra?.sealedAt;
-            if (!sealedAt) break;
-            const sealedAtIso = new Date(sealedAt).toISOString();
-            if (sealedAtIso <= derivedCursor.createdAt) {
-              observedPrefixPartCount += 1;
-              continue;
-            }
-            break;
-          }
-
-          if (observedPrefixPartCount >= parts.length) {
-            messagesToRemove.push(msg.id);
-            continue;
-          }
-
-          if (observedPrefixPartCount > 0) {
-            msg.content.parts = parts.slice(observedPrefixPartCount);
-          }
-        }
-
         if (derivedCursor && this.isMessageAtOrBeforeCursor(msg, derivedCursor)) {
           messagesToRemove.push(msg.id);
           continue;
