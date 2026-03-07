@@ -181,48 +181,47 @@ export function setupKeyboardShortcuts(
 // =============================================================================
 
 export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promise<void>): void {
-  // Add header
   const appName = state.options.appName || 'Mastra Code';
   const version = state.options.version || '0.1.0';
 
   const banner = renderBanner(version, appName);
 
-  // Project frontmatter
-  const frontmatter = [
-    `Project: ${state.projectInfo.name}`,
-    `Resource ID: ${state.projectInfo.resourceId}`,
-    state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
-    state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-    `User: ${getUserId(state.projectInfo.rootPath)}`,
-  ]
-    .filter(Boolean)
-    .map(line => theme.fg('muted', line as string))
-    .join('\n');
-
+  // Compact project context line: project · branch · user
   const sep = theme.fg('dim', ' · ');
+  const contextParts: string[] = [state.projectInfo.name];
+  if (state.projectInfo.gitBranch) {
+    contextParts.push(state.projectInfo.gitBranch);
+  }
+  if (state.projectInfo.isWorktree) {
+    contextParts.push(`worktree of ${state.projectInfo.mainRepoPath}`);
+  }
+  const userId = getUserId(state.projectInfo.rootPath);
+  if (userId) {
+    contextParts.push(userId);
+  }
+  const contextLine = theme.fg('muted', contextParts.join(theme.fg('dim', ' · ')));
+
+  // Hint line
   const hintParts: string[] = [];
   if (state.harness.listModes().length > 1) {
     hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
-  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
-  const instructions = `  ${hintParts.join(sep)}`;
+  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'shortcuts')}`);
+  const hints = hintParts.join(sep);
 
   state.ui.addChild(new Spacer(1));
   state.ui.addChild(new Text(banner, 1, 0));
-  state.ui.addChild(new Text(frontmatter, 1, 0));
-  state.ui.addChild(new Spacer(1));
-  state.ui.addChild(new Text(instructions, 0, 0));
+  state.ui.addChild(new Text(`${contextLine}  ${hints}`, 1, 0));
   state.ui.addChild(new Spacer(1));
 
-  // Add main containers
+  // Main containers
   state.ui.addChild(state.chatContainer);
-  // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
   state.ui.addChild(state.taskProgress);
   state.ui.addChild(state.editorContainer);
   state.editorContainer.addChild(state.editor);
 
-  // Add footer with two-line status
+  // Footer with status
   state.statusLine = new Text('', 0, 0);
   state.memoryStatusLine = new Text('', 0, 0);
   state.footer.addChild(state.statusLine);
@@ -231,7 +230,6 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   updateStatusLine(state);
   refreshModelAuthStatus();
 
-  // Set focus to editor
   state.ui.setFocus(state.editor);
 }
 

@@ -206,6 +206,24 @@ export function updateStatusLine(state: TUIState): void {
     shortModeBadgeWidth = shortName.length + 1;
   }
 
+  // --- Elapsed time (shown while agent is running) ---
+  let elapsedPart: { plain: string; styled: string } | null = null;
+  if (state.agentStartTime) {
+    const elapsedMs = Date.now() - state.agentStartTime;
+    let elapsedStr: string;
+    if (elapsedMs < 1000) {
+      elapsedStr = '<1s';
+    } else if (elapsedMs < 60_000) {
+      elapsedStr = `${Math.floor(elapsedMs / 1000)}s`;
+    } else {
+      const mins = Math.floor(elapsedMs / 60_000);
+      const secs = Math.floor((elapsedMs % 60_000) / 1000);
+      elapsedStr = `${mins}m${secs.toString().padStart(2, '0')}s`;
+    }
+    const plain = `⏱ ${elapsedStr}`;
+    elapsedPart = { plain, styled: theme.fg('muted', plain) };
+  }
+
   const buildLine = (opts: {
     modelId: string;
     memCompact?: 'percentOnly' | 'noBuffer' | 'full';
@@ -214,8 +232,6 @@ export function updateStatusLine(state: TUIState): void {
     badge?: 'full' | 'short';
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
-    // Model ID (always present) — styleModelId adds padding spaces
-    // When YOLO, append ⚒ box flush (no SEP gap)
     if (isYolo && modeColor) {
       const yBox = chalk.bgHex(tintHex(modeColor, 0.25)).hex(tintHex(modeColor, 0.9)).bold(' ⚒ ');
       parts.push({
@@ -227,6 +243,10 @@ export function updateStatusLine(state: TUIState): void {
         plain: ` ${opts.modelId} `,
         styled: styleModelId(opts.modelId),
       });
+    }
+
+    if (elapsedPart) {
+      parts.push(elapsedPart);
     }
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;

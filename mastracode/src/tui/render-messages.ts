@@ -176,15 +176,13 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     if (message.role === 'user') {
       addUserMessage(state, message);
     } else if (message.role === 'assistant') {
-      // Render content in order - interleaving text and tool calls
-      // Accumulate text/thinking until we hit a tool call, then render both
       let accumulatedContent: HarnessMessageContent[] = [];
+      let isFirstTextBlock = true;
 
       for (const content of message.content) {
         if (content.type === 'text' || content.type === 'thinking') {
           accumulatedContent.push(content);
         } else if (content.type === 'tool_call') {
-          // Render accumulated text first if any
           if (accumulatedContent.length > 0) {
             const textMessage: HarnessMessage = {
               ...message,
@@ -194,7 +192,9 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               textMessage,
               state.hideThinkingBlock,
               getMarkdownTheme(),
+              isFirstTextBlock,
             );
+            isFirstTextBlock = false;
             state.chatContainer.addChild(textComponent);
             accumulatedContent = [];
           }
@@ -372,13 +372,17 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         // Skip tool_result - it's handled with tool_call above
       }
 
-      // Render any remaining text after the last tool call
       if (accumulatedContent.length > 0) {
         const textMessage: HarnessMessage = {
           ...message,
           content: accumulatedContent,
         };
-        const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
+        const textComponent = new AssistantMessageComponent(
+          textMessage,
+          state.hideThinkingBlock,
+          getMarkdownTheme(),
+          isFirstTextBlock,
+        );
         state.chatContainer.addChild(textComponent);
       }
     }

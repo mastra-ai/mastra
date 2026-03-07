@@ -60,17 +60,17 @@ export class TaskProgressComponent extends Container {
 
     switch (task.status) {
       case 'completed': {
-        const icon = theme.fg('success', '\u2713');
+        const icon = theme.fg('success', '✓');
         const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
         return `${indent}${icon} ${text}`;
       }
       case 'in_progress': {
-        const icon = theme.fg('warning', '\u25B6');
+        const icon = theme.fg('warning', '▸');
         const text = theme.bold(theme.fg('warning', task.activeForm));
         return `${indent}${icon} ${text}`;
       }
       case 'pending': {
-        const icon = theme.fg('dim', '\u25CB');
+        const icon = theme.fg('dim', '○');
         const text = theme.fg('dim', task.content);
         return `${indent}${icon} ${text}`;
       }

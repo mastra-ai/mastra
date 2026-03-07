@@ -155,6 +155,10 @@ export interface TUIState {
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
 
+  // ── Timing ──────────────────────────────────────────────────────────
+  /** Timestamp when the current agent turn started (for elapsed time display) */
+  agentStartTime?: number;
+
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */
