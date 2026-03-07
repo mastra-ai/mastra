@@ -241,6 +241,63 @@ describe('TokenCounter', () => {
       expect(message.content.parts[2].providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
     });
 
+    it('does not let image base64 payload size dominate token counts', () => {
+      const counter = new TokenCounter();
+      const smallImage = createMessage({
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at this image' },
+          { type: 'image', mimeType: 'image/png', image: 'a'.repeat(80) },
+        ],
+      });
+      const largeImage = createMessage({
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at this image' },
+          { type: 'image', mimeType: 'image/png', image: 'a'.repeat(80_000) },
+        ],
+      });
+
+      const smallTokens = counter.countMessage(smallImage);
+      const largeTokens = counter.countMessage(largeImage);
+
+      expect(largeTokens - smallTokens).toBeLessThanOrEqual(5);
+    });
+
+    it('does not let binary file base64 payload size dominate token counts', () => {
+      const counter = new TokenCounter();
+      const shortFile = createMessage({
+        format: 2,
+        parts: [{ type: 'file', mediaType: 'image/png', data: 'A'.repeat(80), filename: 'tiny.png' }],
+      });
+      const largeFile = createMessage({
+        format: 2,
+        parts: [{ type: 'file', mediaType: 'image/png', data: 'A'.repeat(120_000), filename: 'huge.png' }],
+      });
+
+      const shortTokens = counter.countMessage(shortFile);
+      const largeTokens = counter.countMessage(largeFile);
+
+      expect(largeTokens - shortTokens).toBeLessThanOrEqual(5);
+    });
+
+    it('still counts text-like file contents', () => {
+      const counter = new TokenCounter();
+      const shortTextFile = createMessage({
+        format: 2,
+        parts: [{ type: 'file', mediaType: 'text/plain', data: 'short note', filename: 'note.txt' }],
+      });
+      const longTextFile = createMessage({
+        format: 2,
+        parts: [{ type: 'file', mediaType: 'text/plain', data: 'long note '.repeat(200), filename: 'note.txt' }],
+      });
+
+      const shortTokens = counter.countMessage(shortTextFile);
+      const longTokens = counter.countMessage(longTextFile);
+
+      expect(longTokens).toBeGreaterThan(shortTokens);
+    });
+
     it('caches string-content fallback on content.metadata.mastra', () => {
       const counter = new TokenCounter();
       const message = createMessage({
