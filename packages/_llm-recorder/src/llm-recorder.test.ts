@@ -17,8 +17,11 @@
  * ```
  */
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
-import { describe, it, expect, vi, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterAll, afterEach } from 'vitest';
 import {
   useLLMRecording,
   useLiveMode,
@@ -26,6 +29,7 @@ import {
   getLLMTestMode,
   setupLLMRecording,
   getActiveRecorder,
+  type LLMRecording,
 } from './llm-recorder';
 
 // Get current mode
@@ -292,5 +296,116 @@ describe('useLiveMode', () => {
   it('recording is still active after live mode block ends', () => {
     // After the live mode describe block's afterEach, the server should be restarted
     expect(getActiveRecorder()).toBe(recording);
+  });
+});
+
+describe('recording file format', () => {
+  const originalMode = process.env.LLM_TEST_MODE;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-recorder-format-'));
+
+  afterEach(() => {
+    process.env.LLM_TEST_MODE = originalMode;
+    vi.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('loads legacy array recording format in replay mode', () => {
+    const legacyName = 'legacy-array-format';
+    const filePath = path.join(tempDir, `${legacyName}.json`);
+    const legacyRecordings: LLMRecording[] = [
+      {
+        hash: 'legacy-hash',
+        request: { url: 'https://api.openai.com/v1/responses', method: 'POST', body: { model: 'gpt-4o' }, timestamp: 1 },
+        response: { status: 200, statusText: 'OK', headers: {}, body: { id: 'legacy' }, isStreaming: false },
+      },
+    ];
+    fs.writeFileSync(filePath, JSON.stringify(legacyRecordings, null, 2), 'utf-8');
+
+    process.env.LLM_TEST_MODE = 'replay';
+    const recorder = setupLLMRecording({ name: legacyName, recordingsDir: tempDir });
+
+    expect(recorder.mode).toBe('replay');
+    // recordingCount tracks newly captured recordings (record mode), not loaded ones
+    expect(recorder.recordingCount).toBe(0);
+    recorder.stop();
+  });
+
+  it('loads new meta + recordings format in replay mode', () => {
+    const name = 'new-format';
+    const filePath = path.join(tempDir, `${name}.json`);
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          meta: {
+            name,
+            testFile: '/tmp/new-format.test.ts',
+            testName: 'loads new format',
+            provider: 'openai',
+            model: 'gpt-4o',
+            createdAt: new Date('2026-03-06T00:00:00.000Z').toISOString(),
+          },
+          recordings: [],
+        },
+        null,
+        2,
+      ),
+      'utf-8',
+    );
+
+    process.env.LLM_TEST_MODE = 'replay';
+    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+
+    expect(recorder.mode).toBe('replay');
+    expect(recorder.recordingCount).toBe(0);
+    recorder.stop();
+  });
+
+  it('writes the new meta + recordings format in record mode', async () => {
+    const name = 'writes-meta-format';
+    const filePath = path.join(tempDir, `${name}.json`);
+
+    process.env.LLM_TEST_MODE = 'record';
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'mocked-response', output: [] }), {
+        status: 200,
+        statusText: 'OK',
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const recorder = setupLLMRecording({
+      name,
+      recordingsDir: tempDir,
+      metaContext: {
+        testFile: '/tmp/writes-meta-format.test.ts',
+        provider: 'openai',
+        model: 'gpt-4o',
+      },
+    });
+
+    recorder.start();
+    await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', input: 'hello' }),
+    });
+    await recorder.save();
+    recorder.stop();
+
+    expect(fetchSpy).toHaveBeenCalled();
+
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    expect(parsed.meta.name).toBe(name);
+    expect(parsed.meta.testFile).toBe('/tmp/writes-meta-format.test.ts');
+    expect(parsed.meta.provider).toBe('openai');
+    expect(parsed.meta.model).toBe('gpt-4o');
+    expect(parsed.meta.createdAt).toBeDefined();
+    expect(Array.isArray(parsed.recordings)).toBe(true);
+    expect(parsed.recordings.length).toBe(1);
   });
 });
