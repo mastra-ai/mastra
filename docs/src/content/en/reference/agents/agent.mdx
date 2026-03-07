@@ -396,22 +396,24 @@ agent.setState({ counter: agent.getState().counter + 1 })
 
 #### `send({ messages, threadId, resourceId, ... })`
 
-Send a message and stream the response, emitting events for the full lifecycle. This is a higher-level method that wraps `stream()` with event emission, abort handling, and error recovery.
+Send a message and get back a self-contained `SendOperation`. Each call has its own isolated event stream, abort handle, and tool-approval resolver — multiple concurrent sends to the same Agent do not interfere with each other.
 
 Requires `memory` to be configured on the agent.
 
 ```typescript
-agent.subscribe(event => {
-  if (event.type === 'message_update') {
-    console.log(event.message.content)
-  }
-})
-
-const { message } = await agent.send({
+const op = agent.send({
   messages: 'Hello!',
   threadId: 'thread-1',
   resourceId: 'user-1',
 })
+
+// Consume events as an async iterable
+for await (const event of op.events) {
+  if (event.type === 'message_update') console.log(event.message.content)
+}
+
+// Or await the final message directly
+const { message } = await op.result
 ```
 
 <PropertiesTable
@@ -459,28 +461,34 @@ const { message } = await agent.send({
 ]}
 />
 
-**Returns:** `Promise<{ message: AgentMessage }>`
+**Returns:** `SendOperation`
 
-#### `abort()`
+The returned `SendOperation` has the following properties:
 
-Abort the current `.send()` operation. The in-progress stream is cancelled and a `send_end` event with reason `'aborted'` is emitted.
-
-```typescript
-agent.abort()
-```
-
-#### `respondToToolApproval(decision, requestContext?)`
-
-Respond to a pending tool approval request. Only meaningful when a `tool_approval_required` event has been emitted.
-
-```typescript
-agent.on('tool_approval_required', event => {
-  // Auto-approve read tools, ask for others
-  if (event.toolName.startsWith('read')) {
-    agent.respondToToolApproval('approve')
-  }
-})
-```
+<PropertiesTable
+  content={[
+  {
+    name: 'result',
+    type: 'Promise<{ message: AgentMessage }>',
+    description: 'Resolves when the send completes, with the assembled assistant message.',
+  },
+  {
+    name: 'events',
+    type: 'AsyncIterable<AgentEvent>',
+    description: 'Async iterable of events emitted during this send. Use with `for await`.',
+  },
+  {
+    name: 'abort()',
+    type: '() => void',
+    description: 'Abort this specific send operation.',
+  },
+  {
+    name: 'respondToToolApproval(decision, requestContext?)',
+    type: '(decision: "approve" | "decline", requestContext?: RequestContext) => void',
+    description: 'Respond to a tool approval request within this send operation.',
+  },
+]}
+/>
 
 ## Related
 

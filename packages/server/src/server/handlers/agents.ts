@@ -2071,41 +2071,33 @@ export const SEND_MESSAGE_ROUTE = createRoute({
         }
       }
 
-      const eventStream = new ReadableStream({
-        start(controller) {
-          const unsub = agent.subscribe(event => {
-            try {
-              controller.enqueue(event);
-            } catch {
-              // Stream may be closed
-            }
-          });
+      const op = agent.send({
+        messages,
+        threadId: effectiveThreadId,
+        resourceId: effectiveResourceId,
+        maxSteps,
+        requestContext: serverRequestContext,
+        abortSignal,
+      });
 
-          agent
-            .send({
-              messages,
-              threadId: effectiveThreadId,
-              resourceId: effectiveResourceId,
-              maxSteps,
-              requestContext: serverRequestContext,
-              abortSignal,
-            })
-            .then(() => {
-              unsub();
+      const eventStream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const event of op.events) {
               try {
-                controller.close();
+                controller.enqueue(event);
               } catch {
-                // Already closed
+                break;
               }
-            })
-            .catch((err: unknown) => {
-              unsub();
-              try {
-                controller.error(err);
-              } catch {
-                // Already closed
-              }
-            });
+            }
+            controller.close();
+          } catch (err) {
+            try {
+              controller.error(err);
+            } catch {
+              // Already closed
+            }
+          }
         },
       });
 

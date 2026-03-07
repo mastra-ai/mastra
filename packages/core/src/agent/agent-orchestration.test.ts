@@ -414,7 +414,7 @@ describe('Agent Orchestration Integration', () => {
 });
 
 describe('Agent .send()', () => {
-  it('emits send_start, message events, and send_end', async () => {
+  it('operation events stream contains lifecycle events', async () => {
     const mockMemory = new MockMemory();
     const agent = new Agent({
       id: 'send-agent',
@@ -424,14 +424,16 @@ describe('Agent .send()', () => {
       memory: mockMemory,
     });
 
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    await agent.send({
+    const op = agent.send({
       messages: 'Hi there',
       threadId: 'thread-1',
       resourceId: 'user-1',
     });
+
+    const events: AgentEvent[] = [];
+    for await (const event of op.events) {
+      events.push(event);
+    }
 
     const eventTypes = events.map(e => e.type);
     expect(eventTypes).toContain('send_start');
@@ -447,7 +449,33 @@ describe('Agent .send()', () => {
     }
   });
 
-  it('returns the assembled message', async () => {
+  it('global subscribers also receive events from send operations', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'send-agent',
+      name: 'Send Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel('Hello world'),
+      memory: mockMemory,
+    });
+
+    const globalEvents: AgentEvent[] = [];
+    agent.subscribe(e => globalEvents.push(e));
+
+    const op = agent.send({
+      messages: 'Hi there',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+    });
+
+    await op.result;
+
+    const eventTypes = globalEvents.map(e => e.type);
+    expect(eventTypes).toContain('send_start');
+    expect(eventTypes).toContain('send_end');
+  });
+
+  it('result resolves with the assembled message', async () => {
     const mockMemory = new MockMemory();
     const agent = new Agent({
       id: 'send-agent',
@@ -457,11 +485,13 @@ describe('Agent .send()', () => {
       memory: mockMemory,
     });
 
-    const { message } = await agent.send({
+    const op = agent.send({
       messages: 'Hello',
       threadId: 'thread-1',
       resourceId: 'user-1',
     });
+
+    const { message } = await op.result;
 
     expect(message.role).toBe('assistant');
     expect(message.content.length).toBeGreaterThan(0);
@@ -470,7 +500,7 @@ describe('Agent .send()', () => {
     expect(textContent!.text).toContain('Test response');
   });
 
-  it('abort() cancels the stream and emits aborted', async () => {
+  it('op.abort() cancels this specific send', async () => {
     const mockMemory = new MockMemory();
     const agent = new Agent({
       id: 'abort-agent',
@@ -506,16 +536,18 @@ describe('Agent .send()', () => {
       memory: mockMemory,
     });
 
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    setTimeout(() => agent.abort(), 10);
-
-    await agent.send({
+    const op = agent.send({
       messages: 'Hello',
       threadId: 'thread-1',
       resourceId: 'user-1',
     });
+
+    setTimeout(() => op.abort(), 10);
+
+    const events: AgentEvent[] = [];
+    for await (const event of op.events) {
+      events.push(event);
+    }
 
     const eventTypes = events.map(e => e.type);
     expect(eventTypes).toContain('send_start');
@@ -557,14 +589,16 @@ describe('Agent .send()', () => {
       memory: mockMemory,
     });
 
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    await agent.send({
+    const op = agent.send({
       messages: 'Hello',
       threadId: 'thread-1',
       resourceId: 'user-1',
     });
+
+    const events: AgentEvent[] = [];
+    for await (const event of op.events) {
+      events.push(event);
+    }
 
     const eventTypes = events.map(e => e.type);
     expect(eventTypes).toContain('send_start');
@@ -587,14 +621,16 @@ describe('Agent .send()', () => {
       memory: mockMemory,
     });
 
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    await agent.send({
+    const op = agent.send({
       messages: 'Hello',
       threadId: 'thread-1',
       resourceId: 'user-1',
     });
+
+    const events: AgentEvent[] = [];
+    for await (const event of op.events) {
+      events.push(event);
+    }
 
     const usageEvents = events.filter(e => e.type === 'usage_update');
     expect(usageEvents.length).toBeGreaterThanOrEqual(1);
@@ -603,5 +639,36 @@ describe('Agent .send()', () => {
     if (usage.type === 'usage_update') {
       expect(usage.usage.totalTokens).toBeGreaterThan(0);
     }
+  });
+
+  it('concurrent sends have isolated event streams', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'concurrent-agent',
+      name: 'Concurrent Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel('Response'),
+      memory: mockMemory,
+    });
+
+    const op1 = agent.send({ messages: 'First', threadId: 't-1', resourceId: 'u-1' });
+    const op2 = agent.send({ messages: 'Second', threadId: 't-2', resourceId: 'u-2' });
+
+    const events1: AgentEvent[] = [];
+    const events2: AgentEvent[] = [];
+
+    await Promise.all([
+      (async () => {
+        for await (const e of op1.events) events1.push(e);
+      })(),
+      (async () => {
+        for await (const e of op2.events) events2.push(e);
+      })(),
+    ]);
+
+    expect(events1.some(e => e.type === 'send_start')).toBe(true);
+    expect(events2.some(e => e.type === 'send_start')).toBe(true);
+    expect(events1.some(e => e.type === 'send_end')).toBe(true);
+    expect(events2.some(e => e.type === 'send_end')).toBe(true);
   });
 });

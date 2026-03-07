@@ -1,3 +1,5 @@
+import type { RequestContext } from '../request-context';
+
 /**
  * Event listener that receives agent events.
  */
@@ -171,6 +173,29 @@ export interface AgentErrorEvent {
   error: Error;
   errorType?: string;
   retryable?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// SendOperation
+// ---------------------------------------------------------------------------
+
+/**
+ * A self-contained send operation returned by `agent.send()`.
+ * Each operation has its own event stream, abort handle, and tool-approval
+ * resolver — multiple concurrent sends to the same Agent do not interfere.
+ */
+export interface SendOperation {
+  /** Resolves when the send completes, with the assembled assistant message. */
+  result: Promise<{ message: AgentMessage }>;
+
+  /** Async iterable of events emitted during this send. */
+  events: AsyncIterable<AgentEvent>;
+
+  /** Abort this specific send operation. */
+  abort(): void;
+
+  /** Respond to a tool approval request within this send operation. */
+  respondToToolApproval(decision: 'approve' | 'decline', requestContext?: RequestContext): void;
 }
 
 // ---------------------------------------------------------------------------
