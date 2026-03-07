@@ -48,7 +48,6 @@ async function setupCluster() {
     console.error('Error creating bucket:', error.message);
     // Decide if you want to re-throw or handle specific errors here
   }
-
 }
 
 async function waitForFtsReady(bucket: Bucket): Promise<void> {

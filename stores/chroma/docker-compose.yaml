@@ -4,7 +4,7 @@ services:
     ports:
       - 8000:8000
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8000'"]
+      test: ['CMD-SHELL', "bash -c 'echo > /dev/tcp/localhost/8000'"]
       interval: 2s
       timeout: 2s
       retries: 15
