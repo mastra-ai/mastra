@@ -16,6 +16,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./storage": {
+      "import": {
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.js"
+      },
+      "require": {
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

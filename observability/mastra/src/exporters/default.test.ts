@@ -1,9 +1,13 @@
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
 import type {
   ModelGenerationAttributes,
   WorkflowStepAttributes,
   TracingEvent,
   AnyExportedSpan,
+  MetricEvent,
+  LogEvent,
+  ScoreEvent,
+  FeedbackEvent,
 } from '@mastra/core/observability';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DefaultExporter } from './default';
@@ -814,6 +818,366 @@ describe('DefaultExporter', () => {
 
         // Clean up any remaining timers
         await exporter.shutdown();
+      });
+    });
+
+    describe('Span-events strategy', () => {
+      it('should route SPAN_STARTED to spanEvents buffer (batchCreateSpans)', async () => {
+        mockObservabilityStore.tracingStrategy = {
+          preferred: 'span-events',
+          supported: ['span-events'],
+        };
+        const exporter = new DefaultExporter({
+          strategy: 'span-events',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        const event = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+        await exporter.exportTracingEvent(event);
+
+        await exporter.flush();
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledWith({
+          records: expect.arrayContaining([expect.objectContaining({ spanId: 'span-1', traceId: 'trace-1' })]),
+        });
+        // No updates for a start-only event
+        expect(mockObservabilityStore.batchUpdateSpans).not.toHaveBeenCalled();
+
+        await exporter.shutdown();
+      });
+
+      it('should route SPAN_UPDATED to updates buffer (batchUpdateSpans)', async () => {
+        mockObservabilityStore.tracingStrategy = {
+          preferred: 'span-events',
+          supported: ['span-events'],
+        };
+        const exporter = new DefaultExporter({
+          strategy: 'span-events',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        // Start then update
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1'));
+
+        await exporter.flush();
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalled();
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalledWith({
+          records: expect.arrayContaining([expect.objectContaining({ spanId: 'span-1', sequenceNumber: 1 })]),
+        });
+
+        await exporter.shutdown();
+      });
+
+      it('should route SPAN_ENDED to updates buffer for non-event spans', async () => {
+        mockObservabilityStore.tracingStrategy = {
+          preferred: 'span-events',
+          supported: ['span-events'],
+        };
+        const exporter = new DefaultExporter({
+          strategy: 'span-events',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-1'));
+
+        await exporter.flush();
+
+        // Start goes to batchCreateSpans, end goes to batchUpdateSpans
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalledTimes(1);
+
+        await exporter.shutdown();
+      });
+
+      it('should route event-type SPAN_ENDED to spanEvents (batchCreateSpans)', async () => {
+        mockObservabilityStore.tracingStrategy = {
+          preferred: 'span-events',
+          supported: ['span-events'],
+        };
+        const exporter = new DefaultExporter({
+          strategy: 'span-events',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        // Event-type spans only emit SPAN_ENDED
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'event-1', true));
+
+        await exporter.flush();
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledWith({
+          records: expect.arrayContaining([expect.objectContaining({ spanId: 'event-1' })]),
+        });
+        // Event spans go to creates, not updates
+        expect(mockObservabilityStore.batchUpdateSpans).not.toHaveBeenCalled();
+
+        await exporter.shutdown();
+      });
+
+      it('should handle full lifecycle (start, update, end) with correct ordering', async () => {
+        mockObservabilityStore.tracingStrategy = {
+          preferred: 'span-events',
+          supported: ['span-events'],
+        };
+        const exporter = new DefaultExporter({
+          strategy: 'span-events',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1'));
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_ENDED, 'trace-1', 'span-1'));
+
+        await exporter.flush();
+
+        // 1 create
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+        const creates = mockObservabilityStore.batchCreateSpans.mock.calls[0][0].records;
+        expect(creates).toHaveLength(1);
+
+        // 3 updates (2 updates + 1 end), sorted by sequence
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalledTimes(1);
+        const updates = mockObservabilityStore.batchUpdateSpans.mock.calls[0][0].records;
+        expect(updates).toHaveLength(3);
+        expect(updates[0].sequenceNumber).toBe(1);
+        expect(updates[1].sequenceNumber).toBe(2);
+        expect(updates[2].sequenceNumber).toBe(3);
+
+        await exporter.shutdown();
+      });
+
+      it('should NOT require prior SPAN_STARTED for updates (no out-of-order rejection)', async () => {
+        mockObservabilityStore.tracingStrategy = {
+          preferred: 'span-events',
+          supported: ['span-events'],
+        };
+        const exporter = new DefaultExporter({
+          strategy: 'span-events',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        // Send update without start — span-events strategy is append-only, no rejection
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_UPDATED, 'trace-1', 'span-1'));
+
+        await exporter.flush();
+
+        // Should route to batchUpdateSpans without warning
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalled();
+        expect(mockLogger.warn).not.toHaveBeenCalledWith(
+          'Out-of-order span update detected - skipping event',
+          expect.anything(),
+        );
+
+        await exporter.shutdown();
+      });
+    });
+
+    describe('Non-tracing signal handlers', () => {
+      it('onMetricEvent should extract entity hierarchy from labels', async () => {
+        mockObservabilityStore.batchRecordMetrics = vi.fn().mockResolvedValue(undefined);
+        const exporter = new DefaultExporter({ logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const event: MetricEvent = {
+          type: 'metric',
+          metric: {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            name: 'mastra_agent_runs_started',
+            metricType: 'counter',
+            value: 1,
+            labels: {
+              entity_type: 'agent',
+              entity_name: 'my-agent',
+              parent_type: 'workflow_run',
+              parent_name: 'my-workflow',
+              service_name: 'api-server',
+              other_label: 'kept',
+            },
+          },
+        };
+
+        await exporter.onMetricEvent(event);
+
+        expect(mockObservabilityStore.batchRecordMetrics).toHaveBeenCalledWith({
+          metrics: [
+            expect.objectContaining({
+              name: 'mastra_agent_runs_started',
+              value: 1,
+              entityType: EntityType.AGENT,
+              entityName: 'my-agent',
+              parentEntityType: EntityType.WORKFLOW_RUN,
+              parentEntityName: 'my-workflow',
+              serviceName: 'api-server',
+              // entity_type, entity_name, etc. should be removed from labels
+              labels: { other_label: 'kept' },
+            }),
+          ],
+        });
+
+        await exporter.shutdown();
+      });
+
+      it('onMetricEvent should set null for missing entity fields', async () => {
+        mockObservabilityStore.batchRecordMetrics = vi.fn().mockResolvedValue(undefined);
+        const exporter = new DefaultExporter({ logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const event: MetricEvent = {
+          type: 'metric',
+          metric: {
+            timestamp: new Date(),
+            name: 'mastra_custom_metric',
+            metricType: 'gauge',
+            value: 42,
+            labels: { status: 'ok' },
+          },
+        };
+
+        await exporter.onMetricEvent(event);
+
+        expect(mockObservabilityStore.batchRecordMetrics).toHaveBeenCalledWith({
+          metrics: [
+            expect.objectContaining({
+              entityType: null,
+              entityName: null,
+              parentEntityType: null,
+              parentEntityName: null,
+              rootEntityType: null,
+              rootEntityName: null,
+              serviceName: null,
+              labels: { status: 'ok' },
+            }),
+          ],
+        });
+
+        await exporter.shutdown();
+      });
+
+      it('onScoreEvent should forward to createScore', async () => {
+        mockObservabilityStore.createScore = vi.fn().mockResolvedValue(undefined);
+        const exporter = new DefaultExporter({ logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const event: ScoreEvent = {
+          type: 'score',
+          score: {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-1',
+            scorerName: 'relevance',
+            score: 0.85,
+            experimentId: 'exp-1',
+          },
+        };
+
+        await exporter.onScoreEvent(event);
+
+        expect(mockObservabilityStore.createScore).toHaveBeenCalledWith({
+          score: expect.objectContaining({
+            traceId: 'trace-1',
+            scorerName: 'relevance',
+            score: 0.85,
+            experimentId: 'exp-1',
+          }),
+        });
+
+        await exporter.shutdown();
+      });
+
+      it('onFeedbackEvent should forward to createFeedback', async () => {
+        mockObservabilityStore.createFeedback = vi.fn().mockResolvedValue(undefined);
+        const exporter = new DefaultExporter({ logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const event: FeedbackEvent = {
+          type: 'feedback',
+          feedback: {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            traceId: 'trace-1',
+            source: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+          },
+        };
+
+        await exporter.onFeedbackEvent(event);
+
+        expect(mockObservabilityStore.createFeedback).toHaveBeenCalledWith({
+          feedback: expect.objectContaining({
+            traceId: 'trace-1',
+            source: 'user',
+            feedbackType: 'thumbs',
+            value: 1,
+          }),
+        });
+
+        await exporter.shutdown();
+      });
+
+      it('onLogEvent should extract entity hierarchy from metadata', async () => {
+        mockObservabilityStore.batchCreateLogs = vi.fn().mockResolvedValue(undefined);
+        const exporter = new DefaultExporter({ logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const event: LogEvent = {
+          type: 'log',
+          log: {
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            level: 'info',
+            message: 'Agent started',
+            traceId: 'trace-1',
+            metadata: {
+              entity_type: 'agent',
+              entity_name: 'my-agent',
+              environment: 'production',
+            },
+          },
+        };
+
+        await exporter.onLogEvent(event);
+
+        expect(mockObservabilityStore.batchCreateLogs).toHaveBeenCalledWith({
+          logs: [
+            expect.objectContaining({
+              level: 'info',
+              message: 'Agent started',
+              entityType: EntityType.AGENT,
+              entityName: 'my-agent',
+              environment: 'production',
+            }),
+          ],
+        });
+
+        await exporter.shutdown();
+      });
+
+      it('signal handlers should be no-ops when storage not initialized', async () => {
+        const exporter = new DefaultExporter({ logger: mockLogger });
+        // Don't call init — storage is not available
+
+        const metricEvent: MetricEvent = {
+          type: 'metric',
+          metric: { timestamp: new Date(), name: 'test', metricType: 'counter', value: 1, labels: {} },
+        };
+
+        // Should not throw
+        await exporter.onMetricEvent(metricEvent);
+
+        // Exporter didn't init, so no storage interaction happened (no error thrown)
       });
     });
 

@@ -210,7 +210,7 @@ describe('AutoExtractedMetrics', () => {
   });
 
   describe('Score auto-extraction', () => {
-    it('should emit mastra_scores_total for score events', () => {
+    it('should emit mastra_scores_total and mastra_score_value for score events', () => {
       setup();
       extractor.processScoreEvent({
         type: 'score',
@@ -222,11 +222,16 @@ describe('AutoExtractedMetrics', () => {
         },
       });
 
-      expect(emittedMetrics).toHaveLength(1);
+      expect(emittedMetrics).toHaveLength(2);
       expect(emittedMetrics[0]!.metric.name).toBe('mastra_scores_total');
       expect(emittedMetrics[0]!.metric.metricType).toBe('counter');
       expect(emittedMetrics[0]!.metric.value).toBe(1);
       expect(emittedMetrics[0]!.metric.labels).toEqual({ scorer: 'relevance' });
+
+      expect(emittedMetrics[1]!.metric.name).toBe('mastra_score_value');
+      expect(emittedMetrics[1]!.metric.metricType).toBe('gauge');
+      expect(emittedMetrics[1]!.metric.value).toBe(0.85);
+      expect(emittedMetrics[1]!.metric.labels).toEqual({ scorer: 'relevance' });
     });
 
     it('should include experiment label when present', () => {
@@ -250,7 +255,7 @@ describe('AutoExtractedMetrics', () => {
   });
 
   describe('Feedback auto-extraction', () => {
-    it('should emit mastra_feedback_total for feedback events', () => {
+    it('should emit mastra_feedback_total and mastra_feedback_value for feedback events', () => {
       setup();
       extractor.processFeedbackEvent({
         type: 'feedback',
@@ -263,12 +268,33 @@ describe('AutoExtractedMetrics', () => {
         },
       });
 
-      expect(emittedMetrics).toHaveLength(1);
+      expect(emittedMetrics).toHaveLength(2);
       expect(emittedMetrics[0]!.metric.name).toBe('mastra_feedback_total');
       expect(emittedMetrics[0]!.metric.labels).toEqual({
         feedback_type: 'thumbs',
         source: 'user',
       });
+
+      expect(emittedMetrics[1]!.metric.name).toBe('mastra_feedback_value');
+      expect(emittedMetrics[1]!.metric.metricType).toBe('gauge');
+      expect(emittedMetrics[1]!.metric.value).toBe(1);
+    });
+
+    it('should not emit mastra_feedback_value for non-numeric feedback', () => {
+      setup();
+      extractor.processFeedbackEvent({
+        type: 'feedback',
+        feedback: {
+          timestamp: new Date(),
+          traceId: 'trace-1',
+          source: 'user',
+          feedbackType: 'correction',
+          value: 'fixed text',
+        },
+      });
+
+      expect(emittedMetrics).toHaveLength(1);
+      expect(emittedMetrics[0]!.metric.name).toBe('mastra_feedback_total');
     });
 
     it('should include experiment label when present', () => {
