@@ -1823,3 +1823,121 @@ describe('validateToolInput - Stringified JSON Coercion (GitHub #12757)', () => 
     });
   });
 });
+
+describe('validateToolInput - Absent Optional Fields in OpenAI Processed Schemas', () => {
+  it('should handle absent optional fields in nested objects after OpenAI schema processing', () => {
+    const processedSchema = z.object({
+      name: z
+        .string()
+        .nullable()
+        .transform((val: string | null) => (val === null ? undefined : val)),
+      story: z
+        .object({
+          whyTheyCreate: z
+            .string()
+            .nullable()
+            .transform((val: string | null) => (val === null ? undefined : val)),
+          howLong: z
+            .string()
+            .nullable()
+            .transform((val: string | null) => (val === null ? undefined : val)),
+        })
+        .nullable()
+        .transform((val: any) => (val === null ? undefined : val)),
+    });
+
+    const input = { name: 'Rafael', story: {} };
+
+    const result = validateToolInput(processedSchema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      name: 'Rafael',
+      story: { whyTheyCreate: undefined, howLong: undefined },
+    });
+  });
+
+  it('should handle deeply nested absent optional fields', () => {
+    const processedSchema = z.object({
+      user: z.object({
+        profile: z.object({
+          bio: z
+            .string()
+            .nullable()
+            .transform((val: string | null) => (val === null ? undefined : val)),
+          settings: z.object({
+            theme: z
+              .string()
+              .nullable()
+              .transform((val: string | null) => (val === null ? undefined : val)),
+            notifications: z.boolean(),
+          }),
+        }),
+      }),
+    });
+
+    const input = {
+      user: {
+        profile: {
+          settings: { notifications: true },
+        },
+      },
+    };
+
+    const result = validateToolInput(processedSchema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      user: {
+        profile: {
+          bio: undefined,
+          settings: { theme: undefined, notifications: true },
+        },
+      },
+    });
+  });
+
+  it('should not fill absent truly required fields with null', () => {
+    const processedSchema = z.object({
+      name: z.string(),
+      age: z
+        .number()
+        .nullable()
+        .transform((val: number | null) => (val === null ? undefined : val)),
+    });
+
+    const input = { age: null };
+
+    const result = validateToolInput(processedSchema, input);
+
+    expect(result.error).toBeDefined();
+  });
+
+  it('should handle arrays of objects with absent optional fields', () => {
+    const processedSchema = z.object({
+      items: z.array(
+        z.object({
+          id: z.string(),
+          label: z
+            .string()
+            .nullable()
+            .transform((val: string | null) => (val === null ? undefined : val)),
+        }),
+      ),
+    });
+
+    const input = {
+      items: [{ id: '1' }, { id: '2', label: 'present' }],
+    };
+
+    const result = validateToolInput(processedSchema, input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({
+      items: [
+        { id: '1', label: undefined },
+        { id: '2', label: 'present' },
+      ],
+    });
+  });
+});
