@@ -957,6 +957,73 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
       expect(textChunks.length).toBeGreaterThan(0);
     });
+
+    it('should persist provider-executed tool calls in stream order with results', async () => {
+      const messageList = createMessageListWithUserMessage();
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        messageList,
+        models: createTestModels({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'claude-code-model',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Before the tool. ' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              input: JSON.stringify({ query: 'mastra tools' }),
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'web_search',
+              result: {
+                results: [{ url: 'https://example.com', title: 'Example' }],
+              },
+              providerExecuted: true,
+            },
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: 'After the tool.' },
+            { type: 'text-end', id: 'text-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {},
+        ...defaultSettings(),
+      });
+
+      await result.consumeStream();
+
+      const responseMessages = messageList.get.response.db();
+      const assistantMsg = responseMessages.find(
+        msg => msg.role === 'assistant' && msg.content.parts.some(p => p.type === 'tool-invocation'),
+      );
+      expect(assistantMsg).toBeDefined();
+
+      const parts = assistantMsg!.content.parts;
+      expect(parts.map(part => part.type)).toEqual(['text', 'tool-invocation', 'step-start', 'text']);
+
+      const toolPart = parts.find(part => part.type === 'tool-invocation') as
+        | { toolInvocation: { state: string; result?: unknown } }
+        | undefined;
+      expect(toolPart?.toolInvocation.state).toBe('result');
+      expect(toolPart?.toolInvocation.result).toEqual({
+        results: [{ url: 'https://example.com', title: 'Example' }],
+      });
+    });
   });
 
   describe('toModelOutput', () => {
