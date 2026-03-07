@@ -555,10 +555,13 @@ export const mastra = new Mastra({
   server: {
     auth: new MastraJwtAuth({
       secret: process.env.MASTRA_JWT_SECRET,
+      mapUserToResourceId: user => user.id,
     }),
   },
 })
 ```
+
+The `mapUserToResourceId` callback maps the authenticated user to a resource ID for memory/thread scoping. When provided, it's called after successful authentication and the returned value is set on the request context as `MASTRA_RESOURCE_ID_KEY`. See [Authorization (User Isolation)](/docs/server/middleware#authorization-user-isolation) for details.
 
 ### server.bodySizeLimit
 

@@ -1,6 +1,6 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { MastraServerBase } from '@mastra/core/server';
 import type { ApiRoute, HttpLoggingConfig, ValidationErrorContext, ValidationErrorResponse } from '@mastra/core/server';
 import { Hono } from 'hono';
@@ -257,6 +257,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     return !excludePaths.some((excluded: string) => path === excluded || path.startsWith(excluded + '/'));
   }
 
+  private static readonly RESERVED_CONTEXT_KEYS = new Set([MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY]);
+
   protected mergeRequestContext({
     paramsRequestContext,
     bodyRequestContext,
@@ -267,11 +269,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const requestContext = new RequestContext();
     if (bodyRequestContext) {
       for (const [key, value] of Object.entries(bodyRequestContext)) {
+        if (MastraServer.RESERVED_CONTEXT_KEYS.has(key)) continue;
         requestContext.set(key, value);
       }
     }
     if (paramsRequestContext) {
       for (const [key, value] of Object.entries(paramsRequestContext)) {
+        if (MastraServer.RESERVED_CONTEXT_KEYS.has(key)) continue;
         requestContext.set(key, value);
       }
     }
