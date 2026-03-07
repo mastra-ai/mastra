@@ -76,7 +76,7 @@ describe('LocalFilesystem', () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'Hello World');
 
-      const content = await localFs.readFile('/test.txt');
+      const content = await localFs.readFile('test.txt');
       expect(Buffer.isBuffer(content)).toBe(true);
       expect(content.toString()).toBe('Hello World');
     });
@@ -85,27 +85,27 @@ describe('LocalFilesystem', () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'Hello World');
 
-      const content = await localFs.readFile('/test.txt', { encoding: 'utf-8' });
+      const content = await localFs.readFile('test.txt', { encoding: 'utf-8' });
       expect(typeof content).toBe('string');
       expect(content).toBe('Hello World');
     });
 
     it('should throw FileNotFoundError for missing file', async () => {
-      await expect(localFs.readFile('/nonexistent.txt')).rejects.toThrow(FileNotFoundError);
+      await expect(localFs.readFile('nonexistent.txt')).rejects.toThrow(FileNotFoundError);
     });
 
     it('should throw IsDirectoryError when reading a directory', async () => {
       const dirPath = path.join(tempDir, 'testdir');
       await fs.mkdir(dirPath);
 
-      await expect(localFs.readFile('/testdir')).rejects.toThrow(IsDirectoryError);
+      await expect(localFs.readFile('testdir')).rejects.toThrow(IsDirectoryError);
     });
 
     it('should normalize paths with leading slashes', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'content');
 
-      const content1 = await localFs.readFile('/test.txt', { encoding: 'utf-8' });
+      const content1 = await localFs.readFile('test.txt', { encoding: 'utf-8' });
       const content2 = await localFs.readFile('test.txt', { encoding: 'utf-8' });
 
       expect(content1).toBe('content');
@@ -118,7 +118,7 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('writeFile', () => {
     it('should write string content', async () => {
-      await localFs.writeFile('/test.txt', 'Hello World');
+      await localFs.writeFile('test.txt', 'Hello World');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('Hello World');
@@ -126,28 +126,28 @@ describe('LocalFilesystem', () => {
 
     it('should write buffer content', async () => {
       const buffer = Buffer.from([0x48, 0x65, 0x6c, 0x6c, 0x6f]);
-      await localFs.writeFile('/test.bin', buffer);
+      await localFs.writeFile('test.bin', buffer);
 
       const content = await fs.readFile(path.join(tempDir, 'test.bin'));
       expect(content.equals(buffer)).toBe(true);
     });
 
     it('should create parent directories recursively', async () => {
-      await localFs.writeFile('/deep/nested/dir/test.txt', 'content');
+      await localFs.writeFile('deep/nested/dir/test.txt', 'content');
 
       const content = await fs.readFile(path.join(tempDir, 'deep/nested/dir/test.txt'), 'utf-8');
       expect(content).toBe('content');
     });
 
     it('should throw FileExistsError when overwrite is false', async () => {
-      await localFs.writeFile('/test.txt', 'original');
+      await localFs.writeFile('test.txt', 'original');
 
-      await expect(localFs.writeFile('/test.txt', 'new', { overwrite: false })).rejects.toThrow(FileExistsError);
+      await expect(localFs.writeFile('test.txt', 'new', { overwrite: false })).rejects.toThrow(FileExistsError);
     });
 
     it('should overwrite by default', async () => {
-      await localFs.writeFile('/test.txt', 'original');
-      await localFs.writeFile('/test.txt', 'new');
+      await localFs.writeFile('test.txt', 'original');
+      await localFs.writeFile('test.txt', 'new');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('new');
@@ -159,15 +159,15 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('appendFile', () => {
     it('should append to existing file', async () => {
-      await localFs.writeFile('/test.txt', 'Hello');
-      await localFs.appendFile('/test.txt', ' World');
+      await localFs.writeFile('test.txt', 'Hello');
+      await localFs.appendFile('test.txt', ' World');
 
       const content = await fs.readFile(path.join(tempDir, 'test.txt'), 'utf-8');
       expect(content).toBe('Hello World');
     });
 
     it('should create file if it does not exist', async () => {
-      await localFs.appendFile('/new.txt', 'content');
+      await localFs.appendFile('new.txt', 'content');
 
       const content = await fs.readFile(path.join(tempDir, 'new.txt'), 'utf-8');
       expect(content).toBe('content');
@@ -179,24 +179,24 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('deleteFile', () => {
     it('should delete existing file', async () => {
-      await localFs.writeFile('/test.txt', 'content');
-      await localFs.deleteFile('/test.txt');
+      await localFs.writeFile('test.txt', 'content');
+      await localFs.deleteFile('test.txt');
 
-      const exists = await localFs.exists('/test.txt');
+      const exists = await localFs.exists('test.txt');
       expect(exists).toBe(false);
     });
 
     it('should throw FileNotFoundError for missing file', async () => {
-      await expect(localFs.deleteFile('/nonexistent.txt')).rejects.toThrow(FileNotFoundError);
+      await expect(localFs.deleteFile('nonexistent.txt')).rejects.toThrow(FileNotFoundError);
     });
 
     it('should not throw when force is true and file does not exist', async () => {
-      await expect(localFs.deleteFile('/nonexistent.txt', { force: true })).resolves.not.toThrow();
+      await expect(localFs.deleteFile('nonexistent.txt', { force: true })).resolves.not.toThrow();
     });
 
     it('should throw IsDirectoryError when deleting directory', async () => {
       await fs.mkdir(path.join(tempDir, 'testdir'));
-      await expect(localFs.deleteFile('/testdir')).rejects.toThrow(IsDirectoryError);
+      await expect(localFs.deleteFile('testdir')).rejects.toThrow(IsDirectoryError);
     });
   });
 
@@ -205,40 +205,40 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('copyFile', () => {
     it('should copy file to new location', async () => {
-      await localFs.writeFile('/source.txt', 'content');
-      await localFs.copyFile('/source.txt', '/dest.txt');
+      await localFs.writeFile('source.txt', 'content');
+      await localFs.copyFile('source.txt', 'dest.txt');
 
-      const srcContent = await localFs.readFile('/source.txt', { encoding: 'utf-8' });
-      const destContent = await localFs.readFile('/dest.txt', { encoding: 'utf-8' });
+      const srcContent = await localFs.readFile('source.txt', { encoding: 'utf-8' });
+      const destContent = await localFs.readFile('dest.txt', { encoding: 'utf-8' });
 
       expect(srcContent).toBe('content');
       expect(destContent).toBe('content');
     });
 
     it('should throw FileNotFoundError for missing source', async () => {
-      await expect(localFs.copyFile('/nonexistent.txt', '/dest.txt')).rejects.toThrow(FileNotFoundError);
+      await expect(localFs.copyFile('nonexistent.txt', 'dest.txt')).rejects.toThrow(FileNotFoundError);
     });
 
     it('should throw FileExistsError when overwrite is false and dest exists', async () => {
-      await localFs.writeFile('/source.txt', 'source');
-      await localFs.writeFile('/dest.txt', 'dest');
+      await localFs.writeFile('source.txt', 'source');
+      await localFs.writeFile('dest.txt', 'dest');
 
-      await expect(localFs.copyFile('/source.txt', '/dest.txt', { overwrite: false })).rejects.toThrow(FileExistsError);
+      await expect(localFs.copyFile('source.txt', 'dest.txt', { overwrite: false })).rejects.toThrow(FileExistsError);
     });
 
     it('should copy directory recursively', async () => {
-      await localFs.writeFile('/srcdir/file1.txt', 'content1');
-      await localFs.writeFile('/srcdir/file2.txt', 'content2');
+      await localFs.writeFile('srcdir/file1.txt', 'content1');
+      await localFs.writeFile('srcdir/file2.txt', 'content2');
 
-      await localFs.copyFile('/srcdir', '/destdir', { recursive: true });
+      await localFs.copyFile('srcdir', 'destdir', { recursive: true });
 
-      expect(await localFs.readFile('/destdir/file1.txt', { encoding: 'utf-8' })).toBe('content1');
-      expect(await localFs.readFile('/destdir/file2.txt', { encoding: 'utf-8' })).toBe('content2');
+      expect(await localFs.readFile('destdir/file1.txt', { encoding: 'utf-8' })).toBe('content1');
+      expect(await localFs.readFile('destdir/file2.txt', { encoding: 'utf-8' })).toBe('content2');
     });
 
     it('should throw IsDirectoryError when copying directory without recursive', async () => {
-      await localFs.mkdir('/srcdir');
-      await expect(localFs.copyFile('/srcdir', '/destdir')).rejects.toThrow(IsDirectoryError);
+      await localFs.mkdir('srcdir');
+      await expect(localFs.copyFile('srcdir', 'destdir')).rejects.toThrow(IsDirectoryError);
     });
   });
 
@@ -247,22 +247,22 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('moveFile', () => {
     it('should move file to new location', async () => {
-      await localFs.writeFile('/source.txt', 'content');
-      await localFs.moveFile('/source.txt', '/dest.txt');
+      await localFs.writeFile('source.txt', 'content');
+      await localFs.moveFile('source.txt', 'dest.txt');
 
-      expect(await localFs.exists('/source.txt')).toBe(false);
-      expect(await localFs.readFile('/dest.txt', { encoding: 'utf-8' })).toBe('content');
+      expect(await localFs.exists('source.txt')).toBe(false);
+      expect(await localFs.readFile('dest.txt', { encoding: 'utf-8' })).toBe('content');
     });
 
     it('should throw FileNotFoundError for missing source', async () => {
-      await expect(localFs.moveFile('/nonexistent.txt', '/dest.txt')).rejects.toThrow(FileNotFoundError);
+      await expect(localFs.moveFile('nonexistent.txt', 'dest.txt')).rejects.toThrow(FileNotFoundError);
     });
 
     it('should throw FileExistsError when overwrite is false and dest exists', async () => {
-      await localFs.writeFile('/source.txt', 'source');
-      await localFs.writeFile('/dest.txt', 'dest');
+      await localFs.writeFile('source.txt', 'source');
+      await localFs.writeFile('dest.txt', 'dest');
 
-      await expect(localFs.moveFile('/source.txt', '/dest.txt', { overwrite: false })).rejects.toThrow(FileExistsError);
+      await expect(localFs.moveFile('source.txt', 'dest.txt', { overwrite: false })).rejects.toThrow(FileExistsError);
     });
   });
 
@@ -271,27 +271,27 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('mkdir', () => {
     it('should create directory', async () => {
-      await localFs.mkdir('/newdir');
+      await localFs.mkdir('newdir');
 
       const stats = await fs.stat(path.join(tempDir, 'newdir'));
       expect(stats.isDirectory()).toBe(true);
     });
 
     it('should create nested directories recursively', async () => {
-      await localFs.mkdir('/deep/nested/dir');
+      await localFs.mkdir('deep/nested/dir');
 
       const stats = await fs.stat(path.join(tempDir, 'deep/nested/dir'));
       expect(stats.isDirectory()).toBe(true);
     });
 
     it('should not throw if directory already exists', async () => {
-      await localFs.mkdir('/testdir');
-      await expect(localFs.mkdir('/testdir')).resolves.not.toThrow();
+      await localFs.mkdir('testdir');
+      await expect(localFs.mkdir('testdir')).resolves.not.toThrow();
     });
 
     it('should throw FileExistsError if path is a file', async () => {
-      await localFs.writeFile('/testfile', 'content');
-      await expect(localFs.mkdir('/testfile', { recursive: false })).rejects.toThrow(FileExistsError);
+      await localFs.writeFile('testfile', 'content');
+      await expect(localFs.mkdir('testfile', { recursive: false })).rejects.toThrow(FileExistsError);
     });
   });
 
@@ -300,35 +300,35 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('rmdir', () => {
     it('should remove empty directory', async () => {
-      await localFs.mkdir('/emptydir');
-      await localFs.rmdir('/emptydir');
+      await localFs.mkdir('emptydir');
+      await localFs.rmdir('emptydir');
 
-      expect(await localFs.exists('/emptydir')).toBe(false);
+      expect(await localFs.exists('emptydir')).toBe(false);
     });
 
     it('should throw DirectoryNotEmptyError for non-empty directory', async () => {
-      await localFs.writeFile('/nonempty/file.txt', 'content');
-      await expect(localFs.rmdir('/nonempty')).rejects.toThrow(DirectoryNotEmptyError);
+      await localFs.writeFile('nonempty/file.txt', 'content');
+      await expect(localFs.rmdir('nonempty')).rejects.toThrow(DirectoryNotEmptyError);
     });
 
     it('should remove non-empty directory with recursive option', async () => {
-      await localFs.writeFile('/nonempty/file.txt', 'content');
-      await localFs.rmdir('/nonempty', { recursive: true, force: true });
+      await localFs.writeFile('nonempty/file.txt', 'content');
+      await localFs.rmdir('nonempty', { recursive: true, force: true });
 
-      expect(await localFs.exists('/nonempty')).toBe(false);
+      expect(await localFs.exists('nonempty')).toBe(false);
     });
 
     it('should throw DirectoryNotFoundError for missing directory', async () => {
-      await expect(localFs.rmdir('/nonexistent')).rejects.toThrow(DirectoryNotFoundError);
+      await expect(localFs.rmdir('nonexistent')).rejects.toThrow(DirectoryNotFoundError);
     });
 
     it('should not throw when force is true and directory does not exist', async () => {
-      await expect(localFs.rmdir('/nonexistent', { force: true })).resolves.not.toThrow();
+      await expect(localFs.rmdir('nonexistent', { force: true })).resolves.not.toThrow();
     });
 
     it('should throw NotDirectoryError when path is a file', async () => {
-      await localFs.writeFile('/testfile', 'content');
-      await expect(localFs.rmdir('/testfile')).rejects.toThrow(NotDirectoryError);
+      await localFs.writeFile('testfile', 'content');
+      await expect(localFs.rmdir('testfile')).rejects.toThrow(NotDirectoryError);
     });
   });
 
@@ -337,11 +337,11 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('readdir', () => {
     it('should list directory contents', async () => {
-      await localFs.writeFile('/dir/file1.txt', 'content1');
-      await localFs.writeFile('/dir/file2.txt', 'content2');
-      await localFs.mkdir('/dir/subdir');
+      await localFs.writeFile('dir/file1.txt', 'content1');
+      await localFs.writeFile('dir/file2.txt', 'content2');
+      await localFs.mkdir('dir/subdir');
 
-      const entries = await localFs.readdir('/dir');
+      const entries = await localFs.readdir('dir');
 
       expect(entries.length).toBe(3);
       expect(entries.some(e => e.name === 'file1.txt' && e.type === 'file')).toBe(true);
@@ -350,41 +350,41 @@ describe('LocalFilesystem', () => {
     });
 
     it('should include file sizes', async () => {
-      await localFs.writeFile('/dir/file.txt', 'content');
+      await localFs.writeFile('dir/file.txt', 'content');
 
-      const entries = await localFs.readdir('/dir');
+      const entries = await localFs.readdir('dir');
       const fileEntry = entries.find(e => e.name === 'file.txt');
 
       expect(fileEntry?.size).toBe(7); // 'content'.length
     });
 
     it('should filter by extension', async () => {
-      await localFs.writeFile('/dir/file.txt', 'content');
-      await localFs.writeFile('/dir/file.json', '{}');
+      await localFs.writeFile('dir/file.txt', 'content');
+      await localFs.writeFile('dir/file.json', '{}');
 
-      const txtOnly = await localFs.readdir('/dir', { extension: '.txt' });
+      const txtOnly = await localFs.readdir('dir', { extension: '.txt' });
 
       expect(txtOnly.length).toBe(1);
       expect(txtOnly[0].name).toBe('file.txt');
     });
 
     it('should list recursively', async () => {
-      await localFs.writeFile('/dir/file1.txt', 'content1');
-      await localFs.writeFile('/dir/sub/file2.txt', 'content2');
+      await localFs.writeFile('dir/file1.txt', 'content1');
+      await localFs.writeFile('dir/sub/file2.txt', 'content2');
 
-      const entries = await localFs.readdir('/dir', { recursive: true });
+      const entries = await localFs.readdir('dir', { recursive: true });
 
       expect(entries.some(e => e.name === 'file1.txt')).toBe(true);
       expect(entries.some(e => e.name === 'sub/file2.txt')).toBe(true);
     });
 
     it('should throw DirectoryNotFoundError for missing directory', async () => {
-      await expect(localFs.readdir('/nonexistent')).rejects.toThrow(DirectoryNotFoundError);
+      await expect(localFs.readdir('nonexistent')).rejects.toThrow(DirectoryNotFoundError);
     });
 
     it('should throw NotDirectoryError when path is a file', async () => {
-      await localFs.writeFile('/testfile', 'content');
-      await expect(localFs.readdir('/testfile')).rejects.toThrow(NotDirectoryError);
+      await localFs.writeFile('testfile', 'content');
+      await expect(localFs.readdir('testfile')).rejects.toThrow(NotDirectoryError);
     });
   });
 
@@ -393,17 +393,17 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('exists', () => {
     it('should return true for existing file', async () => {
-      await localFs.writeFile('/test.txt', 'content');
-      expect(await localFs.exists('/test.txt')).toBe(true);
+      await localFs.writeFile('test.txt', 'content');
+      expect(await localFs.exists('test.txt')).toBe(true);
     });
 
     it('should return true for existing directory', async () => {
-      await localFs.mkdir('/testdir');
-      expect(await localFs.exists('/testdir')).toBe(true);
+      await localFs.mkdir('testdir');
+      expect(await localFs.exists('testdir')).toBe(true);
     });
 
     it('should return false for non-existing path', async () => {
-      expect(await localFs.exists('/nonexistent')).toBe(false);
+      expect(await localFs.exists('nonexistent')).toBe(false);
     });
   });
 
@@ -412,9 +412,9 @@ describe('LocalFilesystem', () => {
   // ===========================================================================
   describe('stat', () => {
     it('should return file stats', async () => {
-      await localFs.writeFile('/test.txt', 'content');
+      await localFs.writeFile('test.txt', 'content');
 
-      const stats = await localFs.stat('/test.txt');
+      const stats = await localFs.stat('test.txt');
 
       expect(stats.name).toBe('test.txt');
       expect(stats.type).toBe('file');
@@ -425,9 +425,9 @@ describe('LocalFilesystem', () => {
     });
 
     it('should return directory stats', async () => {
-      await localFs.mkdir('/testdir');
+      await localFs.mkdir('testdir');
 
-      const stats = await localFs.stat('/testdir');
+      const stats = await localFs.stat('testdir');
 
       expect(stats.name).toBe('testdir');
       expect(stats.type).toBe('directory');
@@ -435,7 +435,7 @@ describe('LocalFilesystem', () => {
     });
 
     it('should throw FileNotFoundError for missing path', async () => {
-      await expect(localFs.stat('/nonexistent')).rejects.toThrow(FileNotFoundError);
+      await expect(localFs.stat('nonexistent')).rejects.toThrow(FileNotFoundError);
     });
   });
 
@@ -453,29 +453,29 @@ describe('LocalFilesystem', () => {
     });
 
     it('should block path traversal by default', async () => {
-      await expect(localFs.readFile('/../../../etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('../../../etc/passwd')).rejects.toThrow(PermissionError);
     });
 
     it('should block path traversal with dot segments', async () => {
       // Use multiple levels of path traversal to escape sandbox
-      await expect(localFs.readFile('/foo/../../bar/../../../etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.readFile('foo/../../bar/../../../etc/passwd')).rejects.toThrow(PermissionError);
     });
 
     it('should allow paths inside base directory', async () => {
-      await localFs.writeFile('/allowed/file.txt', 'content');
-      const content = await localFs.readFile('/allowed/file.txt', { encoding: 'utf-8' });
+      await localFs.writeFile('allowed/file.txt', 'content');
+      const content = await localFs.readFile('allowed/file.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
     });
 
     it('should allow absolute paths inside base directory', async () => {
-      await localFs.writeFile('/abs-test.txt', 'absolute content');
+      await localFs.writeFile('abs-test.txt', 'absolute content');
       const absolutePath = path.join(tempDir, 'abs-test.txt');
       const content = await localFs.readFile(absolutePath, { encoding: 'utf-8' });
       expect(content).toBe('absolute content');
     });
 
     it('should allow exists() with absolute paths inside base directory', async () => {
-      await localFs.writeFile('/exists-test.txt', 'content');
+      await localFs.writeFile('exists-test.txt', 'content');
       const absolutePath = path.join(tempDir, 'exists-test.txt');
       const exists = await localFs.exists(absolutePath);
       expect(exists).toBe(true);
@@ -485,6 +485,26 @@ describe('LocalFilesystem', () => {
       const absolutePath = path.join(tempDir, 'nonexistent', 'file.txt');
       const exists = await localFs.exists(absolutePath);
       expect(exists).toBe(false);
+    });
+
+    it('should block absolute paths outside base directory', async () => {
+      await expect(localFs.readFile('/etc/passwd')).rejects.toThrow(PermissionError);
+      await expect(localFs.writeFile('/tmp/escape.txt', 'nope')).rejects.toThrow(PermissionError);
+    });
+
+    it('should not treat absolute paths as workspace-relative (no virtual root)', async () => {
+      // Write a file via relative path
+      await localFs.writeFile('test.txt', 'relative content');
+
+      // Reading via absolute path /test.txt should NOT find the file at basePath/test.txt —
+      // it should throw PermissionError because /test.txt is a real absolute path outside basePath
+      await expect(localFs.readFile('/test.txt')).rejects.toThrow(PermissionError);
+    });
+
+    it('should resolve the same relative path consistently for read and write', async () => {
+      await localFs.writeFile('consistent.txt', 'written');
+      const content = await localFs.readFile('consistent.txt', { encoding: 'utf-8' });
+      expect(content).toBe('written');
     });
 
     it('should allow access when containment is disabled', async () => {
@@ -621,15 +641,45 @@ describe('LocalFilesystem', () => {
         expect(content).toBe('new content');
       });
 
-      it('should block path traversal even with allowedPaths', async () => {
+      it('should block path traversal that escapes all roots', async () => {
         const restrictedFs = new LocalFilesystem({
           basePath: tempDir,
           contained: true,
           allowedPaths: [outsideDir],
         });
 
-        // Path traversal escapes all roots → PermissionError
         await expect(restrictedFs.readFile('/../../../etc/passwd')).rejects.toThrow(PermissionError);
+      });
+
+      it('should allow ../  that stays within an allowed path', async () => {
+        // Create a subdirectory with a file
+        await fs.mkdir(path.join(outsideDir, 'sub'), { recursive: true });
+        await fs.writeFile(path.join(outsideDir, 'sub', 'deep.txt'), 'deep content');
+
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        // Navigate into sub then back out, but still within outsideDir
+        const content = await fsWithAllowed.readFile(path.join(outsideDir, 'sub', '..', 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should block ../ that escapes from allowed path to outside', async () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+          allowedPaths: [outsideDir],
+        });
+
+        // Try to escape outsideDir via ../
+        await expect(fsWithAllowed.readFile(path.join(outsideDir, '..', 'etc', 'passwd'))).rejects.toThrow(
+          PermissionError,
+        );
       });
 
       it('should still allow basePath access when allowedPaths are set', async () => {
@@ -639,8 +689,8 @@ describe('LocalFilesystem', () => {
           allowedPaths: [outsideDir],
         });
 
-        await fsWithAllowed.writeFile('/local-file.txt', 'local content');
-        const content = await fsWithAllowed.readFile('/local-file.txt', { encoding: 'utf-8' });
+        await fsWithAllowed.writeFile('local-file.txt', 'local content');
+        const content = await fsWithAllowed.readFile('local-file.txt', { encoding: 'utf-8' });
         expect(content).toBe('local content');
       });
 
@@ -650,15 +700,32 @@ describe('LocalFilesystem', () => {
           contained: true,
         });
 
-        // Initially blocked — absolute path outside basePath gets treated as virtual,
-        // resolves to basePath/var/... which doesn't exist
-        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow();
+        // Initially blocked — absolute path outside basePath throws PermissionError
+        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow(PermissionError);
 
         // Add allowedPath dynamically
         dynamicFs.setAllowedPaths([outsideDir]);
 
         // Now accessible
         const content = await dynamicFs.readFile(path.join(outsideDir, 'external.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('external content');
+      });
+
+      it('should allow ../ within dynamically added allowedPath', async () => {
+        await fs.mkdir(path.join(outsideDir, 'a'), { recursive: true });
+        await fs.writeFile(path.join(outsideDir, 'a', 'file.txt'), 'nested');
+
+        const dynamicFs = new LocalFilesystem({
+          basePath: tempDir,
+          contained: true,
+        });
+
+        dynamicFs.setAllowedPaths([outsideDir]);
+
+        // ../  that resolves back into outsideDir
+        const content = await dynamicFs.readFile(path.join(outsideDir, 'a', '..', 'external.txt'), {
           encoding: 'utf-8',
         });
         expect(content).toBe('external content');
@@ -680,8 +747,8 @@ describe('LocalFilesystem', () => {
         // Remove allowed paths
         dynamicFs.setAllowedPaths([]);
 
-        // Now blocked — path no longer within any root, treated as virtual
-        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow();
+        // Now blocked — path no longer within any root
+        await expect(dynamicFs.readFile(path.join(outsideDir, 'external.txt'))).rejects.toThrow(PermissionError);
       });
 
       it('should check exists() against allowedPaths', async () => {
@@ -937,8 +1004,8 @@ describe('LocalFilesystem', () => {
 
     testCases.forEach(({ ext, expected }) => {
       it(`should detect ${ext} as ${expected}`, async () => {
-        await localFs.writeFile(`/test.${ext}`, 'content');
-        const stats = await localFs.stat(`/test.${ext}`);
+        await localFs.writeFile(`test.${ext}`, 'content');
+        const stats = await localFs.stat(`test.${ext}`);
         expect(stats.mimeType).toBe(expected);
       });
     });
