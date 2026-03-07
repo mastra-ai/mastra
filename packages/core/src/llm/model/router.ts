@@ -65,6 +65,32 @@ function stableHeaderKey(headers?: Record<string, string>): string {
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
+/**
+ * Remaps tool types in call options from V2 format to V3 format.
+ * V2 uses 'provider-defined' while V3 uses 'provider' for provider tools.
+ * This is needed because the router prepares tools based on its own specificationVersion ('v2'),
+ * but the underlying model may be V3 and expect 'provider' type.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/13667
+ */
+function remapToolsToV3(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+  if (!options.tools?.length) {
+    return options;
+  }
+
+  const remappedTools = options.tools.map((tool: Record<string, unknown>) => {
+    if (tool.type === 'provider-defined') {
+      return { ...tool, type: 'provider' as const };
+    }
+    return tool;
+  });
+
+  return {
+    ...options,
+    tools: remappedTools as typeof options.tools,
+  };
+}
+
 function getStaticProvidersByGateway(name: string) {
   return Object.fromEntries(Object.entries(PROVIDER_REGISTRY).filter(([_provider, config]) => config.gateway === name));
 }
@@ -295,8 +321,10 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     // Handle both V2 and V3 models
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
+      // Remap provider tool types from V2 ('provider-defined') to V3 ('provider') format
+      const v3Options = remapToolsToV3(options);
       // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      return aiSDKV6Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+      return aiSDKV6Model.doGenerate(v3Options as any) as unknown as Promise<StreamResult>;
     }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
     return aiSDKV5Model.doGenerate(options);
@@ -349,8 +377,10 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     // Handle both V2 and V3 models
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
+      // Remap provider tool types from V2 ('provider-defined') to V3 ('provider') format
+      const v3Options = remapToolsToV3(options);
       // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
-      return aiSDKV6Model.doStream(options as any) as unknown as Promise<StreamResult>;
+      return aiSDKV6Model.doStream(v3Options as any) as unknown as Promise<StreamResult>;
     }
     const aiSDKV5Model = new AISDKV5LanguageModel(model);
     return aiSDKV5Model.doStream(options);
