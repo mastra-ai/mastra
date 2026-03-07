@@ -59,3 +59,22 @@ export function validateEndpoint(endpoint: string): void {
     throw new Error(`Invalid endpoint URL: "${endpoint}"`);
   }
 }
+
+/**
+ * Validate a prefix path before interpolating into shell commands.
+ * Allows characters that are valid in S3 keys and safe in shell context:
+ * alphanumeric, hyphens, underscores, dots, forward slashes, @, and colons.
+ * Rejects empty strings, leading/trailing slashes, double slashes, and
+ * shell-unsafe characters (backticks, $, ;, &, |, <, >, quotes, spaces, etc.).
+ */
+const SAFE_PREFIX = /^[a-zA-Z0-9@][a-zA-Z0-9._\-/:@]*[a-zA-Z0-9.]$/;
+
+export function validatePrefix(prefix: string): void {
+  if (!prefix || prefix.includes('//') || !SAFE_PREFIX.test(prefix)) {
+    throw new Error(
+      `Invalid mount prefix: "${prefix}". ` +
+        `Prefix must contain only alphanumeric, hyphens, underscores, dots, forward slashes, @ and colons. ` +
+        `Must not start/end with a slash or contain consecutive slashes.`,
+    );
+  }
+}

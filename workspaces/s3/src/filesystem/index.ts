@@ -47,6 +47,13 @@ export interface S3MountConfig extends FilesystemMountConfig {
   sessionToken?: string;
   /** Mount as read-only */
   readOnly?: boolean;
+  /**
+   * S3 key prefix to scope the mount.
+   * When set, the sandbox mount point will be aligned to this prefix subdirectory
+   * so that sandbox paths map directly to prefixed S3 keys.
+   * Without trailing slash (e.g., 'workspace/user1/agents/abc').
+   */
+  prefix?: string;
 }
 
 /**
@@ -282,6 +289,11 @@ export class S3Filesystem extends MastraFilesystem {
 
     if (this.readOnly) {
       config.readOnly = true;
+    }
+
+    // Include prefix so sandbox mounts can align paths to the correct subdirectory
+    if (this.prefix) {
+      config.prefix = this.prefix.replace(/\/$/, ''); // Strip trailing slash for mount commands
     }
 
     return config;

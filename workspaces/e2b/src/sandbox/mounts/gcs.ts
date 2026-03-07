@@ -1,6 +1,6 @@
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
-import { LOG_PREFIX, validateBucketName } from './types';
+import { LOG_PREFIX, validateBucketName, validatePrefix } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -15,16 +15,29 @@ export interface E2BGCSMountConfig extends FilesystemMountConfig {
   bucket: string;
   /** Service account key JSON (optional - omit for public buckets) */
   serviceAccountKey?: string;
+  /**
+   * GCS key prefix to scope the mount.
+   * When set, gcsfuse uses --only-dir to mount only this subdirectory,
+   * so sandbox paths map directly to prefixed GCS keys.
+   * Without trailing slash (e.g., 'workspace/user1/agents/abc').
+   */
+  prefix?: string;
 }
 
 /**
  * Mount a GCS bucket using gcsfuse.
+ *
+ * When `config.prefix` is set, the `--only-dir` flag is used to mount only
+ * the prefix subdirectory, aligning sandbox paths with GCS key prefixes.
  */
 export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx: MountContext): Promise<void> {
   const { sandbox, logger } = ctx;
 
   // Validate inputs before interpolating into shell commands
   validateBucketName(config.bucket);
+  if (config.prefix) {
+    validatePrefix(config.prefix);
+  }
 
   // Install gcsfuse if not present
   const checkResult = await sandbox.commands.run('which gcsfuse || echo "not found"');
@@ -50,6 +63,9 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
   // Note: gcsfuse uses --uid/--gid flags, not -o uid=X style
   const uidGidFlags = uid && gid ? `--uid=${uid} --gid=${gid}` : '';
 
+  // Build --only-dir flag for prefix support
+  const onlyDirFlag = config.prefix ? `--only-dir="${config.prefix}"` : '';
+
   const hasCredentials = !!config.serviceAccountKey;
   let mountCmd: string;
 
@@ -64,15 +80,18 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
     // Mount with credentials using --key-file flag
     // Use sudo for /dev/fuse access (same as s3fs)
     // -o allow_other lets non-root users access the FUSE mount
-    mountCmd = `sudo gcsfuse --key-file=${keyPath} -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    mountCmd = `sudo gcsfuse --key-file=${keyPath} -o allow_other ${uidGidFlags} ${onlyDirFlag} ${config.bucket} ${mountPath}`;
   } else {
     // Public bucket mode - read-only access without credentials
     // Use --anonymous-access flag (not -o option)
     // Use sudo for /dev/fuse access (same as s3fs)
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting GCS as public bucket (read-only)`);
 
-    mountCmd = `sudo gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${config.bucket} ${mountPath}`;
+    mountCmd = `sudo gcsfuse --anonymous-access -o allow_other ${uidGidFlags} ${onlyDirFlag} ${config.bucket} ${mountPath}`;
   }
+
+  // Clean up double spaces from optional flags
+  mountCmd = mountCmd.replace(/\s{2,}/g, ' ');
 
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);
 
@@ -92,5 +111,9 @@ export async function mountGCS(mountPath: string, config: E2BGCSMountConfig, ctx
     const stdout = errorObj.result?.stdout || '';
     logger.error(`${LOG_PREFIX} gcsfuse error:`, { stderr, stdout, error: String(error) });
     throw new Error(`Failed to mount GCS bucket: ${stderr || stdout || error}`);
+  }
+
+  if (config.prefix) {
+    logger.debug(`${LOG_PREFIX} GCS prefix mount successful: sandbox "${mountPath}" → GCS "${config.prefix}/"`);
   }
 }

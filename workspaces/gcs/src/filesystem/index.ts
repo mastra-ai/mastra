@@ -34,6 +34,13 @@ export interface GCSMountConfig extends FilesystemMountConfig {
   bucket: string;
   /** Service account key JSON (optional - omit for public buckets or ADC) */
   serviceAccountKey?: string;
+  /**
+   * GCS key prefix to scope the mount.
+   * When set, gcsfuse uses --only-dir to mount only this subdirectory,
+   * so sandbox paths map directly to prefixed GCS keys.
+   * Without trailing slash (e.g., 'workspace/user1/agents/abc').
+   */
+  prefix?: string;
 }
 
 /**
@@ -229,6 +236,11 @@ export class GCSFilesystem extends MastraFilesystem {
     // Include service account key if credentials are an object
     if (this.credentials && typeof this.credentials === 'object') {
       config.serviceAccountKey = JSON.stringify(this.credentials);
+    }
+
+    // Include prefix so sandbox mounts can use --only-dir for path alignment
+    if (this.prefix) {
+      config.prefix = this.prefix.replace(/\/$/, ''); // Strip trailing slash
     }
 
     return config;
