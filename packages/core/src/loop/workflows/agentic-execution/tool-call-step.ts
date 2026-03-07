@@ -48,6 +48,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // This avoids serialization issues - _internal is a mutable object that preserves execute functions
       // Fall back to the original tools from the closure if not set
       const stepTools = (_internal?.stepTools as Tools) || tools;
+      const stepActiveTools = _internal?.stepActiveTools;
 
       const tool =
         stepTools?.[inputData.toolName] ||
@@ -221,8 +222,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
       }
 
-      if (!tool) {
-        const availableToolNames = Object.keys(stepTools || {});
+      // Resolve the tool key for activeTools enforcement (may differ from toolName when matched by id)
+      const toolKey = stepTools?.[inputData.toolName]
+        ? inputData.toolName
+        : Object.entries(stepTools || {}).find(([_, t]: [string, any]) => t === tool)?.[0];
+
+      // Reject if tool doesn't exist or isn't in the active set for this step
+      const isHiddenByActiveTools = stepActiveTools && toolKey && !stepActiveTools.includes(toolKey);
+      if (!tool || isHiddenByActiveTools) {
+        const availableToolNames = stepActiveTools ?? Object.keys(stepTools || {});
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         return {

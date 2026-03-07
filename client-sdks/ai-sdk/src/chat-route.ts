@@ -91,11 +91,17 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
     }
   }
 
+  const mergedProviderOptions = {
+    ...defaultOptions?.providerOptions,
+    ...rest.providerOptions,
+  };
+
   const mergedOptions = {
     ...defaultOptions,
     ...rest,
     ...(runId && { runId }),
     requestContext: requestContext || defaultOptions?.requestContext,
+    ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };
 
   const result = resumeData
