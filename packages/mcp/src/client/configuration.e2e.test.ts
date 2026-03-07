@@ -19,7 +19,7 @@ describe('MCPClient', () => {
   beforeAll(async () => {
     weatherServerPort = 60000 + Math.floor(Math.random() * 1000); // Generate a random port
     // Start the weather SSE server
-    weatherProcess = spawn('npx', ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
+    weatherProcess = spawn('npx', ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/weather.ts')], {
       env: { ...process.env, WEATHER_SERVER_PORT: String(weatherServerPort) }, // Pass port as env var
     });
 
@@ -53,7 +53,7 @@ describe('MCPClient', () => {
       servers: {
         stockPrice: {
           command: 'npx',
-          args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+          args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
           env: {
             FAKE_CREDS: 'test',
           },
@@ -85,7 +85,7 @@ describe('MCPClient', () => {
       expect(mcp['serverConfigs']).toEqual({
         stockPrice: {
           command: 'npx',
-          args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+          args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
           env: {
             FAKE_CREDS: 'test',
           },
@@ -402,7 +402,7 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -421,7 +421,7 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -441,7 +441,7 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: {
               FAKE_CREDS: 'test',
             },
@@ -455,7 +455,7 @@ describe('MCPClient', () => {
             servers: {
               stockPrice: {
                 command: 'npx',
-                args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+                args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
                 env: {
                   FAKE_CREDS: 'test',
                 },
@@ -605,7 +605,7 @@ describe('MCPClient', () => {
         servers: {
           'firecrawl-mcp': {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/fire-crawl-complex-schema.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/fire-crawl-complex-schema.ts')],
             logger: mockLogHandler,
           },
         },
@@ -651,7 +651,7 @@ describe('MCPClient', () => {
         servers: {
           stockPrice: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -697,7 +697,7 @@ describe('MCPClient', () => {
         servers: {
           stockPriceServer: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -740,7 +740,7 @@ describe('MCPClient', () => {
         servers: {
           stockPriceServer: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')],
             env: { FAKE_CREDS: 'test' },
             logger: loggerFn,
           },
@@ -794,13 +794,13 @@ describe('MCPClient', () => {
         servers: {
           serverX: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture, tool name will differ by server
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture, tool name will differ by server
             logger: sharedLoggerFn,
             env: { FAKE_CREDS: 'serverX-creds' }, // Make env slightly different for clarity if needed
           },
           serverY: {
             command: 'npx',
-            args: ['-y', 'tsx@latest', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture
+            args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/stock-price.ts')], // Re-use fixture
             logger: sharedLoggerFn,
             env: { FAKE_CREDS: 'serverY-creds' },
           },
