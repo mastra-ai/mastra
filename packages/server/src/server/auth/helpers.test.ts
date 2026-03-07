@@ -608,5 +608,26 @@ describe('auth helpers', () => {
       expect(result.action).toBe('error');
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
+
+    it('should continue authentication when mapUserToResourceId throws', async () => {
+      const requestContext = createRequestContext();
+
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: createMockMastra(),
+        authConfig: {
+          protected: ['/api/*'],
+          authenticateToken: async () => ({ id: 'user-123' }),
+          mapUserToResourceId: () => {
+            throw new Error('mapping failed');
+          },
+        },
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get('user')).toEqual({ id: 'user-123' });
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
+    });
   });
 });

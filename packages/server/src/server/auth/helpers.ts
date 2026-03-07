@@ -279,9 +279,15 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     requestContext.set('user', user);
 
     if (typeof authConfig.mapUserToResourceId === 'function') {
-      const resourceId = authConfig.mapUserToResourceId(user);
-      if (resourceId) {
-        requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+      try {
+        const resourceId = authConfig.mapUserToResourceId(user);
+        if (resourceId) {
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
+        }
+      } catch (mapError) {
+        mastra.getLogger()?.error('mapUserToResourceId failed', {
+          error: mapError instanceof Error ? { message: mapError.message, stack: mapError.stack } : mapError,
+        });
       }
     }
 
