@@ -2,6 +2,4 @@
 '@mastra/server': patch
 ---
 
-fix(server): fix complex query parameter parsing for Zod v4 projects
-
-Projects using Zod v4 would get "Invalid query parameters" errors when using date-range filters, tag filters, or metadata filters in the Studio Observability UI and server API. Complex query parameters (objects, arrays, records) are now correctly detected and parsed regardless of whether the project uses Zod v3 or v4.
+Fixed "Invalid query parameters" errors that occurred in projects using Zod v4 when filtering by date ranges, tags, or metadata. Complex query parameters (objects, arrays, records) are now correctly detected and parsed for both Zod v3 and v4.
