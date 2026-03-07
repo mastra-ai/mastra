@@ -115,7 +115,36 @@
     "@mastra/daytona": "0.1.0",
     "@mastra/e2b": "0.1.1",
     "@mastra/gcs": "0.1.1",
-    "@mastra/s3": "0.2.1"
+    "@mastra/s3": "0.2.1",
+    "@mastra/voice-modelslab": "0.1.0"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_core-dynamic-fallback-minimal",
+    "@mastra_deployer-12532-dependencies",
+    "@mastra_deployer-cloudflare-12532-dependencies",
+    "add-validation-error-hook",
+    "automated-provider-registry-20260306-005013",
+    "big-rats-smoke",
+    "clever-clocks-listen",
+    "early-cups-film",
+    "empty-poets-kiss",
+    "enforce-active-tools-execution",
+    "fix-lastmessages-false",
+    "fix-studio-max-tokens",
+    "fresh-foxes-build",
+    "memory-dynamic-model-fallback-fix",
+    "moody-sloths-look",
+    "neat-weeks-kneel",
+    "old-hounds-drum",
+    "pg-vector-bit-sparsevec-support",
+    "ready-coins-occur",
+    "ready-pants-stop",
+    "sanitize-tool-call-json-input",
+    "shaky-mangos-walk",
+    "shy-cats-look",
+    "strict-squids-tease",
+    "vast-baboons-own",
+    "yellow-swans-nail",
+    "young-files-listen"
+  ]
 }
