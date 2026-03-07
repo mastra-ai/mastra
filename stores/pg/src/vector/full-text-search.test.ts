@@ -1,14 +1,14 @@
 /**
- * Integration tests for Issue #10453: Full-text and hybrid search support
+ * Integration tests for full-text and hybrid search support in PgVector.
  *
  * Tests full-text search (keyword-based) and hybrid (vector + keyword) search
- * modes in PgVector using PostgreSQL tsvector/tsquery.
+ * modes using PostgreSQL tsvector/tsquery.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { PgVector } from '.';
 
-describe('PgVector Full-Text Search (Issue #10453)', () => {
+describe('PgVector Full-Text Search', () => {
   const connectionString = process.env.DB_URL || 'postgresql://postgres:postgres@localhost:5434/mastra';
   let vectorDB: PgVector;
   const ftsIndex = 'test_fts_search';

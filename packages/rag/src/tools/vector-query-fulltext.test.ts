@@ -1,5 +1,5 @@
 /**
- * Unit tests for Issue #10453: Full-text and hybrid search support in RAG vector query tool
+ * Unit tests for full-text and hybrid search support in the RAG vector query tool.
  *
  * Tests that createVectorQueryTool correctly passes searchMode, hybridConfig,
  * and queryText through to vectorQuerySearch.
@@ -23,7 +23,7 @@ vi.mock('../utils', async importOriginal => {
   };
 });
 
-describe('createVectorQueryTool — Full-Text & Hybrid Search (Issue #10453)', () => {
+describe('createVectorQueryTool — Full-Text & Hybrid Search', () => {
   const mockModel = { name: 'test-model', specificationVersion: 'v2' } as any;
   const mockMastra = {
     getVector: vi.fn(() => ({ id: 'mockStore' })),

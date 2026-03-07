@@ -790,7 +790,6 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     }));
   }
 
-
   private buildMetadataFilterClause(filter?: PGVectorFilter): { sql: string; values: any[] } {
     if (!filter || Object.keys(filter).length === 0) {
       return { sql: '', values: [] };
@@ -960,7 +959,12 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     type,
     vectorType = 'vector',
     fullTextSearch,
-  }: Omit<CreateIndexParams, 'metric'> & { metric?: PgMetric; type: IndexType | undefined; vectorType?: VectorType; fullTextSearch?: boolean }) {
+  }: Omit<CreateIndexParams, 'metric'> & {
+    metric?: PgMetric;
+    type: IndexType | undefined;
+    vectorType?: VectorType;
+    fullTextSearch?: boolean;
+  }) {
     const input = indexName + dimension + metric + (type || 'ivfflat') + vectorType + (fullTextSearch ? 'fts' : '');
     return (await this.hasher).h32(input);
   }
