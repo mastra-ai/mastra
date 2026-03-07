@@ -38,8 +38,17 @@ function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
  */
-export function createMcpManager(projectDir: string): McpManager {
-  let config = loadMcpConfig(projectDir);
+export function createMcpManager(
+  projectDir: string,
+  extraServers?: Record<string, McpServerConfig>,
+): McpManager {
+  /** Merge programmatic servers into a base config (highest priority). */
+  const applyExtraServers = (base: McpConfig): McpConfig => {
+    if (!extraServers || Object.keys(extraServers).length === 0) return base;
+    return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
+  };
+
+  let config = applyExtraServers(loadMcpConfig(projectDir));
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
@@ -127,7 +136,7 @@ export function createMcpManager(projectDir: string): McpManager {
 
     async reload() {
       await disconnect();
-      config = loadMcpConfig(projectDir);
+      config = applyExtraServers(loadMcpConfig(projectDir));
       tools = {};
       serverStatuses = new Map();
       initialized = false;

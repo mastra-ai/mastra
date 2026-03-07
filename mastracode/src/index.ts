@@ -23,6 +23,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
+import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 import {
@@ -89,6 +90,8 @@ export interface MastraCodeConfig {
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: HarnessConfig['workspace'];
+  /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
+  mcpServers?: Record<string, McpServerConfig>;
   /** Disable MCP server discovery. Default: false */
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
@@ -129,7 +132,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const memory = getDynamicMemory(storage);
 
   // MCP
-  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath);
+  const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, config?.mcpServers);
 
   // Hooks
   const hookManager = config?.disableHooks ? undefined : new HookManager(project.rootPath, 'session-init');
