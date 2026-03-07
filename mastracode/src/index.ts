@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { Harness, taskWriteTool, taskCheckTool } from '@mastra/core/harness';
+import { Harness } from '@mastra/core/harness';
 import type {
   CustomAvailableModel,
   HeartbeatHandler,
@@ -142,43 +142,13 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
   });
 
-  // Build subagent definitions.
   // Subagents inherit workspace tools from the parent agent's workspace automatically.
   // allowedWorkspaceTools restricts which workspace tools the model can see.
-  // Non-workspace tools (task_write, task_check) are passed explicitly.
-  const filterDisabled = (tools: string[]) =>
-    config?.disabledTools?.length ? tools.filter(t => !config.disabledTools!.includes(t)) : tools;
-
-  const defaultSubagents: HarnessSubagent[] = [
-    {
-      id: exploreSubagent.id,
-      name: exploreSubagent.name,
-      description:
-        "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
-      instructions: exploreSubagent.instructions,
-      allowedWorkspaceTools: filterDisabled(exploreSubagent.allowedTools),
-    },
-    {
-      id: planSubagent.id,
-      name: planSubagent.name,
-      description:
-        "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
-      instructions: planSubagent.instructions,
-      allowedWorkspaceTools: filterDisabled(planSubagent.allowedTools),
-    },
-    {
-      id: executeSubagent.id,
-      name: executeSubagent.name,
-      description:
-        "Task execution with write capabilities. Use for 'implement feature X', 'fix bug Y', 'refactor module Z'.",
-      instructions: executeSubagent.instructions,
-      tools: {
-        task_write: taskWriteTool,
-        task_check: taskCheckTool,
-      },
-      allowedWorkspaceTools: filterDisabled(executeSubagent.allowedTools),
-    },
-  ];
+  const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent].map(s =>
+    config?.disabledTools?.length && s.allowedWorkspaceTools
+      ? { ...s, allowedWorkspaceTools: s.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)) }
+      : s,
+  );
 
   const defaultModes: HarnessMode[] = [
     {

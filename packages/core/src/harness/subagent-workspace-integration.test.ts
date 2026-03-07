@@ -10,11 +10,6 @@ import { Workspace } from '../workspace/workspace';
 import { createSubagentTool } from './tools';
 import type { HarnessSubagent } from './types';
 
-const READ_FILE = WORKSPACE_TOOLS.FILESYSTEM.READ_FILE;
-const LIST_FILES = WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
-const WRITE_FILE = WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE;
-const EXECUTE_COMMAND = WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND;
-
 describe('subagent workspace tool integration', () => {
   let tempDir: string;
 
@@ -61,7 +56,7 @@ describe('subagent workspace tool integration', () => {
               {
                 type: 'tool-call',
                 toolCallId: 'ws-tool-1',
-                toolName: READ_FILE,
+                toolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
                 input: JSON.stringify({ path: '/hello.txt' }),
                 providerExecuted: false,
               },
@@ -99,7 +94,7 @@ describe('subagent workspace tool integration', () => {
         name: 'Explorer',
         description: 'Reads files.',
         instructions: 'Read files.',
-        allowedWorkspaceTools: [READ_FILE, LIST_FILES],
+        allowedWorkspaceTools: [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES],
       },
     ];
 
@@ -116,7 +111,7 @@ describe('subagent workspace tool integration', () => {
 
     expect(result.isError).toBe(false);
     // The subagent-meta should show the read_file tool was called successfully
-    expect(result.content).toContain(`${READ_FILE}:ok`);
+    expect(result.content).toContain(`${WORKSPACE_TOOLS.FILESYSTEM.READ_FILE}:ok`);
   });
 
   it('prepareStep only sends allowed workspace tools to the model', async () => {
@@ -162,7 +157,7 @@ describe('subagent workspace tool integration', () => {
         description: 'Only read tools.',
         instructions: 'Only read.',
         // Only allow read_file and list_files — NOT write_file or execute_command
-        allowedWorkspaceTools: [READ_FILE, LIST_FILES],
+        allowedWorkspaceTools: [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE, WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES],
       },
     ];
 
@@ -178,10 +173,10 @@ describe('subagent workspace tool integration', () => {
     );
 
     // The model should have received ONLY the allowed workspace tools
-    expect(receivedToolNames).toContain(READ_FILE);
-    expect(receivedToolNames).toContain(LIST_FILES);
+    expect(receivedToolNames).toContain(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    expect(receivedToolNames).toContain(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
     // Write and execute tools should NOT be sent to the model
-    expect(receivedToolNames).not.toContain(WRITE_FILE);
-    expect(receivedToolNames).not.toContain(EXECUTE_COMMAND);
+    expect(receivedToolNames).not.toContain(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    expect(receivedToolNames).not.toContain(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   });
 });
