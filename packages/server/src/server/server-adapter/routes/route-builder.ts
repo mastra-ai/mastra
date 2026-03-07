@@ -78,51 +78,26 @@ export function jsonQueryParam<T extends ZodTypeAny>(schema: T): z.ZodType<z.inf
   ]) as z.ZodType<z.infer<T>>;
 }
 
-/**
- * Gets the type name from a Zod schema's internal definition.
- * Works across zod v3 and v4 by checking _def.typeName (v3) and _def.type (v4).
- */
 function getZodTypeName(schema: ZodTypeAny): string | undefined {
-  const schemaAny = schema as any;
-  const def = schemaAny?._def ?? schemaAny?.def;
+  const def = (schema as any)?._def;
+  // Zod v3 uses _def.typeName ("ZodObject"), Zod v4 uses _def.type ("object")
   return def?.typeName ?? def?.type;
 }
 
-/**
- * Checks if a Zod schema represents a complex type that needs JSON parsing from query strings.
- * Complex types: arrays, objects, records (these can't be represented as simple strings)
- * Simple types: strings, numbers, booleans, enums (can use z.coerce for conversion)
- *
- * Uses _def.typeName string comparison instead of instanceof to support both zod v3 and v4,
- * since instanceof checks fail across different zod versions in bundled code.
- */
+const OPTIONAL_TYPES = new Set(['ZodOptional', 'optional', 'ZodNullable', 'nullable']);
+const COMPLEX_TYPES = new Set(['ZodArray', 'array', 'ZodRecord', 'record', 'ZodObject', 'object']);
+
 function isComplexType(schema: ZodTypeAny): boolean {
-  // Unwrap all optional/nullable layers to check the inner type
-  // Note: .partial() can create nested optionals (e.g., ZodOptional<ZodOptional<ZodObject>>)
   let inner: ZodTypeAny = schema;
   let typeName = getZodTypeName(inner);
 
-  while (
-    typeName === 'ZodOptional' ||
-    typeName === 'ZodNullable' ||
-    typeName === 'optional' ||
-    typeName === 'nullable'
-  ) {
-    // Access innerType from internals to avoid version-specific method differences
+  while (typeName && OPTIONAL_TYPES.has(typeName)) {
     const innerDef = (inner as any)._def ?? (inner as any).def;
     inner = innerDef.innerType;
     typeName = getZodTypeName(inner);
   }
 
-  // Complex types that need JSON parsing
-  return (
-    typeName === 'ZodArray' ||
-    typeName === 'ZodRecord' ||
-    typeName === 'ZodObject' ||
-    typeName === 'array' ||
-    typeName === 'record' ||
-    typeName === 'object'
-  );
+  return typeName != null && COMPLEX_TYPES.has(typeName);
 }
 
 /**
