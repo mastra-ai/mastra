@@ -19,5 +19,3 @@ const mastra = new Mastra({
 ```
 
 The callback is called in `coreAuthMiddleware` after the user is authenticated and set on the request context. The returned value is set as `MASTRA_RESOURCE_ID_KEY`, which takes precedence over client-provided values for security. Works across all server adapters (Hono, Express, Next.js, etc.).
-
-Also fixes a security issue where clients could inject reserved context keys (`mastra__resourceId`, `mastra__threadId`) via the request body to impersonate other users' memory/thread access. These keys are now stripped from client-provided `requestContext` during context creation.
