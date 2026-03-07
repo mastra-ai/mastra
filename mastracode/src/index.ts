@@ -232,10 +232,15 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const subagents = (config?.subagents ?? defaultSubagents).map(sa => {
     const modeId = subagentModeMap[sa.id];
     const model = modeId ? effectiveDefaults[modeId] : undefined;
-    const filtered =
-      config?.disabledTools?.length && sa.allowedWorkspaceTools
-        ? { ...sa, allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)) }
-        : sa;
+    let filtered = sa;
+    if (config?.disabledTools?.length) {
+      if (sa.allowedWorkspaceTools) {
+        filtered = { ...filtered, allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)) };
+      }
+      if (sa.tools) {
+        filtered = { ...filtered, tools: Object.fromEntries(Object.entries(sa.tools).filter(([k]) => !config.disabledTools!.includes(k))) };
+      }
+    }
     return model ? { ...filtered, defaultModelId: model } : filtered;
   });
 
