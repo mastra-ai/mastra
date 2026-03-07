@@ -1,0 +1,206 @@
+---
+title: "Reference: AgentFSFilesystem | Workspace"
+description: "Documentation for the AgentFSFilesystem provider for Turso/SQLite-backed storage."
+packages:
+  - "@mastra/agentfs"
+---
+
+# AgentFSFilesystem
+
+Stores files in a Turso/SQLite database via the [AgentFS](https://github.com/nichochar/agentfs) SDK. Files are persisted across sessions in a local SQLite database, giving agents durable storage without external cloud services.
+
+:::info
+
+For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+:::
+
+## Installation
+
+```bash
+npm install @mastra/agentfs
+```
+
+## Usage
+
+Add an `AgentFSFilesystem` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { AgentFSFilesystem } from '@mastra/agentfs'
+
+const workspace = new Workspace({
+  filesystem: new AgentFSFilesystem({
+    agentId: 'my-agent', // stores at .agentfs/my-agent.db
+  }),
+})
+
+const agent = new Agent({
+  name: 'file-agent',
+  model: 'openai/gpt-4o',
+  workspace,
+})
+```
+
+### Using an explicit database path
+
+```typescript
+import { AgentFSFilesystem } from '@mastra/agentfs'
+
+const filesystem = new AgentFSFilesystem({
+  path: '/data/my-agent.db',
+})
+```
+
+### Using a pre-opened AgentFS instance
+
+If you need to manage the AgentFS lifecycle yourself:
+
+```typescript
+import { AgentFS } from 'agentfs-sdk'
+import { AgentFSFilesystem } from '@mastra/agentfs'
+
+const agent = await AgentFS.open({ id: 'my-agent' })
+
+const filesystem = new AgentFSFilesystem({
+  agent, // caller manages open/close
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+{
+name: "agentId",
+type: "string",
+description: "Agent ID — creates database at `.agentfs/<agentId>.db`",
+isOptional: true,
+},
+{
+name: "path",
+type: "string",
+description: "Explicit database file path (alternative to agentId)",
+isOptional: true,
+},
+{
+name: "agent",
+type: "AgentFS",
+description: "Pre-opened AgentFS instance. When provided, the caller manages the lifecycle (open/close).",
+isOptional: true,
+},
+{
+name: "id",
+type: "string",
+description: "Unique identifier for this filesystem instance",
+isOptional: true,
+defaultValue: "Auto-generated",
+},
+{
+name: "displayName",
+type: "string",
+description: "Human-friendly display name for the UI",
+isOptional: true,
+defaultValue: "'AgentFS'",
+},
+{
+name: "icon",
+type: "FilesystemIcon",
+description: "Icon identifier for the UI",
+isOptional: true,
+defaultValue: "'database'",
+},
+{
+name: "description",
+type: "string",
+description: "Short description of this filesystem for the UI",
+isOptional: true,
+},
+{
+name: "readOnly",
+type: "boolean",
+description: "When true, all write operations are blocked",
+isOptional: true,
+defaultValue: "false",
+},
+]}
+/>
+
+You must provide at least one of `agentId`, `path`, or `agent`.
+
+## Properties
+
+<PropertiesTable
+  content={[
+{
+name: "id",
+type: "string",
+description: "Filesystem instance identifier",
+},
+{
+name: "name",
+type: "string",
+description: "Provider name ('AgentFSFilesystem')",
+},
+{
+name: "provider",
+type: "string",
+description: "Provider identifier ('agentfs')",
+},
+{
+name: "readOnly",
+type: "boolean | undefined",
+description: "Whether the filesystem is in read-only mode",
+},
+]}
+/>
+
+## Methods
+
+AgentFSFilesystem implements the [WorkspaceFilesystem interface](/reference/workspace/filesystem), providing all standard filesystem methods:
+
+- `readFile(path, options?)` - Read file contents
+- `writeFile(path, content, options?)` - Write content to a file
+- `appendFile(path, content)` - Append content to a file
+- `deleteFile(path, options?)` - Delete a file
+- `copyFile(src, dest, options?)` - Copy a file
+- `moveFile(src, dest, options?)` - Move or rename a file
+- `mkdir(path, options?)` - Create a directory
+- `rmdir(path, options?)` - Remove a directory
+- `readdir(path, options?)` - List directory contents
+- `exists(path)` - Check if a path exists
+- `stat(path)` - Get file or directory metadata
+
+### `init()`
+
+Initialize the filesystem. Opens the underlying SQLite database.
+
+```typescript
+await filesystem.init()
+```
+
+### `destroy()`
+
+Clean up resources. Closes the database connection if the filesystem owns it (i.e. was not created with a pre-opened `agent`).
+
+```typescript
+await filesystem.destroy()
+```
+
+### `getInfo()`
+
+Returns metadata about this filesystem instance.
+
+```typescript
+const info = filesystem.getInfo()
+// { id: '...', name: 'AgentFSFilesystem', provider: 'agentfs', status: 'ready' }
+```
+
+## Related
+
+- [WorkspaceFilesystem interface](/reference/workspace/filesystem)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
+- [LocalFilesystem reference](/reference/workspace/local-filesystem)
+- [Workspace overview](/docs/workspace/overview)
