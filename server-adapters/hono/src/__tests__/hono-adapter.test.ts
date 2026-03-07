@@ -555,4 +555,86 @@ describe('Hono Server Adapter', () => {
       expect(data).toEqual({ echo: { test: 'data' } });
     });
   });
+
+  describe('Reserved context key injection prevention', () => {
+    it('should strip mastra__resourceId from client-provided requestContext in body', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__resourceId: 'injected-victim-id',
+              myKey: 'safe-value',
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
+
+    it('should strip mastra__threadId from client-provided requestContext in body', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requestContext: {
+              mastra__threadId: 'injected-thread-id',
+              myKey: 'safe-value',
+            },
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
+  });
 });
