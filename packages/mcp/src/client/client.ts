@@ -288,6 +288,8 @@ export class InternalMastraMCPClient extends MastraBase {
         command,
         args: this.serverConfig.args,
         env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
+        stderr: this.serverConfig.stderr,
+        cwd: this.serverConfig.cwd,
       });
       await this.client.connect(this.transport, { timeout: this.serverConfig.timeout ?? this.timeout });
       this.log('debug', `Successfully connected to MCP server via Stdio`);

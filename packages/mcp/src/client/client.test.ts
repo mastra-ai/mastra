@@ -1,8 +1,11 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -1974,4 +1977,57 @@ describe('MastraMCPClient fetch with requestContext', () => {
     const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
     expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
   }, 15000);
+});
+
+describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
+  it('should pipe stderr instead of inheriting it when stderr is set to "pipe"', async () => {
+    const STDERR_MARKER = 'noisy-server: startup log';
+
+    // Spy on parent process stderr to verify the marker does NOT appear
+    const stderrSpy = vi.spyOn(process.stderr, 'write');
+
+    const client = new InternalMastraMCPClient({
+      name: 'noisy',
+      server: {
+        command: 'npx',
+        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/noisy-server.ts')],
+        stderr: 'pipe',
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(tools).toBeDefined();
+
+    // Verify the child's stderr marker was NOT inherited to the parent's stderr
+    const stderrOutput = stderrSpy.mock.calls.map(call => String(call[0])).join('');
+    expect(stderrOutput).not.toContain(STDERR_MARKER);
+
+    stderrSpy.mockRestore();
+    await client.disconnect();
+  }, 30000);
+
+  it('should forward cwd option to the child process', async () => {
+    const targetDir = fs.realpathSync(os.tmpdir());
+
+    const client = new InternalMastraMCPClient({
+      name: 'cwd-test',
+      server: {
+        command: 'npx',
+        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/cwd-reporter.ts')],
+        cwd: targetDir,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    const getCwdTool = tools['getCwd'];
+    expect(getCwdTool).toBeDefined();
+
+    // Execute the tool and verify the child process cwd matches
+    const result = (await getCwdTool!.execute({}, {})) as { content: Array<{ type: string; text: string }> };
+    expect(result.content[0]!.text).toBe(targetDir);
+
+    await client.disconnect();
+  }, 30000);
 });
