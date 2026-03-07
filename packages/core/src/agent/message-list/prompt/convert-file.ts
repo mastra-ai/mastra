@@ -1,6 +1,11 @@
 import type { DataContent, ImagePart, FilePart } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2FilePart, LanguageModelV2TextPart } from '@ai-sdk/provider-v5';
-import { convertToDataContent, detectMediaType, imageMediaTypeSignatures } from '../../../stream/aisdk/v5/compat';
+import {
+  convertToDataContent,
+  detectMediaType,
+  imageMediaTypeSignatures,
+  videoMediaTypeSignatures,
+} from '../../../stream/aisdk/v5/compat';
 
 export function convertImageFilePart(
   part: ImagePart | FilePart,
@@ -55,7 +60,12 @@ export function convertImageFilePart(
     }
 
     case 'file': {
-      // We must have a mediaType for files, if not, throw an error.
+      if (mediaType == null && (data instanceof Uint8Array || typeof data === 'string')) {
+        mediaType =
+          detectMediaType({ data, signatures: imageMediaTypeSignatures }) ??
+          detectMediaType({ data, signatures: videoMediaTypeSignatures });
+      }
+
       if (mediaType == null) {
         throw new Error(`Media type is missing for file part`);
       }
