@@ -43,6 +43,8 @@ export type StorageThreadType = {
   createdAt: Date;
   updatedAt: Date;
   metadata?: Record<string, unknown>;
+  /** Values for user-defined custom columns declared via schemaExtensions */
+  customColumns?: Record<string, unknown>;
 };
 
 /**

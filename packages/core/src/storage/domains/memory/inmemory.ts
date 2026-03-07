@@ -48,7 +48,13 @@ export class InMemoryMemory extends MemoryStorage {
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
     this.logger.debug(`InMemoryMemory: getThreadById called for ${threadId}`);
     const thread = this.db.threads.get(threadId);
-    return thread ? { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata } : null;
+    return thread
+      ? {
+          ...thread,
+          metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
+          customColumns: thread.customColumns ? { ...thread.customColumns } : thread.customColumns,
+        }
+      : null;
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
@@ -62,10 +68,12 @@ export class InMemoryMemory extends MemoryStorage {
     id,
     title,
     metadata,
+    customColumns,
   }: {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
+    customColumns?: Record<string, unknown>;
   }): Promise<StorageThreadType> {
     this.logger.debug(`InMemoryMemory: updateThread called for ${id}`);
     const thread = this.db.threads.get(id);
@@ -77,6 +85,9 @@ export class InMemoryMemory extends MemoryStorage {
     if (thread) {
       thread.title = title;
       thread.metadata = { ...thread.metadata, ...metadata };
+      if (customColumns) {
+        thread.customColumns = { ...thread.customColumns, ...customColumns };
+      }
       thread.updatedAt = new Date();
     }
     return thread;
@@ -574,10 +585,21 @@ export class InMemoryMemory extends MemoryStorage {
       });
     }
 
+    // Apply customColumns filter if provided (AND logic - all key-value pairs must match)
+    if (filter?.customColumns && Object.keys(filter.customColumns).length > 0) {
+      threads = threads.filter(thread => {
+        if (!thread.customColumns) return false;
+        return Object.entries(filter.customColumns!).every(([key, value]) =>
+          jsonValueEquals(thread.customColumns![key], value),
+        );
+      });
+    }
+
     const sortedThreads = this.sortThreads(threads, field, direction);
     const clonedThreads = sortedThreads.map(thread => ({
       ...thread,
       metadata: thread.metadata ? { ...thread.metadata } : thread.metadata,
+      customColumns: thread.customColumns ? { ...thread.customColumns } : thread.customColumns,
     })) as StorageThreadType[];
 
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -712,6 +734,7 @@ export class InMemoryMemory extends MemoryStorage {
       },
       createdAt: now,
       updatedAt: now,
+      customColumns: sourceThread.customColumns ? { ...sourceThread.customColumns } : undefined,
     };
 
     // Save the new thread

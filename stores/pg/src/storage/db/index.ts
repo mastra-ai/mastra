@@ -15,6 +15,7 @@ import type {
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
+  SchemaExtensions,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
@@ -45,6 +46,8 @@ export interface PgDomainClientConfig {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  /** Custom columns to add to Mastra's built-in database tables */
+  schemaExtensions?: SchemaExtensions;
 }
 
 /**
@@ -59,6 +62,8 @@ export interface PgDomainPoolConfig {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  /** Custom columns to add to Mastra's built-in database tables */
+  schemaExtensions?: SchemaExtensions;
 }
 
 /**
@@ -71,6 +76,8 @@ export type PgDomainRestConfig = {
   skipDefaultIndexes?: boolean;
   /** Custom indexes to create for this domain's tables */
   indexes?: CreateIndexOptions[];
+  /** Custom columns to add to Mastra's built-in database tables */
+  schemaExtensions?: SchemaExtensions;
 } & (
   | {
       host: string;
@@ -95,6 +102,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
   schemaName?: string;
   skipDefaultIndexes?: boolean;
   indexes?: CreateIndexOptions[];
+  schemaExtensions?: SchemaExtensions;
 } {
   // Existing client
   if ('client' in config) {
@@ -103,6 +111,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       schemaName: config.schemaName,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
+      schemaExtensions: config.schemaExtensions,
     };
   }
 
@@ -113,6 +122,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
       schemaName: config.schemaName,
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
+      schemaExtensions: config.schemaExtensions,
     };
   }
 
@@ -139,6 +149,7 @@ export function resolvePgConfig(config: PgDomainConfig): {
     schemaName: config.schemaName,
     skipDefaultIndexes: config.skipDefaultIndexes,
     indexes: config.indexes,
+    schemaExtensions: config.schemaExtensions,
   };
 }
 
