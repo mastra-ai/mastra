@@ -57,7 +57,7 @@ const libsqlStore = new LibSQLStore({
 const storage = new MastraCompositeStore({
   id: 'composite-storage',
   default: libsqlStore,
-  editor: new FilesystemStore({ dir: '.mastra-storage' }),
+  // editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
 const config = {
@@ -108,10 +108,10 @@ const config = {
     sourcemap: true,
   },
   editor: new MastraEditor(),
-  server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-  },
+  // server: {
+  //   auth: mastraAuth,
+  //   rbac: rbacProvider,
+  // },
 };
 
 export const mastra = new Mastra({
@@ -119,6 +119,19 @@ export const mastra = new Mastra({
   editor: new MastraEditor({
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
     },
   }),
 });

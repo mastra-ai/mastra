@@ -219,7 +219,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     };
   }, []);
 
-  const handleSaveDraft = useCallback(async () => {
+  const handleSaveDraft = useCallback(async (changeMessage?: string) => {
     if (!isEdit) return;
 
     const isValid = await form.trigger();
@@ -248,6 +248,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         await updateStoredAgent.mutateAsync({
           ...sharedParams,
           memory: editMemory,
+          ...(changeMessage ? { changeMessage } : {}),
         });
       }
 
