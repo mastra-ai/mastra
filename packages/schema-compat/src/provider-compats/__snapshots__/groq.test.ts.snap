@@ -35,6 +35,8 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
               "id",
               "name",
               "createdAt",
+              "updatedAt",
+              "metadata",
             ],
             "type": "object",
           },
@@ -88,6 +90,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
       "required": [
         "code",
         "message",
+        "details",
       ],
       "type": "object",
     },
@@ -97,6 +100,8 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
   },
   "required": [
     "status",
+    "data",
+    "error",
   ],
   "type": "object",
 }
@@ -231,6 +236,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
       },
       "required": [
         "public",
+        "featured",
       ],
       "type": "object",
     },
@@ -268,6 +274,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
         "id",
         "name",
         "email",
+        "age",
       ],
       "type": "object",
     },
@@ -277,6 +284,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
     "preferences",
     "tags",
     "metadata",
+    "settings",
   ],
   "type": "object",
 }
@@ -318,6 +326,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > sho
         },
         "required": [
           "name",
+          "email",
         ],
         "type": "object",
       },
@@ -368,6 +377,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > sho
   },
   "required": [
     "name",
+    "tags",
   ],
   "type": "object",
 }
@@ -431,6 +441,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Basic Transf
   },
   "required": [
     "name",
+    "age",
   ],
   "type": "object",
 }
@@ -495,6 +506,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Sche
         },
       },
       "required": [
+        "theme",
         "notifications",
       ],
       "type": "object",
@@ -510,7 +522,11 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Sche
     "id",
     "email",
     "name",
+    "avatar",
+    "bio",
     "deletedAt",
+    "settings",
+    "tags",
   ],
   "type": "object",
 }
@@ -530,6 +546,11 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Sche
       "type": "string",
     },
   },
+  "required": [
+    "City",
+    "Name",
+    "Slug",
+  ],
   "type": "object",
 }
 `;
@@ -635,6 +656,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
   },
   "required": [
     "name",
+    "tags",
   ],
   "type": "object",
 }
@@ -658,6 +680,8 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
   },
   "required": [
     "name",
+    "enabled",
+    "active",
   ],
   "type": "object",
 }
@@ -677,6 +701,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
   },
   "required": [
     "name",
+    "confidence",
   ],
   "type": "object",
 }
@@ -696,6 +721,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
   },
   "required": [
     "name",
+    "explanation",
   ],
   "type": "object",
 }
@@ -804,6 +830,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Enums > shou
   },
   "required": [
     "name",
+    "status",
   ],
   "type": "object",
 }
@@ -830,12 +857,14 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Nested Objec
                 },
               },
               "required": [
+                "theme",
                 "notifications",
               ],
               "type": "object",
             },
           },
           "required": [
+            "bio",
             "settings",
           ],
           "type": "object",
@@ -896,6 +925,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Nested Objec
       },
       "required": [
         "street",
+        "city",
       ],
       "type": "object",
     },
@@ -905,6 +935,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Nested Objec
   },
   "required": [
     "name",
+    "address",
   ],
   "type": "object",
 }
@@ -941,6 +972,9 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Number Const
       "type": "number",
     },
   },
+  "required": [
+    "count",
+  ],
   "type": "object",
 }
 `;
@@ -1000,6 +1034,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - String Const
   },
   "required": [
     "name",
+    "bio",
   ],
   "type": "object",
 }
@@ -1071,6 +1106,7 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Unions > sho
   },
   "required": [
     "name",
+    "value",
   ],
   "type": "object",
 }

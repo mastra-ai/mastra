@@ -2,6 +2,8 @@ import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
@@ -17,6 +19,7 @@ import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk
 import xxhash from 'xxhash-wasm';
 
 const OM_DEBUG_LOG = process.env.OM_DEBUG ? join(process.cwd(), 'om-debug.log') : null;
+
 function omDebug(msg: string) {
   if (!OM_DEBUG_LOG) return;
   try {
@@ -70,6 +73,7 @@ import {
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -700,6 +704,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   constructor(config: ObservationalMemoryConfig) {
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
+      );
+    }
+
     // Validate that top-level model is not used together with sub-config models
     if (config.model && config.observation?.model) {
       throw new Error(
@@ -932,9 +942,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     };
   }> {
     // Helper to get the model config to resolve (handles ModelWithRetries[] by taking first)
-    const getModelToResolve = (model: AgentConfig['model']) => {
+    const getModelToResolve = (model: AgentConfig['model']): Parameters<typeof resolveModelConfig>[0] => {
       if (Array.isArray(model)) {
-        return model[0]?.model ?? 'unknown';
+        return (model[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
+      }
+      if (typeof model === 'function') {
+        // Wrap to handle functions that may return ModelWithRetries[]
+        return async ctx => {
+          const result = await model(ctx);
+          if (Array.isArray(result)) {
+            return (result[0]?.model ?? 'unknown') as MastraModelConfig;
+          }
+          return result as MastraModelConfig;
+        };
       }
       return model;
     };
@@ -2448,6 +2468,7 @@ ${suggestedResponse}
       // floors are enforced during buffered activation.
       const observedSet = new Set(observedMessageIds);
       const idsToRemove = new Set<string>();
+      const retentionCounter = new TokenCounter();
       let skipped = 0;
       let backoffTriggered = false;
 
@@ -2460,7 +2481,7 @@ ${suggestedResponse}
           const nextRemainingMessages = allMsgs.filter(
             m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
           );
-          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
+          const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
           if (remainingIfRemoved < minRemaining) {
             skipped += 1;
             backoffTriggered = true;
@@ -2739,6 +2760,19 @@ ${suggestedResponse}
 
     // Fetch fresh record
     let record = await this.getOrCreateRecord(threadId, resourceId);
+    const reproCaptureEnabled = isOmReproCaptureEnabled();
+    const preRecordSnapshot = reproCaptureEnabled ? (safeCaptureJson(record) as ObservationalMemoryRecord) : null;
+    const preMessagesSnapshot = reproCaptureEnabled
+      ? (safeCaptureJson(messageList.get.all.db()) as MastraDBMessage[])
+      : null;
+    const preSerializedMessageList = reproCaptureEnabled
+      ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
+      : null;
+    const reproCaptureDetails: Record<string, unknown> = {
+      step0Activation: null,
+      thresholdCleanup: null,
+      thresholdReached: false,
+    };
     omDebug(
       `[OM:step] processInputStep step=${stepNumber}: recordId=${record.id}, genCount=${record.generationCount}, obsTokens=${record.observationTokenCount}, bufferedReflection=${record.bufferedReflection ? 'present (' + record.bufferedReflection.length + ' chars)' : 'empty'}, activeObsLen=${record.activeObservations?.length}`,
     );
@@ -2822,6 +2856,14 @@ ${suggestedResponse}
             writer,
             messageList,
           );
+
+          reproCaptureDetails.step0Activation = {
+            attempted: true,
+            success: activationResult.success,
+            messageTokensActivated: activationResult.messageTokensActivated ?? 0,
+            activatedMessageIds: activationResult.activatedMessageIds ?? [],
+            hadUpdatedRecord: !!activationResult.updatedRecord,
+          };
 
           if (activationResult.success && activationResult.updatedRecord) {
             record = activationResult.updatedRecord;
@@ -2925,12 +2967,12 @@ ${suggestedResponse}
     // STEP 2: CHECK THRESHOLD AND OBSERVE IF NEEDED
     // ════════════════════════════════════════════════════════════════════════
     if (!readOnly) {
-      const allMessages = messageList.get.all.db();
-      const unobservedMessages = this.getUnobservedMessages(allMessages, record);
+      let allMessages = messageList.get.all.db();
+      let unobservedMessages = this.getUnobservedMessages(allMessages, record);
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
-      const currentObservationTokens = record.observationTokenCount ?? 0;
+      let currentObservationTokens = record.observationTokenCount ?? 0;
 
-      const thresholds = this.calculateObservationThresholds(
+      let thresholds = this.calculateObservationThresholds(
         allMessages,
         unobservedMessages,
         0, // pendingTokens not needed — allMessages covers context
@@ -2938,15 +2980,15 @@ ${suggestedResponse}
         currentObservationTokens,
         record,
       );
-      const { totalPendingTokens, threshold } = thresholds;
+      let { totalPendingTokens, threshold } = thresholds;
 
       // Subtract already-buffered message tokens from the pending count for buffering decisions.
       // Buffered messages are "unobserved" (not yet in activeObservations) but have already been
       // sent to the observer — counting them would cause redundant buffering ops, especially
       // after activation resets lastBufferedBoundary to 0.
       // IMPORTANT: Use messageTokens (message tokens being removed), NOT tokenCount (observation tokens).
-      const bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-      const unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
+      let bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      let unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
 
       // Merge per-state sealedIds with static sealedMessageIds (survives across OM instances)
       const stateSealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
@@ -3010,6 +3052,7 @@ ${suggestedResponse}
       // THRESHOLD REACHED: Observe and clean up
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber > 0 && totalPendingTokens >= threshold) {
+        reproCaptureDetails.thresholdReached = true;
         const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
           messageList,
           record,
@@ -3038,6 +3081,13 @@ ${suggestedResponse}
             typeof this.observationConfig.bufferActivation === 'number'
               ? resolveRetentionFloor(this.observationConfig.bufferActivation, threshold)
               : undefined;
+          reproCaptureDetails.thresholdCleanup = {
+            observationSucceeded,
+            observedIdsCount: observedIds?.length ?? 0,
+            observedIds,
+            minRemaining,
+            updatedRecordObservedIds: updatedRecord.observedMessageIds,
+          };
           omDebug(
             `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}, minRemaining=${minRemaining ?? 'n/a'}`,
           );
@@ -3135,7 +3185,45 @@ ${suggestedResponse}
       );
 
       // Persist the computed token count so the UI can display it on page load
-      this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
+      await this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens);
+
+      let postCaptureRecord = freshRecord;
+      if (reproCaptureEnabled) {
+        const captureStorageIds = this.getStorageIds(threadId, resourceId);
+        const captureRecordHistory = await this.storage.getObservationalMemoryHistory(
+          captureStorageIds.threadId,
+          captureStorageIds.resourceId,
+        );
+        postCaptureRecord = captureRecordHistory.find(record => record.id === freshRecord.id) ?? freshRecord;
+      }
+
+      if (reproCaptureEnabled && preRecordSnapshot && preMessagesSnapshot && preSerializedMessageList) {
+        writeProcessInputStepReproCapture({
+          threadId,
+          resourceId,
+          stepNumber,
+          args,
+          preRecord: preRecordSnapshot,
+          postRecord: postCaptureRecord,
+          preMessages: preMessagesSnapshot,
+          preBufferedChunks: this.getBufferedChunks(preRecordSnapshot),
+          preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
+          preSerializedMessageList,
+          postBufferedChunks: this.getBufferedChunks(postCaptureRecord),
+          postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
+          messageList,
+          details: {
+            ...reproCaptureDetails,
+            totalPendingTokens,
+            threshold,
+            effectiveObservationTokensThreshold,
+            currentObservationTokens,
+            otherThreadTokens,
+            contextMessageCount: contextMessages.length,
+          },
+          debug: omDebug,
+        });
+      }
     }
 
     return messageList;
