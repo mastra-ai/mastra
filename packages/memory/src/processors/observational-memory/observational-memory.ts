@@ -3561,6 +3561,32 @@ ${formattedMessages}
   }
 
   /**
+   * Compute a cursor pointing at the latest message by createdAt.
+   * Used to derive a stable observation boundary for replay pruning.
+   */
+  private getLastObservedMessageCursor(messages: MastraDBMessage[]): { createdAt: string; id: string } | undefined {
+    let latest: MastraDBMessage | undefined;
+    for (const msg of messages) {
+      if (!msg?.id || !msg.createdAt) continue;
+      if (!latest || new Date(msg.createdAt).getTime() > new Date(latest.createdAt!).getTime()) {
+        latest = msg;
+      }
+    }
+    return latest ? { createdAt: new Date(latest.createdAt!).toISOString(), id: latest.id } : undefined;
+  }
+
+  /**
+   * Check if a message is at or before a cursor (by createdAt then id).
+   */
+  private isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { createdAt: string; id: string }): boolean {
+    if (!msg.createdAt) return false;
+    const msgIso = new Date(msg.createdAt).toISOString();
+    if (msgIso < cursor.createdAt) return true;
+    if (msgIso === cursor.createdAt && msg.id === cursor.id) return true;
+    return false;
+  }
+
+  /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
