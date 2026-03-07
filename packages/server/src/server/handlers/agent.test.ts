@@ -14,6 +14,7 @@ import {
   LIST_AGENTS_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
   GENERATE_AGENT_ROUTE,
+  getSerializedAgentTools,
   UPDATE_AGENT_MODEL_ROUTE,
   REORDER_AGENT_MODEL_LIST_ROUTE,
   UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE,
@@ -339,6 +340,46 @@ describe('Agent Handlers', () => {
       expect(agent.tools.testTool.outputSchema).toBeDefined();
       expect(typeof agent.tools.testTool.inputSchema).toBe('string');
       expect(typeof agent.tools.testTool.outputSchema).toBe('string');
+    });
+
+    it('should serialize plain JSON Schema tool schemas', async () => {
+      const inputSchema = {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+        },
+        required: ['query'],
+      };
+
+      const outputSchema = {
+        type: 'object',
+        properties: {
+          result: { type: 'string' },
+        },
+      };
+
+      const requestContextSchema = {
+        type: 'object',
+        properties: {
+          userId: { type: 'string' },
+        },
+      };
+
+      const tools = await getSerializedAgentTools({
+        composioTool: {
+          id: 'composio-tool',
+          inputSchema,
+          outputSchema,
+          requestContextSchema,
+        },
+      });
+
+      expect(tools.composioTool.inputSchema).toBeDefined();
+      expect(tools.composioTool.outputSchema).toBeDefined();
+      expect(tools.composioTool.requestContextSchema).toBeDefined();
+      expect(tools.composioTool.inputSchema).toContain('"query"');
+      expect(tools.composioTool.outputSchema).toContain('"result"');
+      expect(tools.composioTool.requestContextSchema).toContain('"userId"');
     });
   });
 
