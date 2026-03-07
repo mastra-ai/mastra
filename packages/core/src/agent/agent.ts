@@ -82,8 +82,10 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import type { AgentEvent, AgentEventListener, AgentEventMap, AgentMessage, SendOperation } from './events';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import type { AgentMode } from './modes';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -174,6 +176,13 @@ export class Agent<
   #requestContextSchema?: ZodSchema<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+
+  // -- Orchestration (optional) -----------------------------------------------
+  #modes?: AgentMode[];
+  #currentModeId?: string;
+  #stateSchema?: z.ZodObject<z.ZodRawShape>;
+  #state: Record<string, unknown> = {};
+  #eventListeners: AgentEventListener[] = [];
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -314,12 +323,547 @@ export class Agent<
       this.#requestContextSchema = config.requestContextSchema;
     }
 
+    if (config.modes?.length) {
+      this.#modes = config.modes;
+      const defaultMode = config.modes.find(m => m.default) ?? config.modes[0]!;
+      this.#currentModeId = defaultMode.id;
+    }
+
+    if (config.stateSchema) {
+      this.#stateSchema = config.stateSchema;
+      this.#state = {
+        ...this.#getSchemaDefaults(config.stateSchema),
+        ...config.initialState,
+      };
+    } else if (config.initialState) {
+      this.#state = { ...config.initialState };
+    }
+
     // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  // ===========================================================================
+  // Events
+  // ===========================================================================
+
+  /**
+   * Subscribe to all agent events. Returns an unsubscribe function.
+   *
+   * @example
+   * ```typescript
+   * const unsub = agent.subscribe((event) => {
+   *   if (event.type === 'mode_changed') console.log(event.modeId);
+   * });
+   * // later:
+   * unsub();
+   * ```
+   */
+  subscribe(listener: AgentEventListener): () => void {
+    this.#eventListeners.push(listener);
+    return () => {
+      const idx = this.#eventListeners.indexOf(listener);
+      if (idx >= 0) this.#eventListeners.splice(idx, 1);
+    };
+  }
+
+  /**
+   * Subscribe to a specific event type. Returns an unsubscribe function.
+   *
+   * @example
+   * ```typescript
+   * agent.on('mode_changed', (event) => {
+   *   console.log(`Switched to ${event.modeId}`);
+   * });
+   * ```
+   */
+  on<K extends keyof AgentEventMap>(type: K, handler: (event: AgentEventMap[K]) => void | Promise<void>): () => void {
+    const wrappedListener: AgentEventListener = event => {
+      if (event.type === type) return handler(event as AgentEventMap[K]);
+    };
+    return this.subscribe(wrappedListener);
+  }
+
+  /**
+   * Emit an event to all subscribers.
+   * @internal — used by Agent internals and future orchestration methods.
+   */
+  protected emitEvent(event: AgentEvent): void {
+    for (const listener of this.#eventListeners) {
+      try {
+        void listener(event);
+      } catch {
+        // Don't let listener errors break the agent
+      }
+    }
+  }
+
+  // ===========================================================================
+  // Modes
+  // ===========================================================================
+
+  /**
+   * Whether this agent has modes configured.
+   */
+  hasModes(): boolean {
+    return !!this.#modes?.length;
+  }
+
+  /**
+   * List all configured modes.
+   * Returns an empty array if modes are not configured.
+   */
+  listModes(): AgentMode[] {
+    return this.#modes ?? [];
+  }
+
+  /**
+   * Get the current mode ID. Returns undefined if modes are not configured.
+   */
+  getCurrentModeId(): string | undefined {
+    return this.#currentModeId;
+  }
+
+  /**
+   * Get the current mode. Returns undefined if modes are not configured.
+   */
+  getCurrentMode(): AgentMode | undefined {
+    if (!this.#modes || !this.#currentModeId) return undefined;
+    return this.#modes.find(m => m.id === this.#currentModeId);
+  }
+
+  /**
+   * Switch to a different mode.
+   * Throws if modes are not configured or the mode ID is not found.
+   */
+  switchMode(modeId: string): void {
+    if (!this.#modes) {
+      throw new Error('Cannot switch modes: no modes configured on this agent');
+    }
+    const mode = this.#modes.find(m => m.id === modeId);
+    if (!mode) {
+      throw new Error(`Mode not found: ${modeId}`);
+    }
+    const previousModeId = this.#currentModeId!;
+    if (previousModeId === modeId) return;
+
+    this.#currentModeId = modeId;
+    this.emitEvent({ type: 'mode_changed', modeId, previousModeId });
+  }
+
+  // ===========================================================================
+  // State
+  // ===========================================================================
+
+  /**
+   * Get the current agent state (read-only snapshot).
+   * Returns an empty object if state is not configured.
+   */
+  getState(): Readonly<Record<string, unknown>> {
+    return { ...this.#state };
+  }
+
+  /**
+   * Update agent state. Validates against stateSchema if provided.
+   * Emits a state_changed event.
+   */
+  setState(updates: Record<string, unknown>): void {
+    const changedKeys = Object.keys(updates);
+    const newState = { ...this.#state, ...updates };
+
+    if (this.#stateSchema) {
+      const result = this.#stateSchema.safeParse(newState);
+      if (!result.success) {
+        throw new Error(`Invalid state update: ${result.error.message}`);
+      }
+      this.#state = result.data as Record<string, unknown>;
+    } else {
+      this.#state = newState;
+    }
+
+    this.emitEvent({ type: 'state_changed', state: this.#state, changedKeys });
+  }
+
+  #getSchemaDefaults(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
+    const shape = schema.shape;
+    const defaults: Record<string, unknown> = {};
+
+    for (const [key, field] of Object.entries(shape)) {
+      try {
+        const result = (field as any).safeParse(undefined);
+        if (result.success && result.data !== undefined) {
+          defaults[key] = result.data;
+        }
+      } catch {
+        // field has no default — skip
+      }
+    }
+
+    return defaults;
+  }
+
+  // ===========================================================================
+  // Send (orchestration loop)
+  // ===========================================================================
+
+  /**
+   * Send a message to the agent and get back a self-contained operation handle.
+   *
+   * Each `.send()` call returns a `SendOperation` with its own isolated event
+   * stream, abort handle, and tool-approval resolver. Multiple concurrent sends
+   * to the same Agent instance do not interfere with each other.
+   *
+   * @example
+   * ```typescript
+   * const op = agent.send({
+   *   messages: 'Hello!',
+   *   threadId: 'thread-1',
+   *   resourceId: 'user-1',
+   * });
+   *
+   * for await (const event of op.events) {
+   *   if (event.type === 'message_update') console.log(event.message);
+   * }
+   *
+   * const { message } = await op.result;
+   * ```
+   */
+  send({
+    messages,
+    threadId,
+    resourceId,
+    modeId,
+    maxSteps = 100,
+    requestContext,
+    toolsets,
+    onStepFinish,
+    abortSignal,
+  }: {
+    messages: MessageListInput;
+    threadId: string;
+    resourceId: string;
+    /** Mode to use for this operation. Overrides the instance-level current mode. */
+    modeId?: string;
+    maxSteps?: number;
+    requestContext?: RequestContext;
+    toolsets?: ToolsetsInput;
+    onStepFinish?: (step: unknown) => void | Promise<void>;
+    abortSignal?: AbortSignal;
+  }): SendOperation {
+    const abortController = new AbortController();
+    let abortRequested = false;
+    const listeners: AgentEventListener[] = [];
+    let pendingApprovalResolve:
+      | ((params: { decision: 'approve' | 'decline'; requestContext?: RequestContext }) => void)
+      | null = null;
+
+    const emit = (event: AgentEvent): void => {
+      for (const listener of listeners) {
+        try {
+          void listener(event);
+        } catch {
+          // Listener errors don't break the operation
+        }
+      }
+      this.emitEvent(event);
+    };
+
+    if (abortSignal) {
+      abortSignal.addEventListener(
+        'abort',
+        () => {
+          abortRequested = true;
+          abortController.abort();
+        },
+        { once: true },
+      );
+    }
+
+    const processStream = async (response: { fullStream: AsyncIterable<any> }): Promise<{ message: AgentMessage }> => {
+      const currentMessage: AgentMessage = {
+        id: randomUUID(),
+        role: 'assistant',
+        content: [],
+        createdAt: new Date(),
+      };
+
+      const textContentById = new Map<string, { index: number; text: string }>();
+      const thinkingContentById = new Map<string, { index: number; text: string }>();
+
+      for await (const chunk of response.fullStream) {
+        switch (chunk.type) {
+          case 'text-start': {
+            const textIndex = currentMessage.content.length;
+            currentMessage.content.push({ type: 'text', text: '' });
+            textContentById.set(chunk.payload.id, { index: textIndex, text: '' });
+            emit({ type: 'message_start', message: { ...currentMessage } });
+            break;
+          }
+
+          case 'text-delta': {
+            const textState = textContentById.get(chunk.payload.id);
+            if (textState) {
+              textState.text += chunk.payload.text;
+              const textContent = currentMessage.content[textState.index];
+              if (textContent && textContent.type === 'text') {
+                textContent.text = textState.text;
+              }
+              emit({ type: 'message_update', message: { ...currentMessage } });
+            }
+            break;
+          }
+
+          case 'reasoning-start': {
+            const thinkingIndex = currentMessage.content.length;
+            currentMessage.content.push({ type: 'thinking', thinking: '' });
+            thinkingContentById.set(chunk.payload.id, { index: thinkingIndex, text: '' });
+            emit({ type: 'message_update', message: { ...currentMessage } });
+            break;
+          }
+
+          case 'reasoning-delta': {
+            const thinkingState = thinkingContentById.get(chunk.payload.id);
+            if (thinkingState) {
+              thinkingState.text += chunk.payload.text;
+              const thinkingContent = currentMessage.content[thinkingState.index];
+              if (thinkingContent && thinkingContent.type === 'thinking') {
+                thinkingContent.thinking = thinkingState.text;
+              }
+              emit({ type: 'message_update', message: { ...currentMessage } });
+            }
+            break;
+          }
+
+          case 'tool-call-input-streaming-start': {
+            const { toolCallId, toolName } = chunk.payload;
+            emit({ type: 'tool_input_start', toolCallId, toolName });
+            break;
+          }
+
+          case 'tool-call-delta': {
+            const { toolCallId, argsTextDelta, toolName } = chunk.payload;
+            emit({ type: 'tool_input_delta', toolCallId, argsTextDelta, toolName });
+            break;
+          }
+
+          case 'tool-call-input-streaming-end': {
+            const { toolCallId } = chunk.payload;
+            emit({ type: 'tool_input_end', toolCallId });
+            break;
+          }
+
+          case 'tool-call': {
+            const toolCall = chunk.payload;
+            currentMessage.content.push({
+              type: 'tool_call',
+              id: toolCall.toolCallId,
+              name: toolCall.toolName,
+              args: toolCall.args,
+            });
+            emit({
+              type: 'tool_start',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              args: toolCall.args,
+            });
+            emit({ type: 'message_update', message: { ...currentMessage } });
+            break;
+          }
+
+          case 'tool-result': {
+            const toolResult = chunk.payload;
+            currentMessage.content.push({
+              type: 'tool_result',
+              id: toolResult.toolCallId,
+              name: toolResult.toolName,
+              result: toolResult.result,
+              isError: toolResult.isError ?? false,
+            });
+            emit({
+              type: 'tool_end',
+              toolCallId: toolResult.toolCallId,
+              result: toolResult.result,
+              isError: toolResult.isError ?? false,
+            });
+            emit({ type: 'message_update', message: { ...currentMessage } });
+            break;
+          }
+
+          case 'tool-error': {
+            const toolError = chunk.payload;
+            emit({ type: 'tool_end', toolCallId: toolError.toolCallId, result: toolError.error, isError: true });
+            break;
+          }
+
+          case 'tool-call-approval': {
+            const { toolCallId, toolName, args: toolArgs } = chunk.payload;
+            emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
+
+            const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+              resolve => {
+                pendingApprovalResolve = resolve;
+              },
+            );
+            pendingApprovalResolve = null;
+
+            if (approval.decision === 'approve') {
+              const approveResult = await (response as any).approveToolExecution(toolCallId);
+              if (approveResult?.fullStream) {
+                const subResult = await processStream(approveResult);
+                currentMessage.content.push(...subResult.message.content);
+              }
+            } else {
+              const declineResult = await (response as any).declineToolExecution(toolCallId);
+              if (declineResult?.fullStream) {
+                const subResult = await processStream(declineResult);
+                currentMessage.content.push(...subResult.message.content);
+              }
+            }
+            return { message: currentMessage };
+          }
+
+          case 'error': {
+            const streamError =
+              chunk.payload.error instanceof Error ? chunk.payload.error : new Error(String(chunk.payload.error));
+            emit({ type: 'error', error: streamError });
+            break;
+          }
+
+          case 'step-finish': {
+            const usage = chunk.payload?.output?.usage;
+            if (usage) {
+              const promptTokens = usage.promptTokens ?? usage.inputTokens ?? 0;
+              const completionTokens = usage.completionTokens ?? usage.outputTokens ?? 0;
+              const totalTokens = promptTokens + completionTokens;
+              emit({ type: 'usage_update', usage: { promptTokens, completionTokens, totalTokens } });
+            }
+            break;
+          }
+
+          case 'finish': {
+            const finishReason = chunk.payload.stepResult?.reason;
+            if (finishReason === 'stop' || finishReason === 'end-turn') {
+              currentMessage.stopReason = 'complete';
+            } else if (finishReason === 'tool-calls') {
+              currentMessage.stopReason = 'tool_use';
+            } else {
+              currentMessage.stopReason = 'complete';
+            }
+            break;
+          }
+        }
+      }
+
+      emit({ type: 'message_end', message: { ...currentMessage } });
+      return { message: currentMessage };
+    };
+
+    const emptyMessage = (): AgentMessage => ({
+      id: randomUUID(),
+      role: 'assistant',
+      content: [],
+      createdAt: new Date(),
+    });
+
+    // Set up the event queue eagerly so events are captured from the start,
+    // even before the consumer calls `for await (const event of op.events)`.
+    const eventQueue: AgentEvent[] = [];
+    type EventResolver = (value: IteratorResult<AgentEvent, undefined>) => void;
+    let eventResolve: EventResolver | null = null;
+    let eventsDone = false;
+
+    function flushResolve(result: IteratorResult<AgentEvent, undefined>): void {
+      if (eventResolve) {
+        const fn: EventResolver = eventResolve;
+        eventResolve = null;
+        fn(result);
+      }
+    }
+
+    const queueListener: AgentEventListener = (event: AgentEvent) => {
+      if (eventResolve) {
+        flushResolve({ value: event, done: false });
+      } else {
+        eventQueue.push(event);
+      }
+    };
+    listeners.push(queueListener);
+
+    const resultPromise = (async (): Promise<{ message: AgentMessage }> => {
+      emit({ type: 'send_start' });
+
+      try {
+        const effectiveModeId = modeId ?? this.#currentModeId;
+        const mode = effectiveModeId ? this.#modes?.find(m => m.id === effectiveModeId) : undefined;
+
+        const streamOptions: Record<string, unknown> = {
+          memory: { thread: threadId, resource: resourceId },
+          abortSignal: abortController.signal,
+          maxSteps,
+          ...(requestContext && { requestContext }),
+          ...(toolsets && { toolsets }),
+          ...(onStepFinish && { onStepFinish }),
+          ...(mode?.instructions && { instructions: mode.instructions }),
+        };
+
+        const response = await this.stream(messages, streamOptions as any);
+        const result = await processStream(response);
+
+        emit({ type: 'send_end', reason: abortRequested ? 'aborted' : 'complete' });
+        return result;
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          emit({ type: 'send_end', reason: 'aborted' });
+        } else {
+          const err = error instanceof Error ? error : new Error(String(error));
+          emit({ type: 'error', error: err });
+          emit({ type: 'send_end', reason: 'error' });
+        }
+        return { message: emptyMessage() };
+      } finally {
+        eventsDone = true;
+        flushResolve({ value: undefined, done: true as const });
+      }
+    })();
+
+    const events: AsyncIterable<AgentEvent> = {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<AgentEvent, undefined>> {
+            if (eventQueue.length > 0) {
+              return Promise.resolve({ value: eventQueue.shift()!, done: false });
+            }
+            if (eventsDone) {
+              return Promise.resolve({ value: undefined, done: true as const });
+            }
+            return new Promise<IteratorResult<AgentEvent, undefined>>(resolver => {
+              eventResolve = resolver;
+            });
+          },
+        };
+      },
+    };
+
+    return {
+      result: resultPromise,
+      events,
+
+      abort() {
+        abortRequested = true;
+        abortController.abort();
+      },
+
+      respondToToolApproval(decision: 'approve' | 'decline', reqContext?: RequestContext) {
+        if (pendingApprovalResolve) {
+          pendingApprovalResolve({ decision, requestContext: reqContext });
+          pendingApprovalResolve = null;
+        }
+      },
+    };
   }
 
   /**

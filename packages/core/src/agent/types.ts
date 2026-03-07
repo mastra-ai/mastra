@@ -1,7 +1,7 @@
 import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
-import type { ZodSchema } from 'zod';
+import type { z, ZodSchema } from 'zod';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type {
   CoreMessage,
@@ -39,6 +39,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
+import type { AgentMode } from './modes';
 
 export type {
   MastraDBMessage,
@@ -329,6 +330,32 @@ export interface AgentConfig<
    * If validation fails, an error is thrown.
    */
   requestContextSchema?: ZodSchema<TRequestContext>;
+
+  /**
+   * Named presets of instructions, model, and tools that can be switched at runtime.
+   * When configured, the current mode's overrides are applied on top of the
+   * agent's base configuration during `stream()` and `generate()`.
+   *
+   * @example
+   * ```typescript
+   * modes: [
+   *   { id: 'plan', name: 'Plan', default: true, model: 'anthropic/claude-sonnet-4-20250514' },
+   *   { id: 'build', name: 'Build', model: 'anthropic/claude-sonnet-4-20250514', tools: buildTools },
+   * ]
+   * ```
+   */
+  modes?: AgentMode[];
+
+  /**
+   * Zod object schema defining the shape of shared agent state.
+   * State persists across mode switches and is accessible via `getState()` / `setState()`.
+   */
+  stateSchema?: z.ZodObject<z.ZodRawShape>;
+
+  /**
+   * Initial state values. Must conform to `stateSchema` if provided.
+   */
+  initialState?: Record<string, unknown>;
 }
 
 export type AgentMemoryOption = {
