@@ -66,30 +66,41 @@ export function createVirtualDependencies(
   const optimizedDependencyEntries = new Map<string, VirtualDependency>();
   const rootDir = workspaceRoot || projectRoot;
 
-  for (const [dep, { exports }] of depsToOptimize.entries()) {
+  for (const [dep, { exports, isWorkspace }] of depsToOptimize.entries()) {
     // Use __ as separator to avoid conflicts with hyphens in package names
     // e.g., @inner/inner-tools -> @inner__inner-tools (preserves the hyphen)
     const fileName = dep.replaceAll('/', '__');
     const virtualFile: string[] = [];
     const exportStringBuilder = [];
 
-    for (const local of exports) {
-      if (local === '*') {
-        virtualFile.push(`export * from '${dep}';`);
-        continue;
-      } else if (local === 'default') {
-        exportStringBuilder.push('default');
-      } else {
-        exportStringBuilder.push(local);
+    // Workspace packages use relative chunk imports in their dist files, which means
+    // static analysis may miss exports that are only used transitively (e.g. InMemoryStore
+    // referenced inside @mastra/core/mastra but only exported via @mastra/core/storage).
+    // Using `export *` guarantees all named exports are available in the cache.
+    if (isWorkspace) {
+      virtualFile.push(`export * from '${dep}';`);
+      if (exports.includes('default')) {
+        virtualFile.push(`export { default } from '${dep}';`);
       }
-    }
+    } else {
+      for (const local of exports) {
+        if (local === '*') {
+          virtualFile.push(`export * from '${dep}';`);
+          continue;
+        } else if (local === 'default') {
+          exportStringBuilder.push('default');
+        } else {
+          exportStringBuilder.push(local);
+        }
+      }
 
-    const chunks = [];
-    if (exportStringBuilder.length) {
-      chunks.push(`{ ${exportStringBuilder.join(', ')} }`);
-    }
-    if (chunks.length) {
-      virtualFile.push(`export ${chunks.join(', ')} from '${dep}';`);
+      const chunks = [];
+      if (exportStringBuilder.length) {
+        chunks.push(`{ ${exportStringBuilder.join(', ')} }`);
+      }
+      if (chunks.length) {
+        virtualFile.push(`export ${chunks.join(', ')} from '${dep}';`);
+      }
     }
 
     // Determine the entry name based on the complexity of exports
