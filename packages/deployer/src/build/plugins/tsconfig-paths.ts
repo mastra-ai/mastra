@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path, { normalize } from 'node:path';
 import type { Plugin } from 'rollup';
 import stripJsonComments from 'strip-json-comments';
@@ -134,6 +135,21 @@ export function tsConfigPaths({ tsConfigPath, respectCoreModule, localResolve }:
         if (!moduleName) {
           const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
           if (!resolved) {
+            if (localResolve && !request.startsWith('./') && !request.startsWith('../')) {
+              const importerInfo = this.getModuleInfo(importer);
+              if (importerInfo?.meta?.[PLUGIN_NAME]?.resolved) {
+                try {
+                  const importerRequire = createRequire(importer);
+                  const resolvedPath = importerRequire.resolve(request);
+                  return {
+                    id: resolvedPath,
+                    external: !request.startsWith('hono/') && request !== 'hono',
+                  };
+                } catch {
+                  // Can't resolve from importer's location, fall through
+                }
+              }
+            }
             return null;
           }
 
