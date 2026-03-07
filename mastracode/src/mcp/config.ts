@@ -11,22 +11,23 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { McpConfig, McpServerConfig, McpSkippedServer } from './types.js';
 
-export function loadMcpConfig(projectDir: string): McpConfig {
+export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
-  const globalConfig = loadSingleConfig(getGlobalMcpPath());
-  const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir));
+  const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
+  const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir, configDirName));
 
   return mergeConfigs(claudeConfig, globalConfig, projectConfig);
 }
 
-export function getProjectMcpPath(projectDir: string): string {
-  return path.join(projectDir, '.mastracode', 'mcp.json');
+export function getProjectMcpPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(projectDir, configDirName, 'mcp.json');
 }
 
-export function getGlobalMcpPath(): string {
-  return path.join(os.homedir(), '.mastracode', 'mcp.json');
+export function getGlobalMcpPath(configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(os.homedir(), configDirName, 'mcp.json');
 }
 
 export function getClaudeSettingsPath(projectDir: string): string {

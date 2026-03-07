@@ -5,6 +5,7 @@
 
 import { MCPClient } from '@mastra/mcp';
 import type { MastraMCPServerDefinition } from '@mastra/mcp';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
 import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
@@ -38,8 +39,8 @@ function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
  */
-export function createMcpManager(projectDir: string): McpManager {
-  let config = loadMcpConfig(projectDir);
+export function createMcpManager(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpManager {
+  let config = loadMcpConfig(projectDir, configDirName);
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
@@ -127,7 +128,7 @@ export function createMcpManager(projectDir: string): McpManager {
 
     async reload() {
       await disconnect();
-      config = loadMcpConfig(projectDir);
+      config = loadMcpConfig(projectDir, configDirName);
       tools = {};
       serverStatuses = new Map();
       initialized = false;
@@ -157,8 +158,8 @@ export function createMcpManager(projectDir: string): McpManager {
 
     getConfigPaths() {
       return {
-        project: getProjectMcpPath(projectDir),
-        global: getGlobalMcpPath(),
+        project: getProjectMcpPath(projectDir, configDirName),
+        global: getGlobalMcpPath(configDirName),
         claude: getClaudeSettingsPath(projectDir),
       };
     },

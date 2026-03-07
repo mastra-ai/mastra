@@ -7,6 +7,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { HooksConfig, HookDefinition, HookEventName } from './types.js';
 
 const VALID_EVENTS: HookEventName[] = [
@@ -18,9 +19,9 @@ const VALID_EVENTS: HookEventName[] = [
   'SessionEnd',
 ];
 
-export function loadHooksConfig(projectDir: string): HooksConfig {
-  const globalPath = getGlobalHooksPath();
-  const projectPath = getProjectHooksPath(projectDir);
+export function loadHooksConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): HooksConfig {
+  const globalPath = getGlobalHooksPath(configDirName);
+  const projectPath = getProjectHooksPath(projectDir, configDirName);
 
   const globalConfig = loadSingleConfig(globalPath);
   const projectConfig = loadSingleConfig(projectPath);
@@ -28,12 +29,12 @@ export function loadHooksConfig(projectDir: string): HooksConfig {
   return mergeConfigs(globalConfig, projectConfig);
 }
 
-export function getProjectHooksPath(projectDir: string): string {
-  return path.join(projectDir, '.mastracode', 'hooks.json');
+export function getProjectHooksPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(projectDir, configDirName, 'hooks.json');
 }
 
-export function getGlobalHooksPath(): string {
-  return path.join(os.homedir(), '.mastracode', 'hooks.json');
+export function getGlobalHooksPath(configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(os.homedir(), configDirName, 'hooks.json');
 }
 
 function loadSingleConfig(filePath: string): HooksConfig {

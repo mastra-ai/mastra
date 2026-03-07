@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { DEFAULT_OM_MODEL_ID } from './constants';
+import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants';
 
 export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  configDir: z.string().default(DEFAULT_CONFIG_DIR),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
   currentModelId: z.string().default(''),
