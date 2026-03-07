@@ -699,6 +699,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
+        // Store activeTools on _internal so toolCallStep can enforce them
+        if (_internal) {
+          _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
+        }
+
         const runState = new AgenticRunState({
           _internal: _internal!,
           model: currentStep.model,
