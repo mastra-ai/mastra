@@ -1,5 +1,6 @@
-import { mastra } from './mastra/index';
 import 'dotenv/config';
+import { mastra } from './mastra/index';
+
 
 async function runResearchPipeline(topic: string) {
   console.log(`\n🔍 Starting research pipeline for: "${topic}"\n`);
