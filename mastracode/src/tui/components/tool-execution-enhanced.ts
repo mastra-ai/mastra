@@ -116,6 +116,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private collapsible?: CollapsibleComponent;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
+  private shellExit?: { exitCode: number; success: boolean; executionTimeMs: number; outputTokensEstimate: number };
 
   constructor(toolName: string, args: unknown, options: ToolExecutionOptions = {}, ui: TUI) {
     super();
@@ -163,6 +164,14 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       return;
     }
     this.streamingOutput += output;
+    this.rebuild();
+  }
+
+  /**
+   * Store shell exit metadata (exit code, duration, output token count).
+   */
+  setShellExit(data: { exitCode: number; success: boolean; executionTimeMs: number; outputTokensEstimate: number }): void {
+    this.shellExit = data;
     this.rebuild();
   }
 
@@ -356,11 +365,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const timeoutSuffix = timeout ? theme.fg('muted', ` (timeout ${timeout}s)`) : '';
     const cwdSuffix = cwd ? theme.fg('muted', ` in ${cwd}`) : '';
     const timeSuffix = this.isPartial ? timeoutSuffix : this.getDurationSuffix();
+    const tokenSuffix = this.getTokenEstimateSuffix();
 
     // Helper to render shell command with bordered box
     const renderBorderedShell = (status: string, outputLines: string[]) => {
       const border = (char: string) => theme.bold(theme.fg('accent', char));
-      const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('accent', command)}${cwdSuffix}${timeSuffix}${status}`;
+      const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('accent', command)}${cwdSuffix}${timeSuffix}${tokenSuffix}${status}`;
 
       // Top border
       this.contentBox.addChild(new Text(border('┌──'), 0, 0));
@@ -450,11 +460,12 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const isWait = !isKill && argsObj?.wait === true;
 
     const timeSuffix = this.isPartial ? '' : this.getDurationSuffix();
+    const tokenSuffix = this.getTokenEstimateSuffix();
     const label = isKill ? 'kill' : isWait ? 'wait' : 'output';
 
     const renderBorderedProcess = (status: string, outputLines: string[]) => {
       const border = (char: string) => theme.bold(theme.fg('accent', char));
-      const footerText = `${theme.fg('toolTitle', label)} ${theme.fg('accent', `PID ${pid}`)}${timeSuffix}${status}`;
+      const footerText = `${theme.fg('toolTitle', label)} ${theme.fg('accent', `PID ${pid}`)}${timeSuffix}${tokenSuffix}${status}`;
 
       this.contentBox.addChild(new Text(border('┌──'), 0, 0));
 
@@ -1146,6 +1157,22 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const ms = Date.now() - this.startTime;
     if (ms < 1000) return theme.fg('muted', ` ${ms}ms`);
     return theme.fg('muted', ` ${(ms / 1000).toFixed(1)}s`);
+  }
+
+  private getTokenEstimateSuffix(): string {
+    if (this.isPartial || !this.result) return '';
+    // Prefer accurate tiktoken count from shell exit data when available
+    if (this.shellExit && this.shellExit.outputTokensEstimate > 1000) {
+      const tokens = this.shellExit.outputTokensEstimate;
+      const label = `${(tokens / 1000).toFixed(1)}k`;
+      return theme.fg('muted', ` ${label} tokens`);
+    }
+    const output = this.getFormattedOutput();
+    if (!output) return '';
+    const tokens = Math.ceil(output.length / 4);
+    if (tokens <= 1000) return '';
+    const label = `${(tokens / 1000).toFixed(1)}k`;
+    return theme.fg('muted', ` ~${label} tokens`);
   }
 
   private getFormattedOutput(): string {

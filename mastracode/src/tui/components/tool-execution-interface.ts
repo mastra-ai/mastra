@@ -18,4 +18,6 @@ export interface IToolExecutionComponent {
   setExpanded(expanded: boolean): void;
   /** Append streaming output for shell commands */
   appendStreamingOutput?(output: string): void;
+  /** Store shell exit metadata (exit code, duration, output token count) */
+  setShellExit?(data: { exitCode: number; success: boolean; executionTimeMs: number; outputTokensEstimate: number }): void;
 }

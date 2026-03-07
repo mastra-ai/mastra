@@ -602,53 +602,61 @@ describe('output-helpers', () => {
 
   describe('applyTokenLimit', () => {
     it('returns output unchanged when under limit', async () => {
-      expect(await applyTokenLimit('short text', 100)).toBe('short text');
+      const r = await applyTokenLimit('short text', 100);
+      expect(r.text).toBe('short text');
+      expect(r.tokens).toBeGreaterThan(0);
     });
 
     it('returns empty string for empty input', async () => {
-      expect(await applyTokenLimit('', 100)).toBe('');
+      const r = await applyTokenLimit('', 100);
+      expect(r.text).toBe('');
+      expect(r.tokens).toBe(0);
     });
 
     it('truncates from the start by default (keeps the end)', async () => {
       const lines = Array.from({ length: 100 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
-      const result = await applyTokenLimit(output, 20);
-      expect(result).toContain('[output truncated: showing last');
-      expect(result).toContain('tokens]');
-      expect(result).toContain('line number 100');
-      expect(result).not.toContain('line number 1\n');
+      const r = await applyTokenLimit(output, 20);
+      expect(r.text).toContain('[output truncated: showing last');
+      expect(r.text).toContain('tokens]');
+      expect(r.text).toContain('line number 100');
+      expect(r.text).not.toContain('line number 1\n');
+      expect(r.tokens).toBe(20);
     });
 
     it('truncates from the end when from="end" (keeps the start)', async () => {
       const lines = Array.from({ length: 100 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
-      const result = await applyTokenLimit(output, 20, 'end');
-      expect(result).toContain('[output truncated: showing first');
-      expect(result).toContain('tokens]');
-      expect(result).toContain('line number 1');
-      expect(result).not.toContain('line number 100');
+      const r = await applyTokenLimit(output, 20, 'end');
+      expect(r.text).toContain('[output truncated: showing first');
+      expect(r.text).toContain('tokens]');
+      expect(r.text).toContain('line number 1');
+      expect(r.text).not.toContain('line number 100');
       // Notice should be at the end
-      expect(result.indexOf('[output truncated')).toBeGreaterThan(result.indexOf('line number 1'));
+      expect(r.text.indexOf('[output truncated')).toBeGreaterThan(r.text.indexOf('line number 1'));
+      expect(r.tokens).toBe(20);
     });
 
     it('uses DEFAULT_MAX_OUTPUT_TOKENS as default limit', async () => {
-      expect(await applyTokenLimit('hello world')).toBe('hello world');
+      const r = await applyTokenLimit('hello world');
+      expect(r.text).toBe('hello world');
 
       const hugeLines = Array.from({ length: 5000 }, (_, i) => `output line number ${i + 1}`);
       const hugeOutput = hugeLines.join('\n');
-      const result = await applyTokenLimit(hugeOutput);
-      expect(result).toContain('[output truncated');
+      const r2 = await applyTokenLimit(hugeOutput);
+      expect(r2.text).toContain('[output truncated');
     });
 
     it('fills the token budget even with a single long line', async () => {
       // This is the bug Tyler hit: a file with one huge line should still use the full budget
       const longLine = 'word '.repeat(500); // 500 tokens of "word "
       const limit = 50;
-      const result = await applyTokenLimit(longLine, limit);
-      expect(result).toContain('[output truncated');
+      const r = await applyTokenLimit(longLine, limit);
+      expect(r.text).toContain('[output truncated');
+      expect(r.tokens).toBe(limit);
       // The kept portion (minus the notice) should be close to the budget
-      const notice = result.match(/\[output truncated[^\]]*\]\n?/)?.[0] ?? '';
-      const keptText = result.replace(notice, '');
+      const notice = r.text.match(/\[output truncated[^\]]*\]\n?/)?.[0] ?? '';
+      const keptText = r.text.replace(notice, '');
       // "word " is 1 token each, so we should have ~50 words
       const wordCount = keptText.trim().split(/\s+/).length;
       expect(wordCount).toBeGreaterThanOrEqual(limit - 5);
@@ -658,21 +666,26 @@ describe('output-helpers', () => {
 
   describe('applyTokenLimitSandwich', () => {
     it('returns output unchanged when under limit', async () => {
-      expect(await applyTokenLimitSandwich('short text', 100)).toBe('short text');
+      const r = await applyTokenLimitSandwich('short text', 100);
+      expect(r.text).toBe('short text');
+      expect(r.tokens).toBeGreaterThan(0);
     });
 
     it('returns empty string for empty input', async () => {
-      expect(await applyTokenLimitSandwich('', 100)).toBe('');
+      const r = await applyTokenLimitSandwich('', 100);
+      expect(r.text).toBe('');
+      expect(r.tokens).toBe(0);
     });
 
     it('keeps tokens from both start and end', async () => {
       const lines = Array.from({ length: 200 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
-      const result = await applyTokenLimitSandwich(output, 50, 0.2);
-      expect(result).toContain('line number 1');
-      expect(result).toContain('line number 200');
-      expect(result).toContain('output truncated');
-      expect(result).not.toContain('line number 100\n');
+      const r = await applyTokenLimitSandwich(output, 50, 0.2);
+      expect(r.text).toContain('line number 1');
+      expect(r.text).toContain('line number 200');
+      expect(r.text).toContain('output truncated');
+      expect(r.text).not.toContain('line number 100\n');
+      expect(r.tokens).toBe(50);
     });
 
     it('respects head ratio — higher ratio keeps more from the start', async () => {
@@ -681,40 +694,41 @@ describe('output-helpers', () => {
       const small = await applyTokenLimitSandwich(output, 50, 0.1);
       const large = await applyTokenLimitSandwich(output, 50, 0.9);
       // Both should have start and end
-      expect(small).toContain('line number 1');
-      expect(large).toContain('line number 1');
+      expect(small.text).toContain('line number 1');
+      expect(large.text).toContain('line number 1');
       // With 90% head ratio, the head portion should contain more lines from the start
-      const smallHead = small.split('output truncated')[0]!;
-      const largeHead = large.split('output truncated')[0]!;
+      const smallHead = small.text.split('output truncated')[0]!;
+      const largeHead = large.text.split('output truncated')[0]!;
       expect(largeHead.length).toBeGreaterThan(smallHead.length);
     });
 
     it('fills the token budget even with a single long line', async () => {
       const longLine = 'word '.repeat(500);
       const limit = 50;
-      const result = await applyTokenLimitSandwich(longLine, limit, 0.2);
-      expect(result).toContain('output truncated');
-      const notice = result.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
-      const keptText = result.replace(notice, '');
+      const r = await applyTokenLimitSandwich(longLine, limit, 0.2);
+      expect(r.text).toContain('output truncated');
+      expect(r.tokens).toBe(limit);
+      const notice = r.text.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
+      const keptText = r.text.replace(notice, '');
       const wordCount = keptText.trim().split(/\s+/).length;
       expect(wordCount).toBeGreaterThanOrEqual(limit - 5);
     });
 
     it('does not leak full output when tail budget is zero', async () => {
       const longLine = 'word '.repeat(500);
-      const result = await applyTokenLimitSandwich(longLine, 10, 1.0);
-      expect(result).toContain('output truncated');
-      const notice = result.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
-      const keptText = result.replace(notice, '');
+      const r = await applyTokenLimitSandwich(longLine, 10, 1.0);
+      expect(r.text).toContain('output truncated');
+      const notice = r.text.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
+      const keptText = r.text.replace(notice, '');
       expect(keptText.trim().split(/\s+/).length).toBeLessThanOrEqual(15);
     });
 
     it('does not leak full output when head budget is zero', async () => {
       const longLine = 'word '.repeat(500);
-      const result = await applyTokenLimitSandwich(longLine, 10, 0);
-      expect(result).toContain('output truncated');
-      const notice = result.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
-      const keptText = result.replace(notice, '');
+      const r = await applyTokenLimitSandwich(longLine, 10, 0);
+      expect(r.text).toContain('output truncated');
+      const notice = r.text.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
+      const keptText = r.text.replace(notice, '');
       expect(keptText.trim().split(/\s+/).length).toBeLessThanOrEqual(15);
     });
   });
@@ -724,27 +738,30 @@ describe('output-helpers', () => {
       const lines = Array.from({ length: 5000 }, (_, i) => `line number ${String(i).padStart(4, '0')}`);
       const output = lines.join('\n');
 
-      const result = await truncateOutput(output, 0);
-      expect(result).toContain('[output truncated');
+      const r = await truncateOutput(output, 0);
+      expect(r.text).toContain('[output truncated');
+      expect(r.tokens).toBeGreaterThan(0);
     });
 
     it('tail reduces output enough to skip token limit', async () => {
       const lines = Array.from({ length: 500 }, (_, i) => `line ${i + 1}`);
       const output = lines.join('\n');
 
-      const result = await truncateOutput(output, 5);
-      expect(result).not.toContain('[output truncated');
-      expect(result).toContain('[showing last 5 of 500 lines]');
+      const r = await truncateOutput(output, 5);
+      expect(r.text).not.toContain('[output truncated');
+      expect(r.text).toContain('[showing last 5 of 500 lines]');
+      expect(r.tokens).toBeGreaterThan(0);
     });
 
     it('routes to sandwich mode when tokenFrom is sandwich', async () => {
       const lines = Array.from({ length: 5000 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
 
-      const result = await truncateOutput(output, 0, undefined, 'sandwich');
-      expect(result).toContain('line number 1');
-      expect(result).toContain('line number 5000');
-      expect(result).toContain('output truncated');
+      const r = await truncateOutput(output, 0, undefined, 'sandwich');
+      expect(r.text).toContain('line number 1');
+      expect(r.text).toContain('line number 5000');
+      expect(r.text).toContain('output truncated');
+      expect(r.tokens).toBeGreaterThan(0);
     });
   });
 });

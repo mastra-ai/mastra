@@ -623,6 +623,14 @@ export type HarnessEvent =
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
+  | {
+      type: 'shell_exit';
+      toolCallId: string;
+      exitCode: number;
+      success: boolean;
+      executionTimeMs: number;
+      outputTokensEstimate: number;
+    }
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }

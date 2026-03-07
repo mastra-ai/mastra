@@ -77,23 +77,30 @@ export function applyTail(output: string, tail: number | null | undefined): stri
  *   - `'start'` (default): Remove tokens from the start, keep the end
  *   - `'end'`: Remove tokens from the end, keep the start
  */
+export interface TruncationResult {
+  text: string;
+  tokens: number;
+}
+
 export async function applyTokenLimit(
   output: string,
   limit: number = DEFAULT_MAX_OUTPUT_TOKENS,
   from: 'start' | 'end' = 'start',
-): Promise<string> {
-  if (!output) return output;
+): Promise<TruncationResult> {
+  if (!output) return { text: output, tokens: 0 };
 
   const tiktoken = await getTiktoken();
   const allTokens = tiktoken.encode(output, 'all');
-  if (allTokens.length <= limit) return output;
+  if (allTokens.length <= limit) return { text: output, tokens: allTokens.length };
 
   const kept = from === 'start' ? tiktoken.decode(allTokens.slice(-limit)) : tiktoken.decode(allTokens.slice(0, limit));
 
   const position = from === 'start' ? 'last' : 'first';
-  return from === 'start'
-    ? `[output truncated: showing ${position} ~${limit} of ~${allTokens.length} tokens]\n${kept}`
-    : `${kept}\n[output truncated: showing ${position} ~${limit} of ~${allTokens.length} tokens]`;
+  const text =
+    from === 'start'
+      ? `[output truncated: showing ${position} ~${limit} of ~${allTokens.length} tokens]\n${kept}`
+      : `${kept}\n[output truncated: showing ${position} ~${limit} of ~${allTokens.length} tokens]`;
+  return { text, tokens: limit };
 }
 
 /**
@@ -109,12 +116,12 @@ export async function applyTokenLimitSandwich(
   output: string,
   limit: number = DEFAULT_MAX_OUTPUT_TOKENS,
   headRatio: number = 0.1,
-): Promise<string> {
-  if (!output) return output;
+): Promise<TruncationResult> {
+  if (!output) return { text: output, tokens: 0 };
 
   const tiktoken = await getTiktoken();
   const allTokens = tiktoken.encode(output, 'all');
-  if (allTokens.length <= limit) return output;
+  if (allTokens.length <= limit) return { text: output, tokens: allTokens.length };
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
@@ -122,7 +129,7 @@ export async function applyTokenLimitSandwich(
   const tail = tailBudget > 0 ? tiktoken.decode(allTokens.slice(-tailBudget)) : '';
 
   const notice = `[...output truncated — showing first ~${headBudget} + last ~${tailBudget} of ~${allTokens.length} tokens...]`;
-  return [head, notice, tail].filter(Boolean).join('\n');
+  return { text: [head, notice, tail].filter(Boolean).join('\n'), tokens: limit };
 }
 
 /**
@@ -133,7 +140,7 @@ export async function truncateOutput(
   tail?: number | null,
   tokenLimit?: number,
   tokenFrom?: 'start' | 'end' | 'sandwich',
-): Promise<string> {
+): Promise<TruncationResult> {
   const tailed = applyTail(output, tail);
   if (tokenFrom === 'sandwich') {
     return applyTokenLimitSandwich(tailed, tokenLimit);
