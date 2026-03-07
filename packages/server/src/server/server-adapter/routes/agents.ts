@@ -25,9 +25,7 @@ import {
   DECLINE_NETWORK_TOOL_CALL_ROUTE,
   GET_AGENT_SKILL_ROUTE,
   LIST_MODES_ROUTE,
-  SWITCH_MODE_ROUTE,
   GET_STATE_ROUTE,
-  UPDATE_STATE_ROUTE,
   SEND_MESSAGE_ROUTE,
 } from '../../handlers/agents';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
@@ -114,12 +112,10 @@ export const AGENTS_ROUTES: ServerRoute<any, any, any>[] = [
   GET_LISTENER_ROUTE,
 
   // ============================================================================
-  // Orchestration Routes (Modes, State, Send)
+  // Orchestration Routes (Modes, Send)
   // ============================================================================
   LIST_MODES_ROUTE,
-  SWITCH_MODE_ROUTE,
   GET_STATE_ROUTE,
-  UPDATE_STATE_ROUTE,
   SEND_MESSAGE_ROUTE,
 
   // ============================================================================

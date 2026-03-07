@@ -536,6 +536,7 @@ export class Agent<
     messages,
     threadId,
     resourceId,
+    modeId,
     maxSteps = 100,
     requestContext,
     toolsets,
@@ -545,6 +546,8 @@ export class Agent<
     messages: MessageListInput;
     threadId: string;
     resourceId: string;
+    /** Mode to use for this operation. Overrides the instance-level current mode. */
+    modeId?: string;
     maxSteps?: number;
     requestContext?: RequestContext;
     toolsets?: ToolsetsInput;
@@ -794,6 +797,9 @@ export class Agent<
       emit({ type: 'send_start' });
 
       try {
+        const effectiveModeId = modeId ?? this.#currentModeId;
+        const mode = effectiveModeId ? this.#modes?.find(m => m.id === effectiveModeId) : undefined;
+
         const streamOptions: Record<string, unknown> = {
           memory: { thread: threadId, resource: resourceId },
           abortSignal: abortController.signal,
@@ -801,6 +807,7 @@ export class Agent<
           ...(requestContext && { requestContext }),
           ...(toolsets && { toolsets }),
           ...(onStepFinish && { onStepFinish }),
+          ...(mode?.instructions && { instructions: mode.instructions }),
         };
 
         const response = await this.stream(messages, streamOptions as any);

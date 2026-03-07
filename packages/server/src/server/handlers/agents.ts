@@ -2050,7 +2050,7 @@ export const SEND_MESSAGE_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
-      const { messages, threadId, resourceId, maxSteps, bodyRequestContext } = params;
+      const { messages, threadId, resourceId, modeId, maxSteps, bodyRequestContext } = params;
 
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext as Record<string, unknown>)) {
@@ -2075,6 +2075,7 @@ export const SEND_MESSAGE_ROUTE = createRoute({
         messages,
         threadId: effectiveThreadId,
         resourceId: effectiveResourceId,
+        modeId,
         maxSteps,
         requestContext: serverRequestContext,
         abortSignal,

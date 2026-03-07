@@ -494,6 +494,7 @@ export const agentSendBodySchema = z.object({
   messages: z.union([z.string(), z.array(z.any())]).describe('Message(s) to send to the agent'),
   threadId: z.string().describe('Thread ID for memory persistence'),
   resourceId: z.string().describe('Resource ID for memory persistence'),
+  modeId: z.string().optional().describe('Mode to use for this operation (overrides instance default)'),
   maxSteps: z.number().optional().describe('Maximum number of LLM steps'),
   bodyRequestContext: z.record(z.unknown()).optional().describe('Additional request context values'),
 });

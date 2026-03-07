@@ -18,10 +18,8 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
 | `POST` | `/api/agents/:agentId/send` | Send message with event streaming (SSE) |
-| `GET` | `/api/agents/:agentId/modes` | List agent modes and current mode |
-| `POST` | `/api/agents/:agentId/modes/switch` | Switch agent mode |
-| `GET` | `/api/agents/:agentId/state` | Get agent state |
-| `POST` | `/api/agents/:agentId/state` | Update agent state |
+| `GET` | `/api/agents/:agentId/modes` | List available agent modes |
+| `GET` | `/api/agents/:agentId/state` | Get agent state (read-only) |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
 
@@ -66,12 +64,15 @@ Server adapters register these routes when you call `server.init()`. All routes 
   messages: string | CoreMessage[];   // Required
   threadId: string;                   // Required — thread for memory
   resourceId: string;                 // Required — resource for memory
+  modeId?: string;                    // Mode to use for this request
   maxSteps?: number;                  // Max tool steps (default: 100)
   bodyRequestContext?: Record<string, unknown>; // Additional request context
 }
 ```
 
 The response is an SSE stream of agent events (`send_start`, `message_start`, `message_update`, `message_end`, `tool_start`, `tool_end`, `usage_update`, `error`, `send_end`).
+
+Pass `modeId` to select which mode's instructions, model, and tools to use for this specific request. Each request is isolated — selecting a mode does not affect other concurrent requests.
 
 ### Modes response
 
@@ -82,27 +83,11 @@ The response is an SSE stream of agent events (`send_start`, `message_start`, `m
 }
 ```
 
-### Switch mode request body
-
-```typescript prettier:false
-{
-  modeId: string;   // The mode ID to switch to
-}
-```
-
 ### State response
 
 ```typescript prettier:false
 {
   state: Record<string, unknown>;
-}
-```
-
-### Update state request body
-
-```typescript prettier:false
-{
-  state: Record<string, unknown>;   // Partial state update to merge
 }
 ```
 
