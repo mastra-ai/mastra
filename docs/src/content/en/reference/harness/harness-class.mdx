@@ -633,15 +633,15 @@ const mode = harness.getMessageDeliveryMode()
 
 Set how new messages are handled while the agent is running. The mode controls the behavior of `send()`:
 
-- `'interrupt'` — abort the current generation and send immediately (default).
-- `'queue'` — queue the message for processing after the current generation completes.
+- `'interrupt'` — abort the current generation and send immediately.
+- `'queue'` — queue the message for processing after the current generation completes (default).
 
 ```typescript
-// Switch to queue mode
-harness.setMessageDeliveryMode({ mode: 'queue' })
-
-// Switch back to interrupt mode
+// Switch to interrupt mode so new messages abort the current generation
 harness.setMessageDeliveryMode({ mode: 'interrupt' })
+
+// Switch back to queue mode (default)
+harness.setMessageDeliveryMode({ mode: 'queue' })
 ```
 
 ### Tool approvals

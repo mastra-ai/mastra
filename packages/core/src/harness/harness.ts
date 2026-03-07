@@ -98,7 +98,7 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   };
   private sessionGrantedCategories = new Set<string>();
   private sessionGrantedTools = new Set<string>();
-  private messageDelivery: MessageDeliveryMode = 'interrupt';
+  private messageDelivery: MessageDeliveryMode = 'queue';
   private displayState: HarnessDisplayState = defaultDisplayState();
   #internalMastra: Mastra | undefined = undefined;
 
@@ -2040,8 +2040,8 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
   /**
    * Set how new messages are handled while the agent is running.
    *
-   * - `'interrupt'` — abort the current generation and send immediately (default).
-   * - `'queue'` — queue the message for processing after the current generation.
+   * - `'interrupt'` — abort the current generation and send immediately.
+   * - `'queue'` — queue the message for processing after the current generation (default).
    */
   setMessageDeliveryMode({ mode }: { mode: MessageDeliveryMode }): void {
     if (mode === this.messageDelivery) return;

@@ -34,19 +34,19 @@ describe('MessageDeliveryMode', () => {
     harness = createHarness();
   });
 
-  it('defaults to interrupt mode', () => {
-    expect(harness.getMessageDeliveryMode()).toBe('interrupt');
-  });
-
-  it('can be set to queue mode', () => {
-    harness.setMessageDeliveryMode({ mode: 'queue' });
+  it('defaults to queue mode', () => {
     expect(harness.getMessageDeliveryMode()).toBe('queue');
   });
 
-  it('can be toggled back to interrupt mode', () => {
-    harness.setMessageDeliveryMode({ mode: 'queue' });
+  it('can be set to interrupt mode', () => {
     harness.setMessageDeliveryMode({ mode: 'interrupt' });
     expect(harness.getMessageDeliveryMode()).toBe('interrupt');
+  });
+
+  it('can be set back to queue mode', () => {
+    harness.setMessageDeliveryMode({ mode: 'interrupt' });
+    harness.setMessageDeliveryMode({ mode: 'queue' });
+    expect(harness.getMessageDeliveryMode()).toBe('queue');
   });
 
   it('emits message_delivery_mode_changed event', () => {
@@ -57,10 +57,10 @@ describe('MessageDeliveryMode', () => {
       }
     });
 
-    harness.setMessageDeliveryMode({ mode: 'queue' });
+    harness.setMessageDeliveryMode({ mode: 'interrupt' });
 
     expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({ type: 'message_delivery_mode_changed', mode: 'queue' });
+    expect(events[0]).toEqual({ type: 'message_delivery_mode_changed', mode: 'interrupt' });
   });
 
   it('does not emit event when mode is unchanged', () => {
@@ -71,15 +71,15 @@ describe('MessageDeliveryMode', () => {
       }
     });
 
-    harness.setMessageDeliveryMode({ mode: 'interrupt' });
+    harness.setMessageDeliveryMode({ mode: 'queue' });
     expect(events).toHaveLength(0);
   });
 
   it('updates display state when mode changes', () => {
-    expect(harness.getDisplayState().messageDeliveryMode).toBe('interrupt');
-
-    harness.setMessageDeliveryMode({ mode: 'queue' });
     expect(harness.getDisplayState().messageDeliveryMode).toBe('queue');
+
+    harness.setMessageDeliveryMode({ mode: 'interrupt' });
+    expect(harness.getDisplayState().messageDeliveryMode).toBe('interrupt');
   });
 });
 
@@ -88,9 +88,9 @@ describe('MessageDeliveryMode', () => {
 // ===========================================================================
 
 describe('defaultDisplayState includes messageDeliveryMode', () => {
-  it('defaults messageDeliveryMode to interrupt', () => {
+  it('defaults messageDeliveryMode to queue', () => {
     const ds = defaultDisplayState();
-    expect(ds.messageDeliveryMode).toBe('interrupt');
+    expect(ds.messageDeliveryMode).toBe('queue');
   });
 });
 
@@ -106,8 +106,8 @@ describe('message_delivery_mode_changed display state', () => {
   });
 
   it('updates display state via event', () => {
-    emit(harness, { type: 'message_delivery_mode_changed', mode: 'queue' });
-    expect(harness.getDisplayState().messageDeliveryMode).toBe('queue');
+    emit(harness, { type: 'message_delivery_mode_changed', mode: 'interrupt' });
+    expect(harness.getDisplayState().messageDeliveryMode).toBe('interrupt');
   });
 
   it('emits display_state_changed after mode change', () => {
@@ -118,9 +118,9 @@ describe('message_delivery_mode_changed display state', () => {
       }
     });
 
-    harness.setMessageDeliveryMode({ mode: 'queue' });
+    harness.setMessageDeliveryMode({ mode: 'interrupt' });
     const dsEvent = events.find(
-      e => e.type === 'display_state_changed' && (e as any).displayState.messageDeliveryMode === 'queue',
+      e => e.type === 'display_state_changed' && (e as any).displayState.messageDeliveryMode === 'interrupt',
     );
     expect(dsEvent).toBeDefined();
   });
@@ -166,19 +166,20 @@ describe('send() method', () => {
     const followUpSpy = vi.spyOn(harness, 'followUp').mockResolvedValue(undefined);
     vi.spyOn(harness, 'isRunning').mockReturnValue(true);
 
-    harness.setMessageDeliveryMode({ mode: 'queue' });
     await harness.send({ content: 'queue me' });
 
     expect(followUpSpy).toHaveBeenCalledWith({ content: 'queue me', requestContext: undefined });
     expect(steerSpy).not.toHaveBeenCalled();
   });
 
-  it('defaults to interrupt mode when running', async () => {
+  it('defaults to queue mode when running', async () => {
+    const followUpSpy = vi.spyOn(harness, 'followUp').mockResolvedValue(undefined);
     const steerSpy = vi.spyOn(harness, 'steer').mockResolvedValue(undefined);
     vi.spyOn(harness, 'isRunning').mockReturnValue(true);
 
     await harness.send({ content: 'test' });
 
-    expect(steerSpy).toHaveBeenCalled();
+    expect(followUpSpy).toHaveBeenCalled();
+    expect(steerSpy).not.toHaveBeenCalled();
   });
 });

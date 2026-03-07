@@ -253,8 +253,8 @@ export interface HarnessOMConfig {
 /**
  * Controls how the Harness handles a new message while the agent is already running.
  *
- * - `'interrupt'` — abort the current generation and send the new message immediately (default).
- * - `'queue'` — queue the message to be processed after the current generation completes.
+ * - `'interrupt'` — abort the current generation and send the new message immediately.
+ * - `'queue'` — queue the message to be processed after the current generation completes (default).
  */
 export type MessageDeliveryMode = 'interrupt' | 'queue';
 
@@ -563,7 +563,7 @@ export interface HarnessDisplayState {
 export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
-    messageDeliveryMode: 'interrupt',
+    messageDeliveryMode: 'queue',
     currentMessage: null,
     tokenUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     activeTools: new Map(),
