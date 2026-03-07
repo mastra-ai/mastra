@@ -1,5 +1,22 @@
 # @mastra/playground-ui
 
+## 15.2.1-alpha.0
+
+### Patch Changes
+
+- fix: maxTokens from Studio Advanced Settings now correctly limits model output ([#13912](https://github.com/mastra-ai/mastra/pull/13912))
+
+  The `modelSettingsArgs` object was prematurely renaming `maxTokens` to `maxOutputTokens`. The React hook (`useChat`) destructures `maxTokens` from this object, so the rename caused it to receive `undefined`, and the value was silently dropped from the API request body.
+
+- Fixed sandbox execution badge to show full streaming output during live sessions instead of snapping to the truncated tool result. The truncated view now only appears after page refresh when streaming data is no longer available. ([#13869](https://github.com/mastra-ai/mastra/pull/13869))
+
+- Updated dependencies [[`a070277`](https://github.com/mastra-ai/mastra/commit/a07027766ce195ba74d0783116d894cbab25d44c), [`b628b91`](https://github.com/mastra-ai/mastra/commit/b628b9128b372c0f54214d902b07279f03443900), [`332c014`](https://github.com/mastra-ai/mastra/commit/332c014e076b81edf7fe45b58205882726415e90), [`4246e34`](https://github.com/mastra-ai/mastra/commit/4246e34cec9c26636d0965942268e6d07c346671), [`aae2295`](https://github.com/mastra-ai/mastra/commit/aae2295838a2d329ad6640829e87934790ffe5b8), [`aa61f29`](https://github.com/mastra-ai/mastra/commit/aa61f29ff8095ce46a4ae16e46c4d8c79b2b685b), [`41d79a1`](https://github.com/mastra-ai/mastra/commit/41d79a14bd8cb6de1e2565fd0a04786bae2f211b), [`f8c1bdd`](https://github.com/mastra-ai/mastra/commit/f8c1bdd9d89297db75bdd5288d9ed9457369609d), [`0c09eac`](https://github.com/mastra-ai/mastra/commit/0c09eacb1926f64cfdc9ae5c6d63385cf8c9f72c), [`6b9b93d`](https://github.com/mastra-ai/mastra/commit/6b9b93d6f459d1ba6e36f163abf62a085ddb3d64), [`aae2295`](https://github.com/mastra-ai/mastra/commit/aae2295838a2d329ad6640829e87934790ffe5b8), [`0bc289e`](https://github.com/mastra-ai/mastra/commit/0bc289e2d476bf46c5b91c21969e8d0c6864691c), [`9b75a06`](https://github.com/mastra-ai/mastra/commit/9b75a06e53ebb0b950ba7c1e83a0142047185f46), [`d567299`](https://github.com/mastra-ai/mastra/commit/d567299cf81e02bd9d5221d4bc05967d6c224161), [`4df2116`](https://github.com/mastra-ai/mastra/commit/4df211619dd922c047d396ca41cd7027c8c4c8e7), [`2219c1a`](https://github.com/mastra-ai/mastra/commit/2219c1acbd21da116da877f0036ffb985a9dd5a3)]:
+  - @mastra/core@1.11.0-alpha.0
+  - @mastra/ai-sdk@1.1.3-alpha.0
+  - @mastra/schema-compat@1.1.4-alpha.0
+  - @mastra/client-js@1.7.4-alpha.0
+  - @mastra/react@0.2.10-alpha.0
+
 ## 15.2.0
 
 ### Minor Changes
