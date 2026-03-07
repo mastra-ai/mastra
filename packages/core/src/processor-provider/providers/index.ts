@@ -35,7 +35,7 @@ export const unicodeNormalizerProvider: ProcessorProvider = {
     collapseWhitespace: z.boolean().optional(),
     trim: z.boolean().optional(),
   }),
-  availablePhases: ['processInput'] as ProcessorPhase[],
+  availablePhases: ['processInput', 'processOutputStep', 'processOutputResult'] as ProcessorPhase[],
   createProcessor(config) {
     return new UnicodeNormalizer(config);
   },
@@ -121,7 +121,7 @@ export const moderationProvider: ProcessorProvider = {
     structuredOutputOptions: structuredOutputOptionsSchema,
     providerOptions: providerOptionsSchema,
   }),
-  availablePhases: ['processInput', 'processOutputResult', 'processOutputStream'] as ProcessorPhase[],
+  availablePhases: ['processInput', 'processOutputStep', 'processOutputResult'] as ProcessorPhase[],
   createProcessor(config) {
     return new ModerationProcessor(config as unknown as ModerationOptions);
   },
@@ -173,7 +173,7 @@ export const piiDetectorProvider: ProcessorProvider = {
     structuredOutputOptions: structuredOutputOptionsSchema,
     providerOptions: providerOptionsSchema,
   }),
-  availablePhases: ['processInput'] as ProcessorPhase[],
+  availablePhases: ['processInput', 'processOutputStep', 'processOutputResult'] as ProcessorPhase[],
   createProcessor(config) {
     return new PIIDetector(config as unknown as PIIDetectorOptions);
   },
@@ -225,7 +225,7 @@ export const systemPromptScrubberProvider: ProcessorProvider = {
     placeholderText: z.string().optional(),
     structuredOutputOptions: structuredOutputOptionsSchema,
   }),
-  availablePhases: ['processOutputStream', 'processOutputResult'] as ProcessorPhase[],
+  availablePhases: ['processOutputStep', 'processOutputResult'] as ProcessorPhase[],
   createProcessor(config) {
     return new SystemPromptScrubber(config as unknown as SystemPromptScrubberOptions);
   },

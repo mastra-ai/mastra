@@ -5,7 +5,7 @@ import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
 import type { ChunkType } from '../../stream';
-import type { Processor } from '../index';
+import type { ProcessOutputStepArgs, Processor } from '../index';
 
 export interface SystemPromptScrubberOptions {
   /** Strategy to use when system prompts are detected: 'block' | 'warn' | 'filter' | 'redact' */
@@ -98,7 +98,7 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   }
 
   /**
-   * Process streaming chunks to detect and handle system prompts
+   * Streaming is intentionally a passthrough. LLM-based detection runs in processOutputStep/result.
    */
   async processOutputStream(
     args: {
@@ -108,62 +108,11 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
       abort: (reason?: string) => never;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, ...rest } = args;
-    const observabilityContext = resolveObservabilityContext(rest);
+    return args.part;
+  }
 
-    // Only process text-delta chunks
-    if (part.type !== 'text-delta') {
-      return part;
-    }
-
-    const text = part.payload.text;
-    if (!text || text.trim() === '') {
-      return part;
-    }
-
-    try {
-      const detectionResult = await this.detectSystemPrompts(text, observabilityContext);
-
-      if (detectionResult.detections && detectionResult.detections.length > 0) {
-        const detectedTypes = detectionResult.detections.map(detection => detection.type);
-
-        switch (this.strategy) {
-          case 'block':
-            abort(`System prompt detected: ${detectedTypes.join(', ')}`);
-            break;
-
-          case 'filter':
-            return null; // Don't emit this part
-
-          case 'warn':
-            console.warn(
-              `[SystemPromptScrubber] System prompt detected in streaming content: ${detectedTypes.join(', ')}`,
-            );
-            if (this.includeDetections && detectionResult.detections) {
-              console.warn(`[SystemPromptScrubber] Detections: ${detectionResult.detections.length} items`);
-            }
-            return part; // Allow content through
-
-          case 'redact':
-          default:
-            const redactedText =
-              detectionResult.redacted_content || this.redactText(text, detectionResult.detections || []);
-            return {
-              ...part,
-              payload: {
-                ...part.payload,
-                text: redactedText,
-              },
-            };
-        }
-      }
-
-      return part;
-    } catch (error) {
-      // Fail open - allow content through if detection fails
-      console.warn('[SystemPromptScrubber] Detection failed, allowing content:', error);
-      return part;
-    }
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<MastraDBMessage[]> {
+    return this.processOutputResult(args);
   }
 
   /**
