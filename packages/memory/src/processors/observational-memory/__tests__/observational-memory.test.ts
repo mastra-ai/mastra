@@ -1,7 +1,8 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 import {
@@ -21,6 +22,7 @@ import {
   validateCompression,
   buildReflectorSystemPrompt,
 } from '../reflector-agent';
+import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -2524,6 +2526,31 @@ describe('Scenario: Observation quality checks', () => {
     expect(observations).toBeGreaterThan(20);
     expect(observations).toBeLessThan(100);
   });
+
+  it('reuses cached part token metadata across repeated counting and message lifecycle copy', () => {
+    const counter = new TokenCounter();
+    const message = createTestMessage('ignored-content', 'assistant');
+    message.content = {
+      format: 2,
+      parts: [{ type: 'text', text: 'Persistent tiktoken estimate on part metadata' } as any],
+    } as any;
+
+    const firstCount = counter.countMessage(message);
+    const firstCache = (message.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(firstCache).toBeTruthy();
+
+    const reloaded = {
+      ...JSON.parse(JSON.stringify(message)),
+      createdAt: new Date(message.createdAt),
+    } as MastraDBMessage;
+
+    const secondCount = counter.countMessage(reloaded);
+    const secondCache = (reloaded.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+
+    expect(secondCount).toBe(firstCount);
+    expect(secondCache).toEqual(firstCache);
+  });
 });
 
 // =============================================================================
@@ -4061,6 +4088,30 @@ describe('Async Buffering Storage Operations', () => {
 });
 
 describe('Model Requirement', () => {
+  const originalCoreFeatures = new Set(coreFeatures);
+
+  afterEach(() => {
+    coreFeatures.clear();
+    for (const feature of originalCoreFeatures) {
+      coreFeatures.add(feature);
+    }
+  });
+
+  it('should throw when core does not support request-response-id-rotation', () => {
+    coreFeatures.delete('request-response-id-rotation');
+
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Please bump @mastra/core to a newer version');
+  });
+
   it('should throw when no model is provided at all', () => {
     expect(
       () =>
@@ -7606,6 +7657,73 @@ describe('Full Async Buffering Flow', () => {
     // The key assertion is that new buffering was triggered (observer called again).
     const callsAfterActivation = observerCalls.length;
     expect(callsAfterActivation).toBeGreaterThan(1); // buffered once before, buffered again after activation
+  });
+
+  it('should retain at least the configured absolute bufferActivation floor after chunk activation', async () => {
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+      messageTokens: 999999,
+      bufferTokens: 999998,
+      bufferActivation: 0.5,
+      reflectionObservationTokens: 50000,
+      reflectionAsyncActivation: 0.5,
+      messageCount: 20,
+    });
+
+    const messageListAfterStep0 = await step(0);
+    await waitForAsyncOps();
+
+    const contextMsgs = messageListAfterStep0.get.all.db();
+    const tokensBeforeActivation = new TokenCounter().countMessages(contextMsgs);
+    expect(tokensBeforeActivation).toBeGreaterThan(0);
+
+    const chunkMsgIds = contextMsgs.slice(0, 6).map((m: any) => m.id);
+    expect(chunkMsgIds.length).toBe(6);
+
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    const recordId = record!.id;
+
+    await storage.updateBufferedObservations({
+      id: recordId,
+      chunk: {
+        observations: 'Manual chunk floor observations',
+        tokenCount: 80,
+        messageIds: chunkMsgIds,
+        messageTokens: 1200,
+        lastObservedAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+        cycleId: 'manual-cycle-floor',
+      },
+    });
+
+    (om as any).observationConfig.messageTokens = 1000;
+    (om as any).observationConfig.bufferTokens = 500;
+    (om as any).observationConfig.blockAfter = 1200;
+    (om as any).observationConfig.bufferActivation = 2000;
+
+    const originalCleanup = (om as any).cleanupAfterObservation.bind(om);
+    let capturedMinRemaining: number | undefined;
+    (om as any).cleanupAfterObservation = async (...args: any[]) => {
+      capturedMinRemaining = args[6];
+      return originalCleanup(...args);
+    };
+
+    const messageListAfterStep1 = await step(1);
+    await waitForAsyncOps();
+
+    const recordAfterStep1 = await storage.getObservationalMemory(threadId, resourceId);
+    expect(recordAfterStep1!.activeObservations).toContain('Manual chunk floor observations');
+
+    const expectedFloor = resolveRetentionFloor(
+      (om as any).observationConfig.bufferActivation,
+      (om as any).observationConfig.messageTokens,
+    );
+    expect(capturedMinRemaining).toBe(expectedFloor);
+
+    const remainingMessages = messageListAfterStep1.get.all.db();
+    const remainingTokens = new TokenCounter().countMessages(remainingMessages);
+    expect(remainingTokens).toBeGreaterThanOrEqual(Math.floor(expectedFloor * 0.9));
+
+    const remainingIds = new Set(remainingMessages.map((m: any) => m.id));
+    expect(chunkMsgIds.some(id => !remainingIds.has(id))).toBe(true);
   });
 
   it('should use lastBufferedAtTime cursor to prevent re-observing same messages', async () => {

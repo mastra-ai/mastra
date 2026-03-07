@@ -1,5 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
+import { MastraCompositeStore, FilesystemStore } from '@mastra/core/storage';
 import { MastraEditor } from '@mastra/editor';
 import { LibSQLStore } from '@mastra/libsql';
 
@@ -27,6 +28,7 @@ import {
   agentWithBranchingModeration,
   agentWithSequentialModeration,
   supervisorAgent,
+  subscriptionOrchestratorAgent,
 } from './agents/model-v2-agent';
 import { createScorer } from '@mastra/core/evals';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
@@ -47,9 +49,15 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 
-const storage = new LibSQLStore({
+const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
-  url: 'file:../../../mastra.db',
+  url: 'file:./mastra.db',
+});
+
+const storage = new MastraCompositeStore({
+  id: 'composite-storage',
+  default: libsqlStore,
+  editor: new FilesystemStore({ dir: '.mastra-storage' }),
 });
 
 const config = {
@@ -72,6 +80,7 @@ const config = {
     agentWithBranchingModeration,
     agentWithSequentialModeration,
     supervisorAgent,
+    subscriptionOrchestratorAgent,
   },
   processors: {
     moderationProcessor,

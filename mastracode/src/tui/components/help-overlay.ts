@@ -45,6 +45,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
+    { key: '/update', description: 'Check for and install updates' },
   ];
 
   if (modes > 1) {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "DynamoDB storage adapter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -49,7 +49,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
