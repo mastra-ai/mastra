@@ -47,6 +47,7 @@ if (OM_DEBUG_LOG) {
   };
 }
 
+import { getObservationBackpressureState, isMessageSealedForBuffering } from './backpressure';
 import { addRelativeTimeToObservations } from './date-utils';
 import {
   createActivationMarker,
@@ -597,10 +598,24 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const memBoundary = ObservationalMemory.lastBufferedBoundary.get(bufferKey) ?? 0;
     const lastBoundary = Math.max(dbBoundary, memBoundary);
 
-    // Halve the buffer interval when within ~1 bufferTokens of the activation threshold.
-    // This produces finer-grained chunks right before activation, improving boundary selection.
-    const rampPoint = messageTokensThreshold ? messageTokensThreshold - bufferTokens * 1.1 : Infinity;
-    const effectiveBufferTokens = currentTokens >= rampPoint ? bufferTokens / 2 : bufferTokens;
+    // Use smaller interval buckets as we approach/overflow threshold so buffered chunks
+    // are created more frequently and activation has tighter swap boundaries.
+    let effectiveBufferTokens = bufferTokens;
+    let rampBand = 'base';
+
+    if (messageTokensThreshold && messageTokensThreshold > 0) {
+      const ratio = currentTokens / messageTokensThreshold;
+      if (ratio >= 1.2) {
+        effectiveBufferTokens = Math.max(100, Math.floor(bufferTokens / 4));
+        rampBand = 'critical';
+      } else if (ratio >= 1.0) {
+        effectiveBufferTokens = Math.max(100, Math.floor(bufferTokens / 3));
+        rampBand = 'high';
+      } else if (ratio >= 0.8) {
+        effectiveBufferTokens = Math.max(100, Math.floor(bufferTokens / 2));
+        rampBand = 'warm';
+      }
+    }
 
     // Calculate which interval we're in
     const currentInterval = Math.floor(currentTokens / effectiveBufferTokens);
@@ -609,11 +624,65 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     const shouldTrigger = currentInterval > lastInterval;
 
     omDebug(
-      `[OM:shouldTriggerAsyncObs] tokens=${currentTokens}, bufferTokens=${bufferTokens}, effectiveBufferTokens=${effectiveBufferTokens}, rampPoint=${rampPoint}, currentInterval=${currentInterval}, lastInterval=${lastInterval}, lastBoundary=${lastBoundary} (db=${dbBoundary}, mem=${memBoundary}), shouldTrigger=${shouldTrigger}`,
+      `[OM:shouldTriggerAsyncObs] tokens=${currentTokens}, bufferTokens=${bufferTokens}, effectiveBufferTokens=${effectiveBufferTokens}, rampBand=${rampBand}, currentInterval=${currentInterval}, lastInterval=${lastInterval}, lastBoundary=${lastBoundary} (db=${dbBoundary}, mem=${memBoundary}), shouldTrigger=${shouldTrigger}`,
     );
 
     // Trigger if we've crossed into a new interval
     return shouldTrigger;
+  }
+
+  private async maybeApplyObservationBackpressure(params: {
+    currentTokens: number;
+    threshold: number;
+    lockKey: string;
+    record: ObservationalMemoryRecord;
+    threadId: string;
+    resourceId?: string;
+  }): Promise<{ waitMs: number; ratio: number; recordAfterWait?: ObservationalMemoryRecord }> {
+    if (!this.isAsyncObservationEnabled()) {
+      return { waitMs: 0, ratio: 0 };
+    }
+
+    const bufferKey = this.getObservationBufferKey(params.lockKey);
+    const hasOngoingBuffering = params.record.isBufferingObservation || this.isAsyncBufferingInProgress(bufferKey);
+    if (!hasOngoingBuffering) {
+      const ratio = params.threshold > 0 ? params.currentTokens / params.threshold : 0;
+      return { waitMs: 0, ratio };
+    }
+
+    const backpressure = getObservationBackpressureState({
+      currentTokens: params.currentTokens,
+      threshold: params.threshold,
+      record: params.record,
+      messageTokensThreshold: getMaxThreshold(this.observationConfig.messageTokens),
+      bufferActivation: this.observationConfig.bufferActivation ?? 0.7,
+      bufferTokens: this.observationConfig.bufferTokens ?? 0,
+      blockAfter: this.observationConfig.blockAfter,
+      getBufferedChunks: record => this.getBufferedChunks(record),
+    });
+
+    if (backpressure.waitMs <= 0) {
+      return { waitMs: 0, ratio: backpressure.ratio };
+    }
+
+    if (backpressure.bufferedActivationLooksReady) {
+      omDebug(
+        `[OM:backpressure] skipping wait: buffered chunks already look activation-ready, current=${params.currentTokens}, projectedRemoval=${backpressure.projectedMessageRemoval}, projectedRemaining=${backpressure.projectedRemaining}, maxRemaining=${backpressure.maxRemaining}`,
+      );
+      return { waitMs: 0, ratio: backpressure.ratio };
+    }
+
+    omDebug(
+      `[OM:backpressure] applying waitMs=${backpressure.waitMs}, ratio=${backpressure.ratio.toFixed(3)}, current=${params.currentTokens}, threshold=${params.threshold}, projectedRemoval=${backpressure.projectedMessageRemoval}, projectedRemaining=${backpressure.projectedRemaining}, maxRemaining=${backpressure.maxRemaining}, isBufferingObs=${params.record.isBufferingObservation}`,
+    );
+
+    await Promise.race([
+      new Promise(resolve => setTimeout(resolve, backpressure.waitMs)),
+      ObservationalMemory.awaitBuffering(params.threadId, params.resourceId, this.scope, backpressure.waitMs),
+    ]);
+
+    const recordAfterWait = await this.getOrCreateRecord(params.threadId, params.resourceId);
+    return { waitMs: backpressure.waitMs, ratio: backpressure.ratio, recordAfterWait };
   }
 
   /**
@@ -1405,6 +1474,54 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
       lastPart.metadata.mastra.sealedAt = sealedAt;
     }
+  }
+
+  private async maybePreSealNearThreshold(params: {
+    messageList: MessageList;
+    record: ObservationalMemoryRecord;
+    threadId: string;
+    resourceId?: string;
+    totalPendingTokens: number;
+    threshold: number;
+    sealedIds: Set<string>;
+  }): Promise<number> {
+    if (!this.isAsyncObservationEnabled()) return 0;
+    if (typeof this.observationConfig.bufferActivation !== 'number') return 0;
+    if (params.totalPendingTokens >= params.threshold) return 0;
+
+    const minRemaining = resolveRetentionFloor(this.observationConfig.bufferActivation, params.threshold);
+    const preSealStart = Math.max(0, params.threshold - minRemaining);
+    if (params.totalPendingTokens < preSealStart) return 0;
+
+    const allMessages = params.messageList.get.all.db();
+    const unobserved = this.getUnobservedMessages(allMessages, params.record);
+    const candidates = unobserved.filter(
+      m =>
+        m.id !== 'om-continuation' &&
+        !params.sealedIds.has(m.id) &&
+        !isMessageSealedForBuffering(m) &&
+        this.hasUnobservedParts(m),
+    );
+
+    if (candidates.length === 0) return 0;
+
+    this.sealMessagesForBuffering(candidates);
+    await this.messageHistory.persistMessages({
+      messages: candidates,
+      threadId: params.threadId,
+      resourceId: params.resourceId,
+    });
+
+    for (const message of candidates) {
+      params.sealedIds.add(message.id);
+    }
+    ObservationalMemory.sealedMessageIds.set(params.threadId, new Set(params.sealedIds));
+
+    omDebug(
+      `[OM:pre-seal] nearThreshold pre-sealed ${candidates.length} messages at pending=${params.totalPendingTokens}/${params.threshold} (start=${preSealStart}, floor=${minRemaining})`,
+    );
+
+    return candidates.length;
   }
 
   /**
@@ -2997,6 +3114,16 @@ ${suggestedResponse}
       state.sealedIds = sealedIds;
       const lockKey = this.getLockKey(threadId, resourceId);
 
+      await this.maybePreSealNearThreshold({
+        messageList,
+        record,
+        threadId,
+        resourceId,
+        totalPendingTokens,
+        threshold,
+        sealedIds,
+      });
+
       // ════════════════════════════════════════════════════════════════════════
       // ASYNC BUFFERING: Trigger background observation at bufferTokens intervals
       // ════════════════════════════════════════════════════════════════════════
@@ -3036,6 +3163,32 @@ ${suggestedResponse}
             requestContext,
           );
         }
+      }
+
+      const backpressure = await this.maybeApplyObservationBackpressure({
+        currentTokens: totalPendingTokens,
+        threshold,
+        lockKey,
+        record,
+        threadId,
+        resourceId,
+      });
+      if (backpressure.waitMs > 0) {
+        record = backpressure.recordAfterWait ?? (await this.getOrCreateRecord(threadId, resourceId));
+        allMessages = messageList.get.all.db();
+        unobservedMessages = this.getUnobservedMessages(allMessages, record);
+        currentObservationTokens = record.observationTokenCount ?? 0;
+        thresholds = this.calculateObservationThresholds(
+          allMessages,
+          unobservedMessages,
+          0,
+          otherThreadTokens,
+          currentObservationTokens,
+          record,
+        );
+        ({ totalPendingTokens, threshold } = thresholds);
+        bufferedChunkTokens = this.getBufferedChunks(record).reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+        unbufferedPendingTokens = Math.max(0, totalPendingTokens - bufferedChunkTokens);
       }
 
       // ════════════════════════════════════════════════════════════════════════
