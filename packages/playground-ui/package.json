@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "15.1.0",
+  "version": "15.2.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -154,7 +154,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/react-query": "^5.90.21",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
