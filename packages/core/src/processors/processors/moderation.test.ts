@@ -548,17 +548,13 @@ describe('ModerationProcessor', () => {
   });
 
   describe('processOutputStream', () => {
-    it('should always moderate current part even when chunkWindow is 0', async () => {
+    it('should return streaming text chunks unchanged', async () => {
       const model = setupMockModel({ object: createMockModerationResult(true, ['hate']) });
       const moderator = new ModerationProcessor({
         model,
-        chunkWindow: 0, // No context window
         strategy: 'block',
       });
-
-      const mockAbort = vi.fn().mockImplementation(() => {
-        throw new TripWire('Content flagged');
-      });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
 
       const part: ChunkType = {
         type: 'text-delta' as const,
@@ -566,62 +562,15 @@ describe('ModerationProcessor', () => {
         runId: '1',
         from: ChunkFrom.AGENT,
       };
-      const streamParts: any[] = []; // Empty context
-
-      // Should attempt to moderate the current part and abort
-      await expect(async () => {
-        await moderator.processOutputStream({
-          part,
-          streamParts,
-          state: {},
-          abort: mockAbort as any,
-        });
-      }).rejects.toThrow('Content flagged');
-
-      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Content flagged for moderation'));
-    });
-
-    it('should include context when chunkWindow is greater than 0', async () => {
-      const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationProcessor({
-        model,
-        chunkWindow: 2, // Include 2 previous chunks
-        strategy: 'block',
-      });
-
-      const mockAbort = vi.fn();
-
-      const previousChunks: ChunkType[] = [
-        {
-          type: 'text-delta' as const,
-          payload: { text: 'Previous content ', id: 'text-1' },
-          runId: '1',
-          from: ChunkFrom.AGENT,
-        },
-        {
-          type: 'text-delta' as const,
-          payload: { text: 'more context ', id: 'text-1' },
-          runId: '1',
-          from: ChunkFrom.AGENT,
-        },
-      ];
-      const currentChunk: ChunkType = {
-        type: 'text-delta' as const,
-        payload: { text: 'current part', id: 'text-1' },
-        runId: '1',
-        from: ChunkFrom.AGENT,
-      };
-
       const result = await moderator.processOutputStream({
-        part: currentChunk,
-        streamParts: previousChunks,
+        part,
+        streamParts: [],
         state: {},
-        abort: mockAbort as any,
+        abort: vi.fn() as any,
       });
 
-      // Should return the part if moderation passes
-      expect(result).toEqual(currentChunk);
-      expect(mockAbort).not.toHaveBeenCalled();
+      expect(result).toEqual(part);
+      expect(generateSpy).not.toHaveBeenCalled();
     });
 
     it('should skip non-text-delta chunks', async () => {
@@ -630,8 +579,7 @@ describe('ModerationProcessor', () => {
         model,
         strategy: 'block',
       });
-
-      const mockAbort = vi.fn();
+      const generateSpy = vi.spyOn(model, 'doGenerate');
 
       const objectChunk: ChunkType = {
         type: 'object' as const,
@@ -644,41 +592,31 @@ describe('ModerationProcessor', () => {
         part: objectChunk,
         streamParts: [],
         state: {},
-        abort: mockAbort as any,
+        abort: vi.fn() as any,
       });
 
-      // Should return the part without moderation
       expect(result).toEqual(objectChunk);
-      expect(mockAbort).not.toHaveBeenCalled();
+      expect(generateSpy).not.toHaveBeenCalled();
     });
+  });
 
-    it('should properly handle chunkWindow=0 with current part in streamParts', async () => {
+  describe('processOutputStep', () => {
+    it('should moderate the completed assistant step instead of each chunk', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
       const moderator = new ModerationProcessor({
         model,
-        chunkWindow: 0, // No context window
         strategy: 'block',
       });
 
       const mockAbort = vi.fn();
+      const messages = [createTestMessage('Safe content', 'assistant')];
 
-      const currentChunk: ChunkType = {
-        type: 'text-delta' as const,
-        payload: { text: 'Safe content', id: 'text-1' },
-        runId: '1',
-        from: ChunkFrom.AGENT,
-      };
-      const streamParts = [currentChunk]; // streamParts includes the current part
-
-      const result = await moderator.processOutputStream({
-        part: currentChunk,
-        streamParts,
-        state: {},
+      const result = await moderator.processOutputStep({
+        messages,
         abort: mockAbort as any,
-      });
+      } as any);
 
-      // Should moderate the current part and return it if safe
-      expect(result).toEqual(currentChunk);
+      expect(result).toEqual(messages);
       expect(mockAbort).not.toHaveBeenCalled();
     });
   });

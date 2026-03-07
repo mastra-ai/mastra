@@ -862,7 +862,35 @@ describe('PIIDetector', () => {
       expect(result).toEqual(part);
     });
 
-    it('should detect and redact PII in text chunks', async () => {
+    it('should not run PII detection for streaming chunks', async () => {
+      const model = setupMockModel(createMockPIIResult(['email']));
+      const detector = new PIIDetector({ model });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
+
+      const part: ChunkType = {
+        type: 'text-delta',
+        payload: {
+          id: 'test-id',
+          text: 'My email is test@example.com',
+        },
+        runId: 'test-run-id',
+        from: ChunkFrom.USER,
+      };
+
+      const result = await detector.processOutputStream({
+        part,
+        streamParts: [],
+        state: {},
+        abort: vi.fn() as any,
+      });
+
+      expect(result).toEqual(part);
+      expect(generateSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('processOutputStep', () => {
+    it('should detect and redact PII after the step completes', async () => {
       const detections: PIIDetection[] = [
         {
           type: 'email',
@@ -876,148 +904,17 @@ describe('PIIDetector', () => {
       const model = setupMockModel(createMockPIIResult(['email'], detections, 'My email is j***.d**@e******.com'));
       const detector = new PIIDetector({ model });
 
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'My email is test@example.com',
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.USER,
-      };
+      const messages = [createTestMessage('My email is test@example.com', 'assistant')];
 
-      const result = await detector.processOutputStream({
-        part,
-        streamParts: [],
-        state: {},
+      const result = await detector.processOutputStep({
+        messages,
         abort: vi.fn() as any,
+      } as any);
+
+      expect(result[0].content.parts[0]).toEqual({
+        type: 'text',
+        text: 'My email is j***.d**@e******.com',
       });
-
-      expect(result).toEqual({
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'My email is j***.d**@e******.com',
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.USER,
-      });
-    });
-
-    it('should block streaming content when strategy is block and PII is detected', async () => {
-      const model = setupMockModel(createMockPIIResult(['email']));
-      const detector = new PIIDetector({ model, strategy: 'block' });
-
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'My email is test@example.com',
-          providerMetadata: {},
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
-
-      const mockAbort = vi.fn().mockImplementation(() => {
-        throw new TripWire('PII detected in streaming content');
-      });
-
-      await expect(
-        detector.processOutputStream({
-          part,
-          streamParts: [],
-          state: {},
-          abort: mockAbort as any,
-        }),
-      ).rejects.toThrow('PII detected in streaming content');
-
-      expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('PII detected in streaming content'));
-    });
-
-    it('should filter streaming chunks when strategy is filter and PII is detected', async () => {
-      const model = setupMockModel(createMockPIIResult(['email']));
-      const detector = new PIIDetector({ model, strategy: 'filter' });
-
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'My email is test@example.com',
-          providerMetadata: {},
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
-
-      const result = await detector.processOutputStream({
-        part,
-        streamParts: [],
-        state: {},
-        abort: vi.fn() as any,
-      });
-
-      expect(result).toBeNull();
-    });
-
-    it('should warn but allow content when strategy is warn and PII is detected', async () => {
-      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const model = setupMockModel(createMockPIIResult(['email']));
-      const detector = new PIIDetector({ model, strategy: 'warn' });
-
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'My email is test@example.com',
-          providerMetadata: {},
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
-
-      const result = await detector.processOutputStream({
-        part,
-        streamParts: [],
-        state: {},
-        abort: vi.fn() as any,
-      });
-
-      expect(result).toEqual(part);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('PII detected in streaming content'));
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should handle streaming detection failures gracefully', async () => {
-      const model = new MockLanguageModelV1({
-        defaultObjectGenerationMode: 'json',
-        doGenerate: async () => {
-          throw new Error('Detection failed');
-        },
-      });
-      const detector = new PIIDetector({ model });
-
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'My email is test@example.com',
-          providerMetadata: {},
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
-
-      const result = await detector.processOutputStream({
-        part,
-        streamParts: [],
-        state: {},
-        abort: vi.fn() as any,
-      });
-
-      expect(result).toEqual(part); // Should return original part on failure
     });
   });
 

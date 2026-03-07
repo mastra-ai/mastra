@@ -9,7 +9,7 @@ import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
 import type { ChunkType } from '../../stream';
-import type { Processor } from '../index';
+import type { ProcessOutputStepArgs, Processor } from '../index';
 
 /**
  * PII categories for detection and redaction
@@ -576,7 +576,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
   }
 
   /**
-   * Process streaming output chunks for PII detection and redaction
+   * Streaming is intentionally a passthrough. LLM-based PII detection runs in processOutputStep/result.
    */
   async processOutputStream(
     args: {
@@ -586,68 +586,11 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       abort: (reason?: string) => never;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, ...rest } = args;
-    const observabilityContext = resolveObservabilityContext(rest);
-    try {
-      // Only process text-delta chunks
-      if (part.type !== 'text-delta') {
-        return part;
-      }
+    return args.part;
+  }
 
-      const textContent = part.payload.text;
-      if (!textContent.trim()) {
-        return part;
-      }
-
-      const detectionResult = await this.detectPII(textContent, observabilityContext);
-
-      if (this.isPIIFlagged(detectionResult)) {
-        switch (this.strategy) {
-          case 'block':
-            abort(`PII detected in streaming content. Types: ${this.getDetectedTypes(detectionResult).join(', ')}`);
-
-          case 'warn':
-            console.warn(
-              `[PIIDetector] PII detected in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
-            );
-            return part; // Allow content through with warning
-
-          case 'filter':
-            console.info(
-              `[PIIDetector] Filtered streaming part with PII: ${this.getDetectedTypes(detectionResult).join(', ')}`,
-            );
-            return null; // Don't emit this part
-
-          case 'redact':
-            if (detectionResult.redacted_content) {
-              console.info(
-                `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
-              );
-              return {
-                ...part,
-                payload: {
-                  ...part.payload,
-                  text: detectionResult.redacted_content,
-                },
-              };
-            } else {
-              console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
-              return null; // Fallback to filtering if no redaction available
-            }
-
-          default:
-            return part;
-        }
-      }
-
-      return part;
-    } catch (error) {
-      if (error instanceof TripWire) {
-        throw error; // Re-throw tripwire errors
-      }
-      console.warn('[PIIDetector] Streaming detection failed, allowing content:', error);
-      return part; // Fail open - allow content if detection fails
-    }
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<MastraDBMessage[]> {
+    return this.processOutputResult(args);
   }
 
   /**

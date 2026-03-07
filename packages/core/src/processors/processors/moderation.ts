@@ -8,7 +8,7 @@ import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
 import type { ChunkType } from '../../stream';
-import type { Processor } from '../index';
+import type { ProcessOutputStepArgs, Processor } from '../index';
 
 /**
  * Individual moderation category score
@@ -71,9 +71,8 @@ export interface ModerationOptions {
   includeScores?: boolean;
 
   /**
-   * Number of previous chunks to include for context when moderating stream chunks.
-   * If set to 1, includes the previous part. If set to 2, includes the two previous chunks, etc.
-   * Default: 0 (no context window)
+   * Legacy streaming option retained for compatibility.
+   * LLM-based output moderation now runs at processOutputStep/result instead of per chunk.
    */
   chunkWindow?: number;
 
@@ -213,6 +212,13 @@ export class ModerationProcessor implements Processor<'moderation'> {
     return this.processInput(args);
   }
 
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<MastraDBMessage[]> {
+    return this.processOutputResult(args);
+  }
+
+  /**
+   * Streaming is intentionally a passthrough. LLM-based moderation runs in processOutputStep/result.
+   */
   async processOutputStream(
     args: {
       part: ChunkType;
@@ -221,38 +227,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
       abort: (reason?: string) => never;
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null | undefined> {
-    try {
-      const { part, streamParts, abort, ...rest } = args;
-      const observabilityContext = resolveObservabilityContext(rest);
-
-      // Only process text-delta chunks for moderation
-      if (part.type !== 'text-delta') {
-        return part;
-      }
-
-      // Build context from chunks based on chunkWindow (streamParts includes the current part)
-      const contentToModerate = this.buildContextFromChunks(streamParts);
-
-      const moderationResult = await this.moderateContent(contentToModerate, true, observabilityContext);
-
-      if (this.isModerationFlagged(moderationResult)) {
-        this.handleFlaggedContent(moderationResult, this.strategy, abort);
-
-        // If we reach here, strategy is 'warn' or 'filter'
-        if (this.strategy === 'filter') {
-          return null; // Don't emit this part
-        }
-      }
-
-      return part;
-    } catch (error) {
-      if (error instanceof TripWire) {
-        throw error; // Re-throw tripwire errors
-      }
-      // Log error but don't block the stream
-      console.warn('[ModerationProcessor] Stream moderation failed:', error);
-      return args.part;
-    }
+    return args.part;
   }
 
   /**
