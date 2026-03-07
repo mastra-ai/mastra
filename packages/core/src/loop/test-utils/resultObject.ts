@@ -672,6 +672,7 @@ export function resultObjectTests({
               "args": {
                 "value": "value",
               },
+              "parseError": undefined,
               "providerExecuted": undefined,
               "providerMetadata": undefined,
               "toolCallId": "call-1",

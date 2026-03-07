@@ -160,6 +160,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
 
     case 'tool-call': {
       let toolCallInput: Record<string, any> | undefined = undefined;
+      let parseError: string | undefined = undefined;
 
       if (value.input) {
         const sanitized = sanitizeToolCallInput(value.input);
@@ -167,11 +168,20 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           try {
             toolCallInput = JSON.parse(sanitized);
           } catch (error) {
-            console.error('Error converting tool call input to JSON', {
-              error,
-              input: value.input,
-            });
-            toolCallInput = undefined;
+            const repaired = tryRepairJson(sanitized);
+            if (repaired) {
+              toolCallInput = repaired;
+            } else {
+              toolCallInput = {};
+              const truncated = value.input.length > 200 ? value.input.slice(0, 200) + '...' : value.input;
+              console.error('Error converting tool call input to JSON', {
+                error,
+                input: truncated,
+              });
+              parseError =
+                `Tool call arguments for "${value.toolName}" contained malformed JSON that could not be parsed. ` +
+                `Please provide valid JSON arguments. Raw input: ${truncated}`;
+            }
           }
         }
       }
@@ -184,6 +194,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
           toolCallId: value.toolCallId,
           toolName: value.toolName,
           args: toolCallInput,
+          parseError,
           providerExecuted: value.providerExecuted,
           providerMetadata: value.providerMetadata,
         },
@@ -598,4 +609,111 @@ function normalizeFinishReason(
 
   // V2/V5 format - already a string, but normalize 'unknown' to 'other' for consistency with V6
   return finishReason === 'unknown' ? 'other' : finishReason;
+}
+
+/**
+ * Attempts to repair common JSON malformations from LLM providers.
+ * Returns the parsed object on success, or null if repair fails.
+ */
+export function tryRepairJson(input: string): Record<string, any> | null {
+  const repaired = applyStructuralFixes(input.trim());
+
+  try {
+    const parsed = JSON.parse(repaired);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    const withDoubleQuotes = applyStructuralFixes(replaceSingleQuoteDelimiters(input.trim()));
+    try {
+      const parsed = JSON.parse(withDoubleQuotes);
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Converts single-quote delimiters to double quotes, preserving apostrophes in double-quoted values. */
+function replaceSingleQuoteDelimiters(input: string): string {
+  const chars: string[] = [];
+  let i = 0;
+
+  while (i < input.length) {
+    const ch = input[i]!;
+
+    if (ch === '"') {
+      chars.push(ch);
+      i++;
+      while (i < input.length) {
+        const inner = input[i]!;
+        if (inner === '\\') {
+          chars.push(inner);
+          i++;
+          if (i < input.length) {
+            chars.push(input[i]!);
+            i++;
+          }
+        } else if (inner === '"') {
+          chars.push(inner);
+          i++;
+          break;
+        } else {
+          chars.push(inner);
+          i++;
+        }
+      }
+    } else if (ch === "'") {
+      chars.push('"');
+      i++;
+      while (i < input.length) {
+        const inner = input[i]!;
+        if (inner === '\\') {
+          chars.push(inner);
+          i++;
+          if (i < input.length) {
+            chars.push(input[i]!);
+            i++;
+          }
+        } else if (inner === "'") {
+          chars.push('"');
+          i++;
+          break;
+        } else if (inner === '"') {
+          chars.push('\\"');
+          i++;
+        } else {
+          chars.push(inner);
+          i++;
+        }
+      }
+    } else {
+      chars.push(ch);
+      i++;
+    }
+  }
+
+  return chars.join('');
+}
+
+function applyStructuralFixes(input: string): string {
+  let result = input;
+
+  // Strip trailing LLM special tokens: '{}\t<|call|>' -> '{}'
+  result = result.replace(/\s*(<\|[^|]*\|>\s*)+$/, '').trim();
+
+  // Fix missing opening quote: {"a":"b",c":"d"} -> {"a":"b","c":"d"}
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)"\s*:/g, '$1"$2":');
+
+  // Quote unquoted property names: {command:"value"} -> {"command":"value"}
+  result = result.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+
+  // Remove trailing commas: {"a":1,} -> {"a":1}
+  result = result.replace(/,(\s*[}\]])/g, '$1');
+
+  return result;
 }

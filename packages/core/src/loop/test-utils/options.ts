@@ -534,6 +534,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "args": {
                   "value": "value",
                 },
+                "parseError": undefined,
                 "providerExecuted": undefined,
                 "providerMetadata": undefined,
                 "toolCallId": "call-1",
@@ -812,6 +813,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "args": {
                         "value": "value",
                       },
+                      "parseError": undefined,
                       "providerExecuted": undefined,
                       "providerMetadata": undefined,
                       "toolCallId": "call-1",
@@ -4919,6 +4921,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "args": {
                 "value": "test",
               },
+              "parseError": undefined,
               "providerExecuted": undefined,
               "providerMetadata": {
                 "provider": {
@@ -8120,6 +8123,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "args": {
                   "value": "value",
                 },
+                "parseError": undefined,
                 "providerExecuted": undefined,
                 "providerMetadata": undefined,
                 "toolCallId": "call-1",
@@ -8300,6 +8304,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                       "args": {
                         "value": "value",
                       },
+                      "parseError": undefined,
                       "providerExecuted": undefined,
                       "providerMetadata": undefined,
                       "toolCallId": "call-1",
