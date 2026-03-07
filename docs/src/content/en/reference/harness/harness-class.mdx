@@ -199,7 +199,7 @@ await harness.sendMessage({ content: 'Hello!' })
             name: 'allowedWorkspaceTools',
             type: 'string[]',
             description:
-              'Workspace tool keys the subagent is allowed to use. When set, workspace tools not in this list are hidden from the model. Non-workspace tools are never affected. When omitted, all workspace tools are visible.',
+              'Workspace tool names the subagent is allowed to use. Uses the exposed names (after any renames via workspace tool config). When set, workspace tools not in this list are hidden from the model. Non-workspace tools are never affected. When omitted, all workspace tools are visible.',
             isOptional: true,
           },
           {

@@ -142,13 +142,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools),
   });
 
-  // Subagents inherit workspace tools from the parent agent's workspace automatically.
-  // allowedWorkspaceTools restricts which workspace tools the model can see.
-  const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent].map(s =>
-    config?.disabledTools?.length && s.allowedWorkspaceTools
-      ? { ...s, allowedWorkspaceTools: s.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)) }
-      : s,
-  );
+  const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
   const defaultModes: HarnessMode[] = [
     {
@@ -233,10 +227,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
+  // Subagents inherit workspace tools from the parent agent's workspace automatically.
+  // Apply disabledTools filter to both default and custom subagents.
   const subagents = (config?.subagents ?? defaultSubagents).map(sa => {
     const modeId = subagentModeMap[sa.id];
     const model = modeId ? effectiveDefaults[modeId] : undefined;
-    return model ? { ...sa, defaultModelId: model } : sa;
+    const filtered =
+      config?.disabledTools?.length && sa.allowedWorkspaceTools
+        ? { ...sa, allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)) }
+        : sa;
+    return model ? { ...filtered, defaultModelId: model } : filtered;
   });
 
   // Build initial state with global preferences
