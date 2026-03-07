@@ -2082,4 +2082,33 @@ describe('processInputStep', () => {
       expect(allMessages[1].id).toBe('result-msg');
     });
   });
+
+  describe('TrailingAssistantGuard auto-injection for Claude 4.6', () => {
+    it('should append a trailing user continuation even without structured output', async () => {
+      const runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      messageList.add([createMessage('Assistant reply', 'assistant')], 'response');
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: {
+          ...createMockModel('claude-opus-4-6'),
+          provider: 'anthropic',
+        },
+        steps: [],
+      });
+
+      const allMessages = messageList.get.all.db();
+      expect(allMessages).toHaveLength(2);
+      expect(allMessages[1]?.role).toBe('user');
+      expect(allMessages[1]?.content.parts).toEqual([{ type: 'text', text: 'Continue.' }]);
+    });
+  });
 });
