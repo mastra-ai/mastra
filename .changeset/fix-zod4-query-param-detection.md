@@ -2,6 +2,6 @@
 '@mastra/server': patch
 ---
 
-fix(server): support Zod v4 in query parameter type detection
+fix(server): fix complex query parameter parsing for Zod v4 projects
 
-`wrapSchemaForQueryParams` relied on `_def.typeName` to detect complex schema types (objects, arrays, records) that need JSON parsing from query strings. Zod v4 uses `_def.type` with lowercase values instead, causing all complex fields to be treated as simple strings. This broke date range filters, tags, and metadata filters in the Studio Observability UI when users had Zod v4 installed.
+Projects using Zod v4 would get "Invalid query parameters" errors when using date-range filters, tag filters, or metadata filters in the Studio Observability UI and server API. Complex query parameters (objects, arrays, records) are now correctly detected and parsed regardless of whether the project uses Zod v3 or v4.
