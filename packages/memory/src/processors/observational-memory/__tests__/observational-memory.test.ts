@@ -7568,7 +7568,8 @@ describe('Full Async Buffering Flow', () => {
     // Lower thresholds so step 1 crosses them → triggers handleThresholdReached
     (om as any).observationConfig.messageTokens = 1000;
     (om as any).observationConfig.bufferTokens = 500;
-    (om as any).observationConfig.blockAfter = 1200;
+    // Lower blockAfter so activation still runs after refreshed pending-token recount
+    (om as any).observationConfig.blockAfter = 1100;
 
     const msgCountBefore = contextMsgs.length;
 
@@ -8339,5 +8340,673 @@ describe('Per-step save deduplication', () => {
 
     expect(sameLogical.length).toBe(1);
     expect(sameLogical[0]!.id).toBe('user-1');
+  });
+});
+
+describe('Single-thread replay red tests', () => {
+  async function createReplayFixture() {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'single-thread-replay';
+    const resourceId = 'single-thread-replay-resource';
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: new MockLanguageModelV2({}) as any,
+      observation: { messageTokens: 5_000 },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    const messageList = new MessageList({ threadId, resourceId });
+
+    return { om, messageList, threadId, resourceId };
+  }
+
+  function getModelTextParts(message: any): string[] {
+    if (typeof message?.content === 'string') return [message.content];
+    if (Array.isArray(message?.content)) {
+      return message.content.filter((p: any) => p?.type === 'text').map((p: any) => p.text);
+    }
+    return [];
+  }
+
+  function getModelVisibleText(messageList: any): string {
+    return messageList.get.all.aiV5
+      .model()
+      .flatMap((m: any) => getModelTextParts(m))
+      .join(' | ');
+  }
+
+  it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 1);
+
+    messageList.add(
+      {
+        id: 'boundary-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'old-at-boundary' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'boundary-new',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'new-after-boundary' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('old-at-boundary');
+    expect(remainingText).toContain('new-after-boundary');
+  });
+
+  it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'pre-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fully-observed-before-marker' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix-in-marker-message' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-post-marker-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t1,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remaining.map((m: any) => m.id)).toEqual(['marker-msg']);
+    expect(remainingText).not.toContain('fully-observed-before-marker');
+    expect(remainingText).not.toContain('observed-prefix-in-marker-message');
+    expect(remainingText).toContain('fresh-post-marker-tail');
+  });
+
+  it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [
+            { type: 'text', text: 'sealed-prefix', metadata: { mastra: { sealedAt: t0.getTime() } } },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'sealed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const messagesAfterRemint = messageList.get.all.db();
+    const reminted = messagesAfterRemint.find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('sealed-prefix');
+    expect(remainingText).toContain('fresh-tail');
+  });
+
+  it('T1-B: reminted +1ms boundary should not leak observed prefix on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'new-content-after-seal' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+    expect(reminted!.createdAt.getTime()).toBe(t0.getTime() + 1);
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('already-observed');
+    expect(remainingText).toContain('new-content-after-seal');
+  });
+
+  it('T4-B: post-activation step>0 should still prune already observed content before model sees it', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['old-1'],
+    });
+
+    messageList.add(
+      {
+        id: 'old-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'new-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-after-activation' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-activation');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-C: post-activation step>0 should not replay sealed-split prefix when ID A is reused', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'fresh-after-split' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-split');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-D: repeated loop re-add of id A should not replay observed prefix across reminted tails on step>0', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    for (let i = 1; i <= 3; i++) {
+      messageList.add(
+        {
+          id: 'A',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'already-observed' },
+              { type: 'text', text: `fresh-${i}` },
+            ],
+          },
+          createdAt: new Date(t0.getTime() + i),
+        } as any,
+        'response',
+      );
+    }
+
+    const reminted = messageList.get.all.db().filter((m: any) => m.id !== 'A');
+    expect(reminted.length).toBeGreaterThan(0);
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-3');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-A: activation/save ordering race should not replay previously observed content', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    const saveStarted: { value: boolean } = { value: false };
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      saveStarted.value = true;
+      await new Promise(resolve => setTimeout(resolve, 25));
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(saveStarted.value).toBe(true);
+
+    await (om as any).filterAlreadyObservedMessages(
+      messageList,
+      {
+        observedMessageIds: ['race-old'],
+        lastObservedAt: t0,
+      },
+      { useMarkerBoundaryPruning: true },
+    );
+
+    const duringRaceText = getModelVisibleText(messageList);
+
+    expect(duringRaceText).not.toContain('already-observed-race');
+
+    await cleanupPromise;
+  });
+
+  it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old-debug',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh-debug',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+
+    const duringRaceText = getModelVisibleText(messageList);
+
+    // Keep this assertion as a debug signal for post-activation under-inclusion windows.
+    expect(duringRaceText).toContain('fresh-next-turn');
+
+    await cleanupPromise;
+  });
+
+  it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const observed = {
+      id: 'obs-1',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'already-seen' }] },
+      createdAt: t0,
+    } as any;
+    const fresh = {
+      id: 'obs-2',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'new-seen' }] },
+      createdAt: new Date(t0.getTime() + 1),
+    } as any;
+
+    const record = {
+      observedMessageIds: ['obs-1'],
+      lastObservedAt: t0,
+      bufferedObservations: [],
+    } as any;
+
+    const unobserved = (om as any).getUnobservedMessages([observed, fresh], record);
+    const unobservedIds = unobserved.map((m: any) => m.id);
+    expect(unobservedIds).toEqual(['obs-2']);
+
+    messageList.add(observed, 'memory');
+    messageList.add(fresh, 'memory');
+    await (om as any).filterAlreadyObservedMessages(messageList, record);
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    expect(remainingIds).toEqual(unobservedIds);
   });
 });
