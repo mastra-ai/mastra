@@ -1,3 +1,4 @@
+import type { ValidationErrorHook } from '@mastra/core/server';
 import { z } from 'zod';
 import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
 import { generateRouteOpenAPI } from '../openapi-utils';
@@ -181,6 +182,7 @@ interface RouteConfig<
    * Uses the format: `resource:action` or `resource:action:resourceId`
    */
   requiresPermission?: string;
+  onValidationError?: ValidationErrorHook;
 }
 
 /**
@@ -255,7 +257,8 @@ export function createRoute<
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
   TResponseType
 > {
-  const { summary, description, tags, deprecated, requiresAuth, requiresPermission, ...baseRoute } = config;
+  const { summary, description, tags, deprecated, requiresAuth, requiresPermission, onValidationError, ...baseRoute } =
+    config;
 
   // Generate OpenAPI specification from the route config
   // Skip OpenAPI generation for 'ALL' method as it doesn't map to OpenAPI
@@ -281,6 +284,7 @@ export function createRoute<
     deprecated,
     requiresAuth,
     requiresPermission,
+    onValidationError,
   };
 }
 
