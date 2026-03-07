@@ -4,6 +4,8 @@ export type { OutputFormat } from './message-list';
 export * from './types';
 export * from './agent';
 export * from './utils';
+export type { AgentEvent, AgentEventListener, AgentEventMap } from './events';
+export type { AgentMode } from './modes';
 
 export type {
   AgentExecutionOptions,

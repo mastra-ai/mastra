@@ -82,8 +82,10 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import type { AgentEvent, AgentEventListener, AgentEventMap } from './events';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import type { AgentMode } from './modes';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -174,6 +176,13 @@ export class Agent<
   #requestContextSchema?: ZodSchema<TRequestContext>;
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
+
+  // -- Orchestration (optional) -----------------------------------------------
+  #modes?: AgentMode[];
+  #currentModeId?: string;
+  #stateSchema?: z.ZodObject<z.ZodRawShape>;
+  #state: Record<string, unknown> = {};
+  #eventListeners: AgentEventListener[] = [];
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
   private _agentNetworkAppend = false;
@@ -314,12 +323,187 @@ export class Agent<
       this.#requestContextSchema = config.requestContextSchema;
     }
 
+    if (config.modes?.length) {
+      this.#modes = config.modes;
+      const defaultMode = config.modes.find(m => m.default) ?? config.modes[0]!;
+      this.#currentModeId = defaultMode.id;
+    }
+
+    if (config.stateSchema) {
+      this.#stateSchema = config.stateSchema;
+      this.#state = {
+        ...this.#getSchemaDefaults(config.stateSchema),
+        ...config.initialState,
+      };
+    } else if (config.initialState) {
+      this.#state = { ...config.initialState };
+    }
+
     // @ts-expect-error Flag for agent network messages
     this._agentNetworkAppend = config._agentNetworkAppend || false;
   }
 
   getMastraInstance() {
     return this.#mastra;
+  }
+
+  // ===========================================================================
+  // Events
+  // ===========================================================================
+
+  /**
+   * Subscribe to all agent events. Returns an unsubscribe function.
+   *
+   * @example
+   * ```typescript
+   * const unsub = agent.subscribe((event) => {
+   *   if (event.type === 'mode_changed') console.log(event.modeId);
+   * });
+   * // later:
+   * unsub();
+   * ```
+   */
+  subscribe(listener: AgentEventListener): () => void {
+    this.#eventListeners.push(listener);
+    return () => {
+      const idx = this.#eventListeners.indexOf(listener);
+      if (idx >= 0) this.#eventListeners.splice(idx, 1);
+    };
+  }
+
+  /**
+   * Subscribe to a specific event type. Returns an unsubscribe function.
+   *
+   * @example
+   * ```typescript
+   * agent.on('mode_changed', (event) => {
+   *   console.log(`Switched to ${event.modeId}`);
+   * });
+   * ```
+   */
+  on<K extends keyof AgentEventMap>(type: K, handler: (event: AgentEventMap[K]) => void | Promise<void>): () => void {
+    const wrappedListener: AgentEventListener = event => {
+      if (event.type === type) return handler(event as AgentEventMap[K]);
+    };
+    return this.subscribe(wrappedListener);
+  }
+
+  /**
+   * Emit an event to all subscribers.
+   * @internal — used by Agent internals and future orchestration methods.
+   */
+  protected emitEvent(event: AgentEvent): void {
+    for (const listener of this.#eventListeners) {
+      try {
+        void listener(event);
+      } catch {
+        // Don't let listener errors break the agent
+      }
+    }
+  }
+
+  // ===========================================================================
+  // Modes
+  // ===========================================================================
+
+  /**
+   * Whether this agent has modes configured.
+   */
+  hasModes(): boolean {
+    return !!this.#modes?.length;
+  }
+
+  /**
+   * List all configured modes.
+   * Returns an empty array if modes are not configured.
+   */
+  listModes(): AgentMode[] {
+    return this.#modes ?? [];
+  }
+
+  /**
+   * Get the current mode ID. Returns undefined if modes are not configured.
+   */
+  getCurrentModeId(): string | undefined {
+    return this.#currentModeId;
+  }
+
+  /**
+   * Get the current mode. Returns undefined if modes are not configured.
+   */
+  getCurrentMode(): AgentMode | undefined {
+    if (!this.#modes || !this.#currentModeId) return undefined;
+    return this.#modes.find(m => m.id === this.#currentModeId);
+  }
+
+  /**
+   * Switch to a different mode.
+   * Throws if modes are not configured or the mode ID is not found.
+   */
+  switchMode(modeId: string): void {
+    if (!this.#modes) {
+      throw new Error('Cannot switch modes: no modes configured on this agent');
+    }
+    const mode = this.#modes.find(m => m.id === modeId);
+    if (!mode) {
+      throw new Error(`Mode not found: ${modeId}`);
+    }
+    const previousModeId = this.#currentModeId!;
+    if (previousModeId === modeId) return;
+
+    this.#currentModeId = modeId;
+    this.emitEvent({ type: 'mode_changed', modeId, previousModeId });
+  }
+
+  // ===========================================================================
+  // State
+  // ===========================================================================
+
+  /**
+   * Get the current agent state (read-only snapshot).
+   * Returns an empty object if state is not configured.
+   */
+  getState(): Readonly<Record<string, unknown>> {
+    return { ...this.#state };
+  }
+
+  /**
+   * Update agent state. Validates against stateSchema if provided.
+   * Emits a state_changed event.
+   */
+  setState(updates: Record<string, unknown>): void {
+    const changedKeys = Object.keys(updates);
+    const newState = { ...this.#state, ...updates };
+
+    if (this.#stateSchema) {
+      const result = this.#stateSchema.safeParse(newState);
+      if (!result.success) {
+        throw new Error(`Invalid state update: ${result.error.message}`);
+      }
+      this.#state = result.data as Record<string, unknown>;
+    } else {
+      this.#state = newState;
+    }
+
+    this.emitEvent({ type: 'state_changed', state: this.#state, changedKeys });
+  }
+
+  #getSchemaDefaults(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
+    const shape = schema.shape;
+    const defaults: Record<string, unknown> = {};
+
+    for (const [key, field] of Object.entries(shape)) {
+      try {
+        const result = (field as any).safeParse(undefined);
+        if (result.success && result.data !== undefined) {
+          defaults[key] = result.data;
+        }
+      } catch {
+        // field has no default — skip
+      }
+    }
+
+    return defaults;
   }
 
   /**
