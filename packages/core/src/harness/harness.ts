@@ -1529,9 +1529,9 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
                 ? (part as { image?: string }).image!
                 : '';
           content.push({
-            type: 'file',
+            type: 'image',
             data: imgData,
-            mediaType:
+            mimeType:
               (part as { mimeType?: string }).mimeType ?? (part as { mediaType?: string }).mediaType ?? 'image/png',
           });
           break;
