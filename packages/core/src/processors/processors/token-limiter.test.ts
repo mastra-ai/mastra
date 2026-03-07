@@ -1096,4 +1096,449 @@ describe('TokenLimiterProcessor', () => {
       expect(allMessagesAfter.some(m => m.id === 'input-1')).toBe(true);
     });
   });
+
+  describe('processInputStep', () => {
+    const createMockModel = () =>
+      ({
+        modelId: 'test-model',
+        specificationVersion: 'v2',
+        provider: 'test',
+        defaultObjectGenerationMode: 'json',
+        supportsImageUrls: false,
+        supportsStructuredOutputs: true,
+        doGenerate: async () => ({}),
+        doStream: async () => ({}),
+      }) as any;
+
+    it('should prune old messages at each step to stay within token limit', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 50 });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      // Simulate a multi-step conversation that has grown
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Hello how are you doing today my friend',
+            parts: [{ type: 'text', text: 'Hello how are you doing today my friend' }],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I am doing great thanks for asking me',
+            parts: [{ type: 'text', text: 'I am doing great thanks for asking me' }],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        'response',
+      );
+      messageList.add(
+        {
+          id: 'user-2',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Can you help me with something important',
+            parts: [{ type: 'text', text: 'Can you help me with something important' }],
+          },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+        'input',
+      );
+      messageList.add(
+        {
+          id: 'assistant-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'Of course I would be happy to help you',
+            parts: [{ type: 'text', text: 'Of course I would be happy to help you' }],
+          },
+          createdAt: new Date('2023-01-01T00:03:00Z'),
+        },
+        'response',
+      );
+      messageList.add(
+        {
+          id: 'user-3',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Please write a sorting function',
+            parts: [{ type: 'text', text: 'Please write a sorting function' }],
+          },
+          createdAt: new Date('2023-01-01T00:04:00Z'),
+        },
+        'input',
+      );
+
+      expect(messageList.get.all.db().length).toBe(5);
+
+      // Run processInputStep (simulating step 2 of an agentic loop)
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 2,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      const messagesAfter = messageList.get.all.db();
+
+      // Should have fewer messages after pruning
+      expect(messagesAfter.length).toBeLessThan(5);
+
+      // Newest messages should be preserved
+      expect(messagesAfter.some(m => m.id === 'user-3')).toBe(true);
+
+      // Oldest messages should be removed
+      expect(messagesAfter.some(m => m.id === 'user-1')).toBe(false);
+    });
+
+    it('should preserve all messages when within token limit', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 1000 });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: { format: 2, content: 'Hi there', parts: [{ type: 'text', text: 'Hi there' }] },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        'response',
+      );
+      messageList.add(
+        {
+          id: 'user-2',
+          role: 'user',
+          content: { format: 2, content: 'How are you?', parts: [{ type: 'text', text: 'How are you?' }] },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+        'input',
+      );
+
+      expect(messageList.get.all.db().length).toBe(3);
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // All messages should be preserved when within limit
+      expect(messageList.get.all.db().length).toBe(3);
+    });
+
+    it('should account for system messages in token budget', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 55 });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      // Add system message
+      messageList.addSystem({
+        role: 'system',
+        content: 'You are a helpful assistant that answers questions concisely',
+      });
+
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, content: 'Hello there', parts: [{ type: 'text', text: 'Hello there' }] },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: { format: 2, content: 'Hi how can I help', parts: [{ type: 'text', text: 'Hi how can I help' }] },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        'response',
+      );
+      messageList.add(
+        {
+          id: 'user-2',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'What is the weather',
+            parts: [{ type: 'text', text: 'What is the weather' }],
+          },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+        'input',
+      );
+
+      const beforeCount = messageList.get.all.db().length;
+      expect(beforeCount).toBe(3);
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      const messagesAfter = messageList.get.all.db();
+
+      // Newest message should always be preserved
+      expect(messagesAfter.some(m => m.id === 'user-2')).toBe(true);
+
+      // System message budget should cause some messages to be pruned
+      expect(messagesAfter.length).toBeLessThan(beforeCount);
+    });
+
+    it('should throw TripWire for empty messages', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 1000 });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow('TokenLimiterProcessor: No messages to process');
+    });
+
+    it('should throw TripWire when system messages exceed limit', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 10 });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      // Add a large system message that will exceed the tiny limit
+      messageList.addSystem({
+        role: 'system',
+        content:
+          'You are a very detailed and thorough assistant that always provides comprehensive answers with multiple examples and explanations',
+      });
+
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+
+      await expect(
+        runner.runProcessInputStep({
+          messageList,
+          stepNumber: 0,
+          model: createMockModel(),
+          steps: [],
+        }),
+      ).rejects.toThrow('System messages alone exceed token limit');
+    });
+
+    it('should handle tool call messages in token counting', async () => {
+      const processor = new TokenLimiterProcessor({ limit: 100 });
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      // Add a tool call message (these appear during multi-step workflows)
+      messageList.add(
+        {
+          id: 'assistant-tool-call',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'call',
+                  toolCallId: 'call_1',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'response',
+      );
+
+      // Add tool result
+      messageList.add(
+        {
+          id: 'tool-result',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'The result is 4',
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call_1',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                  result: '4',
+                },
+              },
+            ],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        'response',
+      );
+
+      // Add user follow-up
+      messageList.add(
+        {
+          id: 'user-followup',
+          role: 'user',
+          content: { format: 2, content: 'Thanks', parts: [{ type: 'text', text: 'Thanks' }] },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+        'input',
+      );
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      // All messages should fit within 100 token limit
+      const messagesAfter = messageList.get.all.db();
+      expect(messagesAfter.length).toBeGreaterThan(0);
+      expect(messagesAfter.some(m => m.id === 'user-followup')).toBe(true);
+    });
+
+    it('should work correctly with simple number constructor', async () => {
+      // Test that TokenLimiterProcessor(50) works the same as TokenLimiterProcessor({ limit: 50 })
+      const processor = new TokenLimiterProcessor(50);
+
+      const runner = new ProcessorRunner({
+        inputProcessors: [processor],
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      const messageList = new MessageList();
+
+      messageList.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Hello how are you doing today my friend',
+            parts: [{ type: 'text', text: 'Hello how are you doing today my friend' }],
+          },
+          createdAt: new Date('2023-01-01T00:00:00Z'),
+        },
+        'input',
+      );
+      messageList.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I am doing great thanks for asking me',
+            parts: [{ type: 'text', text: 'I am doing great thanks for asking me' }],
+          },
+          createdAt: new Date('2023-01-01T00:01:00Z'),
+        },
+        'response',
+      );
+      messageList.add(
+        {
+          id: 'user-2',
+          role: 'user',
+          content: { format: 2, content: 'Latest message', parts: [{ type: 'text', text: 'Latest message' }] },
+          createdAt: new Date('2023-01-01T00:02:00Z'),
+        },
+        'input',
+      );
+
+      expect(messageList.get.all.db().length).toBe(3);
+
+      await runner.runProcessInputStep({
+        messageList,
+        stepNumber: 1,
+        model: createMockModel(),
+        steps: [],
+      });
+
+      const messagesAfter = messageList.get.all.db();
+
+      // Should have pruned some messages
+      expect(messagesAfter.length).toBeLessThan(3);
+
+      // Newest message should be preserved
+      expect(messagesAfter.some(m => m.id === 'user-2')).toBe(true);
+    });
+  });
 });

@@ -66,7 +66,7 @@ describe('TokenLimiterProcessor', () => {
     expect(customResult.length).toBe(messagesV2.length);
   });
 
-  function estimateTokens(messages: MastraDBMessage[]) {
+  async function estimateTokens(messages: MastraDBMessage[]) {
     // Create a TokenLimiterProcessor just for counting tokens
     const testLimiter = new TokenLimiterProcessor(Infinity);
 
@@ -75,7 +75,7 @@ describe('TokenLimiterProcessor', () => {
     // Count tokens for each message including all overheads
     for (const message of messages) {
       // Base token count from the countInputMessageTokens method
-      estimatedTokens += (testLimiter as any).countInputMessageTokens(message);
+      estimatedTokens += await (testLimiter as any).countInputMessageTokens(message);
     }
 
     return Number(estimatedTokens.toFixed(2));
@@ -94,7 +94,7 @@ describe('TokenLimiterProcessor', () => {
   ) {
     const { messagesV2, fakeCore } = generateConversationHistory(config);
 
-    const estimate = estimateTokens(messagesV2);
+    const estimate = await estimateTokens(messagesV2);
     const used = (await agent.generateLegacy(fakeCore)).usage.promptTokens;
 
     // Check if within accuracy margin
