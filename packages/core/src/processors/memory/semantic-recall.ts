@@ -14,6 +14,17 @@ import { globalEmbeddingCache } from './embedding-cache';
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
 
+/**
+ * Global index validation cache shared across all SemanticRecall instances.
+ * This mirrors globalEmbeddingCache and ensures we never call createIndex
+ * more than once per process/module lifetime per (indexName, dimension) pair.
+ *
+ * Without this, serverless environments create a new SemanticRecall instance
+ * per request, causing a redundant createIndex HTTP round-trip on every single
+ * request — a key source of the ~15s latency reported against Upstash Vector.
+ */
+const globalIndexValidationCache = new Map<string, { dimension: number }>();
+
 export interface SemanticRecallOptions {
   /**
    * Storage instance for retrieving messages
@@ -130,10 +141,6 @@ export class SemanticRecall implements Processor {
 
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
-
-  // Cache for index dimension validation (per-process)
-  // Prevents redundant API calls when index already validated
-  private indexValidationCache = new Map<string, { dimension: number }>();
 
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
@@ -332,9 +339,6 @@ export class SemanticRecall implements Processor {
     return null;
   }
 
-  /**
-   * Perform semantic search using vector embeddings
-   */
   private async performSemanticSearch({
     query,
     threadId,
@@ -344,12 +348,10 @@ export class SemanticRecall implements Processor {
     threadId: string;
     resourceId?: string;
   }): Promise<MastraDBMessage[]> {
-    // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
 
     // Generate embeddings for the query
-    const { embeddings, dimension } = await this.embedMessageContent(query, indexName);
-    await this.ensureVectorIndex(indexName, dimension);
+    const { embeddings } = await this.embedMessageContent(query, indexName);
 
     // Perform vector search for each embedding
     const vectorResults: Array<{
@@ -393,9 +395,6 @@ export class SemanticRecall implements Processor {
   }
 
   /**
-   * Generate embeddings for message content
-   */
-  /**
    * Hash content using xxhash for fast cache key generation
    * Includes index name to ensure cache isolation between different embedding models/dimensions
    */
@@ -405,6 +404,9 @@ export class SemanticRecall implements Processor {
     return h.h64(combined).toString(16);
   }
 
+  /**
+   * Generate embeddings for message content
+   */
   private async embedMessageContent(
     content: string,
     indexName: string,
@@ -458,26 +460,33 @@ export class SemanticRecall implements Processor {
   }
 
   /**
-   * Ensure vector index exists with correct dimensions
-   * Uses in-memory cache to avoid redundant validation calls
+   * Ensure vector index exists with correct dimensions.
+   * Uses the module-level globalIndexValidationCache so that the createIndex
+   * round-trip is only made once per process lifetime per (indexName, dimension)
+   * pair, regardless of how many SemanticRecall instances are created (e.g. in
+   * serverless environments where a new instance is spun up per request).
+   *
+   * This is called only on the write path (processOutputResult) — never on the
+   * read path (performSemanticSearch) — because the index must already exist if
+   * there are messages to recall.
    */
   private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
-    // Check cache first - if already validated in this process, skip
-    const cached = this.indexValidationCache.get(indexName);
+    // Check global cache first — if already validated in this process, skip
+    const cached = globalIndexValidationCache.get(indexName);
     if (cached?.dimension === dimension) {
       return;
     }
 
-    // Always call createIndex - it's idempotent and validates dimensions
-    // Vector stores handle the "already exists" case and validate dimensions
+    // Always call createIndex — it's idempotent and validates dimensions.
+    // Vector stores handle the "already exists" case and validate dimensions.
     await this.vector.createIndex({
       indexName,
       dimension,
       metric: 'cosine',
     });
 
-    // Cache the validated dimension to avoid redundant calls
-    this.indexValidationCache.set(indexName, { dimension });
+    // Cache the validated dimension globally to avoid redundant calls across instances
+    globalIndexValidationCache.set(indexName, { dimension });
   }
 
   /**
