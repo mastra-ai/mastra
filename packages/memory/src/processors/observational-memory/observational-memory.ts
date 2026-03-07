@@ -2974,9 +2974,12 @@ ${suggestedResponse}
             // Explicitly write undefined when omitted so stale values are cleared.
             const thread = await this.storage.getThreadById({ threadId });
             if (thread) {
+              const activatedSet = new Set(activationResult.activatedMessageIds ?? []);
+              const activatedMessages = messageList.get.all.db().filter(msg => msg?.id && activatedSet.has(msg.id));
               const newMetadata = setThreadOMMetadata(thread.metadata, {
                 suggestedResponse: activationResult.suggestedContinuation,
                 currentTask: activationResult.currentTask,
+                lastObservedMessageCursor: this.getLastObservedMessageCursor(activatedMessages),
               });
               await this.storage.updateThread({
                 id: threadId,
