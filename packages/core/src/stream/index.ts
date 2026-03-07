@@ -21,6 +21,9 @@ export type {
   ToolCallChunk,
   ToolResultChunk,
 
+  // Result Types
+  LLMStepResult,
+
   // Payload Types
   StepFinishPayload,
   StepStartPayload,

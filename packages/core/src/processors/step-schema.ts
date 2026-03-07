@@ -138,11 +138,24 @@ export type ProcessorOutputStreamPhaseType = {
   retryCount?: number;
 };
 
+/**
+ * Serializable version of OutputResult for use in workflow step schemas.
+ * Uses Record<string, unknown> for usage instead of LanguageModelUsage
+ * because zod schemas need to serialize across workflow step boundaries.
+ */
+export type SerializableOutputResult = {
+  text: string;
+  usage: Record<string, unknown>;
+  finishReason: string;
+  steps: unknown[];
+};
+
 export type ProcessorOutputResultPhaseType = {
   phase: 'outputResult';
   messages: ProcessorMessageType[];
   messageList: MessageList;
   retryCount?: number;
+  result?: SerializableOutputResult;
 };
 
 export type ProcessorOutputStepPhaseType = {
@@ -173,6 +186,7 @@ export type ProcessorStepOutputType = {
   part?: unknown | null;
   streamParts?: unknown[];
   state?: Record<string, unknown>;
+  result?: SerializableOutputResult;
   finishReason?: string;
   toolCalls?: Array<{ toolName: string; toolCallId: string; args?: unknown }>;
   text?: string;
@@ -552,11 +566,19 @@ export const ProcessorOutputStreamPhaseSchema = z.object({
  * Schema for 'outputResult' phase - processOutputResult
  * Processes the complete output result after streaming/generate is finished
  */
+const outputResultSchema = z.object({
+  text: z.string().describe('The accumulated text from all steps'),
+  usage: z.record(z.unknown()).describe('Token usage (cumulative across all steps)'),
+  finishReason: z.string().describe('Why the generation finished'),
+  steps: z.array(z.unknown()).describe('All LLM step results'),
+});
+
 export const ProcessorOutputResultPhaseSchema = z.object({
   phase: z.literal('outputResult'),
   messages: messagesSchema,
   messageList: messageListSchema,
   retryCount: retryCountSchema,
+  result: outputResultSchema.optional(),
 });
 
 /**
@@ -621,6 +643,9 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   part: z.unknown().nullable().optional(),
   streamParts: z.array(z.unknown()).optional(),
   state: z.record(z.unknown()).optional(),
+
+  // Output result fields
+  result: outputResultSchema.optional(),
 
   // Output step fields
   finishReason: z.string().optional(),
