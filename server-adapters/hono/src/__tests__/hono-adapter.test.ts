@@ -467,6 +467,189 @@ describe('Hono Server Adapter', () => {
     },
   });
 
+  describe('OpenAPI Spec', () => {
+    let server: Server | null = null;
+
+    afterEach(async () => {
+      if (server) {
+        await new Promise<void>((resolve, reject) => {
+          server!.close(err => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        server = null;
+      }
+    });
+
+    it('should serve the OpenAPI spec at both /api/openapi.json and /openapi.json', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const prefixedResponse = await fetch(`http://localhost:${port}/api/openapi.json`);
+      expect(prefixedResponse.status).toBe(200);
+      const prefixedSpec = await prefixedResponse.json();
+      expect(prefixedSpec.openapi).toBe('3.1.0');
+      expect(prefixedSpec.servers).toEqual([{ url: '/api' }]);
+
+      const rootResponse = await fetch(`http://localhost:${port}/openapi.json`);
+      expect(rootResponse.status).toBe(200);
+      const rootSpec = await rootResponse.json();
+      expect(rootSpec.openapi).toBe('3.1.0');
+      expect(rootSpec.servers).toEqual([{ url: '/api' }]);
+    });
+
+    it('should set per-path servers override on custom routes in the spec', async () => {
+      const customRoutes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          openapi: {
+            summary: 'Health check',
+            description: 'Returns health status',
+            tags: ['Health'],
+            responses: {
+              200: { description: 'OK' },
+            },
+          },
+          handler: async c => {
+            return c.json({ status: 'ok' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
+      const spec = await response.json();
+
+      // Built-in routes should NOT have per-path servers (they use top-level servers)
+      const builtinPaths = Object.keys(spec.paths).filter(p => p !== '/health');
+      for (const p of builtinPaths) {
+        expect(spec.paths[p].servers).toBeUndefined();
+      }
+
+      expect(spec.paths['/health']).toBeDefined();
+      expect(spec.paths['/health'].servers).toEqual([{ url: '/' }]);
+
+      const rootResponse = await fetch(`http://localhost:${port}/openapi.json`);
+      const rootSpec = await rootResponse.json();
+      expect(rootSpec.paths['/health'].servers).toEqual([{ url: '/' }]);
+    });
+
+    it('should not add servers override to custom routes when no prefix is used', async () => {
+      const customRoutes = [
+        registerApiRoute('/health', {
+          method: 'GET',
+          openapi: {
+            summary: 'Health check',
+            description: 'Returns health status',
+            responses: { 200: { description: 'OK' } },
+          },
+          handler: async c => {
+            return c.json({ status: 'ok' });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        prefix: '',
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/openapi.json`);
+      const spec = await response.json();
+
+      expect(spec.paths['/health']).toBeDefined();
+      expect(spec.paths['/health'].servers).toBeUndefined();
+      expect(spec.servers).toBeUndefined();
+    });
+
+    it('should enforce root-level servers override on custom routes', async () => {
+      const customRoutes = [
+        registerApiRoute('/external', {
+          method: 'GET',
+          openapi: {
+            summary: 'External endpoint',
+            description: 'Route with custom servers',
+            servers: [{ url: 'https://external.example.com' }],
+            responses: { 200: { description: 'OK' } },
+          },
+          handler: async c => {
+            return c.json({ ok: true });
+          },
+        }),
+      ];
+
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        openapiPath: '/openapi.json',
+        customApiRoutes: customRoutes,
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = serve({ fetch: app.fetch, port: 0 }, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const response = await fetch(`http://localhost:${port}/api/openapi.json`);
+      const spec = await response.json();
+
+      expect(spec.paths['/external']).toBeDefined();
+      expect(spec.paths['/external'].servers).toEqual([{ url: '/' }]);
+    });
+  });
+
   describe('Custom API Routes (registerApiRoute)', () => {
     let server: Server | null = null;
 
