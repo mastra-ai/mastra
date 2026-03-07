@@ -355,11 +355,8 @@ describe('prepareToolsAndToolChoice', () => {
         description: 'A sub-agent tool',
         inputSchema: z.object({
           prompt: z.string().describe('The prompt for the agent'),
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
-          resumeData: z
-            .any()
-            .describe('The resumeData object created from the resumeSchema of suspended tool')
-            .optional(),
+          suspendedToolRunId: z.string().optional().default(''),
+          resumeData: z.any().optional(),
         }),
         execute: async () => 'result',
       });
@@ -408,6 +405,18 @@ describe('prepareToolsAndToolChoice', () => {
           ).toBeUndefined();
         }
       }
+
+      const suspendedSchema = properties.suspendedToolRunId as Record<string, any>;
+      expect(suspendedSchema).toBeDefined();
+      expect(suspendedSchema.type).toBe('string');
+      expect(suspendedSchema.default).toBe('');
+      expect(suspendedSchema.anyOf).toBeUndefined();
+      expect(suspendedSchema.description).toBeUndefined();
+
+      const resumeSchema = properties.resumeData as Record<string, any>;
+      expect(resumeSchema).toBeDefined();
+      expect(resumeSchema.anyOf).toBeUndefined();
+      expect(resumeSchema.description).toBeUndefined();
     });
   });
 
