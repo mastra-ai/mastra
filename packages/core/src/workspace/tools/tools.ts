@@ -11,7 +11,7 @@ import type { WorkspaceToolName } from '../constants';
 import { WORKSPACE_TOOLS } from '../constants';
 import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
-import type { FileReadTracker, FileWriteLock } from '../filesystem';
+import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../filesystem';
 import type { Workspace } from '../workspace';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { deleteFileTool } from './delete-file';
@@ -97,6 +97,44 @@ export function resolveToolConfig(
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolve the effective workspace for tool execution. When a dynamic filesystem
+ * resolver is configured (no static filesystem), resolves the filesystem from
+ * requestContext and returns a proxy workspace that exposes it via `.filesystem`.
+ * Falls back to the workspace as-is when a static filesystem is available.
+ */
+async function resolveEffectiveWorkspace(workspace: Workspace, context: any): Promise<Workspace> {
+  if (!workspace.filesystem && workspace.hasFilesystemConfig() && context?.requestContext) {
+    const resolvedFs = await workspace.resolveFilesystem({ requestContext: context.requestContext });
+    if (resolvedFs) {
+      return new Proxy(workspace, {
+        get(target: any, prop: string | symbol) {
+          if (prop === 'filesystem') return resolvedFs;
+          return target[prop];
+        },
+      });
+    }
+  }
+  return workspace;
+}
+
+/**
+ * Clone a standalone tool with config overrides and inject workspace into context.
+ * When the workspace uses a dynamic filesystem resolver, the filesystem is resolved
+ * from requestContext and made available via the workspace proxy.
+ */
+function wrapTool(tool: any, workspace: Workspace, config: { requireApproval: boolean }): any {
+  return {
+    ...tool,
+    requireApproval: config.requireApproval,
+    execute: async (input: any, context: any = {}) => {
+      const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context);
+      const enrichedContext = { ...context, workspace: effectiveWorkspace };
+      return tool.execute(input, enrichedContext);
+    },
+  };
+}
+
+/**
  * Wrap a tool with read-before-write tracking (readTracker).
  *
  * - mode 'read': records the read after execution
@@ -106,16 +144,21 @@ function wrapWithReadTracker(
   tool: any,
   workspace: Workspace,
   readTracker: FileReadTracker,
-  config: { requireReadBeforeWrite?: boolean },
+  config: { requireApproval: boolean; requireReadBeforeWrite?: boolean },
   mode: 'read' | 'write',
 ): any {
   return {
     ...tool,
+    requireApproval: config.requireApproval,
     execute: async (input: any, context: any = {}) => {
+      const effectiveWorkspace = await resolveEffectiveWorkspace(context?.workspace ?? workspace, context);
+      const enrichedContext = { ...context, workspace: effectiveWorkspace };
+      const fs: WorkspaceFilesystem | undefined = effectiveWorkspace.filesystem;
+
       // Pre-execution: check read-before-write for write tools
-      if (mode === 'write' && config.requireReadBeforeWrite) {
+      if (mode === 'write' && config.requireReadBeforeWrite && fs) {
         try {
-          const stat = await workspace.filesystem!.stat(input.path);
+          const stat = await fs.stat(input.path);
           const check = readTracker.needsReRead(input.path, stat.modifiedAt);
           if (check.needsReRead) {
             throw new FileReadRequiredError(input.path, check.reason!);
@@ -128,12 +171,12 @@ function wrapWithReadTracker(
         }
       }
 
-      const result = await tool.execute(input, context);
+      const result = await tool.execute(input, enrichedContext);
 
       // Post-execution: track reads / clear write records
-      if (mode === 'read') {
+      if (mode === 'read' && fs) {
         try {
-          const stat = await workspace.filesystem!.stat(input.path);
+          const stat = await fs.stat(input.path);
           readTracker.recordRead(input.path, stat.modifiedAt);
         } catch {
           // Ignore stat errors for tracking
@@ -207,9 +250,11 @@ export function createWorkspaceTools(workspace: Workspace) {
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
 
-    let wrapped: any = { ...tool, requireApproval: config.requireApproval };
+    let wrapped: any;
     if (readTracker && opts?.readTrackerMode) {
-      wrapped = wrapWithReadTracker(wrapped, workspace, readTracker, config, opts.readTrackerMode);
+      wrapped = wrapWithReadTracker(tool, workspace, readTracker, config, opts.readTrackerMode);
+    } else {
+      wrapped = wrapTool(tool, workspace, config);
     }
 
     // Write lock is outermost — serializes the entire enriched execute pipeline
@@ -234,8 +279,8 @@ export function createWorkspaceTools(workspace: Workspace) {
     tools[exposedName] = wrapped;
   };
 
-  // Filesystem tools
-  if (workspace.filesystem) {
+  // Filesystem tools — add when filesystem is available (static instance or resolver function)
+  if (workspace.hasFilesystemConfig()) {
     addTool(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE, readFileTool, { readTrackerMode: 'read' });
     addTool(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE, writeFileTool, {
       requireWrite: true,
