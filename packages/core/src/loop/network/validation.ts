@@ -162,6 +162,19 @@ export interface CompletionRunResult {
   timedOut: boolean;
 }
 
+function getValidationMemoryOptions(context: CompletionContext) {
+  return {
+    thread: context.threadId ?? context.runId,
+    resource: context.resourceId ?? context.networkName,
+    options: {
+      readOnly: true,
+      workingMemory: {
+        enabled: false,
+      },
+    },
+  };
+}
+
 // Legacy type aliases for backwards compatibility
 /** @deprecated Use CompletionContext instead */
 export type CheckContext = CompletionContext;
@@ -455,6 +468,7 @@ export async function runDefaultCompletionCheck(
       structuredOutput: {
         schema: defaultCompletionSchema,
       },
+      memory: getValidationMemoryOptions(context),
       abortSignal,
       onAbort,
     });
@@ -572,6 +586,7 @@ export async function generateFinalResult(
   const stream = await agent.stream(prompt, {
     maxSteps: 1,
     structuredOutput: { schema: finalResultSchema },
+    memory: getValidationMemoryOptions(context),
     abortSignal,
     onAbort,
   });
@@ -656,6 +671,7 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
   const stream = await agent.stream<OUTPUT>(prompt, {
     maxSteps: 1,
     structuredOutput: structuredOutputOptions,
+    memory: getValidationMemoryOptions(context),
     abortSignal,
     onAbort,
   });
