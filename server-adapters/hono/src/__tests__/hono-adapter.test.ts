@@ -636,5 +636,46 @@ describe('Hono Server Adapter', () => {
       expect(data.threadId).toBeNull();
       expect(data.customKey).toBe('safe-value');
     });
+
+    it('should strip reserved keys from client-provided requestContext in GET query params', async () => {
+      const mastra = new Mastra({});
+      const app = new Hono();
+
+      const adapter = new MastraServer({ app, mastra });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'GET',
+        path: '/test/context',
+        responseType: 'json',
+        handler: async ({ requestContext }) => {
+          return {
+            resourceId: requestContext?.get('mastra__resourceId') ?? null,
+            threadId: requestContext?.get('mastra__threadId') ?? null,
+            customKey: requestContext?.get('myKey') ?? null,
+          };
+        },
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const queryContext = JSON.stringify({
+        mastra__resourceId: 'injected-victim-id',
+        mastra__threadId: 'injected-thread-id',
+        myKey: 'safe-value',
+      });
+
+      const response = await app.request(
+        new Request(`http://localhost/test/context?requestContext=${encodeURIComponent(queryContext)}`, {
+          method: 'GET',
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.resourceId).toBeNull();
+      expect(data.threadId).toBeNull();
+      expect(data.customKey).toBe('safe-value');
+    });
   });
 });
