@@ -283,4 +283,29 @@ describe('processWorkflowWaitForEvent', () => {
 
     expect(pubsub.publish).toHaveBeenCalled();
   });
+
+  it('does not resume and does not throw when condition expression is malformed', async () => {
+    const pubsub = createMockPubSub();
+    const workflowData = createMockWorkflowData();
+    const state = createMockState({
+      waitingPaths: { 'bad.event': [0] },
+      waitingPathConditions: {
+        'bad.event': {
+          if: 'event.x > 5',
+          suspendContext: {},
+        },
+      },
+    });
+
+    await expect(
+      processWorkflowWaitForEvent(workflowData, {
+        pubsub,
+        eventName: 'bad.event',
+        eventData: { x: 10 },
+        currentState: state,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(pubsub.publish).not.toHaveBeenCalled();
+  });
 });

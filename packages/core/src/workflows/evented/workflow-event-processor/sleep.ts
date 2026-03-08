@@ -28,8 +28,13 @@ export async function processWorkflowWaitForEvent(
   // Evaluate match/if conditions when present
   const condition = currentState?.waitingPathConditions?.[eventName];
   if (condition) {
-    const passed = evaluateEventConditions(condition, eventData ?? {});
-    if (!passed) {
+    try {
+      const passed = evaluateEventConditions(condition, eventData ?? {});
+      if (!passed) {
+        return;
+      }
+    } catch {
+      // Malformed condition — skip resume to avoid crashing the event loop
       return;
     }
   }

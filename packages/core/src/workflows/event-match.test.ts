@@ -165,6 +165,14 @@ describe('evaluateExpression', () => {
   it('handles escaped quotes in strings', () => {
     expect(evaluateExpression("event.name == 'it\\'s'", { name: "it's" }, {})).toBe(true);
   });
+
+  it('throws on unterminated single-quoted string', () => {
+    expect(() => evaluateExpression("event.name == 'hello", {}, {})).toThrow('Unterminated string literal');
+  });
+
+  it('throws on unterminated double-quoted string', () => {
+    expect(() => evaluateExpression('event.name == "hello', {}, {})).toThrow('Unterminated string literal');
+  });
 });
 
 describe('evaluateEventConditions', () => {
