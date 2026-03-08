@@ -113,4 +113,41 @@ describe('useAuthCapabilities', () => {
       );
     });
   });
+
+  describe('apiPrefix support (issue #13901)', () => {
+    it('should use custom apiPrefix instead of hardcoded /api', async () => {
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+          apiPrefix: '/mastra',
+        },
+      };
+
+      mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
+
+      const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
+      await makeAuthCapabilitiesRequest(mockClient as any);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+
+      expect(url).toBe('http://localhost:4000/mastra/auth/capabilities');
+    });
+
+    it('should default to /api when apiPrefix is not set', async () => {
+      const mockClient = {
+        options: {
+          baseUrl: 'http://localhost:4000',
+        },
+      };
+
+      mockFetch.mockResolvedValue(createMockResponse({ enabled: false, login: null }));
+
+      const { makeAuthCapabilitiesRequest } = await import('../use-auth-capabilities');
+      await makeAuthCapabilitiesRequest(mockClient as any);
+
+      const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(url).toBe('http://localhost:4000/api/auth/capabilities');
+    });
+  });
 });
