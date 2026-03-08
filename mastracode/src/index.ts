@@ -39,12 +39,14 @@ import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex
 
 import { stateSchema } from './schema.js';
 import {
+  createCodebaseSearchTool,
   createViewTool,
   createGrepTool,
   createGlobTool,
   createExecuteCommandTool,
   createWriteFileTool,
   createStringReplaceLspTool,
+  hasMorphKey,
 } from './tools/index.js';
 import { mastra } from './tui/theme.js';
 import { syncGateways } from './utils/gateway-sync.js';
@@ -156,6 +158,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const executeCommandTool = createExecuteCommandTool(project.rootPath);
   const writeFileTool = createWriteFileTool(project.rootPath);
   const stringReplaceLspTool = createStringReplaceLspTool(project.rootPath);
+  const codebaseSearchTool = hasMorphKey() ? createCodebaseSearchTool(project.rootPath) : null;
 
   // Filter disabled tools from a tool map so subagents respect disabledTools config.
   const filterDisabled = <T extends Record<string, unknown>>(tools: T): T => {
@@ -171,6 +174,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     view: viewTool,
     search_content: grepTool,
     find_files: globTool,
+    ...(codebaseSearchTool ? { codebase_search: codebaseSearchTool } : {}),
   });
 
   const defaultSubagents: HarnessSubagent[] = [

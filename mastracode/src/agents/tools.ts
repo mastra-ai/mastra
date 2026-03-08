@@ -5,7 +5,14 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
 import type { stateSchema } from '../schema';
-import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
+import {
+  createCodebaseSearchTool,
+  createWebSearchTool,
+  createWebExtractTool,
+  hasMorphKey,
+  hasTavilyKey,
+  requestSandboxAccessTool,
+} from '../tools';
 
 /** Minimal shape for tools passed to createDynamicTools. */
 interface ToolLike {
@@ -66,6 +73,10 @@ export function createDynamicTools(
     const tools: Record<string, ToolLike> = {
       request_access: requestSandboxAccessTool,
     };
+
+    if (hasMorphKey()) {
+      tools.codebase_search = createCodebaseSearchTool(state?.projectPath as string | undefined);
+    }
 
     if (hasTavilyKey()) {
       tools.web_search = createWebSearchTool();
