@@ -134,6 +134,7 @@ function tokenize(expr: string): Token[] {
           i++;
         }
       }
+      if (i >= expr.length) throw new Error(`Unterminated string literal in expression: ${expr}`);
       i++; // skip closing quote
       tokens.push({ kind: 'string', value: str });
       continue;
@@ -152,6 +153,7 @@ function tokenize(expr: string): Token[] {
           i++;
         }
       }
+      if (i >= expr.length) throw new Error(`Unterminated string literal in expression: ${expr}`);
       i++; // skip closing quote
       tokens.push({ kind: 'string', value: str });
       continue;
