@@ -36,6 +36,7 @@ import type { ModelItem } from './components/model-selector.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
 import {
   addUserMessage,
@@ -733,8 +734,9 @@ export class MastraTUI {
               currentModelId: undefined,
               title,
               titleColor: modeColor,
-              onSelect: (model: ModelItem) => {
+              onSelect: async (model: ModelItem) => {
                 this.state.ui.hideOverlay();
+                await promptForApiKeyIfNeeded(this.state.ui, model, this.state.authStorage);
                 resolveModel(model.id);
               },
               onCancel: () => {

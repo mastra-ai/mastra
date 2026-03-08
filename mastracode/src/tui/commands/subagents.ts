@@ -3,6 +3,7 @@ import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
 async function showSubagentModelListForScope(
@@ -29,6 +30,7 @@ async function showSubagentModelListForScope(
       title: `Select subagent model (${scopeLabel})`,
       onSelect: async (model: ModelItem) => {
         ctx.state.ui.hideOverlay();
+        await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         try {
           await ctx.state.harness.setSubagentModelId({ modelId: model.id, agentType });
           if (scope === 'global') {
