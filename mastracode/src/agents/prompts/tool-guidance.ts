@@ -8,6 +8,7 @@ import { MC_TOOLS } from '../../tool-names.js';
 
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  hasCodebaseSearch?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
 }
@@ -111,6 +112,16 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 ${webTools.join(' / ')} — Search the web / extract page content
 - Use for looking up documentation, error messages, package APIs.`);
     }
+  }
+
+  // --- Codebase search (all modes, conditionally available) ---
+
+  if (options.hasCodebaseSearch && !denied.has('codebase_search')) {
+    sections.push(`
+**codebase_search** — Semantic codebase search
+- Use for complex semantic searches across the codebase
+- Prefer over grep for "find all usages of pattern X" or architectural questions
+- Returns relevant code spans with file paths and line numbers`);
   }
 
   // --- Task management tools (all modes) ---

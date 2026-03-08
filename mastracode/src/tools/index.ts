@@ -5,6 +5,7 @@
 export { createViewTool } from './file-view';
 export { createExecuteCommandTool, executeCommandTool } from './shell';
 export { createStringReplaceLspTool, stringReplaceLspTool } from './string-replace-lsp';
+export { createCodebaseSearchTool, hasMorphKey } from './codebase-search';
 export { createWebSearchTool, createWebExtractTool, hasTavilyKey } from './web-search';
 export { createGrepTool } from './grep';
 export { createGlobTool } from './glob';
