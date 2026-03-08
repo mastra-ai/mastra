@@ -77,7 +77,7 @@ function AgentSession() {
     };
   }, [agent]);
 
-  if (isAgentLoading || !agent) {
+  if (isAgentLoading) {
     return null;
   }
 
@@ -85,7 +85,7 @@ function AgentSession() {
     return <div className="text-center py-4">Agent not found</div>;
   }
 
-  const actualThreadId = isNewThread ? newThreadId : threadId;
+  const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
 
   const handleRefreshThreadList = async () => {
     await refreshThreads();
@@ -99,7 +99,7 @@ function AgentSession() {
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
         <SchemaRequestContextProvider>
-          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
+          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId} resourceId={agentId!}>
             <ThreadInputProvider>
               <ObservationalMemoryProvider>
                 <ActivatedSkillsProvider>
@@ -107,11 +107,11 @@ function AgentSession() {
                     <SessionHeader />
                     <div className="grid overflow-y-auto relative bg-surface1 h-full pt-6">
                       <AgentChat
-                        key={actualThreadId!}
+                        key={actualThreadId}
                         agentId={agentId!}
                         agentName={agent?.name}
                         modelVersion={agent?.modelVersion}
-                        threadId={actualThreadId!}
+                        threadId={actualThreadId}
                         memory={hasMemory}
                         refreshThreadList={handleRefreshThreadList}
                         modelList={agent?.modelList}

@@ -35,6 +35,9 @@ test.describe('session page - layout', () => {
 
     // ASSERT: Main app sidebar navigation is NOT present
     await expect(page.locator('nav:has-text("Agents")')).not.toBeVisible();
+
+    // ASSERT: Model switcher (provider/model comboboxes) is NOT present
+    await expect(page.getByRole('combobox')).not.toBeVisible();
   });
 
   test('does not render preset dropdown when no presets are configured', async ({ page }) => {
