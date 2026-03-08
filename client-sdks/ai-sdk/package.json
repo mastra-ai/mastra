@@ -33,7 +33,7 @@
     "./**/*.d.ts"
   ],
   "peerDependencies": {
-    "@mastra/core": ">=1.5.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.11.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {

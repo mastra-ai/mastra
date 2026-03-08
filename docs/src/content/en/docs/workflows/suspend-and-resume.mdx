@@ -195,6 +195,74 @@ The `suspended` array contains the IDs of any suspended workflows and steps from
 ['nested-workflow', 'step-1']
 ```
 
+## Waiting for events with conditions
+
+You can suspend a workflow and have it automatically resume when a specific event arrives, with optional conditions on the event payload. This is useful when multiple workflows wait for the same event type but only the correct one should resume.
+
+Pass a `waitForEvent` option to `suspend()` with an event name and optional matching conditions:
+
+```typescript title="src/mastra/workflows/invoice-workflow.ts"
+const waitForApproval = createStep({
+  id: 'wait-for-approval',
+  inputSchema: z.object({ invoiceId: z.string() }),
+  outputSchema: z.object({ approved: z.boolean() }),
+  resumeSchema: z.object({ invoiceId: z.string(), approved: z.boolean() }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    if (!resumeData) {
+      return await suspend(
+        { invoiceId: inputData.invoiceId },
+        {
+          waitForEvent: {
+            event: 'invoice.approved',
+            match: 'invoiceId',
+          },
+        },
+      )
+    }
+
+    return { approved: resumeData.approved }
+  },
+})
+```
+
+The `match` option compares a field path on both the incoming event data and the suspend payload. The workflow only resumes when the values are strictly equal.
+
+### Expression-based conditions
+
+For more complex conditions, use the `if` option with a comparison expression. Two variables are available in expressions: `event` (the incoming event data) and `async` (the data passed to `suspend()`).
+
+```typescript
+await suspend(
+  { userId: currentUser.id },
+  {
+    waitForEvent: {
+      event: 'subscription.created',
+      if: "event.userId == async.userId && event.plan == 'pro'",
+    },
+  },
+)
+```
+
+Supported operators: `==`, `!=`, `&&`, `||`. Parentheses are supported for grouping.
+
+### Publishing events
+
+Trigger a waiting workflow by publishing an event through the Mastra pubsub system:
+
+```typescript
+await mastra.pubsub.publish('workflows', {
+  type: 'workflow.user-event.invoice.approved',
+  runId: workflowRunId,
+  data: {
+    workflowId: 'invoice-workflow',
+    runId: workflowRunId,
+    resumeData: { invoiceId: 'inv-42', approved: true },
+  },
+})
+```
+
+When the event arrives, Mastra evaluates the `match` and `if` conditions against the `resumeData` from the published event. If all conditions pass, the workflow resumes with that data. If conditions fail, the workflow stays suspended.
+
 ## Sleep
 
 Sleep methods can be used to pause execution at the workflow level, which sets the status to `waiting`. By comparison, `suspend()` pauses execution within a specific step and sets the status to `suspended`.
