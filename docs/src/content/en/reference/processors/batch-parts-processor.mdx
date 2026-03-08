@@ -25,40 +25,41 @@ const processor = new BatchPartsProcessor({
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "Options",
-description: "Configuration options for batching stream parts",
-isOptional: true,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
-{
-name: "batchSize",
-type: "number",
-description: "Number of parts to batch together before emitting",
-isOptional: true,
-default: "5",
-},
-{
-name: "maxWaitTime",
-type: "number",
-description: "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
-isOptional: true,
-default: "undefined (no timeout)",
-},
-{
-name: "emitOnNonText",
-type: "boolean",
-description: "Whether to emit immediately when a non-text part is encountered",
-isOptional: true,
-default: "true",
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options for batching stream parts',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'batchSize',
+            type: 'number',
+            description: 'Number of parts to batch together before emitting',
+            isOptional: true,
+            default: '5',
+          },
+          {
+            name: 'maxWaitTime',
+            type: 'number',
+            description:
+              "Maximum time to wait before emitting a batch (in milliseconds). If set, will emit the current batch even if it hasn't reached batchSize",
+            isOptional: true,
+            default: 'undefined (no timeout)',
+          },
+          {
+            name: 'emitOnNonText',
+            type: 'boolean',
+            description: 'Whether to emit immediately when a non-text part is encountered',
+            isOptional: true,
+            default: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -66,30 +67,30 @@ default: "true",
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Processor identifier set to 'batch-parts'",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Optional processor display name",
-isOptional: true,
-},
-{
-name: "processOutputStream",
-type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
-description: "Processes streaming output parts to batch them together",
-isOptional: false,
-},
-{
-name: "flush",
-type: "(state?: BatchPartsState) => ChunkType | null",
-description: "Force flush any remaining batched parts when the stream ends",
-isOptional: false,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'batch-parts'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Optional processor display name',
+    isOptional: true,
+  },
+  {
+    name: 'processOutputStream',
+    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>',
+    description: 'Processes streaming output parts to batch them together',
+    isOptional: false,
+  },
+  {
+    name: 'flush',
+    type: '(state?: BatchPartsState) => ChunkType | null',
+    description: 'Force flush any remaining batched parts when the stream ends',
+    isOptional: false,
+  },
 ]}
 />
 

@@ -1,6 +1,9 @@
 // Workspace
 export * from './workspace';
 
+// LSP
+export type { LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
+
 // Built-in Providers
 export { LocalFilesystem, type LocalFilesystemOptions } from './filesystem';
 export { CompositeFilesystem, type CompositeFilesystemConfig } from './filesystem';
@@ -30,6 +33,10 @@ export {
   resolveToolConfig,
   type WorkspaceToolConfig,
   type WorkspaceToolsConfig,
+  type ExecuteCommandToolConfig,
+  type BackgroundProcessConfig,
+  type BackgroundProcessMeta,
+  type BackgroundProcessExitMeta,
   // Individual standalone tools
   readFileTool,
   writeFileTool,
@@ -115,6 +122,9 @@ export type {
   SkillsResolver,
   SkillsContext,
 } from './skills';
+
+// Skill Tools
+export { createSkillTools } from './skills';
 
 // Skill Publishing
 export type { SkillPublishResult } from './skills';

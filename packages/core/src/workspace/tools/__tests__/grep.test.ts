@@ -477,4 +477,63 @@ describe('workspace_grep', () => {
     const firstMatchIndex = result.indexOf('match_');
     expect(summaryIndex).toBeLessThan(firstMatchIndex);
   });
+
+  it('should respect .gitignore when searching from root', async () => {
+    await fs.mkdir(path.join(tempDir, 'src'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'dist'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'src', 'app.ts'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'dist', 'app.js'), 'findme');
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'dist/\n');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'findme', includeHidden: true },
+      { workspace },
+    );
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('src/app.ts');
+    expect(result).not.toContain('dist/app.js');
+  });
+
+  it('should still search an ignored directory when explicitly targeted', async () => {
+    await fs.mkdir(path.join(tempDir, 'dist'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'dist', 'app.js'), 'findme');
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'dist/\n');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'findme', path: '/dist' },
+      { workspace },
+    );
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('/dist/app.js');
+  });
+
+  it('should still apply gitignore when targeting a non-ignored subdirectory', async () => {
+    await fs.mkdir(path.join(tempDir, 'src', 'dist'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'src', 'app.ts'), 'findme');
+    await fs.writeFile(path.join(tempDir, 'src', 'dist', 'generated.js'), 'findme');
+    await fs.writeFile(path.join(tempDir, '.gitignore'), 'dist/\n');
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.GREP].execute(
+      { pattern: 'findme', path: '/src' },
+      { workspace },
+    );
+
+    expect(result).toContain('1 match across 1 file');
+    expect(result).toContain('src/app.ts');
+    expect(result).not.toContain('generated.js');
+  });
 });

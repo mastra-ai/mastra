@@ -13,7 +13,7 @@ export const executeCommandInputSchema = z.object({
   command: z
     .string()
     .describe('The shell command to execute (e.g., "npm install", "ls -la src/", "cat file.txt | grep error")'),
-  timeout: z.number().nullish().describe('Maximum execution time in milliseconds. Example: 60000 for 1 minute.'),
+  timeout: z.number().nullish().describe('Maximum execution time in seconds. Example: 60 for 1 minute.'),
   cwd: z.string().nullish().describe('Working directory for the command'),
   tail: z
     .number()
@@ -58,7 +58,8 @@ function extractTailPipe(command: string): { command: string; tail?: number } {
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
-  let { command, timeout, cwd, tail } = input;
+  let { command, cwd, tail } = input;
+  const timeout = input.timeout != null ? (input.timeout as number) * 1000 : undefined;
   const background = input.background as boolean | undefined;
   const { workspace, sandbox } = requireSandbox(context);
 
@@ -74,7 +75,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
   await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
   const toolCallId = context?.agent?.toolCallId;
-  const tokenLimit = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.maxOutputTokens;
+  const toolConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+  const tokenLimit = toolConfig?.maxOutputTokens;
   const tokenFrom = 'sandwich' as const;
 
   // Background mode: spawn via process manager and return immediately
@@ -83,10 +85,39 @@ async function executeCommand(input: Record<string, any>, context: any) {
       throw new SandboxFeatureNotSupportedError('processes');
     }
 
-    const handle = await sandbox.processes.spawn(command, {
+    const bgConfig = toolConfig?.backgroundProcesses;
+
+    // Resolve abort signal: undefined = use context signal (from agent), null/false = disabled
+    const bgAbortSignal =
+      bgConfig?.abortSignal === undefined ? context?.abortSignal : bgConfig.abortSignal || undefined;
+
+    // Use `let` so callbacks can reference handle.pid via closure.
+    // spawn() resolves before any data events fire (Node event loop guarantees this).
+    let handle: Awaited<ReturnType<typeof sandbox.processes.spawn>>;
+    handle = await sandbox.processes.spawn(command, {
       cwd: cwd ?? undefined,
       timeout: timeout ?? undefined,
+      abortSignal: bgAbortSignal,
+      onStdout: bgConfig?.onStdout
+        ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId })
+        : undefined,
+      onStderr: bgConfig?.onStderr
+        ? (data: string) => bgConfig.onStderr!(data, { pid: handle.pid, toolCallId })
+        : undefined,
     });
+
+    // Wire exit callback (fire-and-forget)
+    if (bgConfig?.onExit) {
+      void handle.wait().then(result => {
+        bgConfig.onExit!({
+          pid: handle.pid,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          toolCallId,
+        });
+      });
+    }
 
     return `Started background process (PID: ${handle.pid})`;
   }
@@ -103,11 +134,13 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const result = await sandbox.executeCommand(command, [], {
       timeout: timeout ?? undefined,
       cwd: cwd ?? undefined,
+      abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
       onStdout: async (data: string) => {
         stdout += data;
         await context?.writer?.custom({
           type: 'data-sandbox-stdout',
           data: { output: data, timestamp: Date.now(), toolCallId },
+          transient: true,
         });
       },
       onStderr: async (data: string) => {
@@ -115,6 +148,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
         await context?.writer?.custom({
           type: 'data-sandbox-stderr',
           data: { output: data, timestamp: Date.now(), toolCallId },
+          transient: true,
         });
       },
     });
@@ -170,7 +204,7 @@ Examples:
 Usage:
 - Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
-- Use the timeout parameter to limit execution time. Behavior when omitted depends on the sandbox provider.
+- Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.
 - Optionally use cwd to override the working directory. Commands run from the sandbox default if omitted.`;
 
 /** Foreground-only tool (no background param in schema). */

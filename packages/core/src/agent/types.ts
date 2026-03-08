@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, ToolSet } from '@internal/ai-sdk-v4';
+import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -29,7 +29,7 @@ import type { ObservabilityContext, Span, SpanType, TracingOptions, TracingPolic
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
-import type { ModelManagerModelConfig } from '../stream/types';
+import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -40,7 +40,13 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 
-export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type {
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  UIMessageWithMetadata,
+  MessageList,
+} from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
 
@@ -113,21 +119,11 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-// This is used in place of DynamicArgument so that model router IDE autocomplete works.
-// Without this TS doesn't understand the function/string union type from DynamicArgument
-type DynamicModel = ({
-  requestContext,
-  mastra,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-}) => Promise<MastraModelConfig> | MastraModelConfig;
-
-type ModelWithRetries = {
+export type ModelWithRetries = {
   id?: string;
-  model: MastraModelConfig | DynamicModel;
-  maxRetries?: number; //defaults to 0
-  enabled?: boolean; //defaults to true
+  model: DynamicArgument<MastraModelConfig>;
+  maxRetries?: number; // defaults to agent-level maxRetries
+  enabled?: boolean; // defaults to true
 };
 
 export interface AgentConfig<
@@ -155,8 +151,69 @@ export interface AgentConfig<
   instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
+   * Supports DynamicArgument for both single models and model fallback arrays.
+   *
+   * @example Static single model (magic string)
+   * ```typescript
+   * model: 'openai/gpt-4'
+   * ```
+   *
+   * @example Static single model (config object)
+   * ```typescript
+   * model: {
+   *   id: 'openai/gpt-4',
+   *   apiKey: process.env.OPENAI_API_KEY
+   * }
+   * ```
+   *
+   * @example Static fallback array
+   * ```typescript
+   * model: [
+   *   { model: 'openai/gpt-4', maxRetries: 2 },
+   *   { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   * ]
+   * ```
+   *
+   * @example Dynamic single model (tier-based selection)
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   return tier === 'premium' ? 'openai/gpt-4' : 'openai/gpt-3.5-turbo';
+   * }
+   * ```
+   *
+   * @example Dynamic fallback array (tier-based fallback configuration)
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   if (tier === 'premium') {
+   *     return [
+   *       { model: 'openai/gpt-4', maxRetries: 2 },
+   *       { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   *     ];
+   *   }
+   *   return [{ model: 'openai/gpt-3.5-turbo', maxRetries: 1 }];
+   * }
+   * ```
+   *
+   * @example Dynamic fallback array with nested dynamic models
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const region = requestContext.get('region');
+   *   return [
+   *     {
+   *       // Each model can also be dynamic
+   *       model: ({ requestContext }) => {
+   *         return region === 'eu' ? 'openai/gpt-4-eu' : 'openai/gpt-4';
+   *       },
+   *       maxRetries: 2
+   *     },
+   *     { model: 'openai/gpt-3.5-turbo', maxRetries: 1 }
+   *   ];
+   * }
+   * ```
    */
-  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
+  model: DynamicArgument<MastraModelConfig | ModelWithRetries[]>;
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0
@@ -442,7 +499,7 @@ export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boole
 
 export type AgentExecuteOnFinishOptions = {
   runId: string;
-  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
+  result: MastraOnFinishCallbackArgs & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;

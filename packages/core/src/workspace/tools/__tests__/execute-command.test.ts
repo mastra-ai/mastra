@@ -146,6 +146,38 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('transient chunks', () => {
+    it('marks stdout and stderr chunks as transient', async () => {
+      const { context, writerCustom } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          opts?.onStdout?.('output\n');
+          opts?.onStderr?.('warning\n');
+          return { success: true, exitCode: 0, stdout: 'output\n', stderr: 'warning\n', executionTimeMs: 10 };
+        },
+      });
+
+      await execute({ command: 'echo', args: [], timeout: null, cwd: null }, context);
+
+      const stdoutChunks = getChunks(writerCustom, 'data-sandbox-stdout');
+      const stderrChunks = getChunks(writerCustom, 'data-sandbox-stderr');
+      const exitChunks = getChunks(writerCustom, 'data-sandbox-exit');
+
+      expect(stdoutChunks).toHaveLength(1);
+      expect(stderrChunks).toHaveLength(1);
+      expect(exitChunks).toHaveLength(1);
+
+      for (const chunk of stdoutChunks) {
+        expect(chunk.transient).toBe(true);
+      }
+      for (const chunk of stderrChunks) {
+        expect(chunk.transient).toBe(true);
+      }
+      for (const chunk of exitChunks) {
+        expect(chunk.transient).toBeUndefined();
+      }
+    });
+  });
+
   describe('exit chunk data', () => {
     it('emits exit chunk with success on successful command', async () => {
       const { context, writerCustom } = createMockContext({
@@ -339,6 +371,41 @@ describe('executeCommandTool data chunks', () => {
       expect(exitChunks).toHaveLength(1);
       expect(exitChunks[0].data.success).toBe(false);
       expect(exitChunks[0].data.exitCode).toBe(-1);
+    });
+  });
+
+  describe('abort signal passthrough', () => {
+    it('passes context.abortSignal to sandbox.executeCommand', async () => {
+      const controller = new AbortController();
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      context.abortSignal = controller.signal;
+
+      await execute({ command: 'echo hi', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedOpts.abortSignal).toBe(controller.signal);
+    });
+
+    it('passes undefined abortSignal when context has none', async () => {
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      await execute({ command: 'echo hi', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedOpts.abortSignal).toBeUndefined();
     });
   });
 
