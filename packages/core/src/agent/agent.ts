@@ -85,7 +85,7 @@ import type {
 import type { AgentEvent, AgentEventListener, AgentEventMap, AgentMessage, SendOperation } from './events';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
-import type { AgentMode } from './modes';
+import type { AgentHarnessConfig, AgentMode } from './modes';
 import { SaveQueueManager } from './save-queue';
 import { TripWire } from './trip-wire';
 import type {
@@ -177,11 +177,8 @@ export class Agent<
   readonly #options?: AgentCreateOptions;
   #legacyHandler?: AgentLegacyHandler;
 
-  // -- Orchestration (optional) -----------------------------------------------
-  #modes?: AgentMode[];
-  #currentModeId?: string;
-  #stateSchema?: z.ZodObject<z.ZodRawShape>;
-  #state: Record<string, unknown> = {};
+  // -- Harness (optional per-session orchestration) ----------------------------
+  #harness?: AgentHarnessConfig;
   #eventListeners: AgentEventListener[] = [];
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
@@ -323,20 +320,8 @@ export class Agent<
       this.#requestContextSchema = config.requestContextSchema;
     }
 
-    if (config.modes?.length) {
-      this.#modes = config.modes;
-      const defaultMode = config.modes.find(m => m.default) ?? config.modes[0]!;
-      this.#currentModeId = defaultMode.id;
-    }
-
-    if (config.stateSchema) {
-      this.#stateSchema = config.stateSchema;
-      this.#state = {
-        ...this.#getSchemaDefaults(config.stateSchema),
-        ...config.initialState,
-      };
-    } else if (config.initialState) {
-      this.#state = { ...config.initialState };
+    if (config.harness) {
+      this.#harness = config.harness;
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -403,107 +388,39 @@ export class Agent<
   }
 
   // ===========================================================================
-  // Modes
+  // Harness (read-only config accessors)
   // ===========================================================================
 
   /**
-   * Whether this agent has modes configured.
+   * Whether this agent has modes configured in its harness config.
    */
   hasModes(): boolean {
-    return !!this.#modes?.length;
+    return !!this.#harness?.modes?.length;
   }
 
   /**
-   * List all configured modes.
-   * Returns an empty array if modes are not configured.
+   * List all configured modes from the harness config.
+   * Returns an empty array if no harness or modes are configured.
    */
   listModes(): AgentMode[] {
-    return this.#modes ?? [];
+    return this.#harness?.modes ?? [];
   }
 
   /**
-   * Get the current mode ID. Returns undefined if modes are not configured.
+   * Get the default mode from the harness config.
+   * Returns the mode marked `default: true`, or the first mode if none is marked.
    */
-  getCurrentModeId(): string | undefined {
-    return this.#currentModeId;
+  getDefaultMode(): AgentMode | undefined {
+    const modes = this.#harness?.modes;
+    if (!modes?.length) return undefined;
+    return modes.find(m => m.default) ?? modes[0];
   }
 
   /**
-   * Get the current mode. Returns undefined if modes are not configured.
+   * Get the harness state schema, if configured.
    */
-  getCurrentMode(): AgentMode | undefined {
-    if (!this.#modes || !this.#currentModeId) return undefined;
-    return this.#modes.find(m => m.id === this.#currentModeId);
-  }
-
-  /**
-   * Switch to a different mode.
-   * Throws if modes are not configured or the mode ID is not found.
-   */
-  switchMode(modeId: string): void {
-    if (!this.#modes) {
-      throw new Error('Cannot switch modes: no modes configured on this agent');
-    }
-    const mode = this.#modes.find(m => m.id === modeId);
-    if (!mode) {
-      throw new Error(`Mode not found: ${modeId}`);
-    }
-    const previousModeId = this.#currentModeId!;
-    if (previousModeId === modeId) return;
-
-    this.#currentModeId = modeId;
-    this.emitEvent({ type: 'mode_changed', modeId, previousModeId });
-  }
-
-  // ===========================================================================
-  // State
-  // ===========================================================================
-
-  /**
-   * Get the current agent state (read-only snapshot).
-   * Returns an empty object if state is not configured.
-   */
-  getState(): Readonly<Record<string, unknown>> {
-    return { ...this.#state };
-  }
-
-  /**
-   * Update agent state. Validates against stateSchema if provided.
-   * Emits a state_changed event.
-   */
-  setState(updates: Record<string, unknown>): void {
-    const changedKeys = Object.keys(updates);
-    const newState = { ...this.#state, ...updates };
-
-    if (this.#stateSchema) {
-      const result = this.#stateSchema.safeParse(newState);
-      if (!result.success) {
-        throw new Error(`Invalid state update: ${result.error.message}`);
-      }
-      this.#state = result.data as Record<string, unknown>;
-    } else {
-      this.#state = newState;
-    }
-
-    this.emitEvent({ type: 'state_changed', state: this.#state, changedKeys });
-  }
-
-  #getSchemaDefaults(schema: z.ZodObject<z.ZodRawShape>): Record<string, unknown> {
-    const shape = schema.shape;
-    const defaults: Record<string, unknown> = {};
-
-    for (const [key, field] of Object.entries(shape)) {
-      try {
-        const result = (field as any).safeParse(undefined);
-        if (result.success && result.data !== undefined) {
-          defaults[key] = result.data;
-        }
-      } catch {
-        // field has no default — skip
-      }
-    }
-
-    return defaults;
+  getStateSchema(): z.ZodObject<z.ZodRawShape> | undefined {
+    return this.#harness?.stateSchema;
   }
 
   // ===========================================================================
@@ -537,6 +454,7 @@ export class Agent<
     threadId,
     resourceId,
     modeId,
+    state,
     maxSteps = 100,
     requestContext,
     toolsets,
@@ -548,6 +466,8 @@ export class Agent<
     resourceId: string;
     /** Mode to use for this operation. Overrides the instance-level current mode. */
     modeId?: string;
+    /** Per-operation state. Overrides the instance-level state for this operation only. */
+    state?: Record<string, unknown>;
     maxSteps?: number;
     requestContext?: RequestContext;
     toolsets?: ToolsetsInput;
@@ -797,14 +717,35 @@ export class Agent<
       emit({ type: 'send_start' });
 
       try {
-        const effectiveModeId = modeId ?? this.#currentModeId;
-        const mode = effectiveModeId ? this.#modes?.find(m => m.id === effectiveModeId) : undefined;
+        const modes = this.#harness?.modes;
+        const defaultMode = modes?.find(m => m.default) ?? modes?.[0];
+        const effectiveModeId = modeId ?? defaultMode?.id;
+        const mode = effectiveModeId ? modes?.find(m => m.id === effectiveModeId) : undefined;
+
+        if (modeId && modes?.length && !mode) {
+          throw new Error(`Mode not found: ${modeId}. Available: ${modes.map(m => m.id).join(', ')}`);
+        }
+
+        if (state && this.#harness?.stateSchema) {
+          const result = this.#harness.stateSchema.safeParse(state);
+          if (!result.success) {
+            throw new Error(`Invalid state: ${result.error.message}`);
+          }
+        }
+
+        const effectiveRequestContext = requestContext ?? new RequestContext();
+        if (state) {
+          effectiveRequestContext.set('agentState', state);
+        }
+        if (effectiveModeId) {
+          effectiveRequestContext.set('agentModeId', effectiveModeId);
+        }
 
         const streamOptions: Record<string, unknown> = {
           memory: { thread: threadId, resource: resourceId },
           abortSignal: abortController.signal,
           maxSteps,
-          ...(requestContext && { requestContext }),
+          requestContext: effectiveRequestContext,
           ...(toolsets && { toolsets }),
           ...(onStepFinish && { onStepFinish }),
           ...(mode?.instructions && { instructions: mode.instructions }),

@@ -41,10 +41,6 @@ import {
   approveNetworkToolCallBodySchema,
   declineNetworkToolCallBodySchema,
   listModesResponseSchema,
-  switchModeBodySchema,
-  switchModeResponseSchema,
-  agentStateResponseSchema,
-  updateStateBodySchema,
   agentSendBodySchema,
   sendEventSchema,
 } from '../schemas/agents';
@@ -1952,83 +1948,19 @@ export const LIST_MODES_ROUTE = createRoute({
   pathParamSchema: agentIdPathParams,
   responseSchema: listModesResponseSchema,
   summary: 'List agent modes',
-  description: 'Returns the configured modes for an agent and the current active mode',
+  description: 'Returns the available modes from the agent harness config and the default mode',
   tags: ['Agents', 'Orchestration'],
   requiresAuth: true,
   handler: async ({ mastra, agentId }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
+      const defaultMode = agent.getDefaultMode();
       return {
         modes: agent.listModes().map(m => ({ id: m.id, name: m.name, default: m.default })),
-        currentModeId: agent.getCurrentModeId(),
+        currentModeId: defaultMode?.id,
       };
     } catch (error) {
       return handleError(error, 'Error listing agent modes');
-    }
-  },
-});
-
-export const SWITCH_MODE_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/modes/switch',
-  responseType: 'json' as const,
-  pathParamSchema: agentIdPathParams,
-  bodySchema: switchModeBodySchema,
-  responseSchema: switchModeResponseSchema,
-  summary: 'Switch agent mode',
-  description: 'Switch the agent to a different mode',
-  tags: ['Agents', 'Orchestration'],
-  requiresAuth: true,
-  handler: async ({ mastra, agentId, modeId }) => {
-    try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
-      const previousModeId = agent.getCurrentModeId();
-      agent.switchMode(modeId);
-      return { modeId, previousModeId };
-    } catch (error) {
-      return handleError(error, 'Error switching agent mode');
-    }
-  },
-});
-
-export const GET_STATE_ROUTE = createRoute({
-  method: 'GET',
-  path: '/agents/:agentId/state',
-  responseType: 'json' as const,
-  pathParamSchema: agentIdPathParams,
-  responseSchema: agentStateResponseSchema,
-  summary: 'Get agent state',
-  description: 'Returns the current shared state of the agent',
-  tags: ['Agents', 'Orchestration'],
-  requiresAuth: true,
-  handler: async ({ mastra, agentId }) => {
-    try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
-      return { state: agent.getState() };
-    } catch (error) {
-      return handleError(error, 'Error getting agent state');
-    }
-  },
-});
-
-export const UPDATE_STATE_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/state',
-  responseType: 'json' as const,
-  pathParamSchema: agentIdPathParams,
-  bodySchema: updateStateBodySchema,
-  responseSchema: agentStateResponseSchema,
-  summary: 'Update agent state',
-  description: 'Merge partial updates into the agent state. Validates against stateSchema if configured.',
-  tags: ['Agents', 'Orchestration'],
-  requiresAuth: true,
-  handler: async ({ mastra, agentId, state: updates }) => {
-    try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
-      agent.setState(updates);
-      return { state: agent.getState() };
-    } catch (error) {
-      return handleError(error, 'Error updating agent state');
     }
   },
 });
@@ -2050,7 +1982,7 @@ export const SEND_MESSAGE_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
-      const { messages, threadId, resourceId, modeId, maxSteps, bodyRequestContext } = params;
+      const { messages, threadId, resourceId, modeId, state, maxSteps, bodyRequestContext } = params;
 
       if (bodyRequestContext && typeof bodyRequestContext === 'object') {
         for (const [key, value] of Object.entries(bodyRequestContext as Record<string, unknown>)) {
@@ -2076,6 +2008,7 @@ export const SEND_MESSAGE_ROUTE = createRoute({
         threadId: effectiveThreadId,
         resourceId: effectiveResourceId,
         modeId,
+        state: state as Record<string, unknown> | undefined,
         maxSteps,
         requestContext: serverRequestContext,
         abortSignal,

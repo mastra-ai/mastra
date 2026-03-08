@@ -12,7 +12,7 @@ export type {
   AgentMessageContent,
   SendOperation,
 } from './events';
-export type { AgentMode } from './modes';
+export type { AgentMode, AgentHarnessConfig } from './modes';
 
 export type {
   AgentExecutionOptions,

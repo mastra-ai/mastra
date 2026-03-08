@@ -223,62 +223,25 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
       'Zod schema for validating request context values. When provided, the context is validated at the start of generate() or stream(), throwing a MastraError if validation fails.',
   },
   {
-    name: 'modes',
-    type: 'AgentMode[]',
+    name: 'harness',
+    type: 'AgentHarnessConfig',
     isOptional: true,
     description:
-      "Named presets of instructions, model, and tools that can be switched at runtime. When configured, the current mode's overrides are applied on top of the agent's base configuration. Use `switchMode()` to change between modes.",
+      'Per-session orchestration config. Defines modes and state schema available per `.send()` operation. Values are NOT stored on the Agent singleton — they are passed per-operation for session isolation.',
     properties: [
       {
-        name: 'id',
-        type: 'string',
-        description: 'Unique identifier for this mode (e.g., "plan", "build", "review").',
+        name: 'modes',
+        type: 'AgentMode[]',
+        isOptional: true,
+        description: 'Named presets. Select a mode per `.send()` via `modeId`.',
       },
       {
-        name: 'name',
-        type: 'string',
+        name: 'stateSchema',
+        type: 'z.ZodObject',
         isOptional: true,
-        description: 'Human-readable name for display.',
-      },
-      {
-        name: 'default',
-        type: 'boolean',
-        isOptional: true,
-        description:
-          'Whether this is the default mode when the agent starts. If no mode is marked default, the first mode is used.',
-      },
-      {
-        name: 'instructions',
-        type: 'SystemMessage | ({ requestContext }) => SystemMessage',
-        isOptional: true,
-        description: 'Instructions override for this mode.',
-      },
-      {
-        name: 'model',
-        type: 'MastraModelConfig | ({ requestContext }) => MastraModelConfig',
-        isOptional: true,
-        description: 'Model override for this mode.',
-      },
-      {
-        name: 'tools',
-        type: 'ToolsInput | ({ requestContext }) => ToolsInput',
-        isOptional: true,
-        description: 'Tools override for this mode (merged with agent-level tools).',
+        description: 'Zod schema for per-session state. Validated per `.send()` operation.',
       },
     ],
-  },
-  {
-    name: 'stateSchema',
-    type: 'z.ZodObject',
-    isOptional: true,
-    description:
-      'Zod object schema defining the shape of shared agent state. State persists across mode switches and is accessible via `getState()` / `setState()`. If the schema includes defaults, they are applied automatically.',
-  },
-  {
-    name: 'initialState',
-    type: 'Record<string, unknown>',
-    isOptional: true,
-    description: 'Initial state values. Must conform to `stateSchema` if provided. Overrides schema defaults.',
   },
 ]}
 />
@@ -322,21 +285,21 @@ agent.on('mode_changed', event => {
 })
 ```
 
-### Modes
+### Harness
 
 #### `hasModes()`
 
-Returns `true` if the agent has modes configured.
+Returns `true` if the agent has modes configured in its `harness` config.
 
 ```typescript
 if (agent.hasModes()) {
-  console.log('Current mode:', agent.getCurrentModeId())
+  console.log('Default mode:', agent.getDefaultMode()?.id)
 }
 ```
 
 #### `listModes()`
 
-Returns all configured modes, or an empty array if modes are not configured.
+Returns all configured modes from the harness config.
 
 ```typescript
 const modes = agent.listModes()
@@ -344,53 +307,25 @@ const modes = agent.listModes()
 
 **Returns:** `AgentMode[]`
 
-#### `getCurrentModeId()`
+#### `getDefaultMode()`
 
-Returns the current mode ID, or `undefined` if modes are not configured.
-
-```typescript
-const modeId = agent.getCurrentModeId()
-```
-
-**Returns:** `string | undefined`
-
-#### `getCurrentMode()`
-
-Returns the current mode object, or `undefined` if modes are not configured.
+Returns the default mode (marked `default: true`, or the first mode).
 
 ```typescript
-const mode = agent.getCurrentMode()
+const defaultMode = agent.getDefaultMode()
 ```
 
 **Returns:** `AgentMode | undefined`
 
-#### `switchMode(modeId)`
+#### `getStateSchema()`
 
-Switch to a different mode. Throws if modes are not configured or the mode ID is not found.
-
-```typescript
-agent.switchMode('build')
-```
-
-### State
-
-#### `getState()`
-
-Returns a read-only snapshot of the current agent state. Returns an empty object if state is not configured.
+Returns the Zod state schema from the harness config, if configured.
 
 ```typescript
-const state = agent.getState()
+const schema = agent.getStateSchema()
 ```
 
-**Returns:** `Readonly<Record<string, unknown>>`
-
-#### `setState(updates)`
-
-Update agent state with a partial update. Validates against `stateSchema` if provided and emits a `state_changed` event.
-
-```typescript
-agent.setState({ counter: agent.getState().counter + 1 })
-```
+**Returns:** `z.ZodObject | undefined`
 
 ### Orchestration
 
@@ -405,6 +340,8 @@ const op = agent.send({
   messages: 'Hello!',
   threadId: 'thread-1',
   resourceId: 'user-1',
+  modeId: 'plan',
+  state: { counter: 0 },
 })
 
 // Consume events as an async iterable
@@ -432,6 +369,20 @@ const { message } = await op.result
     name: 'resourceId',
     type: 'string',
     description: 'The resource ID for memory persistence.',
+  },
+  {
+    name: 'modeId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Mode to use for this operation. Must match an id from `harness.modes`. Falls back to the default mode.',
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    isOptional: true,
+    description:
+      'Per-operation state. Validated against `harness.stateSchema` if configured. Accessible by tools via `requestContext.get("agentState")`.',
   },
   {
     name: 'maxSteps',

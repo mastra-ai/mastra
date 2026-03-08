@@ -18,8 +18,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
 | `POST` | `/api/agents/:agentId/send` | Send message with event streaming (SSE) |
-| `GET` | `/api/agents/:agentId/modes` | List available agent modes |
-| `GET` | `/api/agents/:agentId/state` | Get agent state (read-only) |
+| `GET` | `/api/agents/:agentId/modes` | List available modes from harness config |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
 
@@ -80,14 +79,6 @@ Pass `modeId` to select which mode's instructions, model, and tools to use for t
 {
   modes: Array<{ id: string; name?: string; default?: boolean }>;
   currentModeId?: string;
-}
-```
-
-### State response
-
-```typescript prettier:false
-{
-  state: Record<string, unknown>;
 }
 ```
 

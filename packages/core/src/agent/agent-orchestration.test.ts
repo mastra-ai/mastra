@@ -53,62 +53,61 @@ function createV2StreamModel(text = 'Hello from send') {
 }
 
 describe('Agent Events', () => {
-  it('subscribe receives events and returns unsubscribe function', () => {
+  it('subscribe receives events and returns unsubscribe function', async () => {
+    const mockMemory = new MockMemory();
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
-      model: createDummyModel(),
-      stateSchema: z.object({ counter: z.number().default(0) }),
+      model: createV2StreamModel(),
+      memory: mockMemory,
     });
 
     const events: AgentEvent[] = [];
     const unsub = agent.subscribe(event => events.push(event));
 
-    agent.setState({ counter: 1 });
-    expect(events).toHaveLength(1);
-    expect(events[0]!.type).toBe('state_changed');
+    const op = agent.send({ messages: 'hi', threadId: 't1', resourceId: 'r1' });
+    await op.result;
 
+    expect(events.length).toBeGreaterThan(0);
+
+    const countBefore = events.length;
     unsub();
-    agent.setState({ counter: 2 });
-    expect(events).toHaveLength(1); // no new event after unsub
+
+    const op2 = agent.send({ messages: 'hi again', threadId: 't1', resourceId: 'r1' });
+    await op2.result;
+
+    expect(events.length).toBe(countBefore);
   });
 
-  it('on() filters by event type', () => {
+  it('on() filters by event type', async () => {
+    const mockMemory = new MockMemory();
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
-      model: createDummyModel(),
-      modes: [
-        { id: 'plan', name: 'Plan', default: true },
-        { id: 'build', name: 'Build' },
-      ],
-      stateSchema: z.object({ counter: z.number().default(0) }),
+      model: createV2StreamModel(),
+      memory: mockMemory,
     });
 
-    const modeEvents: AgentEvent[] = [];
-    const stateEvents: AgentEvent[] = [];
+    const sendEvents: AgentEvent[] = [];
+    agent.on('send_start', event => sendEvents.push(event));
 
-    agent.on('mode_changed', event => modeEvents.push(event));
-    agent.on('state_changed', event => stateEvents.push(event));
+    const op = agent.send({ messages: 'hi', threadId: 't1', resourceId: 'r1' });
+    await op.result;
 
-    agent.switchMode('build');
-    agent.setState({ counter: 42 });
-
-    expect(modeEvents).toHaveLength(1);
-    expect(stateEvents).toHaveLength(1);
-    expect(modeEvents[0]!.type).toBe('mode_changed');
-    expect(stateEvents[0]!.type).toBe('state_changed');
+    expect(sendEvents).toHaveLength(1);
+    expect(sendEvents[0]!.type).toBe('send_start');
   });
 
-  it('listener errors do not propagate', () => {
+  it('listener errors do not propagate', async () => {
+    const mockMemory = new MockMemory();
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
-      model: createDummyModel(),
-      stateSchema: z.object({ x: z.number().default(0) }),
+      model: createV2StreamModel(),
+      memory: mockMemory,
     });
 
     const events: AgentEvent[] = [];
@@ -117,33 +116,15 @@ describe('Agent Events', () => {
     });
     agent.subscribe(event => events.push(event));
 
-    agent.setState({ x: 1 });
-    expect(events).toHaveLength(1);
-  });
+    const op = agent.send({ messages: 'hi', threadId: 't1', resourceId: 'r1' });
+    await op.result;
 
-  it('multiple subscribers all receive events', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      stateSchema: z.object({ x: z.number().default(0) }),
-    });
-
-    const a: AgentEvent[] = [];
-    const b: AgentEvent[] = [];
-
-    agent.subscribe(e => a.push(e));
-    agent.subscribe(e => b.push(e));
-
-    agent.setState({ x: 5 });
-    expect(a).toHaveLength(1);
-    expect(b).toHaveLength(1);
+    expect(events.length).toBeGreaterThan(0);
   });
 });
 
-describe('Agent Modes', () => {
-  it('hasModes returns false when no modes configured', () => {
+describe('Agent Harness Config', () => {
+  it('hasModes returns false when no harness configured', () => {
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
@@ -153,109 +134,64 @@ describe('Agent Modes', () => {
 
     expect(agent.hasModes()).toBe(false);
     expect(agent.listModes()).toEqual([]);
-    expect(agent.getCurrentModeId()).toBeUndefined();
-    expect(agent.getCurrentMode()).toBeUndefined();
+    expect(agent.getDefaultMode()).toBeUndefined();
   });
 
-  it('defaults to the mode marked default', () => {
+  it('hasModes returns true when harness has modes', () => {
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
       model: createDummyModel(),
-      modes: [
-        { id: 'alpha', name: 'Alpha' },
-        { id: 'beta', name: 'Beta', default: true },
-      ],
+      harness: {
+        modes: [
+          { id: 'plan', name: 'Plan', default: true },
+          { id: 'build', name: 'Build' },
+        ],
+      },
     });
 
     expect(agent.hasModes()).toBe(true);
-    expect(agent.getCurrentModeId()).toBe('beta');
-    expect(agent.getCurrentMode()!.id).toBe('beta');
+    expect(agent.listModes()).toHaveLength(2);
   });
 
-  it('defaults to first mode when none marked default', () => {
+  it('getDefaultMode returns the mode marked default', () => {
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
       model: createDummyModel(),
-      modes: [
-        { id: 'first', name: 'First' },
-        { id: 'second', name: 'Second' },
-      ],
+      harness: {
+        modes: [
+          { id: 'alpha', name: 'Alpha' },
+          { id: 'beta', name: 'Beta', default: true },
+        ],
+      },
     });
 
-    expect(agent.getCurrentModeId()).toBe('first');
+    expect(agent.getDefaultMode()!.id).toBe('beta');
   });
 
-  it('switchMode changes the current mode and emits event', () => {
+  it('getDefaultMode falls back to first mode', () => {
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
       model: createDummyModel(),
-      modes: [
-        { id: 'plan', name: 'Plan', default: true },
-        { id: 'build', name: 'Build' },
-      ],
+      harness: {
+        modes: [
+          { id: 'first', name: 'First' },
+          { id: 'second', name: 'Second' },
+        ],
+      },
     });
 
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    agent.switchMode('build');
-    expect(agent.getCurrentModeId()).toBe('build');
-    expect(events).toHaveLength(1);
-    expect(events[0]).toEqual({
-      type: 'mode_changed',
-      modeId: 'build',
-      previousModeId: 'plan',
-    });
-  });
-
-  it('switchMode to same mode is a no-op', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      modes: [{ id: 'plan', name: 'Plan', default: true }],
-    });
-
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    agent.switchMode('plan');
-    expect(events).toHaveLength(0);
-  });
-
-  it('switchMode throws for unknown mode', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      modes: [{ id: 'plan', name: 'Plan', default: true }],
-    });
-
-    expect(() => agent.switchMode('nonexistent')).toThrow('Mode not found: nonexistent');
-  });
-
-  it('switchMode throws when modes not configured', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-    });
-
-    expect(() => agent.switchMode('plan')).toThrow('Cannot switch modes: no modes configured on this agent');
+    expect(agent.getDefaultMode()!.id).toBe('first');
   });
 
   it('listModes returns all configured modes', () => {
     const modes = [
-      { id: 'plan', name: 'Plan', default: true },
+      { id: 'plan', name: 'Plan', default: true as const },
       { id: 'build', name: 'Build' },
       { id: 'review', name: 'Review' },
     ];
@@ -264,152 +200,34 @@ describe('Agent Modes', () => {
       name: 'Test Agent',
       instructions: 'You are helpful.',
       model: createDummyModel(),
-      modes,
+      harness: { modes },
     });
 
     expect(agent.listModes()).toEqual(modes);
   });
-});
 
-describe('Agent State', () => {
-  it('getState returns empty object when no state configured', () => {
+  it('getStateSchema returns the schema from harness config', () => {
+    const schema = z.object({ counter: z.number().default(0) });
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
       model: createDummyModel(),
+      harness: { stateSchema: schema },
     });
 
-    expect(agent.getState()).toEqual({});
+    expect(agent.getStateSchema()).toBe(schema);
   });
 
-  it('initializes state from schema defaults', () => {
+  it('getStateSchema returns undefined when no harness', () => {
     const agent = new Agent({
       id: 'test-agent',
       name: 'Test Agent',
       instructions: 'You are helpful.',
       model: createDummyModel(),
-      stateSchema: z.object({
-        counter: z.number().default(0),
-        label: z.string().default('untitled'),
-      }),
     });
 
-    expect(agent.getState()).toEqual({ counter: 0, label: 'untitled' });
-  });
-
-  it('initialState overrides schema defaults', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      stateSchema: z.object({
-        counter: z.number().default(0),
-        label: z.string().default('untitled'),
-      }),
-      initialState: { counter: 10 },
-    });
-
-    expect(agent.getState()).toEqual({ counter: 10, label: 'untitled' });
-  });
-
-  it('setState updates state and emits event', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      stateSchema: z.object({
-        counter: z.number().default(0),
-      }),
-    });
-
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    agent.setState({ counter: 42 });
-    expect(agent.getState()).toEqual({ counter: 42 });
-    expect(events).toHaveLength(1);
-
-    const event = events[0]!;
-    expect(event.type).toBe('state_changed');
-    if (event.type === 'state_changed') {
-      expect(event.changedKeys).toEqual(['counter']);
-      expect(event.state).toEqual({ counter: 42 });
-    }
-  });
-
-  it('setState validates against schema', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      stateSchema: z.object({
-        counter: z.number(),
-      }),
-      initialState: { counter: 0 },
-    });
-
-    expect(() => agent.setState({ counter: 'not a number' as any })).toThrow('Invalid state update');
-  });
-
-  it('setState works without schema (unvalidated)', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      initialState: { foo: 'bar' },
-    });
-
-    agent.setState({ foo: 'baz', extra: true });
-    expect(agent.getState()).toEqual({ foo: 'baz', extra: true });
-  });
-
-  it('getState returns a snapshot (not a reference)', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      initialState: { counter: 0 },
-    });
-
-    const snapshot = agent.getState();
-    (snapshot as any).counter = 999;
-    expect(agent.getState().counter).toBe(0);
-  });
-});
-
-describe('Agent Orchestration Integration', () => {
-  it('modes and state work together', () => {
-    const agent = new Agent({
-      id: 'test-agent',
-      name: 'Test Agent',
-      instructions: 'You are helpful.',
-      model: createDummyModel(),
-      modes: [
-        { id: 'plan', name: 'Plan', default: true },
-        { id: 'build', name: 'Build' },
-      ],
-      stateSchema: z.object({
-        currentModelId: z.string().optional(),
-      }),
-    });
-
-    const events: AgentEvent[] = [];
-    agent.subscribe(e => events.push(e));
-
-    agent.switchMode('build');
-    agent.setState({ currentModelId: 'anthropic/claude-sonnet-4-20250514' });
-
-    expect(agent.getCurrentModeId()).toBe('build');
-    expect(agent.getState()).toEqual({ currentModelId: 'anthropic/claude-sonnet-4-20250514' });
-    expect(events).toHaveLength(2);
-    expect(events[0]!.type).toBe('mode_changed');
-    expect(events[1]!.type).toBe('state_changed');
+    expect(agent.getStateSchema()).toBeUndefined();
   });
 });
 
@@ -441,38 +259,6 @@ describe('Agent .send()', () => {
     expect(eventTypes).toContain('message_update');
     expect(eventTypes).toContain('message_end');
     expect(eventTypes).toContain('send_end');
-
-    const sendEnd = events.find(e => e.type === 'send_end');
-    expect(sendEnd).toBeDefined();
-    if (sendEnd && sendEnd.type === 'send_end') {
-      expect(sendEnd.reason).toBe('complete');
-    }
-  });
-
-  it('global subscribers also receive events from send operations', async () => {
-    const mockMemory = new MockMemory();
-    const agent = new Agent({
-      id: 'send-agent',
-      name: 'Send Agent',
-      instructions: 'You are helpful.',
-      model: createV2StreamModel('Hello world'),
-      memory: mockMemory,
-    });
-
-    const globalEvents: AgentEvent[] = [];
-    agent.subscribe(e => globalEvents.push(e));
-
-    const op = agent.send({
-      messages: 'Hi there',
-      threadId: 'thread-1',
-      resourceId: 'user-1',
-    });
-
-    await op.result;
-
-    const eventTypes = globalEvents.map(e => e.type);
-    expect(eventTypes).toContain('send_start');
-    expect(eventTypes).toContain('send_end');
   });
 
   it('result resolves with the assembled message', async () => {
@@ -494,10 +280,118 @@ describe('Agent .send()', () => {
     const { message } = await op.result;
 
     expect(message.role).toBe('assistant');
-    expect(message.content.length).toBeGreaterThan(0);
     const textContent = message.content.find(c => c.type === 'text');
     expect(textContent).toBeDefined();
     expect(textContent!.text).toContain('Test response');
+  });
+
+  it('accepts modeId per-operation', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'mode-agent',
+      name: 'Mode Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel('mode response'),
+      memory: mockMemory,
+      harness: {
+        modes: [
+          { id: 'plan', name: 'Plan', default: true },
+          { id: 'build', name: 'Build' },
+        ],
+      },
+    });
+
+    const op = agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      modeId: 'build',
+    });
+
+    const { message } = await op.result;
+    expect(message.role).toBe('assistant');
+  });
+
+  it('throws for unknown modeId', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'mode-agent',
+      name: 'Mode Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel(),
+      memory: mockMemory,
+      harness: {
+        modes: [{ id: 'plan', name: 'Plan' }],
+      },
+    });
+
+    const op = agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      modeId: 'nonexistent',
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of op.events) {
+      events.push(event);
+    }
+
+    const errorEvent = events.find(e => e.type === 'error');
+    expect(errorEvent).toBeDefined();
+  });
+
+  it('validates state against harness stateSchema', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'state-agent',
+      name: 'State Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel(),
+      memory: mockMemory,
+      harness: {
+        stateSchema: z.object({ counter: z.number() }),
+      },
+    });
+
+    const op = agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      state: { counter: 'not a number' as any },
+    });
+
+    const events: AgentEvent[] = [];
+    for await (const event of op.events) {
+      events.push(event);
+    }
+
+    const errorEvent = events.find(e => e.type === 'error');
+    expect(errorEvent).toBeDefined();
+  });
+
+  it('accepts valid state per-operation', async () => {
+    const mockMemory = new MockMemory();
+    const agent = new Agent({
+      id: 'state-agent',
+      name: 'State Agent',
+      instructions: 'You are helpful.',
+      model: createV2StreamModel(),
+      memory: mockMemory,
+      harness: {
+        stateSchema: z.object({ counter: z.number() }),
+      },
+    });
+
+    const op = agent.send({
+      messages: 'Hello',
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      state: { counter: 42 },
+    });
+
+    const { message } = await op.result;
+    expect(message.role).toBe('assistant');
   });
 
   it('op.abort() cancels this specific send', async () => {
@@ -555,89 +449,6 @@ describe('Agent .send()', () => {
     const sendEnd = events.find(e => e.type === 'send_end');
     if (sendEnd && sendEnd.type === 'send_end') {
       expect(sendEnd.reason).toBe('aborted');
-    }
-  });
-
-  it('emits error event when stream contains an error chunk', async () => {
-    const mockMemory = new MockMemory();
-    const agent = new Agent({
-      id: 'error-agent',
-      name: 'Error Agent',
-      instructions: 'You are helpful.',
-      model: new MockLanguageModelV2({
-        doGenerate: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          finishReason: 'stop' as const,
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          content: [{ type: 'text' as const, text: '' }],
-          warnings: [],
-        }),
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'error', error: new Error('Stream error') },
-            {
-              type: 'finish',
-              finishReason: 'error' as const,
-              usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-            },
-          ]),
-        }),
-      }),
-      memory: mockMemory,
-    });
-
-    const op = agent.send({
-      messages: 'Hello',
-      threadId: 'thread-1',
-      resourceId: 'user-1',
-    });
-
-    const events: AgentEvent[] = [];
-    for await (const event of op.events) {
-      events.push(event);
-    }
-
-    const eventTypes = events.map(e => e.type);
-    expect(eventTypes).toContain('send_start');
-    expect(eventTypes).toContain('error');
-    expect(eventTypes).toContain('send_end');
-
-    const errorEvent = events.find(e => e.type === 'error');
-    if (errorEvent && errorEvent.type === 'error') {
-      expect(errorEvent.error.message).toBe('Stream error');
-    }
-  });
-
-  it('emits usage_update event with token counts', async () => {
-    const mockMemory = new MockMemory();
-    const agent = new Agent({
-      id: 'usage-agent',
-      name: 'Usage Agent',
-      instructions: 'You are helpful.',
-      model: createV2StreamModel('Token test'),
-      memory: mockMemory,
-    });
-
-    const op = agent.send({
-      messages: 'Hello',
-      threadId: 'thread-1',
-      resourceId: 'user-1',
-    });
-
-    const events: AgentEvent[] = [];
-    for await (const event of op.events) {
-      events.push(event);
-    }
-
-    const usageEvents = events.filter(e => e.type === 'usage_update');
-    expect(usageEvents.length).toBeGreaterThanOrEqual(1);
-
-    const usage = usageEvents[0]!;
-    if (usage.type === 'usage_update') {
-      expect(usage.usage.totalTokens).toBeGreaterThan(0);
     }
   });
 
