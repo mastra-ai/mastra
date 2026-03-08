@@ -183,7 +183,7 @@ export class StepExecutor extends MastraBase {
                     foreachIndex: params.foreachIdx,
                     resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
                     waitForEvent:
-                      suspendOptions?.waitForEvent && suspendOptions.waitForEvent.event
+                      suspendOptions?.waitForEvent && suspendOptions.waitForEvent.event?.trim()
                         ? {
                             event: suspendOptions.waitForEvent.event,
                             match: suspendOptions.waitForEvent.match,
