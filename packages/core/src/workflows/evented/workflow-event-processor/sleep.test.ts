@@ -84,6 +84,23 @@ describe('processWorkflowWaitForEvent', () => {
     expect(pubsub.publish).not.toHaveBeenCalled();
   });
 
+  it('does not resume when workflow status is not suspended', async () => {
+    const pubsub = createMockPubSub();
+    const workflowData = createMockWorkflowData();
+    const state = createMockState({
+      status: 'completed',
+      waitingPaths: { 'invoice.approved': [0] },
+    });
+
+    await processWorkflowWaitForEvent(workflowData, {
+      pubsub,
+      eventName: 'invoice.approved',
+      currentState: state,
+    });
+
+    expect(pubsub.publish).not.toHaveBeenCalled();
+  });
+
   it('resumes when match condition passes', async () => {
     const pubsub = createMockPubSub();
     const workflowData = createMockWorkflowData();

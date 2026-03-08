@@ -20,6 +20,11 @@ export async function processWorkflowWaitForEvent(
     currentState: WorkflowRunState;
   },
 ) {
+  // Only process events for workflows that are still suspended
+  if (currentState?.status !== 'suspended') {
+    return;
+  }
+
   const executionPath = currentState?.waitingPaths[eventName];
   if (!executionPath) {
     return;
