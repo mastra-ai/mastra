@@ -186,8 +186,8 @@ export class StepExecutor extends MastraBase {
                       suspendOptions?.waitForEvent && suspendOptions.waitForEvent.event?.trim()
                         ? {
                             event: suspendOptions.waitForEvent.event.trim(),
-                            match: suspendOptions.waitForEvent.match,
-                            if: suspendOptions.waitForEvent.if,
+                            match: suspendOptions.waitForEvent.match?.trim() || undefined,
+                            if: suspendOptions.waitForEvent.if?.trim() || undefined,
                             suspendContext: suspendData ?? {},
                           }
                         : undefined,
