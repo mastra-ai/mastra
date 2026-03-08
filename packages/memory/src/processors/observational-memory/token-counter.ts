@@ -123,7 +123,8 @@ function serializePartForTokenCounting(part: CacheablePart): string {
   }
 
   if (part?.type === 'file') {
-    const mediaType = typeof part.mediaType === 'string' ? part.mediaType : undefined;
+    const mediaType =
+      typeof part.mediaType === 'string' ? part.mediaType : typeof part.mimeType === 'string' ? part.mimeType : undefined;
     const filename = typeof part.filename === 'string' ? part.filename : undefined;
     const filePayload =
       typeof part.data === 'string'

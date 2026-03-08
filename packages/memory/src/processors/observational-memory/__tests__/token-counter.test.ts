@@ -281,6 +281,23 @@ describe('TokenCounter', () => {
       expect(largeTokens - shortTokens).toBeLessThanOrEqual(5);
     });
 
+    it('does not let mimeType-based binary file payload size dominate token counts', () => {
+      const counter = new TokenCounter();
+      const shortFile = createMessage({
+        format: 2,
+        parts: [{ type: 'file', mimeType: 'image/png', data: 'A'.repeat(80), filename: 'tiny.png' }],
+      });
+      const largeFile = createMessage({
+        format: 2,
+        parts: [{ type: 'file', mimeType: 'image/png', data: 'A'.repeat(120_000), filename: 'huge.png' }],
+      });
+
+      const shortTokens = counter.countMessage(shortFile);
+      const largeTokens = counter.countMessage(largeFile);
+
+      expect(largeTokens - shortTokens).toBeLessThanOrEqual(5);
+    });
+
     it('still counts text-like file contents', () => {
       const counter = new TokenCounter();
       const shortTextFile = createMessage({
