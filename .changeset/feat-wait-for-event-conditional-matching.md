@@ -1,10 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/playground-ui': patch
-'@mastra/ai-sdk': patch
-'@mastra/couchbase': patch
-'@mastra/server': patch
-'@mastra/chroma': patch
 ---
 
 Added conditional event matching for workflow suspend/resume. Workflows can now use `waitForEvent` in suspend options to wait for a specific named event with optional `match` (field-path comparison) and `if` (expression-based) conditions. This enables Inngest-style event-driven patterns where multiple workflows wait for the same event type but only the correct one resumes based on payload data.
