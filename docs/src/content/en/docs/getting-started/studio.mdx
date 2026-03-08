@@ -43,12 +43,6 @@ Chat with your agent directly, dynamically switch [models](/models), and tweak s
 
 When you interact with your agent, you can follow each step of its reasoning, view tool call outputs, and [observe](#observability) traces and logs to see how responses are generated. You can also attach [scorers](#scorers) to measure and compare response quality over time.
 
-#### Session page
-
-Each agent also has a session page at `/agents/<agentId>/session` that strips away the sidebar and information pane, showing only the chat interface. This is useful for quick internal testing or for sharing with less technical team members who don't need the full Studio chrome.
-
-If you have [request context presets](/docs/server/request-context) configured via the `MASTRA_REQUEST_CONTEXT_PRESETS` environment variable, a preset dropdown appears in the header next to the Mastra logo, letting you switch between presets without navigating to the full request context page.
-
 ### Workflows
 
 Visualize your workflow as a graph and run it step by step with a custom input. During execution, the interface updates in real time to show the active step and the path taken.

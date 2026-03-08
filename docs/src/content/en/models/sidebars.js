@@ -118,6 +118,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/alibaba-coding-plan',
+          label: 'Alibaba Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/alibaba-coding-plan-cn',
+          label: 'Alibaba Coding Plan (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/amazon-bedrock',
           label: 'Amazon Bedrock',
         },
@@ -175,6 +185,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
+        },
+        {
+          type: 'doc',
+          id: 'providers/drun',
+          label: 'D.Run (China)',
         },
         {
           type: 'doc',
