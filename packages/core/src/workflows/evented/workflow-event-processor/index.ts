@@ -5,6 +5,7 @@ import { EventProcessor } from '../../../events/processor';
 import type { Event } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context/';
+import type { EventMatchCondition } from '../../../workflows/event-match';
 import type {
   StepFlowEntry,
   StepResult,
@@ -1623,6 +1624,22 @@ export class WorkflowEventProcessor extends EventProcessor {
       const resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> =
         prevResult.suspendPayload?.__workflow_meta?.resumeLabels ?? {};
 
+      // Extract waitForEvent metadata — populate waitingPaths so events can find this workflow
+      const waitForEventMeta = prevResult.suspendPayload?.__workflow_meta?.waitForEvent;
+      const waitingPaths: Record<string, number[]> = {};
+      const waitingPathConditions: Record<string, EventMatchCondition> = {};
+      if (waitForEventMeta?.event) {
+        waitingPaths[waitForEventMeta.event] = executionPath;
+        const hasConditions = waitForEventMeta.match || waitForEventMeta.if;
+        if (hasConditions) {
+          waitingPathConditions[waitForEventMeta.event] = {
+            match: waitForEventMeta.match,
+            if: waitForEventMeta.if,
+            suspendContext: waitForEventMeta.suspendContext,
+          };
+        }
+      }
+
       // Check shouldPersistSnapshot option - default to true if not specified
       const shouldPersist =
         workflow?.options?.shouldPersistSnapshot?.({
@@ -1649,6 +1666,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             result: prevResult,
             suspendedPaths,
             resumeLabels,
+            ...(Object.keys(waitingPaths).length > 0 ? { waitingPaths } : {}),
+            ...(Object.keys(waitingPathConditions).length > 0 ? { waitingPathConditions } : {}),
           },
         });
       }
@@ -1890,6 +1909,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         {
           pubsub: this.mastra.pubsub,
           eventName: type.split('.').slice(2).join('.'),
+          eventData: (workflowData.resumeData as Record<string, unknown>) ?? {},
           currentState: currentState!,
         },
       );

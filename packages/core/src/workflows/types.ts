@@ -14,6 +14,7 @@ import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { ZodLikeSchema } from '../types/zod-compat';
+import type { EventMatchCondition } from './event-match';
 import type { ExecutionEngine } from './execution-engine';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
@@ -346,6 +347,8 @@ export interface WorkflowRunState {
     }
   >;
   waitingPaths: Record<string, number[]>;
+  /** Conditions to evaluate before resuming a step waiting for an event. */
+  waitingPathConditions?: Record<string, EventMatchCondition>;
   timestamp: number;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
