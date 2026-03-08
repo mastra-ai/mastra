@@ -142,7 +142,16 @@ describe('evaluateExpression', () => {
     expect(evaluateExpression('event.offset == -10', { offset: -10 }, {})).toBe(true);
   });
 
-  it('short-circuits AND when left side is false', () => {
+  it('uses strict equality for cross-type comparisons', () => {
+    // string '5' vs number 5 should NOT match with strict equality
+    expect(evaluateExpression("event.id == '5'", { id: 5 }, {})).toBe(false);
+    expect(evaluateExpression('event.id == 5', { id: '5' }, {})).toBe(false);
+    // same type should match
+    expect(evaluateExpression('event.id == 5', { id: 5 }, {})).toBe(true);
+    expect(evaluateExpression("event.id == '5'", { id: '5' }, {})).toBe(true);
+  });
+
+  it('evaluates AND requiring both sides to be true', () => {
     const expr = "event.a == 'no' && event.b == 'yes'";
     expect(evaluateExpression(expr, { a: 'no', b: 'yes' }, {})).toBe(true);
     expect(evaluateExpression(expr, { a: 'yes', b: 'yes' }, {})).toBe(false);
