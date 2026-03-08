@@ -19,7 +19,12 @@ export const AgentChat = ({
   modelList,
   messageId,
   isNewThread,
-}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string; isNewThread?: boolean }) => {
+  hideModelSwitcher,
+}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & {
+  messageId?: string;
+  isNewThread?: boolean;
+  hideModelSwitcher?: boolean;
+}) => {
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
 
@@ -68,7 +73,13 @@ export const AgentChat = ({
       settings={settings}
       requestContext={requestContext}
     >
-      <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
+      <Thread
+        agentName={agentName ?? ''}
+        hasMemory={memory}
+        agentId={agentId}
+        hasModelList={Boolean(modelList)}
+        hideModelSwitcher={hideModelSwitcher}
+      />
     </MastraRuntimeProvider>
   );
 };
