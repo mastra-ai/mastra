@@ -18,6 +18,7 @@ import type {
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
+import { isDevPlaygroundRequest } from '../auth/helpers';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -30,7 +31,7 @@ import {
 import { createPublicRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
-type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any }) => Promise<any>;
+type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any; apiPrefix?: string }) => Promise<any>;
 let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
 function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
   if (!_buildCapabilitiesPromise) {
@@ -107,21 +108,26 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     try {
-      const { mastra, request } = ctx as any;
+      const { mastra, request, routePrefix } = ctx as any;
 
-      const auth = getAuthProvider(mastra);
+      // In dev playground mode, return auth as disabled so the UI doesn't show login gates.
+      // The server already bypasses auth for dev playground requests, so the UI should match.
+      const serverConfig = mastra.getServer?.();
+      const authConfig = serverConfig?.auth || {};
+      const getHeader = (name: string) => request.headers.get(name) ?? undefined;
 
-      if (!auth) {
+      if (isDevPlaygroundRequest('/api/auth/capabilities', 'GET', getHeader, authConfig)) {
         return { enabled: false, login: null };
       }
 
+      const auth = getAuthProvider(mastra);
       const rbac = getRBACProvider(mastra);
 
       const buildCapabilities = await loadBuildCapabilities();
       if (!buildCapabilities) {
         return { enabled: false, login: null };
       }
-      const capabilities = await buildCapabilities(auth, request, { rbac });
+      const capabilities = await buildCapabilities(auth, request, { rbac, apiPrefix: routePrefix });
 
       return capabilities;
     } catch (error) {
@@ -196,21 +202,49 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     try {
-      const { mastra, redirect_uri, request } = ctx as any;
+      const { mastra, redirect_uri, request, routePrefix } = ctx as any;
       const auth = getAuthProvider(mastra);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
         throw new HTTPException(404, { message: 'SSO not configured' });
       }
 
-      // Build OAuth callback URI (always /api/auth/sso/callback)
+      // Build OAuth callback URI using the configured route prefix
       const origin = getPublicOrigin(request);
-      const oauthCallbackUri = `${origin}/api/auth/sso/callback`;
+      const raw = ((routePrefix as string) || '/api').trim();
+      const withSlash = raw.startsWith('/') ? raw : `/${raw}`;
+      const prefix = withSlash.endsWith('/') ? withSlash.slice(0, -1) : withSlash;
+      const oauthCallbackUri = `${origin}${prefix}/auth/sso/callback`;
 
       // Encode the post-login redirect in state (where user goes after auth completes)
       // State format: uuid|postLoginRedirect
+      // Validate redirect_uri to prevent open-redirect attacks: allow relative paths,
+      // same-origin URLs, and localhost URLs (for dev setups where Studio runs on a
+      // different port).
+      let postLoginRedirect = '/';
+      if (redirect_uri) {
+        if (!redirect_uri.startsWith('http')) {
+          // Relative path — always safe
+          postLoginRedirect = redirect_uri;
+        } else {
+          try {
+            const redirectUrl = new URL(redirect_uri);
+            const requestOrigin = new URL(origin);
+            const isHttps = redirectUrl.protocol === 'http:' || redirectUrl.protocol === 'https:';
+            const isSameOrigin = redirectUrl.origin === requestOrigin.origin;
+            const isLocalhost =
+              redirectUrl.hostname === 'localhost' ||
+              redirectUrl.hostname === '127.0.0.1' ||
+              redirectUrl.hostname === '[::1]';
+            if (isHttps && (isSameOrigin || isLocalhost)) {
+              postLoginRedirect = redirect_uri;
+            }
+          } catch {
+            // Malformed URL — fall back to /
+          }
+        }
+      }
       const stateId = crypto.randomUUID();
-      const postLoginRedirect = redirect_uri || '/';
       const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
       const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
@@ -267,14 +301,20 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
       }
     }
 
-    // Build absolute redirect URL, preventing open redirects to external origins
+    // Build absolute redirect URL.
+    // The redirect_uri was validated at the login endpoint (same-origin or localhost
+    // only), so the state should only contain safe URLs. We still apply defense-in-depth
+    // checks here: allow http(s) same-origin or localhost, reject everything else.
     let absoluteRedirect: string;
     if (redirectTo.startsWith('http')) {
       try {
-        const redirectUrl = new URL(redirectTo);
-        const baseUrlObj = new URL(baseUrl);
-        // Only allow same-origin redirects
-        absoluteRedirect = redirectUrl.origin === baseUrlObj.origin ? redirectTo : `${baseUrl}/`;
+        const parsed = new URL(redirectTo);
+        const baseOrigin = new URL(baseUrl);
+        const isHttps = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        const isSameOrigin = parsed.origin === baseOrigin.origin;
+        const isLocalhost =
+          parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]';
+        absoluteRedirect = isHttps && (isSameOrigin || isLocalhost) ? redirectTo : `${baseUrl}/`;
       } catch {
         absoluteRedirect = `${baseUrl}/`;
       }

@@ -248,11 +248,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   // ── Skip checks (evaluated once) ──
 
-  // Only bypass auth for dev playground when no real auth provider is configured.
-  // When auth IS configured (has authenticateToken), we need the full auth flow
-  // so user/roles/permissions are set in requestContext.
-  const hasAuthProvider = typeof authConfig.authenticateToken === 'function';
-  if (!hasAuthProvider && isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
+  if (isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
     return pass;
   }
 

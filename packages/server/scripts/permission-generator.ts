@@ -66,7 +66,7 @@ function getPermissionDescription(pattern: string): string {
     return `Full access to ${resourceDesc}`;
   }
 
-  const [resource = '', action = ''] = pattern.split(':');
+  const [resource, action] = pattern.split(':');
   const resourceDesc = RESOURCE_DESCRIPTIONS[resource] || resource;
   const actionDesc = ACTION_DESCRIPTIONS[action] || action;
   return `${actionDesc} ${resourceDesc}`;
