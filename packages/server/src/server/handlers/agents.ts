@@ -11,6 +11,23 @@ import type {
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+
+function isPlainJsonSchema(schema: unknown): schema is Record<string, unknown> {
+  return (
+    schema != null &&
+    typeof schema === 'object' &&
+    !Array.isArray(schema) &&
+    ('type' in schema || 'properties' in schema || '$schema' in schema || 'anyOf' in schema || 'oneOf' in schema)
+  );
+}
+
+function safeZodToJsonSchema(schema: unknown): unknown {
+  if (isPlainJsonSchema(schema)) {
+    return schema;
+  }
+  return zodToJsonSchema(schema as Parameters<typeof zodToJsonSchema>[0]);
+}
+
 import { stringify } from 'superjson';
 
 import { z } from 'zod';
@@ -208,7 +225,7 @@ export async function getSerializedAgentTools(
             }
           } else if (tool.inputSchema) {
             inputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.inputSchema as Parameters<typeof zodToJsonSchema>[0]),
+              safeZodToJsonSchema(tool.inputSchema),
             );
           }
         }
@@ -223,7 +240,7 @@ export async function getSerializedAgentTools(
             }
           } else if (tool.outputSchema) {
             outputSchemaForReturn = stringify(
-              zodToJsonSchema(tool.outputSchema as Parameters<typeof zodToJsonSchema>[0]),
+              safeZodToJsonSchema(tool.outputSchema),
             );
           }
         }
@@ -242,7 +259,7 @@ export async function getSerializedAgentTools(
             }
           } else if (tool.requestContextSchema) {
             requestContextSchemaForReturn = stringify(
-              zodToJsonSchema(tool.requestContextSchema as Parameters<typeof zodToJsonSchema>[0]),
+              safeZodToJsonSchema(tool.requestContextSchema),
             );
           }
         }
