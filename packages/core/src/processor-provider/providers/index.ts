@@ -35,7 +35,7 @@ export const unicodeNormalizerProvider: ProcessorProvider = {
     collapseWhitespace: z.boolean().optional(),
     trim: z.boolean().optional(),
   }),
-  availablePhases: ['processInput', 'processOutputStep', 'processOutputResult'] as ProcessorPhase[],
+  availablePhases: ['processInput'] as ProcessorPhase[],
   createProcessor(config) {
     return new UnicodeNormalizer(config);
   },

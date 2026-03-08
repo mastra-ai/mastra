@@ -603,6 +603,7 @@ describe('ModerationProcessor', () => {
   describe('processOutputStep', () => {
     it('should moderate the completed assistant step instead of each chunk', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
       const moderator = new ModerationProcessor({
         model,
         strategy: 'block',
@@ -617,6 +618,7 @@ describe('ModerationProcessor', () => {
       } as any);
 
       expect(result).toEqual(messages);
+      expect(generateSpy).toHaveBeenCalledTimes(1);
       expect(mockAbort).not.toHaveBeenCalled();
     });
   });
