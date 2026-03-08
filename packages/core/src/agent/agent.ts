@@ -3123,13 +3123,11 @@ export class Agent<
 
                 result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
-                const generateResult = await agent.generateLegacy(
-                  [...filteredContextMessages, { role: 'user' as const, content: effectivePrompt }],
-                  {
-                    requestContext,
-                    ...resolveObservabilityContext(context ?? {}),
-                  },
-                );
+                const generateResult = await agent.generateLegacy(messagesForSubAgent, {
+                  requestContext,
+                  ...resolveObservabilityContext(context ?? {}),
+                  context: filteredContextMessages as any,
+                });
                 result = { text: generateResult.text };
               } else if (
                 (methodType === 'stream' || methodType === 'streamLegacy') &&
