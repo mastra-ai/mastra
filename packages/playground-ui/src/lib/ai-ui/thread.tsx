@@ -61,7 +61,12 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList, hideModelS
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
 
-      <Composer hasMemory={hasMemory} agentId={agentId} hasModelList={hasModelList} hideModelSwitcher={hideModelSwitcher} />
+      <Composer
+        hasMemory={hasMemory}
+        agentId={agentId}
+        hasModelList={hasModelList}
+        hideModelSwitcher={hideModelSwitcher}
+      />
     </ThreadWrapper>
   );
 };
