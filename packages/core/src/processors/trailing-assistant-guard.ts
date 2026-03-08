@@ -38,28 +38,24 @@ export function isMaybeClaude46(
 }
 
 /**
- * Guards against trailing assistant messages when using native structured output
- * with Anthropic Claude 4.6.
+ * Guards against trailing assistant messages when using Anthropic Claude 4.6.
  *
- * Claude 4.6 rejects requests where the last message is an assistant message when
- * using output format (structured output), interpreting it as pre-filling the response.
- * This processor appends a user message to prevent that error.
+ * Claude 4.6 rejects requests where the last message is an assistant message,
+ * interpreting it as pre-filling the response. This applies to all requests,
+ * not just structured output. This processor appends a user message to prevent
+ * that error.
  *
  * This processor should only be added when the agent uses a Claude 4.6 model.
  * Use {@link isMaybeClaude46} to check before adding.
  *
  * @see https://github.com/mastra-ai/mastra/issues/12800
+ * @see https://github.com/mastra-ai/mastra/issues/13969
  */
 export class TrailingAssistantGuard implements Processor<'trailing-assistant-guard'> {
   readonly id = 'trailing-assistant-guard' as const;
   readonly name = 'Trailing Assistant Guard';
 
-  processInputStep({ messages, structuredOutput }: ProcessInputStepArgs): ProcessInputStepResult | undefined {
-    const willUseResponseFormat =
-      structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection;
-
-    if (!willUseResponseFormat) return;
-
+  processInputStep({ messages }: ProcessInputStepArgs): ProcessInputStepResult | undefined {
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== 'assistant') return;
 
@@ -71,7 +67,7 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
           role: 'user' as const,
           content: {
             format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'Generate the structured response.' }],
+            parts: [{ type: 'text' as const, text: 'Continue.' }],
           },
           createdAt: new Date(),
         },
