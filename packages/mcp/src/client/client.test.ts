@@ -1192,6 +1192,71 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     expect(afterDisconnectCount).toBe(initialListenerCount);
   });
 
+  it('should not accumulate SIGHUP listeners across multiple connect/disconnect cycles', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    for (let i = 0; i < 15; i++) {
+      const client = new InternalMastraMCPClient({
+        name: `sighup-cleanup-test-client-${i}`,
+        server: {
+          url: testServer.baseUrl,
+        },
+      });
+
+      await client.connect();
+      await client.disconnect();
+    }
+
+    const finalListenerCount = process.listenerCount('SIGHUP');
+
+    expect(finalListenerCount).toBeLessThanOrEqual(initialListenerCount + 1);
+  });
+
+  it('should clean up SIGHUP listeners on disconnect', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    const client = new InternalMastraMCPClient({
+      name: 'sighup-single-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+
+    const afterConnectCount = process.listenerCount('SIGHUP');
+    expect(afterConnectCount).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGHUP');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  it('should not add duplicate SIGHUP listeners when connect is called multiple times on the same client', async () => {
+    const initialListenerCount = process.listenerCount('SIGHUP');
+
+    const client = new InternalMastraMCPClient({
+      name: 'sighup-duplicate-connect-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+
+    await client.connect();
+    await client.connect();
+    await client.connect();
+
+    const afterMultipleConnects = process.listenerCount('SIGHUP');
+
+    expect(afterMultipleConnects).toBeLessThanOrEqual(initialListenerCount + 1);
+
+    await client.disconnect();
+
+    const afterDisconnectCount = process.listenerCount('SIGHUP');
+    expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
   it('should not create duplicate connections when connect is called concurrently', async () => {
     const client = new InternalMastraMCPClient({
       name: 'concurrent-connect-test-client',
