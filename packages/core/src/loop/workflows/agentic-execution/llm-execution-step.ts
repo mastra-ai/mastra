@@ -162,6 +162,32 @@ async function processOutputStream<OUTPUT = undefined>({
       chunk.type !== 'text-start' &&
       runState.state.isReasoning
     ) {
+      // Flush reasoning deltas before clearing, same pattern as textDeltas above.
+      // Some providers (e.g., OpenAI-compatible reasoning models like kimi-k2.5, DeepSeek-R1)
+      // emit tool-input-start before reasoning-end (which arrives from flush()).
+      // Without this flush, reasoningDeltas are lost and reasoning_content becomes empty,
+      // causing 400 errors on subsequent turns that require reasoning_content echo-back.
+      // See: https://github.com/mastra-ai/mastra/issues/13635
+      if (runState.state.reasoningDeltas.length) {
+        const message: MastraDBMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'reasoning' as const,
+                reasoning: '',
+                details: [{ type: 'text', text: runState.state.reasoningDeltas.join('') }],
+                providerMetadata: runState.state.providerOptions,
+              },
+            ],
+          },
+          createdAt: new Date(),
+        };
+        messageList.add(message, 'response');
+      }
+
       runState.setState({
         isReasoning: false,
         reasoningDeltas: [],
