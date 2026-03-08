@@ -8,7 +8,7 @@ Added conditional event matching for workflow suspend/resume. Workflows can now 
 
 ```ts
 // In your step's execute function:
-await suspend(
+return await suspend(
   { invoiceId: '123' },
   {
     waitForEvent: {
@@ -19,7 +19,7 @@ await suspend(
 );
 
 // With expression-based conditions:
-await suspend(
+return await suspend(
   { userId: 'u-1' },
   {
     waitForEvent: {

@@ -37,7 +37,7 @@ export interface WaitForEventOptions {
    * - `event`  — the incoming event data
    * - `async`  — the data the step had when it suspended (the suspend payload)
    *
-   * Supported operators: `==`, `!=`, `&&`, `||`
+   * Supported operators: `==`, `!=`, `&&`, `||` (comparisons use strict equality)
    *
    * Example: `"event.data.userId == async.data.userId && async.data.plan == 'pro'"`
    */
@@ -291,7 +291,7 @@ function parseAndEvaluate(
       consume();
       const right = parseAtom();
 
-      return op.value === '==' ? left == right : left != right;
+      return op.value === '==' ? left === right : left !== right;
     }
 
     return left;
