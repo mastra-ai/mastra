@@ -38,30 +38,29 @@ export function isMaybeClaude46(
 }
 
 /**
- * Guards against trailing assistant messages when using native structured output
- * with Anthropic Claude 4.6.
+ * Guards against trailing assistant messages for Anthropic Claude 4.6.
  *
- * Claude 4.6 rejects requests where the last message is an assistant message when
- * using output format (structured output), interpreting it as pre-filling the response.
+ * Claude 4.6 does not support assistant message prefilling and rejects all
+ * requests where the last message has role `assistant`. This affects thread
+ * resumption, agent handoffs, tool-call rounds, and structured output calls.
  * This processor appends a user message to prevent that error.
  *
  * This processor should only be added when the agent uses a Claude 4.6 model.
  * Use {@link isMaybeClaude46} to check before adding.
  *
  * @see https://github.com/mastra-ai/mastra/issues/12800
+ * @see https://github.com/mastra-ai/mastra/issues/13969
  */
 export class TrailingAssistantGuard implements Processor<'trailing-assistant-guard'> {
   readonly id = 'trailing-assistant-guard' as const;
   readonly name = 'Trailing Assistant Guard';
 
   processInputStep({ messages, structuredOutput }: ProcessInputStepArgs): ProcessInputStepResult | undefined {
-    const willUseResponseFormat =
-      structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection;
-
-    if (!willUseResponseFormat) return;
-
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== 'assistant') return;
+
+    const willUseResponseFormat =
+      structuredOutput?.schema && !structuredOutput?.model && !structuredOutput?.jsonPromptInjection;
 
     return {
       messages: [
@@ -71,7 +70,12 @@ export class TrailingAssistantGuard implements Processor<'trailing-assistant-gua
           role: 'user' as const,
           content: {
             format: 2 as const,
-            parts: [{ type: 'text' as const, text: 'Generate the structured response.' }],
+            parts: [
+              {
+                type: 'text' as const,
+                text: willUseResponseFormat ? 'Generate the structured response.' : 'Continue.',
+              },
+            ],
           },
           createdAt: new Date(),
         },
