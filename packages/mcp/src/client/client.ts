@@ -108,6 +108,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
+  private sigHupHandler?: () => void;
   private _roots: Root[];
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
@@ -430,6 +431,11 @@ export class InternalMastraMCPClient extends MastraBase {
       process.on('SIGTERM', this.sigTermHandler);
     }
 
+    if (!this.sigHupHandler) {
+      this.sigHupHandler = () => gracefulExit();
+      process.on('SIGHUP', this.sigHupHandler);
+    }
+
     this.log('debug', `Successfully connected to MCP server`);
     return this.isConnected;
   }
@@ -476,6 +482,10 @@ export class InternalMastraMCPClient extends MastraBase {
       if (this.sigTermHandler) {
         process.off('SIGTERM', this.sigTermHandler);
         this.sigTermHandler = undefined;
+      }
+      if (this.sigHupHandler) {
+        process.off('SIGHUP', this.sigHupHandler);
+        this.sigHupHandler = undefined;
       }
     }
   }
