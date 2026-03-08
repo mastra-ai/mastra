@@ -398,8 +398,6 @@ export class InternalMastraMCPClient extends MastraBase {
           throw new Error('Server configuration must include either a command or a url.');
         }
 
-        resolve(true);
-
         // Set up disconnect handler to reset state.
         const originalOnClose = this.client.onclose;
         this.client.onclose = () => {
@@ -409,6 +407,13 @@ export class InternalMastraMCPClient extends MastraBase {
             originalOnClose();
           }
         };
+
+        if (!this.sigHupHandler) {
+          this.sigHupHandler = () => gracefulExit();
+          process.on('SIGHUP', this.sigHupHandler);
+        }
+
+        resolve(true);
       } catch (e) {
         this.isConnected = null;
         reject(e);
@@ -429,11 +434,6 @@ export class InternalMastraMCPClient extends MastraBase {
     if (!this.sigTermHandler) {
       this.sigTermHandler = () => gracefulExit();
       process.on('SIGTERM', this.sigTermHandler);
-    }
-
-    if (!this.sigHupHandler) {
-      this.sigHupHandler = () => gracefulExit();
-      process.on('SIGHUP', this.sigHupHandler);
     }
 
     this.log('debug', `Successfully connected to MCP server`);

@@ -1174,6 +1174,45 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
     expect(afterDisconnectSighupCount).toBe(initialSighupListenerCount);
   });
 
+  it('should not leave a SIGHUP listener behind when connect fails', async () => {
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    const originalStart = StreamableHTTPClientTransport.prototype.start;
+    const initialSighupListenerCount = process.listenerCount('SIGHUP');
+
+    StreamableHTTPClientTransport.prototype.start = async function () {
+      throw new MockStreamableHTTPError(401, 'Unauthorized');
+    };
+
+    const httpServer = createServer((req, res) => {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+    });
+
+    const baseUrl = await new Promise<URL>(resolve => {
+      httpServer.listen(0, '127.0.0.1', () => {
+        const addr = httpServer.address() as { port: number };
+        resolve(new URL(`http://127.0.0.1:${addr.port}/mcp`));
+      });
+    });
+
+    const client = new InternalMastraMCPClient({
+      name: 'failed-connect-cleanup-test',
+      server: {
+        url: baseUrl,
+        connectTimeout: 1000,
+      },
+    });
+
+    try {
+      await expect(client.connect()).rejects.toThrow('Streamable HTTP error: Unauthorized');
+      expect(process.listenerCount('SIGHUP')).toBe(initialSighupListenerCount);
+    } finally {
+      StreamableHTTPClientTransport.prototype.start = originalStart;
+      await client.disconnect().catch(() => {});
+      httpServer.close();
+    }
+  });
+
   it('should not add duplicate signal listeners when connect is called multiple times on the same client', async () => {
     const initialListenerCount = process.listenerCount('SIGTERM');
     const initialSighupListenerCount = process.listenerCount('SIGHUP');
