@@ -5,11 +5,9 @@ import { Tabs, Tab, TabContent, TabList } from '@/ds/components/Tabs';
 import { AgentMetadata } from '../agent-metadata';
 import { useAgent } from '../../hooks/use-agent';
 import { useMemory } from '@/domains/memory/hooks';
-import { useAgentSettings } from '../../context/agent-context';
 import { AgentSettings } from '../agent-settings';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { RequestContextSchemaForm } from '@/domains/request-context';
-import { cn } from '@/lib/utils';
 
 export interface AgentInformationProps {
   agentId: string;
@@ -27,7 +25,7 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
   });
 
   return (
-    <AgentInformationLayout agentId={agentId}>
+    <AgentInformationLayout>
       <AgentEntityHeader agentId={agentId} />
 
       <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
@@ -100,41 +98,16 @@ export const useAgentInformationTab = ({ isMemoryLoading, hasMemory }: UseAgentI
   };
 };
 
-export interface UseAgentInformationSettingsArgs {
-  modelId: string;
-}
-
-export const useAgentInformationSettings = ({ modelId }: UseAgentInformationSettingsArgs) => {
-  const { settings, setSettings } = useAgentSettings();
-
-  useEffect(() => {
-    if (modelId?.includes('gpt-5')) {
-      setSettings({
-        ...(settings || {}),
-        modelSettings: {
-          ...(settings?.modelSettings || {}),
-          temperature: 1,
-        },
-      });
-    }
-  }, [modelId]);
-
-  return {
-    settings,
-    setSettings,
-  };
-};
-
 export interface AgentInformationLayoutProps {
   children: React.ReactNode;
-  agentId?: string;
 }
 
-export const AgentInformationLayout = ({ children, agentId }: AgentInformationLayoutProps) => {
-  const { data: agent } = useAgent(agentId);
-  useAgentInformationSettings({ modelId: agent?.modelId || '' });
-
-  return <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto">{children}</div>;
+export const AgentInformationLayout = ({ children }: AgentInformationLayoutProps) => {
+  return (
+    <div className="grid grid-rows-[auto_1fr] h-full items-start overflow-y-auto overflow-x-hidden min-w-0 w-full">
+      {children}
+    </div>
+  );
 };
 
 export interface AgentInformationTabLayoutProps {
@@ -151,7 +124,7 @@ export const AgentInformationTabLayout = ({ children, agentId }: AgentInformatio
   });
 
   return (
-    <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
+    <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col min-w-0 w-full">
       <Tabs defaultTab="overview" value={selectedTab} onValueChange={handleTabChange}>
         {children}
       </Tabs>

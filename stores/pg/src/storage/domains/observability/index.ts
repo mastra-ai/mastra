@@ -26,7 +26,8 @@ import type {
   GetTraceResponse,
   CreateIndexOptions,
 } from '@mastra/core/storage';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
@@ -51,15 +52,21 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: TABLE_SCHEMAS[TABLE_SPANS],
+      ifNotExists: ['requestContext'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
 
   /**
    * Returns default index definitions for the observability domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
    */
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
         name: `${schemaPrefix}mastra_ai_spans_traceid_startedat_idx`,
@@ -120,6 +127,44 @@ export class ObservabilityPG extends ObservabilityStorage {
         method: 'gin',
       },
     ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: table, constraints, timestamp trigger, and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    // Table
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SPANS,
+        schema: TABLE_SCHEMAS[TABLE_SPANS],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
+    // Timestamp trigger
+    statements.push(generateTimestampTriggerSQL(TABLE_SPANS, schemaName));
+
+    // Indexes
+    for (const idx of ObservabilityPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  /**
+   * Returns default index definitions for this instance's schema.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return ObservabilityPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   /**
@@ -420,7 +465,8 @@ export class ObservabilityPG extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
@@ -573,10 +619,11 @@ export class ObservabilityPG extends ObservabilityStorage {
       // For endedAt DESC: NULLs FIRST (running spans on top when viewing newest)
       // For endedAt ASC: NULLs LAST (running spans at end when viewing oldest)
       // startedAt is never null (required field), so no special handling needed
-      const sortField = `${orderBy.field}Z`;
-      const sortDirection = orderBy.direction;
+      const orderField = orderBy?.field ?? 'startedAt';
+      const sortField = `${orderField}Z`;
+      const sortDirection = orderBy?.direction ?? 'DESC';
       let orderClause: string;
-      if (orderBy.field === 'endedAt') {
+      if (orderField === 'endedAt') {
         const nullsOrder = sortDirection === 'DESC' ? 'NULLS FIRST' : 'NULLS LAST';
         orderClause = `ORDER BY r."${sortField}" ${sortDirection} ${nullsOrder}`;
       } else {

@@ -26,6 +26,7 @@ type TracesListProps = {
   filtersApplied?: boolean;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
+  columns?: typeof tracesListColumns;
 };
 
 export function TracesList({
@@ -37,6 +38,7 @@ export function TracesList({
   filtersApplied,
   isFetchingNextPage,
   hasNextPage,
+  columns = tracesListColumns,
 }: TracesListProps) {
   if (!traces) {
     return null;
@@ -45,7 +47,7 @@ export function TracesList({
   return (
     <EntryList>
       <EntryList.Trim>
-        <EntryList.Header columns={tracesListColumns} />
+        <EntryList.Header columns={columns} />
         {errorMsg ? (
           <EntryList.Message message={errorMsg} type="error" />
         ) : (
@@ -75,10 +77,10 @@ export function TracesList({
                       key={entry.id}
                       entry={entry}
                       isSelected={selectedTraceId === trace.traceId}
-                      columns={tracesListColumns}
+                      columns={columns}
                       onClick={onTraceClick}
                     >
-                      {tracesListColumns.map((col, index) => {
+                      {columns.map((col, index) => {
                         const key = `${index}-${trace.traceId}`;
                         return col.name === 'status' ? (
                           <EntryList.EntryStatus key={key} status={entry?.[col.name as keyof typeof entry]} />

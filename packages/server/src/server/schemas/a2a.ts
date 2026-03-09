@@ -35,7 +35,7 @@ const messageSendConfigurationSchema = z.object({
 const textPartSchema = z.object({
   kind: z.literal('text').describe('Part type - text for TextParts'),
   text: z.string().describe('Text content'),
-  metadata: z.record(z.unknown()).optional().describe('Optional metadata associated with the part'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
 });
 
 const fileWithBytesSchema = z.object({
@@ -53,13 +53,13 @@ const fileWithUriSchema = z.object({
 const filePartSchema = z.object({
   kind: z.literal('file').describe('Part type - file for FileParts'),
   file: z.union([fileWithBytesSchema, fileWithUriSchema]).describe('File content either as url or bytes'),
-  metadata: z.record(z.unknown()).optional().describe('Optional metadata associated with the part'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
 });
 
 const dataPartSchema = z.object({
   kind: z.literal('data').describe('Part type - data for DataParts'),
-  data: z.record(z.unknown()).describe('Structured data content'),
-  metadata: z.record(z.unknown()).optional().describe('Optional metadata associated with the part'),
+  data: z.record(z.string(), z.unknown()).describe('Structured data content'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata associated with the part'),
 });
 
 const partSchema = z.union([textPartSchema, filePartSchema, dataPartSchema]);
@@ -77,33 +77,33 @@ const messageSchema = z.object({
     .array(z.string())
     .optional()
     .describe('The URIs of extensions that are present or contributed to this Message'),
-  metadata: z.record(z.unknown()).optional().describe('Extension metadata'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Extension metadata'),
 });
 
 // MessageSendParams schema
 const messageSendParamsSchema = z.object({
   message: messageSchema,
   configuration: messageSendConfigurationSchema.optional(),
-  metadata: z.record(z.unknown()).optional().describe('Extension metadata'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Extension metadata'),
 });
 
 // TaskQueryParams schema
 const taskQueryParamsSchema = z.object({
   id: z.string().describe('Task id'),
   historyLength: z.number().optional().describe('Number of recent messages to be retrieved'),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 // TaskIdParams schema
 const taskIdParamsSchema = z.object({
   id: z.string().describe('Task id'),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 // Legacy schema for backwards compatibility
 export const messageSendBodySchema = z.object({
   message: messageSchema,
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
 });
 
 export const taskQueryBodySchema = z.object({

@@ -7,23 +7,23 @@ packages:
 
 # Run.observeStream()
 
-The `.observeStream()` method opens a new `ReadableStream` to a workflow run that is currently running, allowing you to observe the stream of events if the original stream is no longer available.
+The `.observeStream()` method opens a new `ReadableStream` to a workflow run that's currently running, allowing you to observe the stream of events if the original stream is no longer available.
 
 ## Usage example
 
 ```typescript
-const run = await workflow.createRun();
+const run = await workflow.createRun()
 
 run.stream({
   inputData: {
-    value: "initial data",
+    value: 'initial data',
   },
-});
+})
 
-const stream = await run.observeStream();
+const stream = await run.observeStream()
 
 for await (const chunk of stream) {
-  console.log(chunk);
+  console.log(chunk)
 }
 ```
 

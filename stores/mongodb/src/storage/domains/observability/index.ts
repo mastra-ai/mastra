@@ -545,7 +545,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 10;
 
     try {
       const collection = await this.getCollection(TABLE_SPANS);
@@ -675,8 +676,8 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       }
 
       // Build sort
-      const sortField = orderBy.field;
-      const sortDirection = orderBy.direction === 'ASC' ? 1 : -1;
+      const sortField = orderBy?.field ?? 'startedAt';
+      const sortDirection = (orderBy?.direction ?? 'DESC') === 'ASC' ? 1 : -1;
 
       // hasChildError filter requires $lookup aggregation for efficiency
       // Instead of fetching all traceIds with errors (unbounded), we use $lookup

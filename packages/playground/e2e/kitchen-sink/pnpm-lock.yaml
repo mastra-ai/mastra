@@ -10,6 +10,7 @@ overrides:
   '@mastra/loggers': link:../../../../packages/loggers
   '@mastra/memory': link:../../../../packages/memory
   '@mastra/libsql': link:../../../../stores/libsql
+  '@mastra/editor': link:../../../../packages/editor
   '@mastra/mcp': link:../../../../packages/mcp
 
 importers:
@@ -17,10 +18,13 @@ importers:
     dependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.44
-        version: 2.0.89(zod@3.25.76)
+        version: 2.0.89(zod@4.3.6)
       '@mastra/core':
         specifier: link:../../../core
         version: link:../../../core
+      '@mastra/editor':
+        specifier: link:../../../editor
+        version: link:../../../editor
       '@mastra/libsql':
         specifier: link:../../../../stores/libsql
         version: link:../../../../stores/libsql
@@ -35,17 +39,17 @@ importers:
         version: link:../../../memory
       ai:
         specifier: 5.1.0-beta.13
-        version: 5.1.0-beta.13(zod@3.25.76)
+        version: 5.1.0-beta.13(zod@4.3.6)
       mastra:
         specifier: link:../../../cli
         version: link:../../../cli
       zod:
-        specifier: ^3.25.76
-        version: 3.25.76
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/node':
-        specifier: 22.19.7
-        version: 22.19.7
+        specifier: 22.19.13
+        version: 22.19.13
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -103,9 +107,9 @@ packages:
     resolution:
       { integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w== }
 
-  '@types/node@22.19.7':
+  '@types/node@22.19.13':
     resolution:
-      { integrity: sha512-MciR4AKGHWl7xwxkBa6xUGxQJ4VBOmPTF7sL+iGzuahOFaO0jHCsuEfS80pan1ef4gWId1oWOweIhrDEYLuaOw== }
+      { integrity: sha512-akNQMv0wW5uyRpD2v2IEyRSZiR+BeGuoB6L310EgGObO44HSMNT8z1xzio28V8qOrgYaopIDNA18YgdXd+qTiw== }
 
   ai@5.1.0-beta.13:
     resolution:
@@ -133,36 +137,36 @@ packages:
     resolution:
       { integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ== }
 
-  zod@3.25.76:
+  zod@4.3.6:
     resolution:
-      { integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ== }
+      { integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg== }
 
 snapshots:
-  '@ai-sdk/gateway@1.1.0-beta.8(zod@3.25.76)':
+  '@ai-sdk/gateway@1.1.0-beta.8(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 2.1.0-beta.2
-      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@3.25.76)
-      zod: 3.25.76
+      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@4.3.6)
+      zod: 4.3.6
 
-  '@ai-sdk/openai@2.0.89(zod@3.25.76)':
+  '@ai-sdk/openai@2.0.89(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
-      '@ai-sdk/provider-utils': 3.0.20(zod@3.25.76)
-      zod: 3.25.76
+      '@ai-sdk/provider-utils': 3.0.20(zod@4.3.6)
+      zod: 4.3.6
 
-  '@ai-sdk/provider-utils@3.0.20(zod@3.25.76)':
+  '@ai-sdk/provider-utils@3.0.20(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 2.0.1
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
-      zod: 3.25.76
+      zod: 4.3.6
 
-  '@ai-sdk/provider-utils@3.1.0-beta.4(zod@3.25.76)':
+  '@ai-sdk/provider-utils@3.1.0-beta.4(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 2.1.0-beta.2
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.6
-      zod: 3.25.76
+      zod: 4.3.6
 
   '@ai-sdk/provider@2.0.1':
     dependencies:
@@ -178,18 +182,18 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@types/node@22.19.7':
+  '@types/node@22.19.13':
     dependencies:
       undici-types: 6.21.0
 
-  ai@5.1.0-beta.13(zod@3.25.76):
+  ai@5.1.0-beta.13(zod@4.3.6):
     dependencies:
-      '@ai-sdk/gateway': 1.1.0-beta.8(zod@3.25.76)
+      '@ai-sdk/gateway': 1.1.0-beta.8(zod@4.3.6)
       '@ai-sdk/provider': 2.1.0-beta.2
-      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@3.25.76)
+      '@ai-sdk/provider-utils': 3.1.0-beta.4(zod@4.3.6)
       '@ai-sdk/test-server': 1.0.0-beta.0
       '@opentelemetry/api': 1.9.0
-      zod: 3.25.76
+      zod: 4.3.6
 
   eventsource-parser@3.0.6: {}
 
@@ -199,4 +203,4 @@ snapshots:
 
   undici-types@6.21.0: {}
 
-  zod@3.25.76: {}
+  zod@4.3.6: {}
