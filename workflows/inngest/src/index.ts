@@ -6,7 +6,7 @@ import type { MastraScorers } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { Processor, ProcessorStepOutput } from '@mastra/core/processors';
+import type { Processor, ProcessorStepOutput, OutputResult } from '@mastra/core/processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { ChunkType, OutputSchema, SchemaWithValidation } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
@@ -538,6 +538,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         part,
         streamParts,
         state,
+        result,
         finishReason,
         toolCalls,
         text,
@@ -625,6 +626,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         systemMessages,
         streamParts,
         state,
+        result,
         finishReason,
         toolCalls,
         text,
@@ -879,16 +881,24 @@ function createStepFromProcessor<TProcessorId extends string>(
               const idsBeforeProcessing = (messages as MastraDBMessage[]).map(m => m.id);
               const check = passThrough.messageList.makeMessageSourceChecker();
 
-              const result = await processor.processOutputResult({
+              const outputResult = (passThrough.result as OutputResult | undefined) ?? {
+                text: '',
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                finishReason: 'unknown',
+                steps: [],
+              };
+
+              const processResult = await processor.processOutputResult({
                 ...baseContext,
                 messages: messages as MastraDBMessage[],
                 messageList: passThrough.messageList,
-                state: {},
+                state: passThrough.state ?? {},
+                result: outputResult,
               });
 
-              if (result instanceof MessageList) {
+              if (processResult instanceof MessageList) {
                 // Validate same instance
-                if (result !== passThrough.messageList) {
+                if (processResult !== passThrough.messageList) {
                   throw new MastraError({
                     category: ErrorCategory.USER,
                     domain: ErrorDomain.MASTRA_WORKFLOW,
@@ -898,22 +908,22 @@ function createStepFromProcessor<TProcessorId extends string>(
                 }
                 return {
                   ...passThrough,
-                  messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  messages: processResult.get.all.db(),
+                  systemMessages: processResult.getAllSystemMessages(),
                 };
-              } else if (Array.isArray(result)) {
+              } else if (Array.isArray(processResult)) {
                 // Processor returned an array of messages
                 ProcessorRunner.applyMessagesToMessageList(
-                  result as MastraDBMessage[],
+                  processResult as MastraDBMessage[],
                   passThrough.messageList,
                   idsBeforeProcessing,
                   check,
                   'response',
                 );
-                return { ...passThrough, messages: result };
-              } else if (result && 'messages' in result && 'systemMessages' in result) {
+                return { ...passThrough, messages: processResult };
+              } else if (processResult && 'messages' in processResult && 'systemMessages' in processResult) {
                 // Processor returned { messages, systemMessages }
-                const typedResult = result as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
+                const typedResult = processResult as { messages: MastraDBMessage[]; systemMessages: CoreMessage[] };
                 ProcessorRunner.applyMessagesToMessageList(
                   typedResult.messages,
                   passThrough.messageList,
