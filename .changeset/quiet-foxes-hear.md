@@ -1,6 +1,6 @@
 ---
+'@mastra/mssql': patch
 '@mastra/upstash': patch
-'@mastra/clickhouse': patch
 '@mastra/convex': patch
 '@mastra/lance': patch
 '@mastra/cloudflare': patch
