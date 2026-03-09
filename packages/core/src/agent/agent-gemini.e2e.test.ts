@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { setupLLMRecording } from '@internal/llm-recorder';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -11,7 +10,24 @@ import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
 
-const recorder = setupLLMRecording({ name: 'core-src-agent-agent-gemini.e2e' });
+const recorder = setupLLMRecording({
+  name: 'core-src-agent-agent-gemini.e2e',
+  transformRequest: ({ url, body }) => {
+    // Normalize dynamic IDs in the request body so hashes are stable across runs.
+    // Workflow suspend/resume injects runId (UUID) and toolCallId into the system instruction.
+    let serialized = JSON.stringify(body);
+    // Normalize UUIDs (runId, suspendedToolRunId)
+    serialized = serialized.replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+      '00000000-0000-0000-0000-000000000000',
+    );
+    // Normalize toolCallId (AI SDK generated, alphanumeric ~16 chars).
+    // It can appear as a direct JSON key or escaped inside a nested JSON string.
+    serialized = serialized.replace(/"toolCallId":"[a-zA-Z0-9]+"/g, '"toolCallId":"NORMALIZED"');
+    serialized = serialized.replace(/\\"toolCallId\\":\\"[a-zA-Z0-9]+\\"/g, '\\"toolCallId\\":\\"NORMALIZED\\"');
+    return { url, body: JSON.parse(serialized) };
+  },
+});
 beforeAll(() => recorder.start());
 afterAll(async () => {
   try {
@@ -830,8 +846,8 @@ describe('Gemini Model Compatibility Tests', () => {
         suspendedToolName: '',
       };
       const threadAndResource = {
-        thread: randomUUID(),
-        resource: randomUUID(),
+        thread: 'tool-suspend-stream-thread',
+        resource: 'tool-suspend-stream-resource',
       };
       const stream = await agentOne.stream('Find the name, age and profession of the user - Dero Israel', {
         memory: threadAndResource,
@@ -927,8 +943,8 @@ describe('Gemini Model Compatibility Tests', () => {
       const agentOne = mastra.getAgent('userAgent');
 
       const threadAndResource = {
-        thread: randomUUID(),
-        resource: randomUUID(),
+        thread: 'tool-suspend-generate-thread',
+        resource: 'tool-suspend-generate-resource',
       };
       const output = await agentOne.generate('Find the name, age and profession of the user - Dero Israel', {
         memory: threadAndResource,
