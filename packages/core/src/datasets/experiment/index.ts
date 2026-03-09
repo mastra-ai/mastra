@@ -85,13 +85,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // during setup (Phase A/B), mark the experiment as failed so it doesn't stay stuck in 'pending'.
   const markFailedOnSetupError = async (err: unknown) => {
     if (providedExperimentId && experimentsStore) {
-      await experimentsStore
-        .updateExperiment({
+      try {
+        await experimentsStore.updateExperiment({
           id: experimentId,
           status: 'failed',
           completedAt: new Date(),
-        })
-        .catch(() => {});
+        });
+      } catch (updateErr) {
+        mastra.getLogger()?.error(`Failed to mark experiment ${experimentId} as failed: ${updateErr}`);
+      }
     }
     throw err;
   };

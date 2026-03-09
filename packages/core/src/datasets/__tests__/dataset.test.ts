@@ -394,8 +394,8 @@ describe('Dataset', () => {
       });
       expect.fail('should have thrown');
     } catch (err) {
-      expect(err).toBeInstanceOf(Error);
-      expect((err as Error).message).toContain('No items in dataset');
+      expect(err).toBeInstanceOf(MastraError);
+      expect((err as MastraError).id).toBe('EXPERIMENT_NO_ITEMS');
     }
   });
 
