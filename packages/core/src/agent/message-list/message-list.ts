@@ -439,7 +439,11 @@ export class MessageList {
 
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
 
-        return messages.map(aiV5ModelMessageToV2PromptMessage);
+        return messages
+          .map(aiV5ModelMessageToV2PromptMessage)
+          .filter(
+            message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
+          );
       },
     },
 
@@ -820,16 +824,17 @@ export class MessageList {
         }
       }
     }
-    // If the last message is an assistant message and the new message is also an assistant message, merge them together and update tool calls with results
-    // Use MessageMerger to handle the complex merge logic
+
+    const replacementTarget = exists && id ? this.messages.find(m => m.id === id) : undefined;
+    const hasSealedReplacementTarget = !!replacementTarget && MessageMerger.isSealed(replacementTarget);
+
+    // Keep this replacement-target guard here instead of MessageMerger.shouldMerge().
+    // shouldMerge() only decides whether to append to the latest assistant message,
+    // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
-    const shouldMerge = MessageMerger.shouldMerge(
-      latestMessage,
-      messageV2,
-      messageSource,
-      isLatestFromMemory,
-      this._agentNetworkAppend,
-    );
+    const shouldMerge =
+      !hasSealedReplacementTarget &&
+      MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
 
     if (shouldMerge && latestMessage) {
       // Delegate merge logic to MessageMerger

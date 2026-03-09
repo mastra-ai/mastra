@@ -173,6 +173,48 @@ export const testWorkflow = createWorkflow({
 - The next step receives an object containing all parallel step outputs
 - You must define the `inputSchema` of the following step to match this structure
 
+### Handling step failures
+
+If any parallel step throws an error, the entire parallel block fails. To build resilient parallel workflows where some steps may fail — for example, multiple research agents where one might have an expired auth token — handle errors inside the step itself using try/catch:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const resilientStep = createStep({
+  id: 'researcher',
+  inputSchema: z.object({ query: z.string() }),
+  outputSchema: z.object({
+    brief: z.string().nullable(),
+    failed: z.boolean(),
+  }),
+  execute: async ({ inputData }) => {
+    try {
+      const result = await fetchExternalData(inputData.query)
+      return { brief: result, failed: false }
+    } catch {
+      return { brief: null, failed: true }
+    }
+  },
+})
+```
+
+This way the step always succeeds with a typed result, and the downstream step can filter out failed results:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const writerStep = createStep({
+  id: 'writer',
+  inputSchema: z.object({
+    'researcher-a': z.object({ brief: z.string().nullable(), failed: z.boolean() }),
+    'researcher-b': z.object({ brief: z.string().nullable(), failed: z.boolean() }),
+  }),
+  outputSchema: z.object({ synthesis: z.string() }),
+  execute: async ({ inputData }) => {
+    const briefs = Object.values(inputData)
+      .filter(v => !v.failed && v.brief)
+      .map(v => v.brief)
+    return { synthesis: briefs.join('; ') }
+  },
+})
+```
+
 :::info
 
 Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand when to use `.parallel()` vs `.foreach()`.
@@ -303,7 +345,7 @@ export const testWorkflow = createWorkflow({
 
 ## Input data mapping
 
-When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
+When using `.then()`, `.parallel()`, or `.branch()`, it's sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
 
 ![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
@@ -788,7 +830,7 @@ This means:
 
 - `.parallel()` collects all branch outputs into an object, then passes it to the next step
 - `.foreach()` collects all iteration outputs into an array, then passes it to the next step
-- There is no way to "stream" results to the next step as they complete
+- Results can't be "streamed" to the next step as they complete
 
 ### Concurrency behavior
 

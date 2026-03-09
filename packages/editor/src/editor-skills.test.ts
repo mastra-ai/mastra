@@ -1223,7 +1223,7 @@ describe('editor.skill — agent execution integration', () => {
     // Should contain the skill name and description in XML format (default)
     expect(systemContent).toContain('code-review');
     expect(systemContent).toContain('Reviews code for bugs and style issues');
-    // Should contain the skills activation instruction
+    // Should contain the skills usage instruction
     expect(systemContent).toContain('Skills are NOT tools');
   });
 
@@ -1275,7 +1275,7 @@ describe('editor.skill — agent execution integration', () => {
     expect(capturedPrompts.length).toBeGreaterThanOrEqual(1);
     const systemContent = extractSystemContent(capturedPrompts[0]!);
 
-    // Should NOT contain the draft skill's name or the skills activation instruction
+    // Should NOT contain the draft skill's name or the skills usage instruction
     expect(systemContent).not.toContain('draft-skill');
     expect(systemContent).not.toContain('Skills are NOT tools');
   });
@@ -1550,10 +1550,10 @@ describe('editor.skill — agent execution integration', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 6: Skill tools (skill-activate, skill-search) are injected into the
+  // Test 6: Skill tools (skill, skill_search) are injected into the
   // model when using versioned blob-backed skill sources
   // ---------------------------------------------------------------------------
-  it('should inject skill-activate and skill-search tools into model for versioned sources', async () => {
+  it('should inject skill and skill_search tools into model for versioned sources', async () => {
     let capturedTools: unknown;
 
     // Use a custom mock that captures tools
@@ -1634,8 +1634,8 @@ describe('editor.skill — agent execution integration', () => {
     const toolNames = Array.isArray(capturedTools)
       ? (capturedTools as any[]).map((t: any) => t.name)
       : Object.keys(capturedTools as any);
-    expect(toolNames).toContain('skill-activate');
-    expect(toolNames).toContain('skill-search');
+    expect(toolNames).toContain('skill');
+    expect(toolNames).toContain('skill_search');
   });
 });
 
@@ -1948,7 +1948,7 @@ describe('editor.skill — live strategy execution', () => {
       },
     });
 
-    // 3. Execute agent — skills with references should inject skill-activate tool
+    // 3. Execute agent — skills with references should inject skill tool
     const agent = await editor.agent.getById('live-ref-agent');
     expect(agent).toBeInstanceOf(Agent);
 
@@ -1958,8 +1958,8 @@ describe('editor.skill — live strategy execution', () => {
     const toolNames = Array.isArray(capturedTools)
       ? (capturedTools as any[]).map((t: any) => t.name)
       : Object.keys(capturedTools as any);
-    expect(toolNames).toContain('skill-activate');
-    expect(toolNames).toContain('skill-search');
+    expect(toolNames).toContain('skill');
+    expect(toolNames).toContain('skill_search');
 
     // 5. Verify we can read the reference through the workspace
     const workspace = await agent!.getWorkspace({});
