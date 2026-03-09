@@ -2,18 +2,21 @@ import { EntryList } from '@/ds/components/EntryList';
 import { getShortId } from '@/ds/components/Text';
 import { SpanRecord } from '@mastra/core/storage';
 import { format, isToday } from 'date-fns';
+import { getInputPreview } from '../utils/span-utils';
 
 export const tracesListColumns = [
   { name: 'shortId', label: 'ID', size: '6rem' },
   { name: 'date', label: 'Date', size: '4.5rem' },
   { name: 'time', label: 'Time', size: '6.5rem' },
   { name: 'name', label: 'Name', size: '1fr' },
+  { name: 'input', label: 'Input', size: '1fr' },
   { name: 'entityId', label: 'Entity', size: '10rem' },
   { name: 'status', label: 'Status', size: '3rem' },
 ];
 
 type Trace = Pick<SpanRecord, 'traceId' | 'name' | 'entityType' | 'entityId' | 'entityName'> & {
   attributes?: Record<string, any> | null;
+  input?: unknown;
   createdAt: Date | string;
 };
 
@@ -62,6 +65,7 @@ export function TracesList({
                     date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                     time: format(createdAtDate, 'h:mm:ss aaa'),
                     name: trace?.name,
+                    input: getInputPreview(trace?.input),
                     entityId:
                       trace?.entityName ||
                       trace?.entityId ||
