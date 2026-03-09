@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Agent, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -1227,5 +1228,155 @@ describe('Stored Agents via MastraEditor', () => {
       const userTools = await agent!.listTools({ requestContext: userCtx });
       expect(userTools['tool-x']).toBeUndefined();
     });
+  });
+});
+
+// ============================================================================
+// applyStoredOverrides
+// ============================================================================
+
+describe('agent.applyStoredOverrides', () => {
+  it('should return the code agent unchanged when no stored config exists', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'code-only-agent',
+      name: 'Code Only',
+      instructions: 'Original instructions',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({ storage, editor, agents: { codeAgent } });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    expect(result).toBe(codeAgent); // same reference, no mutation
+    const instructions = await result.getInstructions({ requestContext: new RequestContext() });
+    expect(instructions).toBe('Original instructions');
+  });
+
+  it('should override instructions when stored config has instructions', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+
+    // Create a stored config for the same ID as the code agent
+    await agentsStore?.create({
+      agent: {
+        id: 'override-agent',
+        name: 'Override Agent',
+        instructions: 'Stored instructions override',
+        model: { provider: 'openai', name: 'gpt-4o' },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'override-agent',
+      name: 'Code Agent',
+      instructions: 'Original code instructions',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({ storage, editor, agents: { codeAgent } });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const instructions = await result.getInstructions({ requestContext: new RequestContext() });
+    expect(instructions).toBe('Stored instructions override');
+  });
+
+  it('should NOT override model — model is never overridden from stored config', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+
+    await agentsStore?.create({
+      agent: {
+        id: 'model-override-agent',
+        name: 'Model Override Agent',
+        instructions: 'Test',
+        model: { provider: 'anthropic', name: 'claude-sonnet-4-20250514' },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'model-override-agent',
+      name: 'Code Agent',
+      instructions: 'Test',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({ storage, editor, agents: { codeAgent } });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    // Model should remain the code-defined value — stored config model is never applied
+    expect(result.model).toBe('openai/gpt-4o');
+  });
+
+  it('should merge tools — stored tools override code tools, code-only tools preserved', async () => {
+    const anotherTool = createTool({
+      id: 'another-tool',
+      description: 'Another tool',
+      inputSchema: z.object({ x: z.string() }),
+      outputSchema: z.object({ y: z.string() }),
+      execute: async ({ x }) => ({ y: x }),
+    });
+
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+
+    // Stored config references 'test-tool' with a description override
+    await agentsStore?.create({
+      agent: {
+        id: 'tools-merge-agent',
+        name: 'Tools Merge Agent',
+        instructions: 'Test',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        tools: {
+          'test-tool': { description: 'Overridden description' },
+        },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'tools-merge-agent',
+      name: 'Code Agent',
+      instructions: 'Test',
+      model: 'openai/gpt-4o',
+      tools: {
+        'test-tool': mockTool,
+        'another-tool': anotherTool,
+      },
+    });
+
+    const mastra = new Mastra({
+      storage,
+      editor,
+      agents: { codeAgent },
+      tools: { 'test-tool': mockTool, 'another-tool': anotherTool },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const tools = await result.listTools();
+
+    // 'another-tool' from code should be preserved
+    expect(tools['another-tool']).toBeDefined();
+
+    // 'test-tool' should have the stored description override
+    expect(tools['test-tool']).toBeDefined();
+    expect(tools['test-tool'].description).toBe('Overridden description');
+  });
+
+  it('should not fail when editor is not registered with Mastra', async () => {
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'orphan-agent',
+      name: 'Orphan',
+      instructions: 'Test',
+      model: 'openai/gpt-4o',
+    });
+
+    // applyStoredOverrides should handle the error gracefully and return the agent unchanged
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    expect(result).toBe(codeAgent);
   });
 });

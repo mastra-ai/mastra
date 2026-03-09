@@ -1,5 +1,3 @@
-import { Link, useParams } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -13,6 +11,7 @@ import {
   useMCPServerTool,
   useMCPServers,
 } from '@mastra/playground-ui';
+import { Link, useParams } from 'react-router';
 
 const MCPServerToolExecutor = () => {
   const { data: mcpServers } = useMCPServers();

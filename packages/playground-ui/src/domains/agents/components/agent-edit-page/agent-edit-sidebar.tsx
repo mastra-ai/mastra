@@ -236,7 +236,6 @@ export function AgentEditSidebar({
                 error={errors.agents?.root?.message}
                 currentAgentId={currentAgentId}
                 readOnly={readOnly}
-                hideCreateButton={hideSubAgentCreate}
               />
               <ScorersSection control={control} readOnly={readOnly} />
               <MemorySection control={control} setValue={form.setValue} readOnly={readOnly} />

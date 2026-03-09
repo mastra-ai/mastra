@@ -5,13 +5,13 @@ import * as React from 'react';
 import clsx from 'clsx';
 
 const textareaVariants = cva(
-  'flex w-full text-icon6 rounded-lg border bg-transparent shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 resize-none',
+  'flex w-full text-neutral6 rounded-lg border bg-transparent shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 resize-none',
   {
     variants: {
       variant: {
-        default: 'border-sm border-border1 placeholder:text-icon3',
-        filled: 'border-sm bg-inputFill border-border1 placeholder:text-icon3',
-        unstyled: 'border-0 bg-transparent placeholder:text-icon3',
+        default: 'border-sm border-border1 placeholder:text-neutral3',
+        filled: 'border-sm bg-inputFill border-border1 placeholder:text-neutral3',
+        unstyled: 'border-0 bg-transparent placeholder:text-neutral3',
       },
       customSize: {
         default: 'px-[13px] py-2 text-[calc(13_/_16_*_1rem)] min-h-[80px]',

@@ -1,7 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
-
-import { Layout } from '@/components/layout';
+import { coreFeatures } from '@mastra/core/features';
 
 // Extend window type for Mastra config
 declare global {
@@ -15,54 +13,78 @@ declare global {
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_AUTO_DETECT_URL?: string;
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
   }
 }
 
-import { AgentLayout } from '@/domains/agents/agent-layout';
-import Tools from '@/pages/tools';
-import { Processors } from '@/pages/processors';
-import { Processor } from '@/pages/processors/processor';
-
-import Agents from './pages/agents';
-import Agent from './pages/agents/agent';
-import AgentTool from './pages/tools/agent-tool';
-import Tool from './pages/tools/tool';
-import Workflows from './pages/workflows';
-import { Workflow } from './pages/workflows/workflow';
-import { WorkflowLayout } from './domains/workflows/workflow-layout';
-import { PostHogProvider } from './lib/analytics';
-import RequestContext from './pages/request-context';
-import MCPs from './pages/mcps';
-import MCPServerToolExecutor from './pages/mcps/tool';
-
-import { McpServerPage } from './pages/mcps/[serverId]';
-
+import type { LinkComponentProviderProps } from '@mastra/playground-ui';
 import {
   LinkComponentProvider,
-  LinkComponentProviderProps,
   PlaygroundConfigGuard,
   PlaygroundQueryClient,
   StudioConfigProvider,
   useStudioConfig,
 } from '@mastra/playground-ui';
-import { Link } from './lib/framework';
-import Scorers from './pages/scorers';
-import Scorer from './pages/scorers/scorer';
-import Observability from './pages/observability';
-import Workspace from './pages/workspace';
-import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
-import Templates from './pages/templates';
-import Template from './pages/templates/template';
 import { MastraReactProvider } from '@mastra/react';
-import { StudioSettingsPage } from './pages/settings';
-import CmsAgentsCreatePage from './pages/cms/agents/create';
-import CmsAgentsEditPage from './pages/cms/agents/edit';
+import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import { WorkflowLayout } from './domains/workflows/workflow-layout';
+import { PostHogProvider } from './lib/analytics';
+import { Link } from './lib/framework';
+import Agents from './pages/agents';
+import Agent from './pages/agents/agent';
+import AgentPlayground from './pages/agents/agent-playground';
+import AgentTraces from './pages/agents/agent-traces';
+import CmsAgentAgentsPage from './pages/cms/agents/agents';
+import { CreateLayoutWrapper } from './pages/cms/agents/create-layout';
+import { EditLayoutWrapper } from './pages/cms/agents/edit-layout';
+import CmsAgentInformationPage from './pages/cms/agents/information';
+import CmsAgentInstructionBlocksPage from './pages/cms/agents/instruction-blocks';
+import CmsAgentMemoryPage from './pages/cms/agents/memory';
+import CmsAgentScorersPage from './pages/cms/agents/scorers';
+import CmsAgentSkillsPage from './pages/cms/agents/skills';
+import CmsAgentToolsPage from './pages/cms/agents/tools';
+import CmsAgentVariablesPage from './pages/cms/agents/variables';
+import CmsAgentWorkflowsPage from './pages/cms/agents/workflows';
+import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
+import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import Datasets from './pages/datasets';
+import DatasetPage from './pages/datasets/dataset';
+import DatasetExperiment from './pages/datasets/dataset/experiment';
+import CompareDatasetExperimentsPage from './pages/datasets/dataset/experiments';
+import DatasetItemPage from './pages/datasets/dataset/item';
+import DatasetItemsComparePage from './pages/datasets/dataset/item/compare';
+import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
+import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
+import { Login } from './pages/login';
+import MCPs from './pages/mcps';
+import { McpServerPage } from './pages/mcps/[serverId]';
+import MCPServerToolExecutor from './pages/mcps/tool';
+import Observability from './pages/observability';
+import PromptBlocks from './pages/prompt-blocks';
+import RequestContext from './pages/request-context';
+import Scorers from './pages/scorers';
+import Scorer from './pages/scorers/scorer';
+import { StudioSettingsPage } from './pages/settings';
+import { SignUp } from './pages/signup';
+import Templates from './pages/templates';
+import Template from './pages/templates/template';
+import AgentTool from './pages/tools/agent-tool';
+import Tool from './pages/tools/tool';
+import Workflows from './pages/workflows';
+import { Workflow } from './pages/workflows/workflow';
+import Workspace from './pages/workspace';
+import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
+import { Layout } from '@/components/layout';
+import { AgentLayout } from '@/domains/agents/agent-layout';
+import { Processors } from '@/pages/processors';
+import { Processor } from '@/pages/processors/processor';
+import Tools from '@/pages/tools';
 
 const paths: LinkComponentProviderProps['paths'] = {
-  agentLink: (agentId: string) => `/agents/${agentId}`,
+  agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
   agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
   agentSkillLink: (agentId: string, skillName: string, workspaceId?: string) =>
     workspaceId
@@ -80,6 +102,12 @@ const paths: LinkComponentProviderProps['paths'] = {
   scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
   cmsScorersCreateLink: () => '/cms/scorers/create',
   cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}/edit`,
+  cmsAgentCreateLink: () => '/cms/agents/create',
+  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}/edit`,
+  promptBlockLink: (promptBlockId: string) => `/prompts/${promptBlockId}`,
+  promptBlocksLink: () => '/prompts',
+  cmsPromptBlockCreateLink: () => '/cms/prompts/create',
+  cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
   toolLink: (toolId: string) => `/tools/${toolId}`,
   skillLink: (skillName: string, workspaceId?: string) =>
     workspaceId ? `/workspaces/${workspaceId}/skills/${skillName}` : `/workspaces`,
@@ -92,6 +120,10 @@ const paths: LinkComponentProviderProps['paths'] = {
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
   mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
+  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
+  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
+  datasetExperimentLink: (datasetId: string, experimentId: string) =>
+    `/datasets/${datasetId}/experiments/${experimentId}`,
 };
 
 const RootLayout = () => {
@@ -109,8 +141,24 @@ const RootLayout = () => {
 
 // Determine platform status at module level for route configuration
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
+const isExperimentalFeatures = coreFeatures.has('datasets');
+
+const agentCmsChildRoutes = [
+  { index: true, element: <CmsAgentInformationPage /> },
+  { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
+  { path: 'tools', element: <CmsAgentToolsPage /> },
+  { path: 'agents', element: <CmsAgentAgentsPage /> },
+  { path: 'scorers', element: <CmsAgentScorersPage /> },
+  { path: 'workflows', element: <CmsAgentWorkflowsPage /> },
+  { path: 'skills', element: <CmsAgentSkillsPage /> },
+  { path: 'memory', element: <CmsAgentMemoryPage /> },
+  { path: 'variables', element: <CmsAgentVariablesPage /> },
+];
 
 const routes = [
+  // Auth pages - no layout
+  { path: '/login', element: <Login /> },
+  { path: '/signup', element: <SignUp /> },
   {
     element: <RootLayout />,
     children: [
@@ -127,10 +175,21 @@ const routes = [
       { path: '/scorers/:scorerId', element: <Scorer /> },
       { path: '/observability', element: <Observability /> },
       { path: '/agents', element: <Agents /> },
-      { path: '/cms/agents/create', element: <CmsAgentsCreatePage /> },
-      { path: '/cms/agents/:agentId/edit', element: <CmsAgentsEditPage /> },
+      {
+        path: '/cms/agents/create',
+        element: <CreateLayoutWrapper />,
+        children: agentCmsChildRoutes,
+      },
+      {
+        path: '/cms/agents/:agentId/edit',
+        element: <EditLayoutWrapper />,
+        children: agentCmsChildRoutes,
+      },
       { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
       { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
+      { path: '/prompts', element: <PromptBlocks /> },
+      { path: '/cms/prompts/create', element: <CmsPromptBlocksCreatePage /> },
+      { path: '/cms/prompts/:promptBlockId/edit', element: <CmsPromptBlocksEditPage /> },
       { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
       {
         path: '/agents/:agentId',
@@ -146,6 +205,8 @@ const routes = [
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
+          ...(isExperimentalFeatures ? [{ path: 'playground', element: <AgentPlayground /> }] : []),
+          { path: 'traces', element: <AgentTraces /> },
         ],
       },
 
@@ -181,6 +242,19 @@ const routes = [
           { path: 'graph/:runId', element: <Workflow /> },
         ],
       },
+
+      ...(isExperimentalFeatures
+        ? [
+            { path: '/datasets', element: <Datasets /> },
+            { path: '/datasets/:datasetId', element: <DatasetPage /> },
+            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            { path: '/datasets/:datasetId/items/:itemId/versions', element: <DatasetItemVersionsComparePage /> },
+            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
+            { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
+            { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
+            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+          ]
+        : []),
 
       { index: true, loader: () => redirect('/agents') },
       { path: '/request-context', element: <RequestContext /> },
@@ -219,7 +293,8 @@ export default function AppWrapper() {
   const port = window.MASTRA_SERVER_PORT || 4111;
   const apiPrefix = window.MASTRA_API_PREFIX || '/api';
   const cloudApiEndpoint = window.MASTRA_CLOUD_API_ENDPOINT || '';
-  const endpoint = cloudApiEndpoint || `${protocol}://${host}:${port}`;
+  const autoDetectUrl = window.MASTRA_AUTO_DETECT_URL === 'true';
+  const endpoint = cloudApiEndpoint || (autoDetectUrl ? window.location.origin : `${protocol}://${host}:${port}`);
 
   return (
     <PlaygroundQueryClient>

@@ -437,6 +437,79 @@ describe('MongoDB Specific Tests', () => {
     });
   });
 
+  describe('MongoDB Message Upsert Behavior', () => {
+    beforeEach(async () => {
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
+    });
+
+    it('should not overwrite createdAt when updating existing message via saveMessages', async () => {
+      const threadId = `thread-upsert-test-${Date.now()}`;
+      const resourceId = 'resource-upsert-test';
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+
+      // Create thread
+      await memoryStore?.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Upsert Test Thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // First save — establishes original createdAt
+      const messageId = `msg-upsert-test-${Date.now()}`;
+      const originalMessage = {
+        id: messageId,
+        threadId,
+        resourceId,
+        role: 'user' as const,
+        type: 'v2' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello' }] },
+        createdAt: new Date(),
+      };
+
+      await memoryStore?.saveMessages({ messages: [originalMessage] });
+
+      // Retrieve and record original createdAt
+      const firstResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const originalCreatedAt = firstResult?.messages?.[0]?.createdAt;
+      expect(originalCreatedAt).toBeDefined();
+
+      // Wait a bit to ensure a different timestamp if overwritten
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Second save (upsert) — same id, updated content
+      const updatedMessage = {
+        id: messageId,
+        threadId,
+        resourceId,
+        role: 'user' as const,
+        type: 'v2' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Hello updated' }] },
+        createdAt: new Date(), // newer timestamp passed in
+      };
+
+      await memoryStore?.saveMessages({ messages: [updatedMessage] });
+
+      // Verify createdAt was NOT overwritten
+      const secondResult = await memoryStore?.listMessagesById({ messageIds: [messageId] });
+      const afterUpsertCreatedAt = secondResult?.messages?.[0]?.createdAt;
+      expect(afterUpsertCreatedAt).toEqual(originalCreatedAt);
+
+      // Verify content WAS updated
+      const updatedContent = secondResult?.messages?.[0]?.content;
+      expect(typeof updatedContent === 'string' ? updatedContent : JSON.stringify(updatedContent)).toContain(
+        'Hello updated',
+      );
+    });
+  });
+
   describe('MongoDB Schemaless Collection Behavior', () => {
     it('should create collections on-demand when using connector directly', async () => {
       // This tests MongoDB's schemaless nature - collections are created automatically
@@ -467,6 +540,69 @@ describe('MongoDB Specific Tests', () => {
 
       // Cleanup
       await collection.drop();
+    });
+  });
+
+  describe('MongoDB OM Regression: bufferedObservationChunks null handling', () => {
+    beforeEach(async () => {
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+      await memoryStore?.dangerouslyClearAll();
+    });
+
+    it('should append buffered observation chunks when legacy docs store null and keep array shape after swap', async () => {
+      const memoryStore = await store.getStore('memory');
+      expect(memoryStore).toBeDefined();
+
+      const resourceId = `resource-om-regression-${Date.now()}`;
+      const record = await memoryStore!.initializeObservationalMemory({
+        threadId: null,
+        resourceId,
+        scope: 'resource',
+        config: {
+          observationThreshold: 5000,
+          reflectionThreshold: 40000,
+        },
+      });
+
+      const client = new MongoClient(TEST_CONFIG.uri!);
+      await client.connect();
+      try {
+        const omCollection = client.db(TEST_CONFIG.dbName).collection('mastra_observational_memory');
+
+        await omCollection.updateOne({ id: record.id }, { $set: { bufferedObservationChunks: null } });
+
+        await expect(
+          memoryStore!.updateBufferedObservations({
+            id: record.id,
+            chunk: {
+              cycleId: `cycle-${Date.now()}`,
+              observations: 'Buffered from regression test',
+              tokenCount: 100,
+              messageIds: [`msg-${Date.now()}`],
+              messageTokens: 200,
+              lastObservedAt: new Date(),
+            },
+          }),
+        ).resolves.not.toThrow();
+
+        const afterBuffer = await omCollection.findOne({ id: record.id });
+        expect(Array.isArray(afterBuffer?.bufferedObservationChunks)).toBe(true);
+        expect(afterBuffer?.bufferedObservationChunks).toHaveLength(1);
+
+        await memoryStore!.swapBufferedToActive({
+          id: record.id,
+          activationRatio: 1,
+          messageTokensThreshold: 1000,
+          currentPendingTokens: 200,
+        });
+
+        const afterSwap = await omCollection.findOne({ id: record.id });
+        expect(Array.isArray(afterSwap?.bufferedObservationChunks)).toBe(true);
+        expect(afterSwap?.bufferedObservationChunks).toEqual([]);
+      } finally {
+        await client.close();
+      }
     });
   });
 

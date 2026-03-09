@@ -3,19 +3,20 @@
  * Tests: start, stop, destroy, status transitions, getInfo
  */
 
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { callLifecycle } from '@mastra/core/workspace';
+import type { MastraSandbox } from '@mastra/core/workspace';
 import { describe, it, expect } from 'vitest';
 
-import type { SandboxCapabilities } from '../types';
+import type { CreateSandboxOptions, SandboxCapabilities } from '../types';
 
 interface TestContext {
-  sandbox: WorkspaceSandbox;
+  sandbox: MastraSandbox;
   capabilities: Required<SandboxCapabilities>;
   testTimeout: number;
   fastOnly: boolean;
   /** Factory to create additional sandbox instances for uniqueness/lifecycle tests */
-  createSandbox: () => Promise<WorkspaceSandbox> | WorkspaceSandbox;
+  createSandbox: (options?: CreateSandboxOptions) => Promise<MastraSandbox> | MastraSandbox;
+  /** Optional factory to create a sandbox with intentionally invalid config */
+  createInvalidSandbox?: () => Promise<MastraSandbox> | MastraSandbox;
 }
 
 export function createSandboxLifecycleTests(getContext: () => TestContext): void {
@@ -47,7 +48,7 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
             expect(sandbox.id).not.toBe(sandbox2.id);
           } finally {
             // Clean up the second sandbox
-            await callLifecycle(sandbox2, 'destroy');
+            await sandbox2._destroy();
           }
         },
         getContext().testTimeout * 2,
@@ -68,7 +69,7 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
             // Before start(), status should be pending or stopped
             expect(['pending', 'stopped']).toContain(freshSandbox.status);
           } finally {
-            await callLifecycle(freshSandbox, 'destroy');
+            await freshSandbox._destroy();
           }
         },
         getContext().testTimeout * 2,
@@ -86,11 +87,9 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
         async () => {
           const { sandbox } = getContext();
 
-          if (!sandbox.start) return;
-
           // Sandbox is already running from beforeAll
           // Calling start() again should not throw
-          await expect(callLifecycle(sandbox, 'start')).resolves.not.toThrow();
+          await expect(sandbox._start()).resolves.not.toThrow();
 
           // Status should still be running
           expect(sandbox.status).toBe('running');
@@ -109,16 +108,14 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
           const freshSandbox = await createSandbox();
           try {
             // Start the sandbox
-            await callLifecycle(freshSandbox, 'start');
+            await freshSandbox._start();
             expect(freshSandbox.status).toBe('running');
 
             // Stop it
-            if (freshSandbox.stop) {
-              await callLifecycle(freshSandbox, 'stop');
-              expect(freshSandbox.status).toBe('stopped');
-            }
+            await freshSandbox._stop();
+            expect(freshSandbox.status).toBe('stopped');
           } finally {
-            await callLifecycle(freshSandbox, 'destroy');
+            await freshSandbox._destroy();
           }
         },
         getContext().testTimeout * 3,
@@ -155,7 +152,7 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
               expect(ready).toBe(false);
             }
           } finally {
-            await callLifecycle(freshSandbox, 'destroy');
+            await freshSandbox._destroy();
           }
         },
         getContext().testTimeout * 2,
@@ -192,6 +189,64 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
           expect(info.status).toBe(sandbox.status);
         },
         getContext().testTimeout,
+      );
+    });
+
+    describe('Error Recovery', () => {
+      it(
+        'start() with invalid config rejects cleanly',
+        async () => {
+          const { createInvalidSandbox } = getContext();
+          if (!createInvalidSandbox) return;
+
+          const badSandbox = await createInvalidSandbox();
+          try {
+            await expect(badSandbox._start()).rejects.toThrow();
+          } finally {
+            try {
+              await badSandbox._destroy();
+            } catch {
+              // Cleanup may fail for invalid sandboxes — that's OK
+            }
+          }
+        },
+        getContext().testTimeout * 2,
+      );
+
+      it(
+        'valid sandbox works after invalid config failure',
+        async () => {
+          const { createInvalidSandbox, createSandbox } = getContext();
+          if (!createInvalidSandbox) return;
+
+          // First: attempt to start with invalid config (should fail)
+          const badSandbox = await createInvalidSandbox();
+          try {
+            await badSandbox._start();
+          } catch {
+            // Expected to fail
+          } finally {
+            try {
+              await badSandbox._destroy();
+            } catch {
+              // Cleanup may fail — that's OK
+            }
+          }
+
+          // Then: verify a fresh sandbox with valid config still works
+          const goodSandbox = await createSandbox();
+          try {
+            await goodSandbox._start();
+            expect(goodSandbox.status).toBe('running');
+
+            const result = await goodSandbox.executeCommand!('echo', ['recovery']);
+            expect(result.exitCode).toBe(0);
+            expect(result.stdout).toContain('recovery');
+          } finally {
+            await goodSandbox._destroy();
+          }
+        },
+        getContext().testTimeout * 3,
       );
     });
   });

@@ -33,8 +33,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.5",
     "uuid": "^13.0.0",
-    "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.24.6"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.9",
@@ -42,13 +41,13 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/mcp": "workspace:^",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^1.13.0",
     "cross-env": "^10.1.0",
     "eslint": "^9.37.0",
-    "hono": "^4.11.3",
+    "hono": "^4.11.9",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",

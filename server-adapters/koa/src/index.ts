@@ -3,7 +3,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { formatZodError } from '@mastra/server/handlers/error';
+import { isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -15,7 +15,46 @@ import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
 import { ZodError } from 'zod';
 
-import { authenticationMiddleware, authorizationMiddleware } from './auth-middleware';
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  if (!_hasPermissionPromise) {
+    _hasPermissionPromise = import('@mastra/core/auth/ee')
+      .then(m => m.hasPermission)
+      .catch(() => {
+        console.error(
+          '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _hasPermissionPromise;
+}
+
+/**
+ * Convert Koa context to Web API Request for cookie-based auth providers.
+ */
+function toWebRequest(ctx: Context): globalThis.Request {
+  const protocol = ctx.protocol || 'http';
+  const host = ctx.host || 'localhost';
+  const url = `${protocol}://${host}${ctx.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(ctx.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: ctx.method,
+    headers,
+  });
+}
 
 // Extend Koa types to include Mastra context
 declare module 'koa' {
@@ -33,6 +72,113 @@ declare module 'koa' {
 }
 
 export class MastraServer extends MastraServerBase<Koa, Context, Context> {
+  async init() {
+    this.registerErrorMiddleware();
+    await super.init();
+  }
+
+  /**
+   * Register a global error-handling middleware at the top of the middleware chain.
+   * This acts as a safety net for errors that propagate past route handlers
+   * (e.g., from auth middleware, context middleware, or when route handlers re-throw).
+   *
+   * When `server.onError` is configured, calls it and uses the response.
+   * Otherwise provides a default JSON error response.
+   *
+   * Errors are emitted on the app for logging (Koa convention) but NOT re-thrown,
+   * so this middleware is the final error boundary. Users who need custom error handling
+   * should use `server.onError` or register their own middleware between this and the routes.
+   */
+  private registerErrorMiddleware(): void {
+    this.app.use(async (ctx: Context, next: Next) => {
+      try {
+        await next();
+      } catch (err) {
+        // Try onError first (may have already been called in registerRoute,
+        // but this catches errors from other middleware too)
+        if (await this.handleOnError(err, ctx)) {
+          return;
+        }
+
+        // Default error handling
+        const error = err instanceof Error ? err : new Error(String(err));
+        let status = 500;
+        if (err && typeof err === 'object') {
+          if ('status' in err) {
+            status = (err as any).status;
+          } else if (
+            'details' in err &&
+            (err as any).details &&
+            typeof (err as any).details === 'object' &&
+            'status' in (err as any).details
+          ) {
+            status = (err as any).details.status;
+          }
+        }
+        ctx.status = status;
+        ctx.body = { error: error.message || 'Unknown error' };
+
+        // Emit the error for logging (standard Koa pattern) but don't re-throw
+        // since this middleware is the final error boundary.
+        ctx.app.emit('error', err, ctx);
+      }
+    });
+  }
+
+  /**
+   * Try to handle an error using the `server.onError` hook.
+   * Creates a minimal context shim compatible with the Hono-style onError signature.
+   *
+   * @returns true if the error was handled and the response was set on ctx
+   */
+  private async handleOnError(err: unknown, ctx: Context): Promise<boolean> {
+    // Guard against double invocation (route catch → re-throw → error middleware)
+    if ((ctx as any)._mastraOnErrorAttempted) return false;
+    (ctx as any)._mastraOnErrorAttempted = true;
+
+    const onError = this.mastra.getServer()?.onError;
+    if (!onError) return false;
+
+    const error = err instanceof Error ? err : new Error(String(err));
+
+    // Create a minimal context shim compatible with the onError signature
+    const shimContext = {
+      json: (data: unknown, status: number = 200) =>
+        new Response(JSON.stringify(data), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      req: {
+        path: ctx.path,
+        method: ctx.method,
+        header: (name: string) => {
+          const value = ctx.headers[name.toLowerCase()];
+          if (Array.isArray(value)) return value.join(', ');
+          return value;
+        },
+        url: ctx.url,
+      },
+    };
+
+    try {
+      const response = await onError(error, shimContext as any);
+      // Apply the Response from onError to the Koa context
+      ctx.status = response.status;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        ctx.body = await response.json();
+      } else {
+        ctx.body = await response.text();
+      }
+      return true;
+    } catch (onErrorErr) {
+      this.mastra.getLogger()?.error('Error in custom onError handler', {
+        error: onErrorErr instanceof Error ? { message: onErrorErr.message, stack: onErrorErr.stack } : onErrorErr,
+      });
+      return false;
+    }
+  }
+
   createContextMiddleware(): Middleware {
     return async (ctx: Context, next: Next) => {
       // Parse request context from request body and add to context
@@ -103,13 +249,25 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Tell Koa we're handling the response ourselves
     ctx.respond = false;
 
+    const streamFormat = route.streamFormat || 'stream';
+
     // Set status and headers via ctx.res directly since we're bypassing Koa's response
+    const sseHeaders =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
     ctx.res.writeHead(200, {
-      'Content-Type': 'text/plain',
+      ...sseHeaders,
       'Transfer-Encoding': 'chunked',
     });
-
-    const streamFormat = route.streamFormat || 'stream';
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
@@ -150,7 +308,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
 
-    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH') {
+    if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
       const contentType = ctx.headers['content-type'] || '';
 
       if (contentType.includes('multipart/form-data')) {
@@ -241,7 +399,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
     if (route.responseType === 'json') {
-      ctx.body = result;
+      // Explicitly set content-type and handle null/undefined to ensure proper JSON response
+      // Koa sets 204 No Content when body is null, but we want to return JSON null
+      ctx.type = 'application/json';
+      ctx.body = result === null || result === undefined ? JSON.stringify(null) : result;
     } else if (route.responseType === 'stream') {
       await this.stream(route, ctx, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {
@@ -380,6 +541,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
         getQuery: name => (ctx.query as Record<string, string>)[name],
         requestContext: ctx.state.requestContext,
+        request: toWebRequest(ctx),
+        buildAuthorizeContext: () => toWebRequest(ctx),
       });
 
       if (authError) {
@@ -407,10 +570,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           this.mastra.getLogger()?.error('Error parsing query params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
-            ctx.status = 400;
-            ctx.body = formatZodError(error, 'query parameters');
+            const resolved = this.resolveValidationError(route, error, 'query');
+            ctx.status = resolved.status;
+            ctx.body = resolved.body;
             return;
           }
           ctx.status = 400;
@@ -429,15 +592,38 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           this.mastra.getLogger()?.error('Error parsing body', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
-            ctx.status = 400;
-            ctx.body = formatZodError(error, 'request body');
+            const resolved = this.resolveValidationError(route, error, 'body');
+            ctx.status = resolved.status;
+            ctx.body = resolved.body;
             return;
           }
           ctx.status = 400;
           ctx.body = {
             error: 'Invalid request body',
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          };
+          return;
+        }
+      }
+
+      // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+      if (params.urlParams) {
+        try {
+          params.urlParams = await this.parsePathParams(route, params.urlParams);
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error parsing path params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
+          if (error instanceof ZodError) {
+            const resolved = this.resolveValidationError(route, error, 'path');
+            ctx.status = resolved.status;
+            ctx.body = resolved.body;
+            return;
+          }
+          ctx.status = 400;
+          ctx.body = {
+            error: 'Invalid path parameters',
             issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
           };
           return;
@@ -456,6 +642,27 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         routePrefix: prefix,
       };
 
+      // Check route permission requirement (EE feature)
+      // Uses convention-based permission derivation: permissions are auto-derived
+      // from route path/method unless explicitly set or route is public
+      const authConfig = this.mastra.getServer()?.auth;
+      if (authConfig) {
+        const hasPermission = await loadHasPermission();
+        if (hasPermission) {
+          const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+
+          if (permissionError) {
+            ctx.status = permissionError.status;
+            ctx.body = {
+              error: permissionError.error,
+              message: permissionError.message,
+            };
+            return;
+          }
+        }
+      }
+
       try {
         const result = await route.handler(handlerParams);
         await this.sendResponse(route, ctx, result, prefix);
@@ -465,25 +672,23 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           path: route.path,
           method: route.method,
         });
-        // Check if it's an HTTPException or MastraError with a status code
-        let status = 500;
+        // Attach status code to the error for upstream middleware
         if (error && typeof error === 'object') {
-          // Check for direct status property (HTTPException)
-          if ('status' in error) {
-            status = (error as any).status;
-          }
-          // Check for MastraError with status in details
-          else if (
-            'details' in error &&
-            error.details &&
-            typeof error.details === 'object' &&
-            'status' in error.details
-          ) {
-            status = (error.details as any).status;
+          if (!('status' in error)) {
+            // Check for MastraError with status in details
+            if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+              (error as any).status = (error.details as any).status;
+            }
           }
         }
-        ctx.status = status;
-        ctx.body = { error: error instanceof Error ? error.message : 'Unknown error' };
+
+        // Try to call server.onError if configured
+        if (await this.handleOnError(error, ctx)) {
+          return;
+        }
+
+        // Re-throw so the error propagates up Koa's middleware chain
+        throw error;
       }
     };
 
@@ -520,6 +725,60 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     if (!(await this.buildCustomRouteHandler())) return;
 
     this.app.use(async (ctx: Context, next: Next) => {
+      // Check if this request matches a protected custom route and run auth
+      const path = String(ctx.path || '/');
+      const method = String(ctx.method || 'GET');
+
+      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
+        const serverRoute: ServerRoute = {
+          method: method as any,
+          path,
+          responseType: 'json',
+          handler: async () => {},
+        };
+
+        const authError = await this.checkRouteAuth(serverRoute, {
+          path,
+          method,
+          getHeader: name => ctx.headers[name.toLowerCase()] as string | undefined,
+          getQuery: name => (ctx.query as Record<string, string>)[name],
+          requestContext: ctx.state.requestContext,
+          request: toWebRequest(ctx),
+          buildAuthorizeContext: () => toWebRequest(ctx),
+        });
+
+        if (authError) {
+          ctx.status = authError.status;
+          ctx.body = { error: authError.error };
+          return;
+        }
+
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
+          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
+          try {
+            ({ hasPermission } = await import('@mastra/core/auth/ee'));
+          } catch {
+            console.error(
+              '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+            );
+          }
+
+          if (hasPermission) {
+            const userPermissions = ctx.state.requestContext.get('userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            if (permissionError) {
+              ctx.status = permissionError.status;
+              ctx.body = {
+                error: permissionError.error,
+                message: permissionError.message,
+              };
+              return;
+            }
+          }
+        }
+      }
+
       const response = await this.handleCustomRouteRequest(
         `${ctx.protocol}://${ctx.host}${ctx.originalUrl || ctx.url}`,
         ctx.method,
@@ -538,13 +797,54 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) {
-      // No auth config, skip registration
+    // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
+    // No global middleware needed
+  }
+
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) {
       return;
     }
 
-    this.app.use(authenticationMiddleware);
-    this.app.use(authorizationMiddleware);
+    this.app.use(async (ctx: Context, next: Next) => {
+      if (!this.shouldLogRequest(ctx.path)) {
+        return next();
+      }
+
+      const start = Date.now();
+      const method = ctx.method;
+      const path = ctx.path;
+
+      await next();
+
+      const duration = Date.now() - start;
+      const status = ctx.status;
+      const level = this.httpLoggingConfig?.level || 'info';
+
+      const logData: Record<string, any> = {
+        method,
+        path,
+        status,
+        duration: `${duration}ms`,
+      };
+
+      if (this.httpLoggingConfig?.includeQueryParams) {
+        logData.query = ctx.query;
+      }
+
+      if (this.httpLoggingConfig?.includeHeaders) {
+        const headers = { ...ctx.headers };
+        const redactHeaders = this.httpLoggingConfig.redactHeaders || [];
+        redactHeaders.forEach((h: string) => {
+          const key = h.toLowerCase();
+          if (headers[key] !== undefined) {
+            headers[key] = '[REDACTED]';
+          }
+        });
+        logData.headers = headers;
+      }
+
+      this.logger[level](`${method} ${path} ${status} ${duration}ms`, logData);
+    });
   }
 }
