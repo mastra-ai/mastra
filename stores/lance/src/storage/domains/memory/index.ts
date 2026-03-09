@@ -375,12 +375,34 @@ export class StoreMemoryLance extends MemoryStorage {
 
       // When perPage is 0, we only need included messages — skip COUNT and data queries
       if (perPage === 0 && include && include.length > 0) {
-        // Fetch messages from all relevant threads for includes
-        const includeThreadIds = [...new Set(include.map(item => item.threadId || threadId))];
+        // Phase 1: Fetch target messages by ID to discover their thread_ids
+        const targetIds = include.map(item => item.id);
+        const idCondition =
+          targetIds.length === 1
+            ? `id = '${this.escapeSql(targetIds[0]!)}'`
+            : `id IN (${targetIds.map(id => `'${this.escapeSql(id)}'`).join(', ')})`;
+        const targetRecords = await table.query().where(idCondition).toArray();
+        // Check if any include item needs context
+        const needsContext = include.some(item => item.withPreviousMessages || item.withNextMessages);
+
+        if (!needsContext) {
+          // No context needed — return only the target messages themselves
+          const includedMessages = targetRecords.map((row: any) => this.normalizeMessage(row));
+          const list = new MessageList().add(includedMessages, 'memory');
+          return {
+            messages: list.get.all.db(),
+            total: 0,
+            page,
+            perPage: perPageForResponse,
+            hasMore: false,
+          };
+        }
+
+        // Phase 2: Fetch full threads for context windows
+        const threadIdsToFetch = [...new Set(targetRecords.map(r => r.thread_id as string))];
         const allThreadMessages: any[] = [];
-        for (const tid of includeThreadIds) {
-          const flatTid = Array.isArray(tid) ? tid[0] : tid;
-          const threadQuery = table.query().where(`thread_id = '${flatTid}'`);
+        for (const tid of threadIdsToFetch) {
+          const threadQuery = table.query().where(`thread_id = '${this.escapeSql(tid)}'`);
           const threadRecords = await threadQuery.toArray();
           allThreadMessages.push(...threadRecords);
         }
@@ -725,7 +747,9 @@ export class StoreMemoryLance extends MemoryStorage {
     const messagesWithContext = include.filter(item => item.withPreviousMessages || item.withNextMessages);
 
     if (messagesWithContext.length === 0) {
-      return records;
+      // No context requested — return only the target messages themselves
+      const targetIds = new Set(include.map(item => item.id));
+      return records.filter(record => targetIds.has(record.id));
     }
 
     // Create a map of message id to index in the sorted array for quick lookup
@@ -759,9 +783,10 @@ export class StoreMemoryLance extends MemoryStorage {
       }
     }
 
-    // If we need to include additional messages, create a new set of records
+    // If no additional context messages needed, return only the target messages
     if (additionalIndices.size === 0) {
-      return records;
+      const targetIds = new Set(include.map(item => item.id));
+      return records.filter(record => targetIds.has(record.id));
     }
 
     // Get IDs of the records that matched the original query
