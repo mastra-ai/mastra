@@ -235,10 +235,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     let filtered = sa;
     if (config?.disabledTools?.length) {
       if (sa.allowedWorkspaceTools) {
-        filtered = { ...filtered, allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)) };
+        filtered = {
+          ...filtered,
+          allowedWorkspaceTools: sa.allowedWorkspaceTools.filter(t => !config.disabledTools!.includes(t)),
+        };
       }
       if (sa.tools) {
-        filtered = { ...filtered, tools: Object.fromEntries(Object.entries(sa.tools).filter(([k]) => !config.disabledTools!.includes(k))) };
+        filtered = {
+          ...filtered,
+          tools: Object.fromEntries(Object.entries(sa.tools).filter(([k]) => !config.disabledTools!.includes(k))),
+        };
       }
     }
     return model ? { ...filtered, defaultModelId: model } : filtered;

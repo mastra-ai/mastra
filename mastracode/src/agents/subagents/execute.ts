@@ -9,7 +9,6 @@ import type { HarnessSubagent } from '@mastra/core/harness';
 
 import { taskCheckTool, taskWriteTool } from '@mastra/core/harness';
 
-
 export const executeSubagent: HarnessSubagent = {
   id: 'execute',
   name: 'Execute',
