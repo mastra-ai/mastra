@@ -16,6 +16,8 @@ import {
   DELETE_MESSAGES_ROUTE,
   DELETE_THREAD_ROUTE,
   UPDATE_THREAD_ROUTE,
+  GET_WORKING_MEMORY_ROUTE,
+  UPDATE_WORKING_MEMORY_ROUTE,
   getTextContent,
 } from './memory';
 import { createTestServerContext } from './test-utils';
@@ -1829,6 +1831,479 @@ describe('Memory Handlers', () => {
             threadId: 'transfer-thread',
           }),
         ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      });
+    });
+
+    describe('Memory scoping after resourceId transfer', () => {
+      describe('Working memory (resource scope) after transfer', () => {
+        it('should not leak old owner working memory to new owner after transfer', async () => {
+          const wmStorage = new InMemoryStore();
+          const wmMemory = new MockMemory({ storage: wmStorage, enableWorkingMemory: true });
+          const wmAgent = new Agent({
+            id: 'test-agent',
+            name: 'test-agent',
+            instructions: 'test-instructions',
+            model: {} as any,
+            memory: wmMemory,
+          });
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': wmAgent },
+          });
+
+          // user-a creates a thread and stores working memory
+          await wmMemory.createThread({ threadId: 'wm-transfer-thread', resourceId: 'user-a' });
+
+          await UPDATE_WORKING_MEMORY_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-transfer-thread',
+            resourceId: 'user-a',
+            workingMemory: '# User Profile\n- Name: Alice\n- Preferences: dark mode',
+            memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+          });
+
+          // Verify user-a can read their working memory
+          const beforeTransfer = await GET_WORKING_MEMORY_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-transfer-thread',
+            resourceId: 'user-a',
+            memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+          });
+          expect(beforeTransfer.workingMemory).toContain('Alice');
+          expect(beforeTransfer.source).toBe('resource');
+
+          // Transfer thread to user-b
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-transfer-thread',
+            resourceId: 'user-b',
+          });
+
+          // New owner (user-b) should NOT see user-a's working memory
+          const afterTransfer = await GET_WORKING_MEMORY_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-transfer-thread',
+            resourceId: 'user-b',
+            memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+          });
+          expect(afterTransfer.workingMemory).toBeNull();
+          expect(afterTransfer.source).toBe('resource');
+        });
+
+        it('should preserve old owner working memory (not deleted) after transfer', async () => {
+          const wmStorage = new InMemoryStore();
+          const wmMemory = new MockMemory({ storage: wmStorage, enableWorkingMemory: true });
+          const wmAgent = new Agent({
+            id: 'test-agent',
+            name: 'test-agent',
+            instructions: 'test-instructions',
+            model: {} as any,
+            memory: wmMemory,
+          });
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': wmAgent },
+          });
+
+          await wmMemory.createThread({ threadId: 'wm-thread-1', resourceId: 'user-a' });
+
+          await UPDATE_WORKING_MEMORY_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-thread-1',
+            resourceId: 'user-a',
+            workingMemory: '# User Profile\n- Name: Alice',
+            memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+          });
+
+          // Transfer the thread
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-thread-1',
+            resourceId: 'user-b',
+          });
+
+          // user-a still has another thread - their working memory is still intact
+          await wmMemory.createThread({ threadId: 'wm-thread-2', resourceId: 'user-a' });
+          const userAMemory = await GET_WORKING_MEMORY_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-thread-2',
+            resourceId: 'user-a',
+            memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+          });
+          expect(userAMemory.workingMemory).toContain('Alice');
+        });
+      });
+
+      describe('Working memory (thread scope) after transfer', () => {
+        it('should preserve thread-scoped working memory after resourceId transfer', async () => {
+          const wmStorage = new InMemoryStore();
+          const wmMemory = new MockMemory({ storage: wmStorage, enableWorkingMemory: true });
+          const wmAgent = new Agent({
+            id: 'test-agent',
+            name: 'test-agent',
+            instructions: 'test-instructions',
+            model: {} as any,
+            memory: wmMemory,
+          });
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': wmAgent },
+          });
+
+          await wmMemory.createThread({ threadId: 'wm-thread-scope', resourceId: 'user-a' });
+
+          // Store thread-scoped working memory
+          await UPDATE_WORKING_MEMORY_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-thread-scope',
+            resourceId: 'user-a',
+            workingMemory: '# Thread Context\n- Topic: Project Alpha',
+            memoryConfig: { workingMemory: { enabled: true, scope: 'thread' } },
+          });
+
+          // Transfer thread to user-b
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-thread-scope',
+            resourceId: 'user-b',
+          });
+
+          // Thread-scoped working memory survives the transfer (keyed by threadId, not resourceId)
+          const afterTransfer = await GET_WORKING_MEMORY_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-thread-scope',
+            resourceId: 'user-b',
+            memoryConfig: { workingMemory: { enabled: true, scope: 'thread' } },
+          });
+          expect(afterTransfer.workingMemory).toContain('Project Alpha');
+          expect(afterTransfer.source).toBe('thread');
+        });
+      });
+
+      describe('Working memory access denial after transfer', () => {
+        it('should deny old owner access to working memory on transferred thread', async () => {
+          const wmStorage = new InMemoryStore();
+          const wmMemory = new MockMemory({ storage: wmStorage, enableWorkingMemory: true });
+          const wmAgent = new Agent({
+            id: 'test-agent',
+            name: 'test-agent',
+            instructions: 'test-instructions',
+            model: {} as any,
+            memory: wmMemory,
+          });
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': wmAgent },
+          });
+
+          await wmMemory.createThread({ threadId: 'wm-denied-thread', resourceId: 'user-a' });
+
+          // Transfer to user-b
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'wm-denied-thread',
+            resourceId: 'user-b',
+          });
+
+          // Old owner (user-a) tries to read working memory via middleware-enforced context
+          await expect(
+            GET_WORKING_MEMORY_ROUTE.handler({
+              ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+              agentId: 'test-agent',
+              threadId: 'wm-denied-thread',
+              resourceId: undefined as any,
+              memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+            }),
+          ).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }),
+          );
+
+          // Old owner (user-a) tries to update working memory via middleware-enforced context
+          await expect(
+            UPDATE_WORKING_MEMORY_ROUTE.handler({
+              ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+              agentId: 'test-agent',
+              threadId: 'wm-denied-thread',
+              resourceId: undefined as any,
+              workingMemory: '# Hacked\n- Should not succeed',
+              memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+            }),
+          ).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }),
+          );
+        });
+      });
+
+      describe('Observational memory scoping after transfer (storage level)', () => {
+        it('should not leak resource-scoped observational memory to new owner after transfer', async () => {
+          // Directly test InMemoryStore OM scoping to verify data isolation
+          const omStorage = new InMemoryStore();
+          const memoryStore = await omStorage.getStore('memory');
+
+          // Simulate OM records for user-a (resource scope: threadId=null)
+          await memoryStore!.initializeObservationalMemory({
+            threadId: null,
+            resourceId: 'user-a',
+            scope: 'resource',
+            config: {},
+          });
+
+          // Verify user-a has an OM record
+          const userARecord = await memoryStore!.getObservationalMemory(null, 'user-a');
+          expect(userARecord).not.toBeNull();
+          expect(userARecord!.resourceId).toBe('user-a');
+
+          // user-b has no OM record
+          const userBRecord = await memoryStore!.getObservationalMemory(null, 'user-b');
+          expect(userBRecord).toBeNull();
+
+          // This proves that after transferring a thread from user-a to user-b,
+          // user-b's resource-scoped OM lookup (null, 'user-b') will NOT see user-a's data
+        });
+
+        it('should keep thread-scoped observational memory accessible by threadId after transfer', async () => {
+          const omStorage = new InMemoryStore();
+          const memoryStore = await omStorage.getStore('memory');
+
+          // Simulate thread-scoped OM record
+          await memoryStore!.initializeObservationalMemory({
+            threadId: 'om-thread-1',
+            resourceId: 'user-a',
+            scope: 'thread',
+            config: {},
+          });
+
+          // Thread-scoped OM is keyed by threadId, not resourceId
+          const record = await memoryStore!.getObservationalMemory('om-thread-1', 'user-a');
+          expect(record).not.toBeNull();
+          expect(record!.threadId).toBe('om-thread-1');
+
+          // After transfer, the thread's resourceId changes but the OM key uses threadId
+          // So the same lookup with new resourceId still finds it (key is thread:om-thread-1)
+          const recordAfterTransfer = await memoryStore!.getObservationalMemory('om-thread-1', 'user-b');
+          expect(recordAfterTransfer).not.toBeNull();
+          expect(recordAfterTransfer!.threadId).toBe('om-thread-1');
+        });
+
+        it('should isolate observational memory history between resources', async () => {
+          const omStorage = new InMemoryStore();
+          const memoryStore = await omStorage.getStore('memory');
+
+          // user-a has resource-scoped OM with history
+          await memoryStore!.initializeObservationalMemory({
+            threadId: null,
+            resourceId: 'user-a',
+            scope: 'resource',
+            config: {},
+          });
+
+          // user-b has no OM history
+          const userBHistory = await memoryStore!.getObservationalMemoryHistory(null, 'user-b');
+          expect(userBHistory).toHaveLength(0);
+
+          // user-a's history is independent
+          const userAHistory = await memoryStore!.getObservationalMemoryHistory(null, 'user-a');
+          expect(userAHistory).toHaveLength(1);
+        });
+      });
+
+      describe('Message listing after transfer', () => {
+        it('should allow new owner to access transferred thread (ownership check passes)', async () => {
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': mockAgent },
+          });
+
+          // user-a creates thread with messages
+          await mockMemory.createThread({ threadId: 'msg-transfer-thread', resourceId: 'user-a' });
+          await SAVE_MESSAGES_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            messages: [
+              {
+                id: 'pre-transfer-msg',
+                role: 'user' as const,
+                createdAt: new Date(),
+                threadId: 'msg-transfer-thread',
+                resourceId: 'user-a',
+                content: {
+                  format: 2,
+                  parts: [{ type: 'text', text: 'Message before transfer' }],
+                  content: 'Message before transfer',
+                },
+              },
+            ] as MastraDBMessage[],
+          });
+
+          // Transfer to user-b
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'msg-transfer-thread',
+            resourceId: 'user-b',
+          });
+
+          // New owner (user-b) passes thread ownership check but message-level
+          // resourceId filtering means only messages authored by user-b are returned.
+          // Messages authored by the old owner (user-a) are filtered out because
+          // listMessages filters by the caller's resourceId when provided.
+          const result = await LIST_MESSAGES_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-b' }),
+            agentId: 'test-agent',
+            threadId: 'msg-transfer-thread',
+            page: 0,
+            perPage: 10,
+          });
+          expect(result.messages).toHaveLength(0);
+        });
+
+        it('should return all messages in transferred thread when no resourceId filter is set', async () => {
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': mockAgent },
+          });
+
+          // user-a creates thread with messages
+          await mockMemory.createThread({ threadId: 'msg-transfer-thread-2', resourceId: 'user-a' });
+          await SAVE_MESSAGES_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            messages: [
+              {
+                id: 'pre-transfer-msg-2',
+                role: 'user' as const,
+                createdAt: new Date(),
+                threadId: 'msg-transfer-thread-2',
+                resourceId: 'user-a',
+                content: {
+                  format: 2,
+                  parts: [{ type: 'text', text: 'Message before transfer' }],
+                  content: 'Message before transfer',
+                },
+              },
+            ] as MastraDBMessage[],
+          });
+
+          // Transfer to user-b
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'msg-transfer-thread-2',
+            resourceId: 'user-b',
+          });
+
+          // In a trusted server context (no middleware), all messages are returned
+          // regardless of message-level resourceId
+          const result = await LIST_MESSAGES_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'msg-transfer-thread-2',
+            page: 0,
+            perPage: 10,
+          });
+          expect(result.messages).toHaveLength(1);
+          expect(result.messages[0].id).toBe('pre-transfer-msg-2');
+        });
+
+        it('should deny old owner from listing messages on transferred thread', async () => {
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': mockAgent },
+          });
+
+          await mockMemory.createThread({ threadId: 'msg-denied-thread', resourceId: 'user-a' });
+          await SAVE_MESSAGES_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            messages: [
+              {
+                id: 'secret-msg',
+                role: 'user' as const,
+                createdAt: new Date(),
+                threadId: 'msg-denied-thread',
+                resourceId: 'user-a',
+                content: {
+                  format: 2,
+                  parts: [{ type: 'text', text: 'Secret message' }],
+                  content: 'Secret message',
+                },
+              },
+            ] as MastraDBMessage[],
+          });
+
+          // Transfer to user-b
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'msg-denied-thread',
+            resourceId: 'user-b',
+          });
+
+          // Old owner (user-a) is denied access
+          await expect(
+            LIST_MESSAGES_ROUTE.handler({
+              ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+              agentId: 'test-agent',
+              threadId: 'msg-denied-thread',
+              page: 0,
+              perPage: 10,
+            }),
+          ).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }),
+          );
+        });
+
+        it('should deny old owner from saving new messages to transferred thread', async () => {
+          const mastra = new Mastra({
+            logger: false,
+            agents: { 'test-agent': mockAgent },
+          });
+
+          await mockMemory.createThread({ threadId: 'msg-save-denied-thread', resourceId: 'user-a' });
+
+          // Transfer to user-b
+          await UPDATE_THREAD_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            agentId: 'test-agent',
+            threadId: 'msg-save-denied-thread',
+            resourceId: 'user-b',
+          });
+
+          // Old owner tries to save a message
+          await expect(
+            SAVE_MESSAGES_ROUTE.handler({
+              ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+              agentId: 'test-agent',
+              messages: [
+                {
+                  id: 'unauthorized-msg',
+                  role: 'user' as const,
+                  createdAt: new Date(),
+                  threadId: 'msg-save-denied-thread',
+                  resourceId: 'user-a',
+                  content: {
+                    format: 2,
+                    parts: [{ type: 'text', text: 'Unauthorized message' }],
+                    content: 'Unauthorized message',
+                  },
+                },
+              ] as MastraDBMessage[],
+            }),
+          ).rejects.toThrow(
+            new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }),
+          );
+        });
       });
     });
 
