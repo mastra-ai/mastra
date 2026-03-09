@@ -101,9 +101,9 @@ export function AgentPlaygroundVersionBar({
 
   const handleSaveWithMessage = useCallback(async () => {
     const msg = changeMessage.trim();
+    await onSaveDraft(msg || undefined);
     setShowMessageDialog(false);
     setChangeMessage('');
-    await onSaveDraft(msg || undefined);
   }, [changeMessage, onSaveDraft]);
 
   return (
@@ -164,7 +164,7 @@ export function AgentPlaygroundVersionBar({
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
-              <Button variant="default" size="sm" disabled={saveDisabled} className="rounded-l-none px-1.5">
+              <Button variant="default" size="sm" disabled={saveDisabled} aria-label="More save options" className="rounded-l-none px-1.5">
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenu.Trigger>
