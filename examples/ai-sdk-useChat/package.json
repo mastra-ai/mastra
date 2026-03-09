@@ -19,8 +19,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@mastra/core": "link:../../packages/core",
-      "next": "^15.5.8"
+      "@mastra/core": "link:../../packages/core"
     }
   },
   "devDependencies": {

@@ -20,7 +20,7 @@
     "overrides": {
       "@mastra/core": "link:../../../packages/core",
       "@mastra/voice-openai": "link:../../../voice/openai",
-      "next": "^15.5.8"
+      "@mastra/voice-openai": "link:../../../voice/openai"
     }
   },
   "devDependencies": {
