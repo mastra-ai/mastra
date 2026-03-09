@@ -160,7 +160,7 @@ export interface LLMRecording {
 export interface RecordingMeta {
   /** Recording name (matches the filename without extension) */
   name: string;
-  /** Absolute path of the test file that created this recording */
+  /** Relative path (from cwd) of the test file that created this recording */
   testFile?: string;
   /** Name of the test (best-effort, may not always be available) */
   testName?: string;
@@ -328,6 +328,15 @@ let activeRecorder: LLMRecorderInstance | null = null;
  */
 export function getActiveRecorder(): LLMRecorderInstance | null {
   return activeRecorder;
+}
+
+/**
+ * Convert an absolute test file path to a stable relative path.
+ * Falls back to the basename if the path is outside the project (starts with `..`).
+ */
+function relativizeTestFile(filepath: string): string {
+  const rel = path.relative(process.cwd(), filepath);
+  return rel.startsWith('..') ? path.basename(filepath) : rel;
 }
 
 /**
@@ -505,12 +514,23 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
   }
 
   // Load existing recordings / metadata before any mutations (backward compatible)
+  // In record/update modes a corrupted file should not block re-recording.
   let savedRecordings: LLMRecording[] = [];
   let existingMeta: RecordingMeta | undefined;
   if (recordingExists) {
-    const file = loadRecordingFile(recordingPath, options.name);
-    existingMeta = file.meta;
-    savedRecordings = file.recordings;
+    const willRecord = mode === 'record' || mode === 'update';
+    try {
+      const file = loadRecordingFile(recordingPath, options.name);
+      existingMeta = file.meta;
+      savedRecordings = file.recordings;
+    } catch (err) {
+      if (!willRecord) {
+        throw err;
+      }
+      console.warn(
+        `[llm-recorder] Failed to parse existing recording for "${options.name}", starting fresh: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   // Resolve mode to an effective action
@@ -756,9 +776,11 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       const firstRequestBody = recordings[0]?.request.body as Record<string, unknown> | undefined;
       const inferredModel = typeof firstRequestBody?.model === 'string' ? firstRequestBody.model : undefined;
 
+      const rawTestFile = options.metaContext?.testFile ?? vitestWorker?.filepath;
+
       const meta: RecordingMeta = {
         name: options.name,
-        testFile: options.metaContext?.testFile ?? vitestWorker?.filepath,
+        testFile: rawTestFile ? relativizeTestFile(rawTestFile) : undefined,
         testName: vitestState?.current?.fullTestName ?? vitestState?.currentTestName ?? existingMeta?.testName,
         provider: options.metaContext?.provider ?? existingMeta?.provider,
         model: options.metaContext?.model ?? inferredModel ?? existingMeta?.model,

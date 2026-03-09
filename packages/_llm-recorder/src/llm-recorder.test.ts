@@ -341,6 +341,29 @@ describe('recording file format', () => {
     expect(parsed.recordings[0].hash).not.toBe('old-hash');
   });
 
+  it('tolerates corrupted JSON in record mode', () => {
+    const name = 'corrupted-json';
+    const filePath = path.join(tempDir, `${name}.json`);
+    fs.writeFileSync(filePath, '{ invalid json !!!', 'utf-8');
+
+    process.env.LLM_TEST_MODE = 'record';
+    const recorder = setupLLMRecording({ name, recordingsDir: tempDir });
+
+    expect(recorder.mode).toBe('record');
+    // Should start without throwing
+    recorder.start();
+    recorder.stop();
+  });
+
+  it('throws on corrupted JSON in replay mode', () => {
+    const name = 'corrupted-replay';
+    const filePath = path.join(tempDir, `${name}.json`);
+    fs.writeFileSync(filePath, '{ invalid json !!!', 'utf-8');
+
+    process.env.LLM_TEST_MODE = 'replay';
+    expect(() => setupLLMRecording({ name, recordingsDir: tempDir })).toThrow();
+  });
+
   it('writes the new meta + recordings format in record mode', async () => {
     const name = 'writes-meta-format';
     const filePath = path.join(tempDir, `${name}.json`);
@@ -378,7 +401,8 @@ describe('recording file format', () => {
 
     const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     expect(parsed.meta.name).toBe(name);
-    expect(parsed.meta.testFile).toBe('/tmp/writes-meta-format.test.ts');
+    // testFile is relativized; /tmp is outside cwd so falls back to basename
+    expect(parsed.meta.testFile).toBe('writes-meta-format.test.ts');
     expect(parsed.meta.provider).toBe('openai');
     expect(parsed.meta.model).toBe('gpt-4o');
     expect(parsed.meta.createdAt).toBeDefined();
