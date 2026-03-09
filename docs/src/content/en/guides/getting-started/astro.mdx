@@ -40,41 +40,39 @@ This creates a project called `mastra-astro`, but you can replace it with any na
 
 ```js title="astro.config.mjs {10}
 // @ts-check
-import { defineConfig } from 'astro/config';
+import { defineConfig } from 'astro/config'
 
-import node from '@astrojs/node';
-import react from '@astrojs/react';
-import tailwindcss from '@tailwindcss/vite';
+import node from '@astrojs/node'
+import react from '@astrojs/react'
+import tailwindcss from '@tailwindcss/vite'
 
 // https://astro.build/config
 export default defineConfig({
   output: 'server',
   adapter: node({
-    mode: 'standalone'
+    mode: 'standalone',
   }),
 
   integrations: [react()],
 
   vite: {
-    plugins: [tailwindcss()]
-  }
-});
+    plugins: [tailwindcss()],
+  },
+})
 ```
 
 Lastly, edit the `tsconfig.json` to resolve paths:
 
-```ts title="tsconfig.json"
+```jsonc title="tsconfig.json"
 {
   "compilerOptions": {
     // ...
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ]
-    }
+      "@/*": ["./src/*"],
+    },
     // ...
-  }
+  },
 }
 ```
 
@@ -88,9 +86,9 @@ npx mastra@latest init
 
 This creates a `src/mastra` folder with an example weather agent and the following files:
 
--	`index.ts` - Mastra config, including memory
+- `index.ts` - Mastra config, including memory
 - `tools/weather-tool.ts` - a tool to fetch weather for a given location
--	`agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
+- `agents/weather-agent.ts`- a weather agent with a prompt that uses the tool
 
 You'll call `weather-agent.ts` from your Astro routes in the next steps.
 
@@ -115,17 +113,17 @@ This downloads the entire AI Elements UI component library into a `@/components/
 Create `src/pages/api/chat.ts`:
 
 ```ts title="src/pages/api/chat.ts"
-import type { APIRoute } from "astro";
-import { handleChatStream } from '@mastra/ai-sdk';
+import type { APIRoute } from 'astro'
+import { handleChatStream } from '@mastra/ai-sdk'
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui'
-import { createUIMessageStreamResponse } from 'ai';
-import { mastra } from '@/mastra';
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/mastra'
 
-const THREAD_ID = 'example-user-id';
-const RESOURCE_ID = 'weather-chat';
+const THREAD_ID = 'example-user-id'
+const RESOURCE_ID = 'weather-chat'
 
 export const POST: APIRoute = async ({ request }) => {
-  const params = await request.json();
+  const params = await request.json()
   const stream = await handleChatStream({
     mastra,
     agentId: 'weather-agent',
@@ -135,8 +133,8 @@ export const POST: APIRoute = async ({ request }) => {
         ...params.memory,
         thread: THREAD_ID,
         resource: RESOURCE_ID,
-      }
-    }
+      },
+    },
   })
 
   return createUIMessageStreamResponse({ stream })
@@ -155,7 +153,7 @@ export const GET: APIRoute = async () => {
     console.log('No previous messages found.')
   }
 
-  const uiMessages = toAISdkV5Messages(response?.messages || []);
+  const uiMessages = toAISdkV5Messages(response?.messages || [])
 
   return Response.json(uiMessages)
 }
@@ -168,77 +166,68 @@ The `POST` route accepts a prompt and streams the agent's response back in AI SD
 Create `src/components/chat.tsx`:
 
 ```tsx title="src/components/chat.tsx"
-import '@/styles/global.css';
-import { useEffect, useState } from 'react';
-import { DefaultChatTransport, type ToolUIPart } from 'ai';
-import { useChat } from '@ai-sdk/react';
+import '@/styles/global.css'
+import { useEffect, useState } from 'react'
+import { DefaultChatTransport, type ToolUIPart } from 'ai'
+import { useChat } from '@ai-sdk/react'
 
 import {
   PromptInput,
   PromptInputBody,
   PromptInputTextarea,
-} from '@/components/ai-elements/prompt-input';
+} from '@/components/ai-elements/prompt-input'
 
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
-} from '@/components/ai-elements/conversation';
+} from '@/components/ai-elements/conversation'
 
-import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
 
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from '@/components/ai-elements/tool';
-
+import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 
 function Chat() {
-  const [input, setInput] = useState<string>('');
+  const [input, setInput] = useState<string>('')
 
   const { messages, setMessages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/chat',
     }),
-  });
+  })
 
   useEffect(() => {
     const fetchMessages = async () => {
-      const res = await fetch('/api/chat');
-      const data = await res.json();
-      setMessages([...data]);
-    };
-    fetchMessages();
-  }, [setMessages]);
+      const res = await fetch('/api/chat')
+      const data = await res.json()
+      setMessages([...data])
+    }
+    fetchMessages()
+  }, [setMessages])
 
   const handleSubmit = async () => {
-    if (!input.trim()) return;
+    if (!input.trim()) return
 
-    sendMessage({ text: input });
-    setInput('');
-  };
+    sendMessage({ text: input })
+    setInput('')
+  }
 
   return (
-    <div className="w-full p-6 relative size-full h-screen">
-      <div className="flex flex-col h-full">
+    <div className="relative size-full h-screen w-full p-6">
+      <div className="flex h-full flex-col">
         <Conversation className="h-full">
           <ConversationContent>
-            {messages.map((message) => (
+            {messages.map(message => (
               <div key={message.id}>
                 {message.parts?.map((part, i) => {
                   if (part.type === 'text') {
                     return (
-                      <Message
-                        key={`${message.id}-${i}`}
-                        from={message.role}>
-                          <MessageContent>
-                            <MessageResponse>{part.text}</MessageResponse>
-                          </MessageContent>
+                      <Message key={`${message.id}-${i}`} from={message.role}>
+                        <MessageContent>
+                          <MessageResponse>{part.text}</MessageResponse>
+                        </MessageContent>
                       </Message>
-                    );
+                    )
                   }
 
                   if (part.type?.startsWith('tool-')) {
@@ -257,10 +246,10 @@ function Chat() {
                           />
                         </ToolContent>
                       </Tool>
-                    );
+                    )
                   }
 
-                  return null;
+                  return null
                 })}
               </div>
             ))}
@@ -271,7 +260,7 @@ function Chat() {
         <PromptInput onSubmit={handleSubmit} className="mt-20">
           <PromptInputBody>
             <PromptInputTextarea
-              onChange={(e) => setInput(e.target.value)}
+              onChange={e => setInput(e.target.value)}
               className="md:leading-10"
               value={input}
               placeholder="Type your message..."
@@ -281,10 +270,10 @@ function Chat() {
         </PromptInput>
       </div>
     </div>
-  );
+  )
 }
 
-export default Chat;
+export default Chat
 ```
 
 This component connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `api/chat` endpoint, sending prompts there and streaming the response back in chunks.
@@ -301,16 +290,16 @@ import Chat from '@/components/chat';
 ---
 
 <html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<Chat client:load />
-	</body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content="{Astro.generator}" />
+    <title>Astro</title>
+  </head>
+  <body>
+    <Chat client:load />
+  </body>
 </html>
 ```
 
@@ -319,8 +308,8 @@ Import the `Chat` component and add it to the body with the `client:load` [direc
 ## Test your agent
 
 1. Run your Astro app with `npm run dev`
-2. Open the chat at http://localhost:4321
-3. Try asking about the weather. If your API key is set up correctly, you'll get a response
+1. Open the chat at [http://localhost:4321](http://localhost:4321)
+1. Try asking about the weather. If your API key is set up correctly, you'll get a response
 
 ## Next steps
 

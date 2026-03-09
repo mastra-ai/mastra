@@ -74,6 +74,8 @@ export interface TokenizeOptions {
   minLength?: number;
   /** Custom stopwords to remove */
   stopwords?: Set<string>;
+  /** Custom split pattern (default: /\s+/) */
+  splitPattern?: RegExp;
 }
 
 /**
@@ -116,6 +118,7 @@ const DEFAULT_TOKENIZE_OPTIONS: Required<TokenizeOptions> = {
   removePunctuation: true,
   minLength: 2,
   stopwords: DEFAULT_STOPWORDS,
+  splitPattern: /\s+/,
 };
 
 /**
@@ -137,7 +140,7 @@ export function tokenize(text: string, options: TokenizeOptions = {}): string[] 
   }
 
   // Split into tokens
-  const tokens = processed.split(/\s+/).filter(token => {
+  const tokens = processed.split(opts.splitPattern).filter(token => {
     // Filter by minimum length
     if (token.length < opts.minLength) {
       return false;

@@ -1,15 +1,16 @@
+import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
 import type { Mastra } from '@mastra/core/mastra';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 export type WorkflowStreamHandlerParams = {
   runId?: string;
   resourceId?: string;
   inputData?: Record<string, any>;
+  initialState?: Record<string, any>;
   resumeData?: Record<string, any>;
   requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
@@ -21,6 +22,8 @@ export type WorkflowStreamHandlerOptions = {
   workflowId: string;
   params: WorkflowStreamHandlerParams;
   includeTextStreamParts?: boolean;
+  sendReasoning?: boolean;
+  sendSources?: boolean;
 };
 
 /**
@@ -31,7 +34,7 @@ export type WorkflowStreamHandlerOptions = {
  * ```ts
  * // Next.js App Router
  * import { handleWorkflowStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from 'ai';
+ * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {
@@ -50,8 +53,10 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
   workflowId,
   params,
   includeTextStreamParts = true,
+  sendReasoning = false,
+  sendSources = false,
 }: WorkflowStreamHandlerOptions): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
-  const { runId, resourceId, inputData, resumeData, requestContext, ...rest } = params;
+  const { runId, resourceId, inputData, initialState, resumeData, requestContext, ...rest } = params;
 
   const workflowObj = mastra.getWorkflowById(workflowId);
   if (!workflowObj) {
@@ -62,20 +67,29 @@ export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
 
   const stream = resumeData
     ? run.resumeStream({ resumeData, ...rest, requestContext })
-    : run.stream({ inputData, ...rest, requestContext });
+    : run.stream({ inputData, initialState, ...rest, requestContext });
 
   return createUIMessageStream<UI_MESSAGE>({
     execute: async ({ writer }) => {
-      for await (const part of toAISdkV5Stream(stream, { from: 'workflow', includeTextStreamParts })) {
+      for await (const part of toAISdkV5Stream(stream, {
+        from: 'workflow',
+        includeTextStreamParts,
+        sendReasoning,
+        sendSources,
+      })) {
         writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
       }
     },
   });
 }
 
-export type WorkflowRouteOptions =
+export type WorkflowRouteOptions = {
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+} & (
   | { path: `${string}:workflowId${string}`; workflow?: never; includeTextStreamParts?: boolean }
-  | { path: string; workflow: string; includeTextStreamParts?: boolean };
+  | { path: string; workflow: string; includeTextStreamParts?: boolean }
+);
 
 /**
  * Creates a workflow route handler for streaming workflow execution using the AI SDK format.
@@ -104,6 +118,8 @@ export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
   includeTextStreamParts = true,
+  sendReasoning = false,
+  sendSources = false,
 }: WorkflowRouteOptions): ReturnType<typeof registerApiRoute> {
   if (!workflow && !path.includes('/:workflowId')) {
     throw new Error('Path must include :workflowId to route to the correct workflow or pass the workflow explicitly');
@@ -192,6 +208,8 @@ export function workflowRoute({
           requestContext: contextRequestContext || params.requestContext,
         },
         includeTextStreamParts,
+        sendReasoning,
+        sendSources,
       });
 
       return createUIMessageStreamResponse({ stream: uiMessageStream });

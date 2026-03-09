@@ -1,5 +1,107 @@
 # create-mastra
 
+## 1.3.7
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.1
+
+### Patch Changes
+
+- Updated default OpenAI model from gpt-4o to gpt-5-mini for new projects. ([#13874](https://github.com/mastra-ai/mastra/pull/13874))
+
+## 1.3.7-alpha.0
+
+## 1.3.6
+
+## 1.3.6-alpha.0
+
+## 1.3.5
+
+## 1.3.5-alpha.0
+
+## 1.3.4
+
+## 1.3.4-alpha.0
+
+## 1.3.3
+
+### Patch Changes
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Added a side-by-side diff view to the Dataset comparison pages (Compare Items and Compare Item Versions), making it easier to spot differences between dataset entries at a glance. ([#13267](https://github.com/mastra-ai/mastra/pull/13267))
+
+- Added a searchable combobox header to the Dataset page, allowing you to quickly filter and switch between datasets without scrolling through a long list. ([#13273](https://github.com/mastra-ai/mastra/pull/13273))
+
+## 1.3.2
+
+### Patch Changes
+
+- Updated style of Button and Select experimental variants ([#13186](https://github.com/mastra-ai/mastra/pull/13186))
+
+## 1.3.2-alpha.1
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Updated style of Button and Select experimental variants ([#13186](https://github.com/mastra-ai/mastra/pull/13186))
+
+## 1.3.1
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#12989](https://github.com/mastra-ai/mastra/pull/12989))
+  - Updated dependency [`commander@^14.0.3` ↗︎](https://www.npmjs.com/package/commander/v/14.0.3) (from `^14.0.2`, in `dependencies`)
+
+## 1.3.0
+
+### Patch Changes
+
+- Supporting work to enable workflow step metadata ([#12508](https://github.com/mastra-ai/mastra/pull/12508))
+
+## 1.3.0-alpha.3
+
+## 1.3.0-alpha.2
+
+## 1.3.0-alpha.1
+
+### Patch Changes
+
+- Supporting work to enable workflow step metadata ([#12508](https://github.com/mastra-ai/mastra/pull/12508))
+
+## 1.2.1-alpha.0
+
+## 1.2.0
+
+## 1.2.0-alpha.1
+
+## 1.2.0-alpha.0
+
+## 1.1.0
+
+### Patch Changes
+
+- fix workflow run input caching bug in studio UI ([#11784](https://github.com/mastra-ai/mastra/pull/11784))
+
+## 1.1.0-alpha.3
+
 ## 1.1.0-alpha.2
 
 ## 1.1.0-alpha.1

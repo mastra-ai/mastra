@@ -1,5 +1,109 @@
 # @mastra/schema-compat
 
+## 1.1.3
+
+### Patch Changes
+
+- Fix `ZodNull` throwing "does not support zod type: ZodNull" for Anthropic and OpenAI reasoning models. MCP tools with nullable properties in their JSON Schema produce `z.null()` which was unhandled by these provider compat layers. ([#13496](https://github.com/mastra-ai/mastra/pull/13496))
+
+## 1.1.3-alpha.0
+
+### Patch Changes
+
+- Fix `ZodNull` throwing "does not support zod type: ZodNull" for Anthropic and OpenAI reasoning models. MCP tools with nullable properties in their JSON Schema produce `z.null()` which was unhandled by these provider compat layers. ([#13496](https://github.com/mastra-ai/mastra/pull/13496))
+
+## 1.1.2
+
+### Patch Changes
+
+- Fixed Groq provider not receiving schema compatibility transformations, which caused HTTP 400 errors when AI models omitted optional parameters from workspace tool calls (e.g. list_files). Groq now correctly gets the same optional-to-nullable schema handling as OpenAI. ([#13303](https://github.com/mastra-ai/mastra/pull/13303))
+
+## 1.1.2-alpha.0
+
+### Patch Changes
+
+- Fixed Groq provider not receiving schema compatibility transformations, which caused HTTP 400 errors when AI models omitted optional parameters from workspace tool calls (e.g. list_files). Groq now correctly gets the same optional-to-nullable schema handling as OpenAI. ([#13303](https://github.com/mastra-ai/mastra/pull/13303))
+
+## 1.1.1
+
+### Patch Changes
+
+- fix(schema-compat): fix zodToJsonSchema routing for v3/v4 Zod schemas ([#13253](https://github.com/mastra-ai/mastra/pull/13253))
+
+  The `zodToJsonSchema` function now reliably detects and routes Zod v3 vs v4 schemas regardless of which version the ambient `zod` import resolves to. Previously, the detection relied on checking `'toJSONSchema' in z` against the ambient `z` import, which could resolve to either v3 or v4 depending on the environment (monorepo vs global install). This caused v3 schemas to be passed to v4's `toJSONSchema()` (crashing with "Cannot read properties of undefined (reading 'def')") or v4 schemas to be passed to the v3 converter (producing schemas missing the `type` field).
+
+  The fix explicitly imports `z as zV4` from `zod/v4` and routes based on the schema's own `_zod` property, making the behavior environment-independent.
+
+  Also migrates all mastracode tool files from `zod/v3` to `zod` imports now that the schema-compat fix supports both versions correctly.
+
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- fix(schema-compat): fix zodToJsonSchema routing for v3/v4 Zod schemas ([#13253](https://github.com/mastra-ai/mastra/pull/13253))
+
+  The `zodToJsonSchema` function now reliably detects and routes Zod v3 vs v4 schemas regardless of which version the ambient `zod` import resolves to. Previously, the detection relied on checking `'toJSONSchema' in z` against the ambient `z` import, which could resolve to either v3 or v4 depending on the environment (monorepo vs global install). This caused v3 schemas to be passed to v4's `toJSONSchema()` (crashing with "Cannot read properties of undefined (reading 'def')") or v4 schemas to be passed to the v3 converter (producing schemas missing the `type` field).
+
+  The fix explicitly imports `z as zV4` from `zod/v4` and routes based on the schema's own `_zod` property, making the behavior environment-independent.
+
+  Also migrates all mastracode tool files from `zod/v3` to `zod` imports now that the schema-compat fix supports both versions correctly.
+
+## 1.1.0
+
+### Minor Changes
+
+- Added [Standard Schema](https://github.com/standard-schema/standard-schema) support to `@mastra/schema-compat`. This enables interoperability with any schema library that implements the Standard Schema specification. ([#12527](https://github.com/mastra-ai/mastra/pull/12527))
+
+  **New exports:**
+  - `toStandardSchema()` - Convert Zod, JSON Schema, or AI SDK schemas to Standard Schema format
+  - `StandardSchemaWithJSON` - Type for schemas implementing both validation and JSON Schema conversion
+  - `InferInput`, `InferOutput` - Utility types for type inference
+
+  **Example usage:**
+
+  ```typescript
+  import { toStandardSchema } from '@mastra/schema-compat/schema';
+  import { z } from 'zod';
+
+  // Convert a Zod schema to Standard Schema
+  const zodSchema = z.object({ name: z.string(), age: z.number() });
+  const standardSchema = toStandardSchema(zodSchema);
+
+  // Use validation
+  const result = standardSchema['~standard'].validate({ name: 'John', age: 30 });
+
+  // Get JSON Schema
+  const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
+  ```
+
+## 1.1.0-alpha.0
+
+### Minor Changes
+
+- Added [Standard Schema](https://github.com/standard-schema/standard-schema) support to `@mastra/schema-compat`. This enables interoperability with any schema library that implements the Standard Schema specification. ([#12527](https://github.com/mastra-ai/mastra/pull/12527))
+
+  **New exports:**
+  - `toStandardSchema()` - Convert Zod, JSON Schema, or AI SDK schemas to Standard Schema format
+  - `StandardSchemaWithJSON` - Type for schemas implementing both validation and JSON Schema conversion
+  - `InferInput`, `InferOutput` - Utility types for type inference
+
+  **Example usage:**
+
+  ```typescript
+  import { toStandardSchema } from '@mastra/schema-compat/schema';
+  import { z } from 'zod';
+
+  // Convert a Zod schema to Standard Schema
+  const zodSchema = z.object({ name: z.string(), age: z.number() });
+  const standardSchema = toStandardSchema(zodSchema);
+
+  // Use validation
+  const result = standardSchema['~standard'].validate({ name: 'John', age: 30 });
+
+  // Get JSON Schema
+  const jsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
+  ```
+
 ## 1.0.0
 
 ### Major Changes

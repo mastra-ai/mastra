@@ -5,6 +5,7 @@ import type { TestCaseWithContext } from '../../utils';
 
 import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createHallucinationScorer } from './index';
+import type { GetContextFn, GetContextParams } from './index';
 
 vi.setConfig({ testTimeout: 30000, hookTimeout: 30000 });
 
@@ -349,5 +350,122 @@ describe('HallucinationMetric', () => {
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
 
     expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
+  });
+
+  describe('getContext hook', () => {
+    it('should call getContext hook when provided', async () => {
+      const testCase = testCases[0]!;
+      const getContextMock = vi
+        .fn<Parameters<GetContextFn>, ReturnType<GetContextFn>>()
+        .mockReturnValue(testCase.context);
+
+      const scorer = createHallucinationScorer({
+        model,
+        options: { getContext: getContextMock },
+      });
+
+      const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+      await scorer.run(createAgentTestRun({ inputMessages, output }));
+
+      // getContext is called twice: once in analyze step, once in generateReason step
+      expect(getContextMock).toHaveBeenCalled();
+      expect(getContextMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should pass correct params to getContext', async () => {
+      const testCase = testCases[0]!;
+      let capturedParams: GetContextParams | undefined;
+
+      const getContext: GetContextFn = params => {
+        capturedParams = params;
+        return testCase.context;
+      };
+
+      const scorer = createHallucinationScorer({
+        model,
+        options: { getContext },
+      });
+
+      const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+      await scorer.run(createAgentTestRun({ inputMessages, output }));
+
+      expect(capturedParams).toBeDefined();
+      expect(capturedParams!.run).toBeDefined();
+      expect(capturedParams!.run.output).toBeDefined();
+      expect(capturedParams!.results).toBeDefined();
+    });
+
+    it('should use getContext result over static context', async () => {
+      const testCase = testCases[0]!;
+      const dynamicContext = ['Dynamic context from hook'];
+      const getContext: GetContextFn = () => dynamicContext;
+
+      const scorer = createHallucinationScorer({
+        model,
+        options: {
+          context: testCase.context, // static context should be ignored
+          getContext,
+        },
+      });
+
+      const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
+
+      // With only one context item that doesn't match the output, score should be higher (more hallucination)
+      expect(result.score).toBeGreaterThan(0);
+    });
+
+    it('should fall back to static context when getContext is not provided', async () => {
+      const testCase = testCases[0]!;
+      const scorer = createHallucinationScorer({
+        model,
+        options: { context: testCase.context },
+      });
+
+      const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
+
+      // Score should match expected when using static context
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
+    });
+
+    it('should support async getContext function', async () => {
+      const testCase = testCases[0]!;
+      const getContext: GetContextFn = async () => {
+        // Simulate async operation
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return testCase.context;
+      };
+
+      const scorer = createHallucinationScorer({
+        model,
+        options: { getContext },
+      });
+
+      const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
+
+      expect(result.score).toBeCloseTo(testCase.expectedResult.score, 2);
+    });
+
+    it('should use empty context when neither getContext nor context is provided', async () => {
+      const testCase = testCases[5]!; // Empty context test case
+      const scorer = createHallucinationScorer({
+        model,
+        options: {}, // No context or getContext provided
+      });
+
+      const inputMessages = [createTestMessage({ role: 'user', content: testCase.input, id: 'test-input' })];
+      const output = [createTestMessage({ role: 'assistant', content: testCase.output, id: 'test-output' })];
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
+
+      // With empty context, factual claims are considered hallucinations
+      expect(result.score).toBe(testCase.expectedResult.score);
+    });
   });
 });

@@ -44,6 +44,11 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
+  // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
+  if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
+
+  // Email fields need valid email format
+  if (field === 'email' || field.includes('email')) return 'test@example.com';
 
   // Version comparison query params (from/to are version IDs)
   // Both use the same known version ID - comparing a version to itself returns empty diffs,
@@ -57,6 +62,7 @@ export function generateContextualValue(fieldName?: string): string {
 
   if (field.includes('agent')) return 'test-agent';
   if (field.includes('workflow')) return 'test-workflow';
+  if (field.includes('tool') && field.includes('slug')) return 'test-tool-slug';
   if (field.includes('tool')) return 'test-tool';
   if (field.includes('skill')) return 'test-skill';
   if (field.includes('reference') && field.includes('path')) return 'test-reference.md';
@@ -76,6 +82,14 @@ export function generateContextualValue(fieldName?: string): string {
   if (field.includes('model')) return 'gpt-4o';
   if (field.includes('action')) return 'merge-template';
   if (field.includes('entity')) return 'test-entity';
+  if (field.includes('provider')) return 'test-provider';
+  if (field.includes('dataset') && field.includes('version')) return '1';
+  if (field.includes('dataset')) return 'test-dataset';
+  if (field.includes('item')) return 'test-item';
+  if (field.includes('experiment')) return 'test-experiment';
+  if (field.includes('mcp') && field.includes('client')) return 'test-mcp-client';
+  if (field.includes('prompt') && field.includes('block')) return 'test-prompt-block';
+  if (field.includes('block')) return 'test-prompt-block';
 
   return 'test-string';
 }
@@ -98,7 +112,11 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     return generateValidDataFromSchema(def.innerType, fieldName);
   }
   if (typeName === 'ZodDefault') {
-    return def.defaultValue();
+    if ('_zod' in schema) {
+      return def.defaultValue;
+    } else {
+      return def.defaultValue();
+    }
   }
 
   if (typeName === 'ZodString') return generateContextualValue(fieldName);
@@ -109,16 +127,32 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodDate') return new Date();
   if (typeName === 'ZodBigInt') return BigInt(0);
 
-  if (typeName === 'ZodLiteral') return def.value;
+  if (typeName === 'ZodLiteral') {
+    if ('_zod' in schema) {
+      return def.values?.[0];
+    } else {
+      return def.value;
+    }
+  }
 
-  if (typeName === 'ZodEnum') return def.values[0];
+  if (typeName === 'ZodEnum') {
+    if ('_zod' in schema) {
+      return Object.values(def.entries)[0];
+    } else {
+      return def.values[0];
+    }
+  }
   if (typeName === 'ZodNativeEnum') {
     const values = Object.values(def.values);
     return values[0];
   }
 
   if (typeName === 'ZodArray') {
-    return [generateValidDataFromSchema(def.type, fieldName)];
+    if ('_zod' in schema) {
+      return [generateValidDataFromSchema(def.element, fieldName)];
+    } else {
+      return [generateValidDataFromSchema(def.type, fieldName)];
+    }
   }
 
   if (typeName === 'ZodObject') {
@@ -218,7 +252,12 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
-  if (route.path.includes(':scorerId')) params.scorerId = 'test-scorer';
+  // For stored scorer version routes, use the stored scorer ID to match test context
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/')) {
+    params.scorerId = 'test-stored-scorer';
+  } else if (route.path.includes(':scorerId')) {
+    params.scorerId = 'test-scorer';
+  }
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';
@@ -231,6 +270,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':entityId')) params.entityId = 'test-agent';
   if (route.path.includes(':actionId')) params.actionId = 'merge-template';
   if (route.path.includes(':storedAgentId')) params.storedAgentId = 'test-stored-agent';
+  if (route.path.includes(':storedScorerId')) params.storedScorerId = 'test-stored-scorer';
   if (route.path.includes(':versionId')) params.versionId = 'test-version-id';
   if (route.path.includes(':processorId')) params.processorId = 'test-processor';
   // MCP route params - need to get actual server ID from test context
@@ -244,6 +284,26 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Skills route params
   if (route.path.includes(':skillName')) params.skillName = 'test-skill';
   if (route.path.includes(':referencePath')) params.referencePath = 'test-reference.md';
+
+  // Stored entity route params
+  if (route.path.includes(':storedMCPClientId')) params.storedMCPClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':mcpClientId')) params.mcpClientId = 'test-stored-mcp-client';
+  if (route.path.includes(':storedPromptBlockId')) params.storedPromptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':promptBlockId')) params.promptBlockId = 'test-stored-prompt-block';
+  if (route.path.includes(':storedWorkspaceId')) params.storedWorkspaceId = 'test-stored-workspace';
+  if (route.path.includes(':storedSkillId')) params.storedSkillId = 'test-stored-skill';
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/'))
+    params.scorerId = 'test-stored-scorer';
+
+  // Dataset route params
+  if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';
+  if (route.path.includes(':itemId')) params.itemId = 'test-item';
+  if (route.path.includes(':experimentId')) params.experimentId = 'test-experiment';
+  if (route.path.includes(':datasetVersion')) params.datasetVersion = '1';
+
+  // Tool provider route params
+  if (route.path.includes(':providerId')) params.providerId = 'test-provider';
+  if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
 
   return params;
 }

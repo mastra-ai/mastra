@@ -1,5 +1,6 @@
 import z from 'zod';
 import { tracingOptionsSchema, coreMessageSchema, messageResponseSchema } from './common';
+import { defaultOptionsSchema } from './default-options';
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
@@ -105,9 +106,12 @@ export const serializedAgentSchema = z.object({
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
   modelList: z.array(modelConfigSchema).optional(),
-  defaultOptions: z.record(z.string(), z.any()).optional(),
+  defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.any()).optional(),
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+  activeVersionId: z.string().optional(),
+  hasDraft: z.boolean().optional(),
 });
 
 /**
@@ -266,11 +270,11 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 /**
  * Body schema for tool execute endpoint
  * Simple schema - tool validates its own input data
- * Note: Using z.custom() instead of z.any()/z.any() because those are treated as optional by Zod
+ * Note: Using z.unknown().refine() instead of z.any() to ensure data is required
+ * (z.any() is treated as optional by Zod)
  */
-
 const executeToolDataBodySchema = z.object({
-  data: z.custom<unknown>(x => x !== undefined, { message: 'data is required' }),
+  data: z.unknown().refine(x => x !== undefined, { message: 'data is required' }),
 });
 
 export const executeToolBodySchema = executeToolDataBodySchema.extend({

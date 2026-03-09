@@ -23,6 +23,7 @@ import { ElasticSearchVector } from '@mastra/elasticsearch';
 const vectorDB = new ElasticSearchVector({
   url: 'http://localhost:9200',
   id: 'my-vector-store',
+  auth: { apiKey: 'insert-api-key' }
 });
 
 // Create a new vector index
@@ -77,6 +78,9 @@ The ElasticSearchVector store can be initialized with:
 
 - `url`: The ElasticSearch node URL (required)
 - `id`: A unique identifier for the vector store instance (required)
+- `auth` : The authentication mechanism (HTTP basic or API key)
+  - HTTP basic: { auth: { username : 'insert-username', password : 'insert-password' }}
+  - API key: { auth: { apiKey: 'insert-api-key' }}
 
 ## Features
 
@@ -102,7 +106,7 @@ The following filter operators are supported:
 
 - **Comparison**: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`
 - **Array**: `$in`, `$nin`, `$all`
-- **Logical**: `$and`, `$or`, `$not`
+- **Logical**: `$and`, `$or`, `$not`, `$nor`
 - **Element**: `$exists`
 - **Regex**: `$regex`
 

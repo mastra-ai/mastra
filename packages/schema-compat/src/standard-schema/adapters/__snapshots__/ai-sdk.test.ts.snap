@@ -1,0 +1,93 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ai-sdk standard-schema adapter > toStandardSchema > should handle array schemas 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "items": {
+    "properties": {
+      "id": {
+        "type": "number",
+      },
+    },
+    "required": [
+      "id",
+    ],
+    "type": "object",
+  },
+  "minItems": 1,
+  "type": "array",
+}
+`;
+
+exports[`ai-sdk standard-schema adapter > toStandardSchema > should handle enum schemas 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "enum": [
+    "red",
+    "green",
+    "blue",
+  ],
+  "type": "string",
+}
+`;
+
+exports[`ai-sdk standard-schema adapter > toStandardSchema > should handle nested object schemas 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "tags": {
+      "items": {
+        "type": "string",
+      },
+      "type": "array",
+    },
+    "user": {
+      "properties": {
+        "email": {
+          "format": "email",
+          "type": "string",
+        },
+        "name": {
+          "type": "string",
+        },
+      },
+      "required": [
+        "name",
+      ],
+      "type": "object",
+    },
+  },
+  "required": [
+    "user",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`ai-sdk standard-schema adapter > toStandardSchema > should return JSON Schema with draft-07 target 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "age": {
+      "type": "number",
+    },
+    "name": {
+      "type": "string",
+    },
+  },
+  "type": "object",
+}
+`;
+
+exports[`ai-sdk standard-schema adapter > toStandardSchema > should return JSON Schema with draft-2020-12 target 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "string",
+}
+`;
+
+exports[`ai-sdk standard-schema adapter > toStandardSchema > should return JSON Schema with openapi-3.0 target (no $schema) 1`] = `
+{
+  "type": "string",
+}
+`;

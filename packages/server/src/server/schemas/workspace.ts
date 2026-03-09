@@ -69,6 +69,29 @@ export const fileEntrySchema = z.object({
   name: z.string(),
   type: z.enum(['file', 'directory']),
   size: z.number().optional(),
+  mount: z
+    .object({
+      provider: z.string(),
+      icon: z.string().optional(),
+      displayName: z.string().optional(),
+      description: z.string().optional(),
+      status: z
+        .enum([
+          'pending',
+          'initializing',
+          'ready',
+          'starting',
+          'running',
+          'stopping',
+          'stopped',
+          'destroying',
+          'destroyed',
+          'error',
+        ])
+        .optional(),
+      error: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const fsReadResponseSchema = z.object({
@@ -146,12 +169,25 @@ export const searchResponseSchema = z.object({
 export const indexBodySchema = z.object({
   path: z.string().describe('Path to use as document ID'),
   content: z.string().describe('Content to index'),
-  metadata: z.record(z.unknown()).optional().describe('Optional metadata'),
+  metadata: z.record(z.string(), z.unknown()).optional().describe('Optional metadata'),
 });
 
 export const indexResponseSchema = z.object({
   success: z.boolean(),
   path: z.string(),
+});
+
+// =============================================================================
+// Mount Schemas
+// =============================================================================
+
+export const mountInfoSchema = z.object({
+  path: z.string().describe('Mount path'),
+  provider: z.string().describe('Filesystem provider type'),
+  readOnly: z.boolean().describe('Whether the mount is read-only'),
+  displayName: z.string().optional().describe('Human-readable name'),
+  icon: z.string().optional().describe('UI icon identifier'),
+  name: z.string().optional().describe('Filesystem instance name'),
 });
 
 // =============================================================================
@@ -178,6 +214,19 @@ export const workspaceInfoResponseSchema = z.object({
       readOnly: z.boolean(),
     })
     .optional(),
+  filesystem: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      provider: z.string(),
+      status: z.string().optional(),
+      error: z.string().optional(),
+      readOnly: z.boolean().optional(),
+      icon: z.string().optional(),
+      metadata: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+  mounts: z.array(mountInfoSchema).optional().describe('Mount points (only present for CompositeFilesystem)'),
 });
 
 const workspaceItemSchema = z.object({
@@ -237,7 +286,7 @@ export const skillMetadataSchema = z.object({
   description: z.string(),
   license: z.string().optional(),
   compatibility: z.unknown().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const skillSourceSchema = z.discriminatedUnion('type', [
@@ -255,8 +304,23 @@ export const skillSchema = skillMetadataSchema.extend({
   assets: z.array(z.string()),
 });
 
+/**
+ * Source info for skills installed via skills.sh
+ * Stored in .meta.json when a skill is installed
+ */
+export const skillsShSourceSchema = z.object({
+  owner: z.string().describe('GitHub owner/org'),
+  repo: z.string().describe('GitHub repository'),
+});
+
+export const skillMetadataWithPathSchema = skillMetadataSchema.extend({
+  path: z.string().describe('Path to the skill directory'),
+  /** Source info for skills installed via skills.sh (from .meta.json) */
+  skillsShSource: skillsShSourceSchema.optional(),
+});
+
 export const listSkillsResponseSchema = z.object({
-  skills: z.array(skillMetadataSchema),
+  skills: z.array(skillMetadataWithPathSchema),
   isSkillsConfigured: z.boolean().describe('Whether skills are configured in the workspace'),
 });
 
@@ -309,4 +373,88 @@ export const skillSearchResultSchema = z.object({
 export const searchSkillsResponseSchema = z.object({
   results: z.array(skillSearchResultSchema),
   query: z.string(),
+});
+
+// =============================================================================
+// skills.sh Proxy Schemas
+// =============================================================================
+
+export const skillsShSearchQuerySchema = z.object({
+  q: z.string().describe('Search query'),
+  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
+});
+
+export const skillsShPopularQuerySchema = z.object({
+  limit: z.coerce.number().optional().default(10).describe('Maximum number of results'),
+  offset: z.coerce.number().optional().default(0).describe('Offset for pagination'),
+});
+
+export const skillsShSkillSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  installs: z.number(),
+  topSource: z.string(),
+});
+
+export const skillsShSearchResponseSchema = z.object({
+  query: z.string(),
+  searchType: z.string(),
+  skills: z.array(skillsShSkillSchema),
+  count: z.number(),
+});
+
+export const skillsShListResponseSchema = z.object({
+  skills: z.array(skillsShSkillSchema),
+  count: z.number(),
+  limit: z.number(),
+  offset: z.number(),
+});
+
+export const skillsShPreviewQuerySchema = z.object({
+  owner: z.string().describe('GitHub repository owner'),
+  repo: z.string().describe('GitHub repository name'),
+  path: z.string().describe('Path to skill within repo'),
+});
+
+export const skillsShPreviewResponseSchema = z.object({
+  content: z.string(),
+});
+
+export const skillsShInstallBodySchema = z.object({
+  owner: z.string().describe('GitHub repository owner'),
+  repo: z.string().describe('GitHub repository name'),
+  skillName: z.string().describe('Skill name from skills.sh'),
+  mount: z.string().optional().describe('Mount path to install into (for CompositeFilesystem)'),
+});
+
+export const skillsShInstallResponseSchema = z.object({
+  success: z.boolean(),
+  skillName: z.string(),
+  installedPath: z.string(),
+  filesWritten: z.number(),
+});
+
+export const skillsShRemoveBodySchema = z.object({
+  skillName: z.string().describe('Name of the installed skill to remove'),
+});
+
+export const skillsShRemoveResponseSchema = z.object({
+  success: z.boolean(),
+  skillName: z.string(),
+  removedPath: z.string(),
+});
+
+export const skillsShUpdateBodySchema = z.object({
+  skillName: z.string().optional().describe('Specific skill to update, or omit to update all'),
+});
+
+export const skillsShUpdateResponseSchema = z.object({
+  updated: z.array(
+    z.object({
+      skillName: z.string(),
+      success: z.boolean(),
+      filesWritten: z.number().optional(),
+      error: z.string().optional(),
+    }),
+  ),
 });

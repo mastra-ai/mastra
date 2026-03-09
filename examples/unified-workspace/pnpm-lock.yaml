@@ -6,6 +6,9 @@ settings:
 
 overrides:
   '@mastra/core': link:../../packages/core
+  '@mastra/e2b': link:../../workspaces/e2b
+  '@mastra/gcs': link:../../workspaces/gcs
+  '@mastra/s3': link:../../workspaces/s3
   '@mastra/memory': link:../../packages/memory
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/client-js': link:../../client-sdks/client-js
@@ -26,9 +29,15 @@ importers:
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
+      '@mastra/e2b':
+        specifier: link:../../workspaces/e2b
+        version: link:../../workspaces/e2b
       '@mastra/fastembed':
         specifier: link:../../packages/fastembed
         version: link:../../packages/fastembed
+      '@mastra/gcs':
+        specifier: link:../../workspaces/gcs
+        version: link:../../workspaces/gcs
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
@@ -38,6 +47,9 @@ importers:
       '@mastra/observability':
         specifier: link:../../observability/mastra
         version: link:../../observability/mastra
+      '@mastra/s3':
+        specifier: link:../../workspaces/s3
+        version: link:../../workspaces/s3
       ai:
         specifier: ^6.0.1
         version: 6.0.38(zod@3.25.76)

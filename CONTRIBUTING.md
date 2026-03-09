@@ -6,12 +6,12 @@ Welcome to Mastra! We welcome contributions of any size and skill level. Thanks 
 >
 > **For new contributors:** Take a look at [https://github.com/firstcontributions/first-contributions](https://github.com/firstcontributions/first-contributions) for helpful information on contributing to open source projects.
 
-## Contributor Guidelines
+## Contributor guidelines
 
 Please read the guidance below about what to do if you:
 
 - [Found a bug](#did-you-find-a-bug)
-- [Fixed a bug](#did-you-write-a-patch-that-fixes-a-bug)
+- [Want to open a Pull Request](#do-you-want-to-open-a-pull-request)
 - [Want to add a new feature or change an existing one](#do-you-intend-to-add-a-new-feature-or-change-an-existing-one)
 - [Want to improve documentation](#want-to-improve-documentation)
 
@@ -24,10 +24,13 @@ Read the [Development Guide](./DEVELOPMENT.md) for information on setting up a d
 
 Be sure to include a title and clear description, as much relevant information as possible, and a **code sample** or an **executable test case** demonstrating the expected behavior that is not occurring.
 
-### Did you write a patch that fixes a bug?
+### Do you want to open a Pull Request?
 
-- Open a new GitHub pull request with the patch
-- Ensure the PR description clearly describes the problem and solution. Include the relevant issue number if applicable
+Follow the [Development Guide](./DEVELOPMENT.md) to learn how to set up this repository and run its tests. After successfully testing things locally, open a pull request with your changes.
+
+Ensure that the PR description clearly describes the problem and solution. Include the relevant issue number if applicable.
+
+**Important:** Coderabbit, our AI assistant, will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and provide feedback or merge it.
 
 ### Do you intend to add a new feature or change an existing one?
 
@@ -38,7 +41,15 @@ Be sure to include a title and clear description, as much relevant information a
 
 Read the [documentation contribution guidelines](./docs/CONTRIBUTING.md) for more details.
 
-## Minimal Reproduction
+## Enterprise Edition (EE) code
+
+Some features in this repository are licensed under the Mastra Enterprise License rather than Apache-2.0. EE code lives in directories named `ee/` within existing packages (e.g., `packages/core/src/auth/ee/`).
+
+**Contributing to EE code**: Contributions to EE-licensed code are welcome. By submitting changes to code within `ee/` directories, you agree that your contributions will be licensed under the Mastra Enterprise License.
+
+**Identifying EE code**: Any directory named `ee/` and its contents are covered by the enterprise license. All other code is Apache-2.0. See [LICENSE.md](./LICENSE.md) for the full mapping.
+
+## Minimal reproduction
 
 A minimal reproduction is a simplified Mastra project that demonstrates a bug with the least amount of code necessary. This helps isolate the issue and makes it easier for maintainers to verify and fix the problem. A minimal reproduction also proves that the bug is not caused by other parts of your codebase or environment. Lastly, creating a minimal reproduction often helps you identify the root cause of the issue yourself.
 
@@ -114,7 +125,7 @@ Create a public GitHub repository with your reproduction:
 
 **Build vs runtime issues**:
 
-- Clarify if the bug occurs during `pnpm build`, `pnpm dev`, or at runtime
+- Clarify if the bug occurs during `mastra build`, `mastra dev`, or at runtime
 - Include build output if it's a build-time error
 
 **Monorepo context**:

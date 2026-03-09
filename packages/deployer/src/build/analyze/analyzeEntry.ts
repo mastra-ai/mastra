@@ -168,9 +168,12 @@ async function captureDependenciesToOptimize(
       }
 
       try {
+        const importerPath = output.facadeModuleId
+          ? pathToFileURL(output.facadeModuleId).href
+          : pathToFileURL(projectRoot).href;
         // Absolute path to the dependency using ESM-compatible resolution
         const resolvedPath = resolveModule(dep, {
-          paths: [pathToFileURL(projectRoot).href],
+          paths: [importerPath],
         });
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);

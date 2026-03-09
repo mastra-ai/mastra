@@ -9,8 +9,8 @@ export function TextAndIcon({ children, className }: TextAndIconProps) {
   return (
     <span
       className={cn(
-        'flex items-center gap-2 text-neutral4 text-ui-md',
-        '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-50 [&_svg]:flex-shrink-0',
+        'flex items-center gap-2',
+        '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:opacity-60 [&_svg]:flex-shrink-0',
         className,
       )}
     >

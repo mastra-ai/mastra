@@ -320,6 +320,28 @@ describe('prepareToolsAndToolChoice', () => {
       expect(result.tools).toBeUndefined();
       expect(result.toolChoice).toBeUndefined();
     });
+
+    it('should preserve toolChoice "none" when tools are empty', () => {
+      const result = prepareToolsAndToolChoice({
+        tools: {},
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
+
+      expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
+
+    it('should preserve toolChoice "none" when tools are undefined', () => {
+      const result = prepareToolsAndToolChoice({
+        tools: undefined,
+        toolChoice: 'none',
+        activeTools: undefined,
+      });
+
+      expect(result.tools).toBeUndefined();
+      expect(result.toolChoice).toEqual({ type: 'none' });
+    });
   });
 
   describe('default targetVersion', () => {

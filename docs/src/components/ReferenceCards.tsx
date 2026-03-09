@@ -2,6 +2,17 @@ import React from 'react'
 import { CardItems } from './CardItems'
 import sidebars from '@site/src/content/en/reference/sidebars'
 
+/**
+ * Convert a doc id to an href, handling index pages
+ * e.g., "deployer/index" -> "/reference/deployer"
+ *       "agents/agent" -> "/reference/agents/agent"
+ */
+function docIdToHref(docId: string): string {
+  // Strip /index suffix since those are served at the parent path
+  const cleanId = docId.replace(/\/index$/, '')
+  return `/reference/${cleanId}`
+}
+
 // Extract reference sections from sidebar config
 function extractReferenceSections() {
   const sections: Record<string, Array<{ title: string; href: string }>> = {}
@@ -31,7 +42,7 @@ function extractReferenceSections() {
           if (subItem.type === 'doc') {
             sections[label].push({
               title: subItem.label,
-              href: `/reference/${subItem.id}`,
+              href: docIdToHref(subItem.id),
             })
           } else if (subItem.type === 'category') {
             // Handle nested categories by including their items
@@ -40,7 +51,7 @@ function extractReferenceSections() {
                 if (nestedItem.type === 'doc') {
                   sections[label].push({
                     title: nestedItem.label,
-                    href: `/reference/${nestedItem.id}`,
+                    href: docIdToHref(nestedItem.id),
                   })
                 }
               })

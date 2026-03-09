@@ -10,8 +10,8 @@ import {
   ZodDefault,
   ZodNull,
   ZodNullable,
-} from 'zod';
-import type { ZodTypeAny } from 'zod';
+} from 'zod/v3';
+import type { ZodTypeAny } from 'zod/v3';
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import type { SchemaCompatLayer as ParentSchemaCompatLayer } from './schema-compatibility';
@@ -215,6 +215,13 @@ export class SchemaCompatLayer {
   }
 
   /**
+   * Type guard for nullable Zod types
+   */
+  isNullable(v: ZodTypeAny): v is ZodNullable<any> {
+    return v instanceof ZodNullable;
+  }
+
+  /**
    * Type guard for array Zod types
    */
   isArr(v: ZodTypeAny): v is ZodArray<any, any> {
@@ -284,7 +291,7 @@ export class SchemaCompatLayer {
    * @abstract
    */
   processZodType(value: ZodTypeAny): ZodTypeAny {
-    return this.parent.processZodType(value);
+    return this.parent.processZodType(value) as ZodTypeAny;
   }
 
   /**
@@ -596,6 +603,24 @@ export class SchemaCompatLayer {
   ): ZodTypeAny {
     if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
       return this.processZodType(value._def.innerType).optional();
+    } else {
+      return value;
+    }
+  }
+
+  /**
+   * Default handler for Zod nullable types. Processes the inner type and maintains nullability.
+   *
+   * @param value - The Zod nullable to process
+   * @param handleTypes - Types that should be processed vs passed through
+   * @returns The processed Zod nullable
+   */
+  public defaultZodNullableHandler(
+    value: ZodNullable<any>,
+    handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
+  ): ZodTypeAny {
+    if (handleTypes.includes(value._def.innerType._def.typeName as AllZodType)) {
+      return this.processZodType(value._def.innerType).nullable();
     } else {
       return value;
     }

@@ -31,7 +31,8 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/mcp": "link:../../packages/mcp",
       "@mastra/memory": "link:../../packages/memory",
-      "mastra": "link:../../packages/cli"
+      "mastra": "link:../../packages/cli",
+      "qs": "^6.14.1"
     }
   },
   "version": "0.0.1",
