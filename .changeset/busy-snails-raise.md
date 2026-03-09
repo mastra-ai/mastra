@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed tripwire aborts not being captured in OpenTelemetry spans. Processor spans now record tripwire details (reason, retry flag, metadata) when a TripWire error is thrown, and agent-level spans include tripwire information when a processor abort short-circuits the agent run. This makes tripwire-triggered aborts visible in tracing dashboards.
+Fixed processor-triggered aborts not appearing in traces. Processor spans now include abort details (reason, retry flag, metadata) and agent-level spans capture the same information when an abort short-circuits the agent run. This makes guardrail and processor aborts fully visible in tracing dashboards.
