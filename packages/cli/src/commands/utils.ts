@@ -87,7 +87,9 @@ export async function getVersionTag(): Promise<string | undefined> {
     const json = await fsExtra.readJSON(pkgPath);
     const currentVersion = json.version;
 
-    const { stdout } = await execa('npm', ['dist-tag', 'ls', 'mastra']);
+    const { stdout } = await execa('npm', ['dist-tag', 'ls', 'mastra'], {
+      cwd: import.meta.dirname,
+    });
     const tagLine = stdout.split('\n').find((distLine: string) => distLine.endsWith(`: ${currentVersion}`));
     const tag = tagLine ? tagLine.split(':')[0]?.trim() : undefined;
 

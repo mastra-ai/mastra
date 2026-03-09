@@ -36,7 +36,7 @@ The `MastraServer` abstract class from `@mastra/server/server-adapter` provides 
 The class takes three type parameters that represent your framework's types:
 
 ```typescript title="my-framework-adapter.ts"
-import { MastraServer } from '@mastra/server/server-adapter';
+import { MastraServer } from '@mastra/server/server-adapter'
 
 export class MyFrameworkServer extends MastraServer<
   // Your framework's app type (e.g., FastifyInstance)
@@ -60,7 +60,7 @@ You must implement these six abstract methods. Each handles a specific part of t
 
 This method runs first and attaches Mastra context to every incoming request. Route handlers need access to the Mastra instance, tools, and other context to function. How you attach this context depends on your framework — Express uses `res.locals`, Hono uses `c.set()`, and other frameworks have their own patterns.
 
-```typescript
+```typescript prettier:false
 registerContextMiddleware(): void {
   this.app.use('*', (req, res, next) => {
     // Attach context to your framework's request/response
@@ -76,7 +76,7 @@ registerContextMiddleware(): void {
 Context to attach:
 
 | Key | Type | Description |
-|-----|------|-------------|
+| - | - | - |
 | `mastra` | `Mastra` | The Mastra instance |
 | `requestContext` | `RequestContext` | Request-scoped context map |
 | `tools` | `Record<string, Tool>` | Available tools |
@@ -87,7 +87,7 @@ Context to attach:
 
 Register authentication and authorization middleware. This method should check if authentication is configured on the Mastra instance and skip registration entirely if not. When auth is configured, you'll typically register two middleware functions: one for authentication (validating tokens and setting the user) and one for authorization (checking if the user can access the requested resource).
 
-```typescript
+```typescript prettier:false
 registerAuthMiddleware(): void {
   const authConfig = this.mastra.getServer()?.auth;
   if (!authConfig) return;
@@ -123,7 +123,7 @@ registerAuthMiddleware(): void {
 
 Register a single route with your framework. This method is called once for each Mastra route during initialization. It receives a `ServerRoute` object containing the path, HTTP method, handler function, and Zod schemas for validation. Your implementation should wire this up to your framework's routing system.
 
-```typescript
+```typescript prettier:false
 async registerRoute(
   app: MyApp,
   route: ServerRoute,
@@ -170,7 +170,7 @@ async registerRoute(
 
 Extract URL parameters, query parameters, and request body from the incoming request. Different frameworks expose these values in different ways—Express uses `req.params`, `req.query`, and `req.body`, while other frameworks may use different property names or require method calls. This method normalizes the extraction for your framework.
 
-```typescript
+```typescript prettier:false
 async getParams(
   route: ServerRoute,
   request: MyRequest
@@ -194,7 +194,7 @@ async getParams(
 
 Send the response back to the client based on the route's response type. Mastra routes can return different response types: JSON for most API responses, streams for agent generation, and special types for MCP transports. Your implementation should handle each type appropriately for your framework.
 
-```typescript
+```typescript prettier:false
 async sendResponse(
   route: ServerRoute,
   response: MyResponse,
@@ -229,7 +229,7 @@ async sendResponse(
 
 Handle streaming responses for agent generation. When an agent generates a response, it produces a stream of chunks that should be sent to the client as they become available. This method reads from the stream, optionally applies redaction to hide sensitive data, and writes chunks to the response in the appropriate format (SSE or newline-delimited JSON).
 
-```typescript
+```typescript prettier:false
 async stream(
   route: ServerRoute,
   response: MyResponse,
@@ -278,7 +278,7 @@ async stream(
 The base class provides helper methods you can use in your implementation. These handle common tasks like parameter validation and route registration, so you don't need to reimplement them:
 
 | Method | Description |
-|--------|-------------|
+| - | - |
 | `parsePathParams(route, params)` | Validate path params with Zod schema |
 | `parseQueryParams(route, params)` | Validate query params with Zod schema |
 | `parseBody(route, body)` | Validate body with Zod schema |
@@ -292,7 +292,7 @@ The `parse*` methods use Zod schemas defined on each route to validate input and
 
 Your adapter's constructor should accept the same options as the base class and pass them to `super()`. You can add additional framework-specific options if needed:
 
-```typescript
+```typescript prettier:false
 constructor(options: {
   app: MyApp;
   mastra: Mastra;
@@ -313,34 +313,38 @@ See [Server Adapters](/docs/server/server-adapters) for full documentation on ea
 Here's a skeleton implementation showing all the required methods. This uses pseudocode for framework-specific parts—replace with your framework's actual APIs:
 
 ```typescript title="my-framework-adapter.ts"
-import { MastraServer, ServerRoute } from '@mastra/server/server-adapter';
-import type { Mastra } from '@mastra/core';
+import { MastraServer, ServerRoute } from '@mastra/server/server-adapter'
+import type { Mastra } from '@mastra/core'
 
 export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse> {
   constructor(options: { app: MyApp; mastra: Mastra; prefix?: string }) {
-    super(options);
+    super(options)
   }
 
   registerContextMiddleware(): void {
     this.app.use('*', (req, res, next) => {
-      res.locals.mastra = this.mastra;
+      res.locals.mastra = this.mastra
       res.locals.requestContext = this.mergeRequestContext({
         paramsRequestContext: req.query.requestContext,
         bodyRequestContext: req.body?.requestContext,
-      });
-      res.locals.tools = this.tools ?? {};
-      res.locals.abortSignal = createAbortSignal(req);
-      next();
-    });
+      })
+      res.locals.tools = this.tools ?? {}
+      res.locals.abortSignal = createAbortSignal(req)
+      next()
+    })
   }
 
   registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth;
-    if (!authConfig) return;
+    const authConfig = this.mastra.getServer()?.auth
+    if (!authConfig) return
     // ... implement auth middleware
   }
 
-  async registerRoute(app: MyApp, route: ServerRoute, { prefix }: { prefix?: string }): Promise<void> {
+  async registerRoute(
+    app: MyApp,
+    route: ServerRoute,
+    { prefix }: { prefix?: string },
+  ): Promise<void> {
     // ... implement route registration
   }
 
@@ -349,14 +353,14 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
       urlParams: request.params,
       queryParams: request.query,
       body: request.body,
-    };
+    }
   }
 
   async sendResponse(route: ServerRoute, response: MyResponse, result: unknown) {
     if (route.responseType === 'stream') {
-      return this.stream(route, response, result);
+      return this.stream(route, response, result)
     }
-    return response.json(result);
+    return response.json(result)
   }
 
   async stream(route: ServerRoute, response: MyResponse, result: unknown) {
@@ -370,15 +374,15 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
 Once your adapter is implemented, use it the same way as the provided adapters:
 
 ```typescript title="server.ts"
-import { MyFrameworkServer } from './my-framework-adapter';
-import { mastra } from './mastra';
+import { MyFrameworkServer } from './my-framework-adapter'
+import { mastra } from './mastra'
 
-const app = createMyFrameworkApp();
-const server = new MyFrameworkServer({ app, mastra });
+const app = createMyFrameworkApp()
+const server = new MyFrameworkServer({ app, mastra })
 
-await server.init();
+await server.init()
 
-app.listen(4111);
+app.listen(4111)
 ```
 
 :::tip

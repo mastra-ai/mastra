@@ -1,14 +1,14 @@
 import { Mastra } from '@mastra/core/mastra';
-import { PinoLogger } from '@mastra/loggers';
+import { registerApiRoute } from '@mastra/core/server';
 import { MastraEditor } from '@mastra/editor';
-import { storage } from './storage';
+import { PinoLogger } from '@mastra/loggers';
 
 import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
-import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { simpleMcpServer } from './mcps';
-import { registerApiRoute } from '@mastra/core/server';
-import { responseQualityScorer, responseTimeScorer } from './scorers';
 import { loggingProcessor, contentFilterProcessor } from './processors';
+import { responseQualityScorer, responseTimeScorer } from './scorers';
+import { storage } from './storage';
+import { complexWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow },
@@ -60,6 +60,11 @@ export const mastra = new Mastra({
           const agentsStore = await storage.getStore('agents');
           if (agentsStore) {
             clearTasks.push(agentsStore.dangerouslyClearAll());
+          }
+
+          const scorerDefinitionsStore = await storage.getStore('scorerDefinitions');
+          if (scorerDefinitionsStore) {
+            clearTasks.push(scorerDefinitionsStore.dangerouslyClearAll());
           }
 
           await Promise.all(clearTasks);

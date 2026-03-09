@@ -15,17 +15,16 @@
 const sidebars = {
   // Docs sidebar - main documentation
   docsSidebar: [
-    'index',
+    {
+      type: 'doc',
+      id: 'index',
+      label: 'Get Started',
+    },
     {
       type: 'category',
-      label: 'Getting Started',
+      label: 'Fundamentals',
       collapsed: false,
       items: [
-        {
-          type: 'doc',
-          id: 'getting-started/start',
-          label: 'Start',
-        },
         {
           type: 'doc',
           id: 'getting-started/studio',
@@ -71,6 +70,11 @@ const sidebars = {
           type: 'doc',
           id: 'agents/structured-output',
           label: 'Structured Output',
+        },
+        {
+          type: 'doc',
+          id: 'agents/supervisor-agents',
+          label: 'Supervisor Agents',
         },
         {
           type: 'doc',
@@ -220,6 +224,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'memory/observational-memory',
+          label: 'Observational Memory',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'memory/working-memory',
           label: 'Working Memory',
         },
@@ -227,14 +239,6 @@ const sidebars = {
           type: 'doc',
           id: 'memory/semantic-recall',
           label: 'Semantic Recall',
-        },
-        {
-          type: 'doc',
-          id: 'memory/observational-memory',
-          label: 'Observational Memory',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
@@ -368,6 +372,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'server/auth/better-auth',
+              label: 'Better Auth',
+            },
+            {
+              type: 'doc',
               id: 'server/auth/clerk',
               label: 'Clerk',
             },
@@ -418,6 +427,11 @@ const sidebars = {
           type: 'doc',
           id: 'deployment/mastra-server',
           label: 'Mastra Server',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/studio',
+          label: 'Studio',
         },
         {
           type: 'doc',
@@ -585,6 +599,22 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Datasets',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/datasets/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'observability/datasets/running-experiments',
+              label: 'Running Experiments',
+            },
+          ],
+        },
       ],
     },
     {
@@ -639,6 +669,7 @@ const sidebars = {
         },
       ],
     },
+
     {
       type: 'category',
       label: 'Build with AI',

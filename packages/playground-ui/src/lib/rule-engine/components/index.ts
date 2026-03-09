@@ -13,6 +13,7 @@ export type {
   RuleFieldSelectProps,
   RuleOperatorSelectProps,
   RuleValueInputProps,
+  RuleGroupViewProps,
 } from './types';
 
 export { OPERATOR_LABELS, OPERATORS } from './types';

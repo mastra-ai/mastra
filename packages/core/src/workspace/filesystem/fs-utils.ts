@@ -5,9 +5,26 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { FileNotFoundError } from '../errors';
+
+// =============================================================================
+// Tilde Expansion
+// =============================================================================
+
+/**
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Shell commands handle this automatically, but Node.js path APIs do not.
+ */
+export function expandTilde(p: string): string {
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/') || p.startsWith('~\\')) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
 
 // =============================================================================
 // Types
@@ -166,6 +183,33 @@ const TEXT_EXTENSIONS = new Set([
 export function isTextFile(filename: string): boolean {
   const ext = path.extname(filename).toLowerCase();
   return TEXT_EXTENSIONS.has(ext);
+}
+
+// =============================================================================
+// Path Resolution
+// =============================================================================
+
+/**
+ * Resolve a workspace path to an absolute OS filesystem path.
+ *
+ * Workspace paths typically start with '/' but are relative to `basePath`
+ * (e.g. "/app.ts" → "basePath/app.ts"). However, with `contained: false` or
+ * when the path is already a real path within `basePath`, it should be used as-is.
+ *
+ * @param basePath - The workspace filesystem base path
+ * @param filePath - The workspace path to resolve
+ * @returns The absolute OS filesystem path
+ */
+export function resolveWorkspacePath(basePath: string, filePath: string): string {
+  if (path.isAbsolute(filePath)) {
+    const normalizedBase = path.normalize(basePath);
+    const normalizedFile = path.normalize(filePath);
+    const rel = path.relative(normalizedBase, normalizedFile);
+    if (!rel.startsWith('..') && !path.isAbsolute(rel)) {
+      return normalizedFile;
+    }
+  }
+  return path.join(basePath, filePath.replace(/^\/+/, ''));
 }
 
 // =============================================================================

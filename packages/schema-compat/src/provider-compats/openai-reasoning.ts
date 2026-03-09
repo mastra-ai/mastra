@@ -7,7 +7,19 @@ import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionS
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
-import { isOptional, isObj, isArr, isUnion, isDefault, isNumber, isString, isDate, isNullable } from '../zodTypes';
+import { ensureAllPropertiesRequired } from '../zod-to-json';
+import {
+  isOptional,
+  isObj,
+  isArr,
+  isUnion,
+  isDefault,
+  isNumber,
+  isString,
+  isDate,
+  isNullable,
+  isNull,
+} from '../zodTypes';
 
 export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -21,18 +33,14 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
   isReasoningModel(): boolean {
     // there isn't a good way to automatically detect reasoning models besides doing this.
     // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
-    return (
-      this.getModel().modelId.includes(`o3`) ||
-      this.getModel().modelId.includes(`o4`) ||
-      this.getModel().modelId.includes(`o1`)
-    );
+    const modelId = this.getModel().modelId;
+    if (!modelId) return false;
+    return modelId.includes(`o3`) || modelId.includes(`o4`) || modelId.includes(`o1`);
   }
 
   shouldApply(): boolean {
-    if (
-      this.isReasoningModel() &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
-    ) {
+    const model = this.getModel();
+    if (this.isReasoningModel() && (model.provider.includes(`openai`) || model.modelId?.includes(`openai`))) {
       return true;
     }
 
@@ -104,6 +112,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
       return this.defaultZodStringHandler(value);
     } else if (isDate(z)(value)) {
       return this.defaultZodDateHandler(value);
+    } else if (isNull(z)(value)) {
+      return z
+        .any()
+        .refine(v => v === null, { message: 'must be null' })
+        .describe(value.description || 'must be null');
     } else if (value.constructor.name === 'ZodAny') {
       // It's bad practice in the tool to use any, it's not reasonable for models that don't support that OOTB, to cast every single possible type
       // in the schema. Usually when it's "any" it could be a json object or a union of specific types.
@@ -116,6 +129,11 @@ export class OpenAIReasoningSchemaCompatLayer extends SchemaCompatLayer {
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
+  }
+
+  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(zodSchema);
+    return ensureAllPropertiesRequired(jsonSchema);
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {

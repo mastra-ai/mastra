@@ -7,6 +7,7 @@ import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '..
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
+import { ensureAllPropertiesRequired } from '../zod-to-json';
 import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
@@ -19,9 +20,10 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   shouldApply(): boolean {
+    const model = this.getModel();
     if (
-      !this.getModel().supportsStructuredOutputs &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
+      !model.supportsStructuredOutputs &&
+      (model.provider.includes(`openai`) || model.modelId?.includes(`openai`) || model.provider.includes(`groq`))
     ) {
       return true;
     }
@@ -99,7 +101,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       const model = this.getModel();
       const checks = ['emoji'] as const;
 
-      if (model.modelId.includes('gpt-4o-mini')) {
+      if (model.modelId?.includes('gpt-4o-mini')) {
         return this.defaultZodStringHandler(value, ['emoji', 'regex']);
       }
 
@@ -119,7 +121,8 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
    */
   processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
     const jsonSchema = super.processToJSONSchema(zodSchema);
-    return this.fixAdditionalProperties(jsonSchema);
+    const fixedSchema = this.fixAdditionalProperties(jsonSchema);
+    return ensureAllPropertiesRequired(fixedSchema);
   }
 
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
@@ -131,7 +134,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     } else if (isStringSchema(schema)) {
       const model = this.getModel();
       // gpt-4o-mini doesn't respect emoji and regex constraints
-      if (model.modelId.includes('gpt-4o-mini')) {
+      if (model.modelId?.includes('gpt-4o-mini')) {
         // Remove emoji format if present
         if (schema.format === 'emoji') {
           delete schema.format;

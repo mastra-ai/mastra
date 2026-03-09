@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { InputField } from './input-field';
 
 const meta: Meta<typeof InputField> = {
-  title: 'Elements/InputField',
+  title: 'Elements/FormFields/InputField',
   component: InputField,
   parameters: {
     layout: 'centered',
@@ -33,6 +33,16 @@ export const Default: Story = {
     name: 'example',
     label: 'Example Input',
     placeholder: 'Enter some text...',
+  },
+};
+
+export const ExperimentalVariant: Story = {
+  args: {
+    name: 'example',
+    label: 'Example Input',
+    placeholder: 'Enter some text...',
+    variant: 'experimental',
+    size: 'default',
   },
 };
 

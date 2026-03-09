@@ -15,8 +15,8 @@ import { listScorers } from './commands/actions/list-scorers';
 import { migrate } from './commands/actions/migrate';
 import { startDevServer } from './commands/actions/start-dev-server';
 import { startProject } from './commands/actions/start-project';
+import { startStudio } from './commands/actions/start-studio';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
-import { studio } from './commands/studio';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
 
 const mastraPkg = pkgJson as PackageJson;
@@ -127,6 +127,7 @@ program
     'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
   )
   .option('-s, --https', 'Enable local HTTPS')
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
   .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 
@@ -145,6 +146,10 @@ program
   .description('Start your built Mastra application')
   .option('-d, --dir <path>', 'Path to your built Mastra output directory (default: .mastra/output)')
   .option('-e, --env <env>', 'Custom env file to include in the start')
+  .option(
+    '-c, --custom-args <args>',
+    'Comma-separated list of custom arguments to pass to the Node.js process. IE: --require=newrelic',
+  )
   .action(startProject);
 
 program
@@ -156,7 +161,8 @@ program
   .option('-s, --server-port <serverPort>', 'Port of the Mastra API server (default: 4111)')
   .option('-x, --server-protocol <serverProtocol>', 'Protocol of the Mastra API server (default: http)')
   .option('--server-api-prefix <serverApiPrefix>', 'API route prefix of the Mastra server (default: /api)')
-  .action(studio);
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
+  .action(startStudio);
 
 program
   .command('migrate')

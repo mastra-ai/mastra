@@ -275,7 +275,7 @@ const SimpleProcessorInput = ({
             ))}
           </SelectContent>
         </Select>
-        <Txt variant="ui-xs" className="text-icon4">
+        <Txt variant="ui-xs" className="text-neutral4">
           {PROCESSOR_PHASES.find(p => p.value === phase)?.label}
         </Txt>
       </div>
