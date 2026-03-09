@@ -85,6 +85,13 @@ type StructuredOutputOptionsBase<OUTPUT = {}> = {
   logger?: IMastraLogger;
 
   /**
+   * Maximum number of retries for the internal structuring agent's LLM calls.
+   * Controls the p-retry count when the inner agent encounters transient errors.
+   * If not set, the default retry behavior (2 retries) is used.
+   */
+  maxRetries?: number;
+
+  /**
    * Provider-specific options passed to the internal structuring agent.
    * Use this to control model behavior like reasoning effort for thinking models.
    *

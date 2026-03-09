@@ -632,7 +632,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.resolvePromises({
                 text: self.#bufferedText.join(''),
                 finishReason: 'other',
-                object: undefined,
                 usage: self.#usageCount,
                 warnings: self.#warnings,
                 providerMetadata: undefined,
@@ -652,6 +651,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 suspendPayload: undefined, // Tripwire doesn't suspend, so resolve to undefined
                 resumeSchema: undefined,
               });
+
+              // Reject the object promise with the failure reason so `await result.object`
+              // throws a meaningful error instead of silently resolving to undefined.
+              if (self.#delayedPromises.object.status.type === 'pending') {
+                const reason = chunk.payload?.reason;
+                if (reason) {
+                  self.#delayedPromises.object.reject(new Error(reason));
+                } else {
+                  self.#delayedPromises.object.resolve(undefined as OUTPUT);
+                }
+              }
 
               self.#closeTransportIfNeeded();
 

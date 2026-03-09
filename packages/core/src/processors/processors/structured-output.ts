@@ -1,5 +1,6 @@
 import type { TransformStreamDefaultController } from 'node:stream/web';
 import { Agent } from '../../agent';
+import { TripWire } from '../../agent/trip-wire';
 import type { StructuredOutputOptions } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { ProviderOptions } from '../../llm/model/provider-options';
@@ -36,6 +37,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   private errorStrategy: 'strict' | 'warn' | 'fallback';
   private fallbackValue?: OUTPUT;
   private isStructuringAgentStreamStarted = false;
+  private maxRetries?: number;
   private jsonPromptInjection?: boolean;
   private providerOptions?: ProviderOptions;
   private logger?: IMastraLogger;
@@ -61,6 +63,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     this.schema = options.schema;
     this.errorStrategy = options.errorStrategy ?? 'strict';
     this.fallbackValue = options.fallbackValue;
+    this.maxRetries = options.maxRetries;
     this.jsonPromptInjection = options.jsonPromptInjection;
     this.providerOptions = options.providerOptions;
     this.logger = options.logger;
@@ -114,13 +117,20 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       const structuringPrompt = this.buildStructuringPrompt(streamParts);
       const prompt = `Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n${structuringPrompt}`;
 
+      // Build structuredOutput options respecting the FallbackFields union type
+      const structuredOutputOpts = {
+        schema: this.schema!,
+        jsonPromptInjection: this.jsonPromptInjection,
+        ...(this.errorStrategy === 'fallback'
+          ? { errorStrategy: 'fallback' as const, fallbackValue: this.fallbackValue! }
+          : { errorStrategy: this.errorStrategy }),
+      };
+
       // Use structuredOutput in 'direct' mode (no model) since this agent already has a model
       const structuringAgentStream = await this.structuringAgent.stream(prompt, {
-        structuredOutput: {
-          schema: this.schema!,
-          jsonPromptInjection: this.jsonPromptInjection,
-        },
+        structuredOutput: structuredOutputOpts,
         providerOptions: this.providerOptions,
+        ...(this.maxRetries !== undefined ? { modelSettings: { maxRetries: this.maxRetries } } : {}),
         ...observabilityContext,
       });
 
@@ -135,11 +145,15 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       ];
 
       // Stream object chunks directly into the main stream
+      let objectResultEmitted = false;
+      let errorChunkSeen = false;
+
       for await (const chunk of structuringAgentStream.fullStream) {
         if (excludedChunkTypes.includes(chunk.type) || chunk.type.startsWith('data-')) {
           continue;
         }
         if (chunk.type === 'error') {
+          errorChunkSeen = true;
           this.handleError('Structuring failed', 'Internal agent did not generate structured output', abort);
 
           if (this.errorStrategy === 'warn') {
@@ -162,6 +176,10 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           }
         }
 
+        if (chunk.type === 'object-result') {
+          objectResultEmitted = true;
+        }
+
         const newChunk: ChunkType<OUTPUT> = {
           ...chunk,
           metadata: {
@@ -170,7 +188,26 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         } as const;
         controller.enqueue(newChunk);
       }
+
+      // If no object was produced and no error chunk was seen, the inner agent generated
+      // no parseable output (e.g. the custom model emitted no text, or empty text).
+      // Log what the model generated and surface a proper error instead of silently returning undefined.
+      if (!objectResultEmitted && !errorChunkSeen) {
+        let generatedText: string | undefined;
+        try {
+          generatedText = await structuringAgentStream.text;
+        } catch {
+          // ignore - we just want the text for diagnostics
+        }
+
+        const detail = generatedText?.trim()
+          ? `Model generated text that could not be parsed as structured output. Generated text: "${generatedText.substring(0, 300)}${generatedText.length > 300 ? '...' : ''}"`
+          : 'Model generated no text output. The custom provider may not support the response format or the model may have returned an empty response.';
+
+        this.handleError('Structuring failed', detail, abort);
+      }
     } catch (error) {
+      if (error instanceof TripWire) throw error;
       this.handleError(
         'Structured output processing failed',
         error instanceof Error ? error.message : 'Unknown error',
