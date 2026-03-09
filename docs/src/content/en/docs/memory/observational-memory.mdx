@@ -196,7 +196,7 @@ OM caches tiktoken part estimates in message metadata to reduce repeat counting 
 - Per-part estimates are stored on `part.providerMetadata.mastra` and reused on subsequent passes when the cache version/tokenizer source matches.
 - For string-only message content (without parts), OM uses a message-level metadata fallback cache.
 - Message and conversation overhead are still recalculated on every pass. The cache only stores payload estimates, so counting semantics stay the same.
-- `data-*` and `reasoning` parts are still skipped and are not cached.
+- `data-*` and `reasoning` parts are still skipped and aren't cached.
 
 ## Async Buffering
 
@@ -245,7 +245,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering is not supported with `scope: 'resource'`. It is automatically disabled in resource scope.
+Async buffering isn't supported with `scope: 'resource'`. It's automatically disabled in resource scope.
 
 :::
 

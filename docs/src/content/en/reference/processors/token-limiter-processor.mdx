@@ -130,8 +130,8 @@ const processor = new TokenLimiterProcessor({
 
 When used as an input processor (both `processInput` and `processInputStep`), `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
 
-- **Empty messages**: If there are no messages to process, a TripWire is thrown because you cannot send an LLM request with no messages.
-- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you cannot send an LLM request with only system messages and no user/assistant messages.
+- **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
+- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
 
 ```typescript
 import { TripWire } from '@mastra/core/agent'

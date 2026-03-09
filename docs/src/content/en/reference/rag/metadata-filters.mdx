@@ -197,7 +197,7 @@ const results = await store.query({
 
 ## Common Rules and Restrictions
 
-1. Field names cannot:
+1. Field names can't:
    - Contain dots (.) unless referring to nested fields
    - Start with $ or contain null characters
    - Be empty strings
@@ -209,11 +209,11 @@ const results = await store.query({
 
 1. Logical operators:
    - Must contain valid conditions
-   - Cannot be empty
+   - Can't be empty
    - Must be properly nested
    - Can only be used at top level or nested within other logical operators
-   - Cannot be used at field level or nested inside a field
-   - Cannot be used inside an operator
+   - Can't be used at field level or nested inside a field
+   - Can't be used inside an operator
    - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
    - Valid: `{ "$or": [{ "$and": [{ "field": { "$gt": 100 } }] }] }`
    - Invalid: `{ "field": { "$and": [{ "$gt": 100 }] } }`
@@ -221,7 +221,7 @@ const results = await store.query({
 
 1. $not operator:
    - Must be an object
-   - Cannot be empty
+   - Can't be empty
    - Can be used at field level or top level
    - Valid: `{ "$not": { "field": "value" } }`
    - Valid: `{ "field": { "$not": { "$eq": "value" } } }`
@@ -242,7 +242,7 @@ const results = await store.query({
 ### ChromaDB
 
 - Where filters only return results where the filtered field exists in metadata
-- Empty metadata fields are not included in filter results
+- Empty metadata fields aren't included in filter results
 - Metadata fields must be present for negative matches (e.g., $ne won't match documents missing the field)
 
 ### Cloudflare Vectorize
@@ -253,7 +253,7 @@ const results = await store.query({
 - String values are indexed up to first 64 bytes (truncated on UTF-8 boundaries)
 - Number values use float64 precision
 - Filter JSON must be under 2048 bytes
-- Field names cannot contain dots (.) or start with $
+- Field names can't contain dots (.) or start with $
 - Field names limited to 512 characters
 - Vectors must be re-upserted after creating new metadata indexes to be included in filtered results
 - Range queries may have reduced accuracy with very large datasets (\~10M+ vectors)
@@ -330,12 +330,12 @@ const results = await store.query({
 
 ### Couchbase
 
-- Currently does not have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
+- Currently doesn't have support for metadata filters. Filtering must be done client-side after retrieving results or by using the Couchbase SDK's Search capabilities directly for more complex queries.
 
 ### Amazon S3 Vectors
 
-- Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date are not allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
-- `$in`/`$nin` require **non-empty arrays of primitives**; Date elements are allowed and normalized to epoch ms. **Array equality** is not supported.
+- Equality values must be primitives (string/number/boolean). `null`/`undefined`, arrays, objects, and Date aren't allowed for equality. Range operators accept numbers or Date (Dates are normalized to epoch ms).
+- `$in`/`$nin` require **non-empty arrays of primitives**; Date elements are allowed and normalized to epoch ms. **Array equality** isn't supported.
 - Implicit AND is canonicalized (`{a:1,b:2}` → `{$and:[{a:1},{b:2}]}`). Logical operators must contain field conditions, use non-empty arrays, and appear only at the root or within other logical operators (not inside field values).
 - Keys listed in `nonFilterableMetadataKeys` at index creation are stored but not filterable; this setting is immutable.
 - $exists requires a boolean value.

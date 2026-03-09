@@ -65,12 +65,12 @@ voice.off('writing', writingCallback)
 
 ## Return Value
 
-This method does not return a value.
+This method doesn't return a value.
 
 ## Notes
 
 - The callback passed to `off()` must be the same function reference that was passed to `on()`
-- If the callback is not found, the method will have no effect
+- If the callback isn't found, the method will have no effect
 - This method is primarily used with real-time voice providers that support event-based communication
 - If called on a voice provider that doesn't support events, it will log a warning and do nothing
 - Removing event listeners is important for preventing memory leaks in long-running applications

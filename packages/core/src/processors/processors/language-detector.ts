@@ -1,5 +1,5 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -7,6 +7,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import { standardSchemaToJSONSchema } from '../../schema';
 import type { Processor } from '../index';
 
 /**
@@ -278,7 +279,6 @@ export class LanguageDetector implements Processor<'language-detector'> {
 
     try {
       const model = await this.detectionAgent.getModel();
-      let response;
 
       const baseSchema = z.object({
         iso_code: z.string().describe('ISO language code').nullable(),
@@ -292,8 +292,9 @@ export class LanguageDetector implements Processor<'language-detector'> {
             })
           : baseSchema;
 
+      let result: LanguageDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.detectionAgent.generate(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,
           },
@@ -303,16 +304,18 @@ export class LanguageDetector implements Processor<'language-detector'> {
           providerOptions: this.providerOptions,
           ...observabilityContext,
         });
+
+        result = response.object!;
       } else {
-        response = await this.detectionAgent.generateLegacy(prompt, {
-          output: schema,
+        const response = await this.detectionAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(schema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
           ...observabilityContext,
         });
-      }
 
-      const result = response.object as LanguageDetectionResult;
+        result = response.object as LanguageDetectionResult;
+      }
 
       if (result.translated_text && !result.confidence) {
         result.confidence = 0.95;

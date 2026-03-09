@@ -3,7 +3,14 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
-import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import {
+  isArraySchema,
+  isNumberSchema,
+  isObjectSchema,
+  isStringSchema,
+  isUnionSchema,
+  isEnumSchema,
+} from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ModelInformation } from '../types';
 import { isOptional, isNull, isObj, isArr, isUnion, isString, isNumber } from '../zodTypes';
@@ -58,6 +65,8 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
       this.defaultStringHandler(schema);
     } else if (isNumberSchema(schema)) {
       this.defaultNumberHandler(schema);
+    } else if (isEnumSchema(schema)) {
+      schema.type = 'string';
     }
   }
 
