@@ -501,6 +501,8 @@ You only need this option if you're importing uncompiled source code directly. I
 
 Mastra automatically detects workspace packages in monorepo setups and adds them to this list, so you typically only need to specify external packages that require transpilation.
 
+Mastra also resolves `tsconfig.json` `baseUrl` and `paths` aliases during build. This includes ESM-style imports such as `~/utils/logger.js` that point to TypeScript source files.
+
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 
