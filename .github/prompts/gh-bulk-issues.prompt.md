@@ -81,6 +81,7 @@ If any checks are failing, spawn an `mc` instance in the worktree with `/gh-fix-
 
 - **2 builds at a time** to manage CPU during `pnpm build`
 - **All `mc` instances can run in parallel** — they're IO-bound, not CPU-bound
+- **One worktree per issue, always** — every task related to an issue (debugging, PR comments, CI fixes) must run in that issue's worktree. Never create a second worktree for the same issue. The worktree accumulates context (commits, diffs, build artifacts) that each `mc` instance benefits from.
 - **Always restart timed-out processes** with a continuation prompt that includes context from the diff and last output
 - **Never leave a process unmonitored** — check every 3 minutes
 - **Update report files continuously** so the user always has a written record
