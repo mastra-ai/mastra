@@ -247,26 +247,33 @@ Converts text to speech and sends it to the model. Can accept either a string or
     type: 'GeminiLiveVoiceOptions',
     description: 'Optional speech configuration.',
     isOptional: true,
-  },
-  {
-    name: 'options.speaker',
-    type: 'GeminiVoiceName',
-    description: 'Voice ID to use for this specific speech request.',
-    isOptional: true,
-    defaultValue: "Constructor's speaker value",
-  },
-  {
-    name: 'options.languageCode',
-    type: 'string',
-    description: 'Language code for the response.',
-    isOptional: true,
-  },
-  {
-    name: 'options.responseModalities',
-    type: "('AUDIO' | 'TEXT')[]",
-    description: 'Response modalities to receive from the model.',
-    isOptional: true,
-    defaultValue: "['AUDIO', 'TEXT']",
+    properties: [
+      {
+        type: 'GeminiLiveVoiceOptions',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'GeminiVoiceName',
+            description: 'Voice ID to use for this specific speech request.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+          {
+            name: 'languageCode',
+            type: 'string',
+            description: 'Language code for the response.',
+            isOptional: true,
+          },
+          {
+            name: 'responseModalities',
+            type: "('AUDIO' | 'TEXT')[]",
+            description: 'Response modalities to receive from the model.',
+            isOptional: true,
+            defaultValue: "['AUDIO', 'TEXT']",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

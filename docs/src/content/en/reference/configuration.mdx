@@ -67,7 +67,7 @@ export const mastra = new Mastra({
 Event handlers for the internal pub/sub system. Maps event topics to handler functions that are called when events are published to those topics.
 
 :::warning
-This is used internally by Mastra's workflow engine. Most users will not need to configure this option.
+This is used internally by Mastra's workflow engine. Most users won't need to configure this option.
 :::
 
 ```typescript title="src/mastra/index.ts"
@@ -110,7 +110,7 @@ Custom ID generator function for creating unique identifiers.
 
 :::warning
 
-This is used internally by Mastra for creating IDs for workflow runs, agent conversations, and other resources. Most users will not need to configure this option.
+This is used internally by Mastra for creating IDs for workflow runs, agent conversations, and other resources. Most users won't need to configure this option.
 
 :::
 
@@ -265,7 +265,7 @@ export const mastra = new Mastra({
 Pub/sub system for event-driven communication between components. Used internally by Mastra for workflow event processing and component communication.
 
 :::warning
-This is used internally by Mastra. Most users will not need to configure this option.
+This is used internally by Mastra. Most users won't need to configure this option.
 :::
 
 ```typescript title="src/mastra/index.ts"
@@ -725,6 +725,42 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+### server.onValidationError
+
+**Type:** `(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined`
+
+Custom handler called when a request fails Zod schema validation. Use this to customize validation error responses, change the status code, or format errors to match your API standards.
+
+Return a `{ status, body }` object to override the default `400` response, or `undefined` to fall through to the default behavior. This hook is supported by all server adapters (Hono, Express, Fastify, Koa).
+
+The `context` parameter indicates which part of the request failed validation:
+
+- `'query'` — query parameters
+- `'body'` — request body
+- `'path'` — path parameters
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    onValidationError: (error, context) => ({
+      status: 422,
+      body: {
+        ok: false,
+        errors: error.issues.map(i => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
+        source: context,
+      },
+    }),
+  },
+})
+```
+
+You can also set `onValidationError` on individual routes created with `createRoute()`. A route-level hook takes precedence over the server-level hook.
 
 ### server.port
 

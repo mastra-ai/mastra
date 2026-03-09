@@ -98,18 +98,31 @@ Converts text to speech using Cloudflare's text-to-speech service.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Voice ID to use for speech synthesis.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
-  },
-  {
-    name: 'options.format',
-    type: 'string',
-    description: 'Output audio format.',
-    isOptional: true,
-    defaultValue: "'mp3'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Voice ID to use for speech synthesis.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+          {
+            name: 'format',
+            type: 'string',
+            description: 'Output audio format.',
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
