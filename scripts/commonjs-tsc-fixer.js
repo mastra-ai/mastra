@@ -28,9 +28,11 @@ async function writeDtsFiles() {
 
       for (const file of matches) {
         if (key.endsWith('*')) {
-          // For wildcard patterns, add the directory
+          // For wildcard patterns, derive the subpath relative to dist/
           const dir = dirname(file);
-          const filename = key.replace('*', dir.replace(join(rootPath, 'dist/'), ''));
+          const distRoot = join(rootPath, 'dist');
+          const subPath = relative(distRoot, dir).replaceAll('\\', '/');
+          const filename = key.replace('*', subPath);
 
           const targetPath = join(rootPath, filename) + '.d.ts';
           await mkdir(dirname(targetPath), { recursive: true });
