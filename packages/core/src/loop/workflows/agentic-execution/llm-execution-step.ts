@@ -58,6 +58,11 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   transportResolver?: () => StreamTransport | undefined;
 };
 
+function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
+  const modelId = runState.state.responseMetadata?.modelId;
+  return modelId ? { metadata: { modelId } } : undefined;
+}
+
 async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
@@ -131,6 +136,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 ...(providerMetadata ? { providerMetadata } : {}),
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
@@ -274,6 +280,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -313,6 +320,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
@@ -346,6 +354,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   mimeType: chunk.payload.mimeType,
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -373,6 +382,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   },
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -460,47 +470,31 @@ function executeStreamWithFallbackModels<T>(
     let lastError: unknown;
     for (const modelConfig of models) {
       index++;
-      const maxRetries = modelConfig.maxRetries || 0;
-      let attempt = 0;
 
       if (done) {
         break;
       }
 
-      while (attempt <= maxRetries) {
-        try {
-          const isLastModel = attempt === maxRetries && index === models.length;
-          const result = await callback(modelConfig, isLastModel);
-          finalResult = result;
-          done = true;
-          break;
-        } catch (err) {
-          // TripWire errors should be re-thrown immediately - they are intentional aborts
-          // from processors (e.g., processInputStep) and should not trigger model retries
-          if (err instanceof TripWire) {
-            throw err;
-          }
-
-          lastError = err;
-          attempt++;
-
-          logger?.error(`Error executing model ${modelConfig.model.modelId}, attempt ${attempt}====`, err);
-
-          // If we've exhausted all retries for this model, break and try the next model
-          if (attempt > maxRetries) {
-            break;
-          }
-
-          // Add exponential backoff before retrying to avoid hammering the API
-          // This helps with rate limiting and gives transient failures time to recover
-          const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000); // 1s, 2s, 4s, 8s, max 10s
-          await new Promise(resolve => setTimeout(resolve, delayMs));
+      try {
+        const isLastModel = index === models.length;
+        const result = await callback(modelConfig, isLastModel);
+        finalResult = result;
+        done = true;
+      } catch (err) {
+        // TripWire errors should be re-thrown immediately - they are intentional aborts
+        // from processors (e.g., processInputStep) and should not trigger model retries
+        if (err instanceof TripWire) {
+          throw err;
         }
+
+        lastError = err;
+
+        logger?.error(`Error executing model ${modelConfig.model.modelId}`, err);
       }
     }
     if (typeof finalResult === 'undefined') {
       const lastErrMsg = lastError instanceof Error ? lastError.message : String(lastError);
-      const errorMessage = `Exhausted all fallback models and reached the maximum number of retries. Last error: ${lastErrMsg}`;
+      const errorMessage = `Exhausted all fallback models. Last error: ${lastErrMsg}`;
       logger?.error(errorMessage);
       throw new Error(errorMessage, { cause: lastError });
     }
@@ -836,7 +830,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 toolChoice: currentStep.toolChoice,
                 activeTools: currentStep.activeTools as string[] | undefined,
                 options,
-                modelSettings: currentStep.modelSettings,
+                // Per-model maxRetries takes precedence over global modelSettings.maxRetries
+                // This ensures p-retry uses the correct retry count for each model in the fallback chain
+                modelSettings: { ...currentStep.modelSettings, maxRetries: modelConfig.maxRetries },
                 includeRawChunks,
                 structuredOutput: currentStep.structuredOutput,
                 // Merge headers: modelConfig headers first, then modelSettings overrides them
@@ -1075,6 +1071,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 providerExecuted: toolCall.providerExecuted,
               };
             }),
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
