@@ -5,6 +5,7 @@ import type { z as zV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import * as jsonSchemaUtils from './json-schema/utils';
+import type { PublicSchema } from './schema';
 import * as v3 from './schema-compatibility-v3';
 import { SchemaCompatLayer as SchemaCompatLayerV3 } from './schema-compatibility-v3';
 import * as v4 from './schema-compatibility-v4';
@@ -312,7 +313,7 @@ export abstract class SchemaCompatLayer {
     return convertZodSchemaToAISDKSchema(processedSchema, this.getSchemaTarget());
   }
 
-  public processToJSONSchema(zodSchema: ZodType, io: 'input' | 'output' = 'input'): JSONSchema7 {
+  public processToJSONSchema(zodSchema: PublicSchema<any>, io: 'input' | 'output' = 'input'): JSONSchema7 {
     const standardSchema = toStandardSchema(zodSchema);
 
     const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
