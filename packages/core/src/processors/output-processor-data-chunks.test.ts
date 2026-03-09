@@ -309,4 +309,58 @@ describe('Output Processor Data Chunks (#13341)', () => {
 
     addSpy.mockRestore();
   });
+
+  it('should process multiple data-* chunks from a single tool execution', async () => {
+    const capturedDataChunks: any[] = [];
+
+    class MultiChunkTracker implements Processor {
+      readonly id = 'multi-chunk-tracker';
+      readonly name = 'Multi Chunk Tracker';
+
+      async processOutputStream({ part }: any) {
+        if (part.type.startsWith('data-')) {
+          capturedDataChunks.push(part);
+        }
+        return part;
+      }
+    }
+
+    const toolWithMultipleChunks = createTool({
+      id: 'toolWithMultipleChunks',
+      description: 'A test tool that emits multiple data chunks',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async (inputData, { writer }) => {
+        writer!.custom({ type: 'data-progress', data: { step: 1, status: 'started' } });
+        writer!.custom({ type: 'data-progress', data: { step: 2, status: 'processing' } });
+        writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
+        return `Processed: ${inputData.text}`;
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent with tools',
+      model: createToolCallingModel('toolWithMultipleChunks') as any,
+      tools: { toolWithMultipleChunks },
+      outputProcessors: [new MultiChunkTracker()],
+    });
+
+    const stream = await agent.stream('Call the tool', { maxSteps: 5 });
+
+    const streamDataChunks: any[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type.startsWith('data-')) {
+        streamDataChunks.push(chunk);
+      }
+    }
+
+    expect(streamDataChunks).toHaveLength(3);
+    expect(streamDataChunks[0]).toMatchObject({ type: 'data-progress', data: { step: 1, status: 'started' } });
+    expect(streamDataChunks[1]).toMatchObject({ type: 'data-progress', data: { step: 2, status: 'processing' } });
+    expect(streamDataChunks[2]).toMatchObject({ type: 'data-metrics', data: { latency: 42 } });
+
+    // Processor should have seen all 3 chunks
+    expect(capturedDataChunks).toHaveLength(3);
+  });
 });
