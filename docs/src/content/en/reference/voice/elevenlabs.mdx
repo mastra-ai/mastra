@@ -93,12 +93,19 @@ Converts text to speech using the configured speech model and voice.
     type: 'object',
     description: 'Additional options for speech synthesis',
     isOptional: true,
-  },
-  {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Override the default speaker ID for this request',
-    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Override the default speaker ID for this request',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -214,5 +221,5 @@ Returns: `Promise<string>` - A Promise that resolves to the transcribed text
 
 1. An ElevenLabs API key is required. Set it via the `ELEVENLABS_API_KEY` environment variable or pass it in the constructor.
 1. The default speaker is set to Aria (ID: '9BWtsMINqrJLrRacOk9x').
-1. Speech-to-text functionality is not supported by ElevenLabs.
+1. Speech-to-text functionality isn't supported by ElevenLabs.
 1. Available speakers can be retrieved using the `getSpeakers()` method, which returns detailed information about each voice including language and gender.

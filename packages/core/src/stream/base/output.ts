@@ -8,6 +8,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import { resolveObservabilityContext } from '../../observability';
+import type { OutputResult } from '../../processors';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
@@ -572,6 +573,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
                   ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser || [],
+                  dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
@@ -740,12 +742,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     },
                   };
 
+                  const outputResult: OutputResult = {
+                    text: self.#bufferedText.join(''),
+                    usage: chunk.payload.output.usage as LanguageModelUsage,
+                    finishReason: self.#finishReason || 'unknown',
+                    steps: [...self.#bufferedSteps] as LLMStepResult[],
+                  };
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     resolveObservabilityContext(options),
                     self.#options.requestContext,
                     0,
                     outputResultWriter,
+                    outputResult,
                   );
 
                   // Get text from the latest response message (the last assistant message)

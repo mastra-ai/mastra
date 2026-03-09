@@ -40,7 +40,7 @@ The OtelBridge provides two-way integration:
 
 - Reads from OTEL ambient context (AsyncLocalStorage) automatically
 - Inherits trace ID and parent span ID from active OTEL spans
-- Respects OTEL sampling decisions — if a trace is not sampled, Mastra won't create spans for it
+- Respects OTEL sampling decisions — if a trace isn't sampled, Mastra won't create spans for it
 - No manual trace ID passing required when OTEL auto-instrumentation is active
 
 **From Mastra to OTEL:**
@@ -193,7 +193,7 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 
 ## Troubleshooting
 
-If traces aren't appearing or connecting as expected:
+If traces aren't displaying or connecting as expected:
 
 - Verify OTEL SDK is initialized before Mastra (use `--import` flag or import at top of entry point)
 - Ensure the OtelBridge is added to your observability config

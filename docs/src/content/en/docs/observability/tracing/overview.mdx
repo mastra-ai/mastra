@@ -442,7 +442,7 @@ requestContext.set('session', { data: { experimentId: 'exp-999' } })
 
 ### Adding Tags to Traces
 
-Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are simple strings designed for quick filtering and organization.
+Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are plain strings designed for quick filtering and organization.
 
 Use `tracingOptions.tags` to add tags when executing agents or workflows:
 
@@ -631,11 +631,11 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in Processors
 
-- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
+- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
 
 #### Creating Custom Processors
 
-You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
+You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a basic example that converts all input text in spans to lowercase:
 
 ```ts title="src/processors/lowercase-input-processor.ts"
 import type { SpanOutputProcessor, AnySpan } from '@mastra/observability'
@@ -681,7 +681,7 @@ Custom span formatters transform how spans appear in specific observability plat
 #### Use Cases
 
 - **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
-- **Transform input/output formats** - Customize how data appears in specific platforms
+- **Transform input/output formats** - Customize how data displays in specific platforms
 - **Platform-specific field mapping** - Add or remove fields based on platform requirements
 - **Async data enrichment** - Fetch additional context from external APIs or databases
 

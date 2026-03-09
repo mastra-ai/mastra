@@ -182,3 +182,113 @@ export const convertUnits = createTool({
     return { original: { value, unit: fromUnit }, converted: { value: result, unit: toUnit } };
   },
 });
+
+// ==============================================
+// Subscription Management Tools (in-memory store)
+// ==============================================
+
+interface Subscription {
+  id: string;
+  name: string;
+  plan: string;
+  price: number;
+  status: 'active' | 'paused' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+}
+
+const subscriptionStore = new Map<string, Subscription>();
+
+export const createSubscription = createTool({
+  id: 'create_subscription',
+  description: 'Create a new subscription for a user. Returns the created subscription with its ID.',
+  inputSchema: z.object({
+    name: z.string().describe('Name for the subscription (e.g., "Netflix", "Spotify")'),
+    plan: z.string().describe('Plan tier (e.g., "basic", "premium", "enterprise")'),
+    price: z.number().describe('Monthly price in USD'),
+  }),
+  execute: async ({ name, plan, price }) => {
+    const id = `sub_${Date.now()}`;
+    const now = new Date().toISOString();
+    const subscription: Subscription = {
+      id,
+      name,
+      plan,
+      price,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    };
+    subscriptionStore.set(id, subscription);
+    return { success: true, subscription };
+  },
+});
+
+export const getSubscription = createTool({
+  id: 'get_subscription',
+  description: 'Get a subscription by its ID.',
+  inputSchema: z.object({
+    id: z.string().describe('The subscription ID (e.g., "sub_123456")'),
+  }),
+  execute: async ({ id }) => {
+    const subscription = subscriptionStore.get(id);
+    if (!subscription) {
+      return { success: false, error: `Subscription ${id} not found` };
+    }
+    return { success: true, subscription };
+  },
+});
+
+export const listSubscriptions = createTool({
+  id: 'list_subscriptions',
+  description: 'List all subscriptions. Optionally filter by status.',
+  inputSchema: z.object({
+    status: z.enum(['active', 'paused', 'cancelled']).optional().describe('Filter by subscription status'),
+  }),
+  execute: async ({ status }) => {
+    let subscriptions = Array.from(subscriptionStore.values());
+    if (status) {
+      subscriptions = subscriptions.filter(s => s.status === status);
+    }
+    return {
+      success: true,
+      subscriptions,
+      total: subscriptions.length,
+    };
+  },
+});
+
+export const updateSubscription = createTool({
+  id: 'update_subscription',
+  description: 'Update an existing subscription. Can change the plan, price, or status.',
+  inputSchema: z.object({
+    id: z.string().describe('The subscription ID to update'),
+    plan: z.string().optional().describe('New plan tier'),
+    price: z.number().optional().describe('New monthly price'),
+    status: z.enum(['active', 'paused', 'cancelled']).optional().describe('New status'),
+  }),
+  execute: async ({ id, plan, price, status }) => {
+    const subscription = subscriptionStore.get(id);
+    if (!subscription) {
+      return { success: false, error: `Subscription ${id} not found` };
+    }
+    if (plan !== undefined) subscription.plan = plan;
+    if (price !== undefined) subscription.price = price;
+    if (status !== undefined) subscription.status = status;
+    subscription.updatedAt = new Date().toISOString();
+    subscriptionStore.set(id, subscription);
+    return { success: true, subscription };
+  },
+});
+
+export const deleteSubscription = createTool({
+  id: 'delete_subscription',
+  description: 'Delete a subscription by its ID.',
+  inputSchema: z.object({
+    id: z.string().describe('The subscription ID to delete'),
+  }),
+  execute: async ({ id }) => {
+    const existed = subscriptionStore.delete(id);
+    return { success: existed, message: existed ? `Subscription ${id} deleted` : `Subscription ${id} not found` };
+  },
+});
