@@ -996,6 +996,10 @@ function createStepFromProcessor<TProcessorId extends string>(
           }
 
           case 'outputStream': {
+            // Skip data-* chunks for processors that haven't opted in
+            if (part && (part as ChunkType).type.startsWith('data-') && !processor.processDataParts) {
+              return { ...passThrough, part };
+            }
             if (processor.processOutputStream) {
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object

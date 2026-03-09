@@ -440,15 +440,9 @@ exports[`GoogleSchemaCompatLayer > processZodType - Basic Transformations > shou
   "additionalProperties": false,
   "properties": {
     "deletedAt": {
-      "anyOf": [
-        {
-          "description": "constraints: a valid date-time",
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
+      "description": "constraints: a valid date-time",
+      "nullable": true,
+      "type": "string",
     },
     "name": {
       "type": "string",
@@ -457,6 +451,30 @@ exports[`GoogleSchemaCompatLayer > processZodType - Basic Transformations > shou
   "required": [
     "name",
     "deletedAt",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`GoogleSchemaCompatLayer > processZodType - Basic Transformations > should handle nullish fields (optional + nullable) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "maxSteps": {
+      "nullable": true,
+      "type": "number",
+    },
+    "name": {
+      "type": "string",
+    },
+    "threadId": {
+      "nullable": true,
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
   ],
   "type": "object",
 }
@@ -513,15 +531,9 @@ exports[`GoogleSchemaCompatLayer > processZodType - Complex Schemas > should han
       "type": "string",
     },
     "deletedAt": {
-      "anyOf": [
-        {
-          "description": "constraints: a valid date-time",
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
+      "description": "constraints: a valid date-time",
+      "nullable": true,
+      "type": "string",
     },
     "email": {
       "type": "string",

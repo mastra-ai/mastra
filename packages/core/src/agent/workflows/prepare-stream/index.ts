@@ -120,6 +120,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     agentId,
     methodType,
+    saveQueueManager,
   });
 
   return createWorkflow({
