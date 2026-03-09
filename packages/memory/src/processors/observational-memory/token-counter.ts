@@ -638,6 +638,17 @@ function isImageLikeFilePart(part: CacheablePart): boolean {
     return true;
   }
 
+  if (isHttpUrlString(data)) {
+    try {
+      const url = new URL(data as string);
+      if (hasImageFilenameExtension(url.pathname)) {
+        return true;
+      }
+    } catch {
+      // ignore invalid URL string
+    }
+  }
+
   return hasImageFilenameExtension(getObjectValue(part, 'filename'));
 }
 
@@ -891,14 +902,15 @@ function encodeAttachmentBase64(asset: unknown): string | undefined {
   return undefined;
 }
 
-function createTimeoutSignal(timeoutMs: number): AbortSignal {
+function createTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cleanup: () => void } {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(new Error(`Attachment token counting timed out after ${timeoutMs}ms`)),
     timeoutMs,
   );
-  controller.signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
-  return controller.signal;
+  const cleanup = () => clearTimeout(timeout);
+  controller.signal.addEventListener('abort', cleanup, { once: true });
+  return { signal: controller.signal, cleanup };
 }
 
 function getNumericResponseField(value: unknown, paths: string[][]): number | undefined {
@@ -1012,27 +1024,32 @@ async function fetchOpenAIAttachmentTokenEstimate(modelId: string, part: Cacheab
   const inputPart = toOpenAIInputPart(part);
   if (!apiKey || !inputPart) return undefined;
 
-  const response = await fetch('https://api.openai.com/v1/responses/input_tokens', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelId,
-      input: [{ type: 'message', role: 'user', content: [inputPart] }],
-    }),
-    signal: createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS),
-  });
+  const { signal, cleanup } = createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS);
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses/input_tokens', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        input: [{ type: 'message', role: 'user', content: [inputPart] }],
+      }),
+      signal,
+    });
 
-  if (!response.ok) return undefined;
-  const body = await response.json();
-  return getNumericResponseField(body, [
-    ['input_tokens'],
-    ['total_tokens'],
-    ['usage', 'input_tokens'],
-    ['usage', 'total_tokens'],
-  ]);
+    if (!response.ok) return undefined;
+    const body = await response.json();
+    return getNumericResponseField(body, [
+      ['input_tokens'],
+      ['total_tokens'],
+      ['usage', 'input_tokens'],
+      ['usage', 'total_tokens'],
+    ]);
+  } finally {
+    cleanup();
+  }
 }
 
 async function fetchAnthropicAttachmentTokenEstimate(
@@ -1043,23 +1060,28 @@ async function fetchAnthropicAttachmentTokenEstimate(
   const contentPart = toAnthropicContentPart(part);
   if (!apiKey || !contentPart) return undefined;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages/count_tokens', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelId,
-      messages: [{ role: 'user', content: [contentPart] }],
-    }),
-    signal: createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS),
-  });
+  const { signal, cleanup } = createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS);
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages/count_tokens', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: 'user', content: [contentPart] }],
+      }),
+      signal,
+    });
 
-  if (!response.ok) return undefined;
-  const body = await response.json();
-  return getNumericResponseField(body, [['input_tokens']]);
+    if (!response.ok) return undefined;
+    const body = await response.json();
+    return getNumericResponseField(body, [['input_tokens']]);
+  } finally {
+    cleanup();
+  }
 }
 
 async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: CacheablePart): Promise<number | undefined> {
@@ -1067,21 +1089,26 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
   const googlePart = toGooglePart(part);
   if (!apiKey || !googlePart) return undefined;
 
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:countTokens`, {
-    method: 'POST',
-    headers: {
-      'x-goog-api-key': apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [googlePart] }],
-    }),
-    signal: createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS),
-  });
+  const { signal, cleanup } = createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS);
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:countTokens`, {
+      method: 'POST',
+      headers: {
+        'x-goog-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [googlePart] }],
+      }),
+      signal,
+    });
 
-  if (!response.ok) return undefined;
-  const body = await response.json();
-  return getNumericResponseField(body, [['totalTokens'], ['total_tokens']]);
+    if (!response.ok) return undefined;
+    const body = await response.json();
+    return getNumericResponseField(body, [['totalTokens'], ['total_tokens']]);
+  } finally {
+    cleanup();
+  }
 }
 
 /**
