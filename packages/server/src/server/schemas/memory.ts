@@ -115,6 +115,8 @@ const filterSchema = z.preprocess(
         .object({
           start: z.coerce.date().optional(),
           end: z.coerce.date().optional(),
+          startExclusive: z.boolean().optional(),
+          endExclusive: z.boolean().optional(),
         })
         .optional(),
       roles: z.array(z.string()).optional(),
