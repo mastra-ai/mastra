@@ -265,6 +265,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       entityType?: string;
       entityId?: string;
       tracingPolicy?: TracingPolicy;
+      requestContext?: RequestContext;
     };
     executionContext: ExecutionContext;
   }): Promise<Span<SpanType> | undefined> {

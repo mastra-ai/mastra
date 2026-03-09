@@ -8,7 +8,8 @@ import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
+import type { ChunkType } from '../stream';
 import type { DataChunkType, LanguageModelUsage, LLMStepResult } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
@@ -159,10 +160,10 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
-   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  structuredOutput?: StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -182,7 +183,7 @@ export type RunProcessInputStepArgs = Omit<
 /**
  * Result from processInputStep method
  *
- * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
+ * Note: structuredOutput.schema is typed as StandardSchemaWithJSON (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
 export type ProcessInputStepResult = {
@@ -201,10 +202,10 @@ export type ProcessInputStepResult = {
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
-   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  structuredOutput?: StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.

@@ -123,8 +123,8 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         weather: expect.any(String),
         temperature: expect.any(Number),
         humidity: expect.any(Number),
-        windSpeed: undefined,
-        barometricPressure: undefined,
+        windSpeed: null,
+        barometricPressure: null,
         precipitation: null,
       };
 

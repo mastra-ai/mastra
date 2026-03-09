@@ -266,7 +266,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should return structured output from network', async () => {
       const helperAgent = new Agent({
@@ -378,7 +378,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle conversation ending with tool result in network (with follow-up user message)', async () => {
       const testTool = createTool({
@@ -438,7 +438,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle conversation ending with tool result in network (agentic loop pattern)', async () => {
       const testTool = createTool({
@@ -497,7 +497,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle messages starting with assistant-with-tool-call in network', async () => {
       const testTool = createTool({
@@ -556,7 +556,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle network with workflow execution', async () => {
       const researchAgent = new Agent({
@@ -642,7 +642,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle messages with only assistant role in network', async () => {
       const helperAgent = new Agent({
@@ -673,7 +673,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
   });
 
   describe('Gemini 3 Pro with tool calls', () => {
@@ -881,7 +881,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(suspendData.suspendPayload).toBeDefined();
       expect(suspendData.suspendedToolName).toBe('findUserTool');
       expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
-    }, 15000);
+    }, 30_000);
 
     it('should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true', async () => {
       const findUserTool = createTool({
@@ -974,7 +974,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(name).toBe('Dero Israel');
       expect(email).toBe('test@test.com');
       expect(age).toBe(25);
-    }, 15000);
+    }, 30_000);
 
     it(
       'should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true',
