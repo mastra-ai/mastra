@@ -4,7 +4,6 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { isProtectedCustomRoute } from '@mastra/server/auth';
-import { formatZodError } from '@mastra/server/handlers/error';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
@@ -571,10 +570,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           this.mastra.getLogger()?.error('Error parsing query params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
-            ctx.status = 400;
-            ctx.body = formatZodError(error, 'query parameters');
+            const resolved = this.resolveValidationError(route, error, 'query');
+            ctx.status = resolved.status;
+            ctx.body = resolved.body;
             return;
           }
           ctx.status = 400;
@@ -593,10 +592,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           this.mastra.getLogger()?.error('Error parsing body', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Zod validation errors should return 400 Bad Request with structured issues
           if (error instanceof ZodError) {
-            ctx.status = 400;
-            ctx.body = formatZodError(error, 'request body');
+            const resolved = this.resolveValidationError(route, error, 'body');
+            ctx.status = resolved.status;
+            ctx.body = resolved.body;
             return;
           }
           ctx.status = 400;
@@ -617,8 +616,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
           if (error instanceof ZodError) {
-            ctx.status = 400;
-            ctx.body = formatZodError(error, 'path parameters');
+            const resolved = this.resolveValidationError(route, error, 'path');
+            ctx.status = resolved.status;
+            ctx.body = resolved.body;
             return;
           }
           ctx.status = 400;

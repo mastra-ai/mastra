@@ -200,6 +200,10 @@ function sanitizeUnknown(value, label) {
       clone[key] = sanitizeScalarString(child, `${label}:${key}`);
       continue;
     }
+    if (typeof child === 'string') {
+      clone[key] = sanitizeScalarString(child, `${label}:${key}`);
+      continue;
+    }
 
     clone[key] = sanitizeNode(child, `${label}:${key}`);
   }

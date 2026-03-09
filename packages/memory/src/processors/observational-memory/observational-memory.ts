@@ -2,6 +2,7 @@ import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
@@ -703,6 +704,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   constructor(config: ObservationalMemoryConfig) {
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
+      );
+    }
+
     // Validate that top-level model is not used together with sub-config models
     if (config.model && config.observation?.model) {
       throw new Error(
@@ -3178,7 +3185,17 @@ ${suggestedResponse}
       );
 
       // Persist the computed token count so the UI can display it on page load
-      this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
+      await this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens);
+
+      let postCaptureRecord = freshRecord;
+      if (reproCaptureEnabled) {
+        const captureStorageIds = this.getStorageIds(threadId, resourceId);
+        const captureRecordHistory = await this.storage.getObservationalMemoryHistory(
+          captureStorageIds.threadId,
+          captureStorageIds.resourceId,
+        );
+        postCaptureRecord = captureRecordHistory.find(record => record.id === freshRecord.id) ?? freshRecord;
+      }
 
       if (reproCaptureEnabled && preRecordSnapshot && preMessagesSnapshot && preSerializedMessageList) {
         writeProcessInputStepReproCapture({
@@ -3187,12 +3204,12 @@ ${suggestedResponse}
           stepNumber,
           args,
           preRecord: preRecordSnapshot,
-          postRecord: freshRecord,
+          postRecord: postCaptureRecord,
           preMessages: preMessagesSnapshot,
           preBufferedChunks: this.getBufferedChunks(preRecordSnapshot),
           preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
           preSerializedMessageList,
-          postBufferedChunks: this.getBufferedChunks(freshRecord),
+          postBufferedChunks: this.getBufferedChunks(postCaptureRecord),
           postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
           messageList,
           details: {

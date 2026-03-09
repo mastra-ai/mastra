@@ -1,7 +1,8 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 import {
@@ -4087,6 +4088,30 @@ describe('Async Buffering Storage Operations', () => {
 });
 
 describe('Model Requirement', () => {
+  const originalCoreFeatures = new Set(coreFeatures);
+
+  afterEach(() => {
+    coreFeatures.clear();
+    for (const feature of originalCoreFeatures) {
+      coreFeatures.add(feature);
+    }
+  });
+
+  it('should throw when core does not support request-response-id-rotation', () => {
+    coreFeatures.delete('request-response-id-rotation');
+
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Please bump @mastra/core to a newer version');
+  });
+
   it('should throw when no model is provided at all', () => {
     expect(
       () =>
