@@ -71,7 +71,9 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
           mode === 'form' ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:text-neutral5',
         )}
       >
-        <Icon size="sm"><FormInput /></Icon>
+        <Icon size="sm">
+          <FormInput />
+        </Icon>
         Form
       </button>
       <button
@@ -82,7 +84,9 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
           mode === 'json' ? 'bg-surface3 text-neutral5' : 'text-neutral3 hover:text-neutral5',
         )}
       >
-        <Icon size="sm"><FileJson /></Icon>
+        <Icon size="sm">
+          <FileJson />
+        </Icon>
         JSON
       </button>
     </div>
@@ -95,7 +99,8 @@ export function AgentPlaygroundRequestContext({ requestContextSchema }: AgentPla
   const [mode, setMode] = useState<InputMode>('form');
 
   // Check if variables define any properties (i.e. there's an actual schema)
-  const hasVariables = variables && typeof variables === 'object' && Object.keys((variables as any)?.properties ?? {}).length > 0;
+  const hasVariables =
+    variables && typeof variables === 'object' && Object.keys((variables as any)?.properties ?? {}).length > 0;
   const hasSchemaForm = !!requestContextSchema || hasVariables;
 
   return (

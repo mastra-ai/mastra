@@ -129,12 +129,22 @@ function DatasetSaveDialog({
 
           <div className="grid gap-2">
             <Label>Input (JSON)</Label>
-            <CodeEditor value={input} onChange={onInputChange} showCopyButton={false} className="min-h-[120px] max-h-[240px]" />
+            <CodeEditor
+              value={input}
+              onChange={onInputChange}
+              showCopyButton={false}
+              className="min-h-[120px] max-h-[240px]"
+            />
           </div>
 
           <div className="grid gap-2">
             <Label>Ground Truth (JSON, optional)</Label>
-            <CodeEditor value={groundTruth} onChange={setGroundTruth} showCopyButton={false} className="min-h-[80px] max-h-[160px]" />
+            <CodeEditor
+              value={groundTruth}
+              onChange={setGroundTruth}
+              showCopyButton={false}
+              className="min-h-[80px] max-h-[160px]"
+            />
           </div>
         </DialogBody>
         <DialogFooter className="px-6">
@@ -175,9 +185,7 @@ function DatasetSaveActionInner() {
   const [input, setInput] = useState('');
 
   const handleClick = useCallback(() => {
-    const text = extractTextFromParts(
-      message.content as readonly { type: string; text?: string }[],
-    );
+    const text = extractTextFromParts(message.content as readonly { type: string; text?: string }[]);
     setInput(JSON.stringify(text, null, 2));
     setDialogOpen(true);
   }, [message.content]);
@@ -193,7 +201,13 @@ function DatasetSaveActionInner() {
       >
         <DatabaseIcon className="h-4 w-4" />
       </IconButton>
-      <DatasetSaveDialog open={dialogOpen} onOpenChange={setDialogOpen} input={input} onInputChange={setInput} requestContext={ctx?.requestContext} />
+      <DatasetSaveDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        input={input}
+        onInputChange={setInput}
+        requestContext={ctx?.requestContext}
+      />
     </>
   );
 }
@@ -242,7 +256,13 @@ function SaveFullConversationInner() {
         {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}
         Save full conversation to dataset
       </button>
-      <DatasetSaveDialog open={dialogOpen} onOpenChange={setDialogOpen} input={input} onInputChange={setInput} requestContext={ctx.requestContext} />
+      <DatasetSaveDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        input={input}
+        onInputChange={setInput}
+        requestContext={ctx.requestContext}
+      />
     </>
   );
 }

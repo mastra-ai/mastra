@@ -124,16 +124,21 @@ function TraceTableHeader({
       )}
     >
       <div className="flex items-center justify-center">
-        <Checkbox
-          checked={allSelected ? true : someSelected ? 'indeterminate' : false}
-          onCheckedChange={onToggleAll}
-        />
+        <Checkbox checked={allSelected ? true : someSelected ? 'indeterminate' : false} onCheckedChange={onToggleAll} />
       </div>
       <div className="w-3.5" />
-      <Txt variant="ui-xs" className="text-neutral3 font-medium">Timestamp</Txt>
-      <Txt variant="ui-xs" className="text-neutral3 font-medium">Input</Txt>
-      <Txt variant="ui-xs" className="text-neutral3 font-medium">Output</Txt>
-      <Txt variant="ui-xs" className="text-neutral3 font-medium text-right">Duration</Txt>
+      <Txt variant="ui-xs" className="text-neutral3 font-medium">
+        Timestamp
+      </Txt>
+      <Txt variant="ui-xs" className="text-neutral3 font-medium">
+        Input
+      </Txt>
+      <Txt variant="ui-xs" className="text-neutral3 font-medium">
+        Output
+      </Txt>
+      <Txt variant="ui-xs" className="text-neutral3 font-medium text-right">
+        Duration
+      </Txt>
     </div>
   );
 }
@@ -158,11 +163,12 @@ function TraceTableRow({
   const duration = formatDuration(trace.startedAt, trace.endedAt);
   const timestamp = formatTimestamp(new Date(trace.startedAt));
 
-  const errorText = hasError && trace.error
-    ? typeof trace.error === 'string'
-      ? trace.error
-      : (trace.error as { message?: string })?.message || 'Error'
-    : '';
+  const errorText =
+    hasError && trace.error
+      ? typeof trace.error === 'string'
+        ? trace.error
+        : (trace.error as { message?: string })?.message || 'Error'
+      : '';
 
   return (
     <div
@@ -172,10 +178,7 @@ function TraceTableRow({
         isSelected && 'bg-surface3',
       )}
     >
-      <div
-        className="flex items-center justify-center"
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
         <Checkbox checked={isChecked} onCheckedChange={onCheck} />
       </div>
 
@@ -304,8 +307,7 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
         });
     },
     retry: false,
-    refetchInterval: (query: { state: { error: unknown } }) =>
-      is403ForbiddenError(query.state.error) ? false : 3000,
+    refetchInterval: (query: { state: { error: unknown } }) => (is403ForbiddenError(query.state.error) ? false : 3000),
   });
 
   useEffect(() => {
@@ -392,8 +394,7 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
   );
 
   const computeTraceLink = useCallback(
-    (traceId: string, spanId?: string) =>
-      `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`,
+    (traceId: string, spanId?: string) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`,
     [],
   );
 
@@ -481,11 +482,7 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
             </div>
           ) : (
             <div>
-              <TraceTableHeader
-                allSelected={allSelected}
-                someSelected={someSelected}
-                onToggleAll={handleToggleAll}
-              />
+              <TraceTableHeader allSelected={allSelected} someSelected={someSelected} onToggleAll={handleToggleAll} />
               {traces.map(trace => (
                 <TraceTableRow
                   key={trace.traceId}

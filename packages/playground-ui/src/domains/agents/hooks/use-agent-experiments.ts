@@ -47,13 +47,11 @@ export const useAgentExperiments = (agentId: string) => {
         }),
       );
 
-      return results
-        .flat()
-        .toSorted((a, b) => {
-          const dateA = a.startedAt ? new Date(a.startedAt as string).getTime() : 0;
-          const dateB = b.startedAt ? new Date(b.startedAt as string).getTime() : 0;
-          return dateB - dateA;
-        }) as AgentExperiment[];
+      return results.flat().toSorted((a, b) => {
+        const dateA = a.startedAt ? new Date(a.startedAt as string).getTime() : 0;
+        const dateB = b.startedAt ? new Date(b.startedAt as string).getTime() : 0;
+        return dateB - dateA;
+      }) as AgentExperiment[];
     },
     enabled: Boolean(agentId) && datasets.length > 0,
     refetchInterval: query => {

@@ -141,11 +141,7 @@ export function ToolsPage() {
                 'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
                 !isDisabled && 'border-border1 border-dashed ',
               )}
-              value={
-                isSelected
-                  ? (selectedTools?.[tool.value]?.description ?? tool.description)
-                  : tool.description
-              }
+              value={isSelected ? (selectedTools?.[tool.value]?.description ?? tool.description) : tool.description}
               onChange={e => handleDescriptionChange(tool.value, e.target.value)}
             />
           </EntityDescription>
@@ -160,12 +156,7 @@ export function ToolsPage() {
           />
         )}
 
-        {!readOnly && (
-          <Switch
-            checked={isSelected}
-            onCheckedChange={() => handleValueChange(tool.value)}
-          />
-        )}
+        {!readOnly && <Switch checked={isSelected} onCheckedChange={() => handleValueChange(tool.value)} />}
       </Entity>
     );
   };
@@ -191,9 +182,7 @@ export function ToolsPage() {
               <SubSectionHeader title="Configured Tools" icon={<ToolsIcon />} />
             </Section.Header>
 
-            <div className="flex flex-col gap-1">
-              {selectedOptions.map(tool => renderToolEntity(tool, true))}
-            </div>
+            <div className="flex flex-col gap-1">{selectedOptions.map(tool => renderToolEntity(tool, true))}</div>
           </SubSectionRoot>
         )}
 
@@ -205,9 +194,7 @@ export function ToolsPage() {
           <Searchbar onSearch={setSearch} label="Search tools" placeholder="Search tools" />
 
           {unselectedOptions.length > 0 && (
-            <div className="flex flex-col gap-1">
-              {unselectedOptions.map(tool => renderToolEntity(tool, false))}
-            </div>
+            <div className="flex flex-col gap-1">{unselectedOptions.map(tool => renderToolEntity(tool, false))}</div>
           )}
         </SubSectionRoot>
       </div>

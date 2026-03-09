@@ -13,10 +13,7 @@ export interface DatasetSaveContextValue {
 
 const DatasetSaveContext = createContext<DatasetSaveContextValue | null>(null);
 
-export function DatasetSaveProvider({
-  children,
-  ...value
-}: DatasetSaveContextValue & { children: React.ReactNode }) {
+export function DatasetSaveProvider({ children, ...value }: DatasetSaveContextValue & { children: React.ReactNode }) {
   return <DatasetSaveContext.Provider value={value}>{children}</DatasetSaveContext.Provider>;
 }
 

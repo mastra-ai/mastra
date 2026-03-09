@@ -17,10 +17,7 @@ import { DatasetCombobox } from '@/domains/datasets/components/dataset-combobox'
 import { ScorerSelector } from '@/domains/datasets/components/experiment-trigger/scorer-selector';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import {
-  useDatasetExperimentResults,
-  useScoresByExperimentId,
-} from '@/domains/datasets/hooks/use-dataset-experiments';
+import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
@@ -149,7 +146,9 @@ function ResultOutputSection({ output }: { output: unknown }) {
       {/* Response text */}
       {parsed.text ? (
         <div className="space-y-1">
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Response</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Response
+          </Txt>
           <div className="text-sm text-neutral5 bg-surface1 rounded px-3 py-2 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
             {parsed.text}
           </div>
@@ -159,7 +158,9 @@ function ResultOutputSection({ output }: { output: unknown }) {
       {/* Object output (for structured generation) */}
       {parsed.object && (
         <div className="space-y-1">
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Structured Output</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Structured Output
+          </Txt>
           <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
             {JSON.stringify(parsed.object, null, 2)}
           </pre>
@@ -217,9 +218,12 @@ function ResultOutputSection({ output }: { output: unknown }) {
       {/* Usage stats */}
       {parsed.usage && (
         <div className="flex items-center gap-3">
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Usage</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Usage
+          </Txt>
           <Txt variant="ui-xs" className="text-neutral2 font-mono">
-            {parsed.usage.promptTokens} prompt · {parsed.usage.completionTokens} completion · {parsed.usage.totalTokens} total
+            {parsed.usage.promptTokens} prompt · {parsed.usage.completionTokens} completion · {parsed.usage.totalTokens}{' '}
+            total
           </Txt>
         </div>
       )}
@@ -227,8 +231,12 @@ function ResultOutputSection({ output }: { output: unknown }) {
       {/* Trace ID */}
       {parsed.traceId && (
         <div className="flex items-center gap-2">
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Trace</Txt>
-          <Txt variant="ui-xs" className="text-neutral2 font-mono truncate">{parsed.traceId}</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Trace
+          </Txt>
+          <Txt variant="ui-xs" className="text-neutral2 font-mono truncate">
+            {parsed.traceId}
+          </Txt>
           <CopyButton content={parsed.traceId} tooltip="Copy trace ID" size="sm" />
         </div>
       )}
@@ -236,7 +244,9 @@ function ResultOutputSection({ output }: { output: unknown }) {
       {/* Fallback if no structured content */}
       {!parsed.text && !parsed.object && parsed.toolCalls.length === 0 && (
         <div className="space-y-1">
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">Output</Txt>
+          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            Output
+          </Txt>
           <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
             {formatResultValue(output)}
           </pre>
@@ -246,20 +256,19 @@ function ResultOutputSection({ output }: { output: unknown }) {
   );
 }
 
-function ExperimentResultsPanel({
-  experiment,
-  onBack,
-}: {
-  experiment: AgentExperiment;
-  onBack: () => void;
-}) {
+function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExperiment; onBack: () => void }) {
   const experimentStatus = experiment.status as 'running' | 'pending' | 'completed' | 'failed';
-  const { data: results, isLoading, setEndOfListElement, isFetchingNextPage, hasNextPage } =
-    useDatasetExperimentResults({
-      datasetId: experiment.datasetId,
-      experimentId: experiment.id,
-      experimentStatus,
-    });
+  const {
+    data: results,
+    isLoading,
+    setEndOfListElement,
+    isFetchingNextPage,
+    hasNextPage,
+  } = useDatasetExperimentResults({
+    datasetId: experiment.datasetId,
+    experimentId: experiment.id,
+    experimentStatus,
+  });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
 
   return (
@@ -304,9 +313,7 @@ function ExperimentResultsPanel({
               return (
                 <div key={result.id} className="border-b border-border1 px-4 py-3 space-y-2">
                   <div className="flex items-center gap-2">
-                    <Badge variant={hasError ? 'error' : 'success'}>
-                      {hasError ? 'Error' : 'Success'}
-                    </Badge>
+                    <Badge variant={hasError ? 'error' : 'success'}>{hasError ? 'Error' : 'Success'}</Badge>
                     <Txt variant="ui-xs" className="text-neutral2 font-mono">
                       {result.itemId.slice(0, 8)}
                     </Txt>
@@ -337,7 +344,9 @@ function ExperimentResultsPanel({
                   {/* Output or Error */}
                   {hasError ? (
                     <div className="space-y-1">
-                      <Txt variant="ui-xs" className="text-red-400 font-medium">Error</Txt>
+                      <Txt variant="ui-xs" className="text-red-400 font-medium">
+                        Error
+                      </Txt>
                       <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
                         {formatResultValue(result.error)}
                       </pre>
@@ -357,7 +366,9 @@ function ExperimentResultsPanel({
               )}
               {!hasNextPage && results.length > 0 && (
                 <div className="text-center py-2">
-                  <Txt variant="ui-xs" className="text-neutral2">All results loaded</Txt>
+                  <Txt variant="ui-xs" className="text-neutral2">
+                    All results loaded
+                  </Txt>
                 </div>
               )}
             </div>
@@ -412,9 +423,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
     }
   }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext, queryClient]);
 
-  const selectedExperiment = selectedExperimentId
-    ? experiments?.find(e => e.id === selectedExperimentId)
-    : null;
+  const selectedExperiment = selectedExperimentId ? experiments?.find(e => e.id === selectedExperimentId) : null;
 
   // Show results panel when an experiment is selected
   if (selectedExperiment) {

@@ -22,7 +22,12 @@ export function AgentPlaygroundTestChat({ agentId, agentName, modelVersion, hasM
 
   return (
     <AgentSettingsProvider agentId={agentId} defaultSettings={{ modelSettings: {} }}>
-      <DatasetSaveProvider enabled threadId={testThreadId} agentId={agentId} requestContext={hasRequestContext ? mergedRequestContext : undefined}>
+      <DatasetSaveProvider
+        enabled
+        threadId={testThreadId}
+        agentId={agentId}
+        requestContext={hasRequestContext ? mergedRequestContext : undefined}
+      >
         <div className="flex flex-col h-full">
           <div className="px-4 py-2 border-b border-border1">
             <Txt variant="ui-xs" className="text-neutral2">

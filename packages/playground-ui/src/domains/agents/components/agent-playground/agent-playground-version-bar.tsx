@@ -73,9 +73,7 @@ export function AgentPlaygroundVersionBar({
   const activeVersion = activeVersionId ? versions.find(v => v.id === activeVersionId) : undefined;
   const activeVersionNumber = activeVersion?.versionNumber;
 
-  const displayedVersion = selectedVersionId
-    ? versions.find(v => v.id === selectedVersionId)
-    : latestVersion;
+  const displayedVersion = selectedVersionId ? versions.find(v => v.id === selectedVersionId) : latestVersion;
 
   const versionOptions = useMemo(
     () =>
@@ -166,12 +164,7 @@ export function AgentPlaygroundVersionBar({
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
-              <Button
-                variant="default"
-                size="sm"
-                disabled={saveDisabled}
-                className="rounded-l-none px-1.5"
-              >
+              <Button variant="default" size="sm" disabled={saveDisabled} className="rounded-l-none px-1.5">
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenu.Trigger>

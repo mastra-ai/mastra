@@ -60,12 +60,7 @@ export function AgentPageTabs({ agentId, activeTab, showPlayground = false }: Ag
           label="Playground"
         />
       )}
-      <TabLink
-        href={`/agents/${agentId}/traces`}
-        active={activeTab === 'traces'}
-        icon={<EyeIcon />}
-        label="Traces"
-      />
+      <TabLink href={`/agents/${agentId}/traces`} active={activeTab === 'traces'} icon={<EyeIcon />} label="Traces" />
     </div>
   );
 }

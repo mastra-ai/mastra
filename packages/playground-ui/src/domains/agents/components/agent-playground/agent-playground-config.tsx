@@ -28,7 +28,14 @@ interface CollapsibleSectionProps {
   children: React.ReactNode;
 }
 
-function CollapsibleSection({ title, icon, badge, headerAction, defaultOpen = false, children }: CollapsibleSectionProps) {
+function CollapsibleSection({
+  title,
+  icon,
+  badge,
+  headerAction,
+  defaultOpen = false,
+  children,
+}: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
@@ -108,13 +115,7 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
 // Diff-aware read-only views
 // ---------------------------------------------------------------------------
 
-function InstructionsDiffView({
-  previousBlocks,
-  currentBlocks,
-}: {
-  previousBlocks: unknown;
-  currentBlocks: unknown;
-}) {
+function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlocks: unknown; currentBlocks: unknown }) {
   const prevBlocksArr = Array.isArray(previousBlocks) ? previousBlocks : [];
   const currBlocksArr = Array.isArray(currentBlocks) ? currentBlocks : [];
 
@@ -241,10 +242,14 @@ function ToolsDiffView({
               {tool}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="error" className="ml-auto">removed in latest</Badge>
+              <Badge variant="error" className="ml-auto">
+                removed in latest
+              </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="success" className="ml-auto">added in latest</Badge>
+              <Badge variant="success" className="ml-auto">
+                added in latest
+              </Badge>
             )}
           </div>
         );
@@ -268,7 +273,9 @@ function ReadOnlyTools({ tools }: { tools: Record<string, unknown> | undefined }
     <div className="flex flex-col gap-1.5">
       {entries.map(([id, config]) => (
         <div key={id} className="rounded-md border border-border1 bg-surface2 px-3 py-1.5">
-          <Txt variant="ui-sm" className="text-neutral5 font-mono">{id}</Txt>
+          <Txt variant="ui-sm" className="text-neutral5 font-mono">
+            {id}
+          </Txt>
           {(config as Record<string, unknown>)?.description ? (
             <Txt variant="ui-xs" className="text-neutral3 mt-0.5">
               {String((config as Record<string, unknown>).description)}
@@ -335,10 +342,14 @@ function VariablesDiffView({
               {`{{${name}}}`}
             </Txt>
             {status === 'removed' && (
-              <Badge variant="error" className="ml-auto">removed in latest</Badge>
+              <Badge variant="error" className="ml-auto">
+                removed in latest
+              </Badge>
             )}
             {status === 'added' && (
-              <Badge variant="success" className="ml-auto">added in latest</Badge>
+              <Badge variant="success" className="ml-auto">
+                added in latest
+              </Badge>
             )}
           </div>
         );
@@ -415,9 +426,11 @@ function ReadOnlyConfigWithDiff({
   const variablesDiff = diffMap.get('requestContextSchema');
 
   const instructionsBadge = instructionsDiff ? <Badge variant="warning">modified</Badge> : null;
-  const toolsBadge = toolsDiff
-    ? <Badge variant="warning">modified</Badge>
-    : toolCount > 0 ? <Badge variant="default">{`${toolCount}`}</Badge> : null;
+  const toolsBadge = toolsDiff ? (
+    <Badge variant="warning">modified</Badge>
+  ) : toolCount > 0 ? (
+    <Badge variant="default">{`${toolCount}`}</Badge>
+  ) : null;
   const variablesBadge = variablesDiff ? <Badge variant="warning">modified</Badge> : null;
 
   if (isLoadingCompare) {
@@ -515,9 +528,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                   }}
                   className={cn(
                     'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
-                    showPreview
-                      ? 'bg-accent1/10 text-accent1'
-                      : 'text-neutral3 hover:text-neutral5 hover:bg-surface3',
+                    showPreview ? 'bg-accent1/10 text-accent1' : 'text-neutral3 hover:text-neutral5 hover:bg-surface3',
                   )}
                 >
                   <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
@@ -525,14 +536,14 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 </button>
               }
             >
-              {showPreview ? (
-                <ReadOnlyInstructions blocks={instructionBlocks} />
-              ) : (
-                <InstructionBlocksPage />
-              )}
+              {showPreview ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
             </CollapsibleSection>
 
-            <CollapsibleSection title="Tools" icon={<Wrench />} badge={toolCount > 0 ? <Badge variant="default">{`${toolCount}`}</Badge> : undefined}>
+            <CollapsibleSection
+              title="Tools"
+              icon={<Wrench />}
+              badge={toolCount > 0 ? <Badge variant="default">{`${toolCount}`}</Badge> : undefined}
+            >
               <ToolsPage />
             </CollapsibleSection>
 
