@@ -4,6 +4,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   filterByDateRange,
+  jsonValueEquals,
   MemoryStorage,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -230,6 +231,17 @@ export class MemoryConvex extends MemoryStorage {
 
     // Apply date range filter
     rows = filterByDateRange(rows, row => new Date(row.createdAt), filter?.dateRange);
+
+    // Apply metadata filtering (AND logic - all key-value pairs must match)
+    this.validateMetadataKeys(filter?.metadata);
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      rows = rows.filter((row: any) => {
+        const content = safelyParseJSON(row.content);
+        const msgMetadata = content?.metadata;
+        if (!msgMetadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+      });
+    }
 
     rows.sort((a, b) => {
       const aValue =

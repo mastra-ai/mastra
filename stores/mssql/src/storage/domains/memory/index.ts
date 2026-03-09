@@ -689,12 +689,50 @@ export class MemoryMSSQL extends MemoryStorage {
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
 
-      const { sql: actualWhereClause = '', params: whereParams } = prepareWhereClause(
+      const { sql: baseWhereClause = '', params: whereParams } = prepareWhereClause(
         filters,
         TABLE_SCHEMAS[TABLE_MESSAGES],
       );
+
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      let metadataWhereClause = '';
+      const metadataParams: Record<string, any> = {};
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError({
+              id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+              details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+            });
+          }
+
+          if (value === null) {
+            metadataWhereClause += ` AND JSON_VALUE(content, '$.metadata.${key}') IS NULL`;
+          } else {
+            const paramName = `msgMeta${metadataIndex}`;
+            metadataWhereClause += ` AND JSON_VALUE(content, '$.metadata.${key}') = @${paramName}`;
+            if (typeof value === 'string') {
+              metadataParams[paramName] = value;
+            } else if (typeof value === 'boolean') {
+              metadataParams[paramName] = value ? 'true' : 'false';
+            } else {
+              metadataParams[paramName] = String(value);
+            }
+          }
+          metadataIndex++;
+        }
+      }
+
+      const actualWhereClause = baseWhereClause + metadataWhereClause;
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
+        Object.entries(metadataParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
       };
 
       // Get total count

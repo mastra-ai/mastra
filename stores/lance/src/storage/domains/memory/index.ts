@@ -5,9 +5,11 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
   createStorageErrorId,
+  jsonValueEquals,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  safelyParseJSON,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -373,12 +375,23 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const whereClause = conditions.join(' AND ');
 
-      // Get total count
-      const total = await table.countRows(whereClause);
-
-      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      // Step 1: Get all messages matching SQL-level filters
       const query = table.query().where(whereClause);
       let allRecords = await query.toArray();
+
+      // Apply metadata filtering in-memory (Lance doesn't support nested JSON path queries in SQL WHERE)
+      this.validateMetadataKeys(filter?.metadata);
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        allRecords = allRecords.filter((record: any) => {
+          const content = safelyParseJSON(record.content);
+          const msgMetadata = content?.metadata;
+          if (!msgMetadata) return false;
+          return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+        });
+      }
+
+      // Get total count after metadata filtering
+      const total = allRecords.length;
 
       // Sort records
       allRecords.sort((a, b) => {

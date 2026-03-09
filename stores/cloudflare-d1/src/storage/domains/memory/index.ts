@@ -778,6 +778,36 @@ export class MemoryStorageD1 extends MemoryStorage {
         queryParams.push(endDate);
       }
 
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError(
+              {
+                id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+                details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+              },
+              new Error('Invalid metadata filter value type'),
+            );
+          }
+
+          if (value === null) {
+            query += ` AND json_extract(content, '$.metadata.${key}') IS NULL`;
+          } else if (typeof value === 'boolean') {
+            query += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            queryParams.push(value ? 1 : 0);
+          } else {
+            query += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            queryParams.push(value);
+          }
+        }
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       query += ` ORDER BY "${field}" ${direction}`;
@@ -825,6 +855,21 @@ export class MemoryStorageD1 extends MemoryStorage {
         const endOp = dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} ?`;
         countParams.push(endDate);
+      }
+
+      // Add metadata filters to count query (must match data query)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value === null) {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') IS NULL`;
+          } else if (typeof value === 'boolean') {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            countParams.push(value ? 1 : 0);
+          } else {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            countParams.push(value);
+          }
+        }
       }
 
       const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {

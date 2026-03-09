@@ -635,6 +635,118 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       });
     });
 
+    describe('metadata filtering', () => {
+      let metaThread: StorageThreadType;
+      let metaMessages: MastraDBMessage[];
+
+      beforeEach(async () => {
+        metaThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: metaThread });
+
+        const now = Date.now();
+        metaMessages = [
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Msg A', metadata: { category: 'greeting', priority: 1 } },
+            createdAt: new Date(now + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Msg B', metadata: { category: 'farewell', priority: 2 } },
+            createdAt: new Date(now + 2000),
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Msg C', metadata: { category: 'greeting', priority: 3, flagged: true } },
+            createdAt: new Date(now + 3000),
+          }),
+          createSampleMessageV2({
+            threadId: metaThread.id,
+            resourceId: metaThread.resourceId,
+            content: { content: 'Msg D' },
+            createdAt: new Date(now + 4000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: metaMessages });
+      });
+
+      it('should filter messages by a single metadata key', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { category: 'greeting' } },
+        });
+        expect(result.messages).toHaveLength(2);
+        const contents = result.messages.map((m: any) => m.content.content);
+        expect(contents).toContain('Msg A');
+        expect(contents).toContain('Msg C');
+      });
+
+      it('should filter messages by multiple metadata keys (AND logic)', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { category: 'greeting', flagged: true } },
+        });
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.content).toBe('Msg C');
+      });
+
+      it('should filter messages by numeric metadata value', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { priority: 2 } },
+        });
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.content).toBe('Msg B');
+      });
+
+      it('should return empty when metadata filter matches nothing', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { category: 'nonexistent' } },
+        });
+        expect(result.messages).toHaveLength(0);
+        expect(result.total).toBe(0);
+      });
+
+      it('should combine metadata filter with dateRange filter', async () => {
+        const now = Date.now();
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: {
+            metadata: { category: 'greeting' },
+            dateRange: { start: new Date(now + 2500) },
+          },
+        });
+        // Only Msg C has category=greeting AND is after now+2500
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.content).toBe('Msg C');
+      });
+
+      it('should combine metadata filter with pagination', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { category: 'greeting' } },
+          perPage: 1,
+          page: 0,
+        });
+        expect(result.messages).toHaveLength(1);
+        expect(result.total).toBe(2);
+        expect(result.hasMore).toBe(true);
+      });
+
+      it('should return correct total when filtering by metadata', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: metaThread.id,
+          filter: { metadata: { category: 'farewell' } },
+        });
+        expect(result.messages).toHaveLength(1);
+        expect(result.total).toBe(1);
+      });
+    });
+
     describe('listMessagesByResourceId (resource-scoped queries)', () => {
       // Skip for adapters that don't support OM/resource-scoped queries
       beforeEach(ctx => {
@@ -838,6 +950,89 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.hasMore).toBe(true);
         expect(result.page).toBe(0);
         expect(result.perPage).toBe(2);
+      });
+
+      it('should filter by metadata when querying by resourceId', async () => {
+        const metaResourceId = `meta-resource-${Date.now()}`;
+        const metaThreadA = createSampleThread({ resourceId: metaResourceId });
+        const metaThreadB = createSampleThread({ resourceId: metaResourceId });
+        await memoryStorage.saveThread({ thread: metaThreadA });
+        await memoryStorage.saveThread({ thread: metaThreadB });
+
+        const now = Date.now();
+        const resourceMessages = [
+          createSampleMessageV2({
+            threadId: metaThreadA.id,
+            resourceId: metaResourceId,
+            content: { content: 'RA1', metadata: { source: 'email' } },
+            createdAt: new Date(now + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: metaThreadA.id,
+            resourceId: metaResourceId,
+            content: { content: 'RA2', metadata: { source: 'chat' } },
+            createdAt: new Date(now + 2000),
+          }),
+          createSampleMessageV2({
+            threadId: metaThreadB.id,
+            resourceId: metaResourceId,
+            content: { content: 'RB1', metadata: { source: 'email', important: true } },
+            createdAt: new Date(now + 3000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: resourceMessages });
+
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: metaResourceId,
+          filter: { metadata: { source: 'email' } },
+          perPage: false,
+        });
+
+        expect(result.messages).toHaveLength(2);
+        const contents = result.messages.map((m: any) => m.content.content);
+        expect(contents).toContain('RA1');
+        expect(contents).toContain('RB1');
+      });
+
+      it('should combine metadata filter with dateRange when querying by resourceId', async () => {
+        const metaResourceId2 = `meta-resource2-${Date.now()}`;
+        const metaThread2 = createSampleThread({ resourceId: metaResourceId2 });
+        await memoryStorage.saveThread({ thread: metaThread2 });
+
+        const now = Date.now();
+        const msgs = [
+          createSampleMessageV2({
+            threadId: metaThread2.id,
+            resourceId: metaResourceId2,
+            content: { content: 'Early email', metadata: { source: 'email' } },
+            createdAt: new Date(now + 1000),
+          }),
+          createSampleMessageV2({
+            threadId: metaThread2.id,
+            resourceId: metaResourceId2,
+            content: { content: 'Late email', metadata: { source: 'email' } },
+            createdAt: new Date(now + 5000),
+          }),
+          createSampleMessageV2({
+            threadId: metaThread2.id,
+            resourceId: metaResourceId2,
+            content: { content: 'Late chat', metadata: { source: 'chat' } },
+            createdAt: new Date(now + 6000),
+          }),
+        ];
+        await memoryStorage.saveMessages({ messages: msgs });
+
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: metaResourceId2,
+          filter: {
+            metadata: { source: 'email' },
+            dateRange: { start: new Date(now + 3000) },
+          },
+          perPage: false,
+        });
+
+        expect(result.messages).toHaveLength(1);
+        expect((result.messages[0] as any).content.content).toBe('Late email');
       });
     });
 

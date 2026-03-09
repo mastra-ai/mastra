@@ -144,6 +144,17 @@ export class InMemoryMemory extends MemoryStorage {
     // Apply date filtering
     threadMessages = filterByDateRange(threadMessages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
 
+    // Apply metadata filtering (AND logic - all key-value pairs must match)
+    this.validateMetadataKeys(filter?.metadata);
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      threadMessages = threadMessages.filter((msg: any) => {
+        const content = safelyParseJSON(msg.content);
+        const msgMetadata = content?.metadata;
+        if (!msgMetadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+      });
+    }
+
     // Sort thread messages before pagination
     threadMessages.sort((a: any, b: any) => {
       const isDateField = field === 'createdAt' || field === 'updatedAt';
@@ -326,6 +337,17 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Apply date filtering
     messages = filterByDateRange(messages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
+
+    // Apply metadata filtering (AND logic - all key-value pairs must match)
+    this.validateMetadataKeys(filter?.metadata);
+    if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+      messages = messages.filter((msg: any) => {
+        const content = safelyParseJSON(msg.content);
+        const msgMetadata = content?.metadata;
+        if (!msgMetadata) return false;
+        return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+      });
+    }
 
     // Sort messages
     messages.sort((a: any, b: any) => {

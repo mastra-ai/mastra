@@ -100,6 +100,12 @@ type StorageListMessagesOptions = {
        */
       endExclusive?: boolean;
     };
+    /**
+     * Filter messages by metadata key-value pairs.
+     * Matches against the metadata field inside message content.
+     * All specified key-value pairs must match (AND logic).
+     */
+    metadata?: Record<string, unknown>;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
 };

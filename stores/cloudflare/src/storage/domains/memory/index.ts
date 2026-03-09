@@ -13,9 +13,11 @@ import {
   createStorageErrorId,
   ensureDate,
   filterByDateRange,
+  jsonValueEquals,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  safelyParseJSON,
   serializeDate,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -851,6 +853,17 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         msg => new Date(msg.createdAt),
         filter?.dateRange,
       );
+
+      // Apply metadata filtering (AND logic - all key-value pairs must match)
+      this.validateMetadataKeys(filter?.metadata);
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        filteredThreadMessages = filteredThreadMessages.filter((msg: any) => {
+          const content = safelyParseJSON(msg.content);
+          const msgMetadata = content?.metadata;
+          if (!msgMetadata) return false;
+          return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+        });
+      }
 
       // Get total count for pagination
       const total = filteredThreadMessages.length;

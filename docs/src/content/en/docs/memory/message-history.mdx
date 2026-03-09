@@ -198,6 +198,19 @@ const { messages } = await memory.recall({
 })
 ```
 
+Filter messages by metadata:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: 'thread-123',
+  filter: {
+    metadata: { category: 'billing', priority: 1 },
+  },
+})
+```
+
+All specified key-value pairs must match (AND logic). Supported value types are string, number, boolean, and null.
+
 Fetch a single message by ID:
 
 ```typescript
