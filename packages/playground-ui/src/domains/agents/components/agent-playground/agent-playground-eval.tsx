@@ -125,12 +125,26 @@ interface ParsedOutput {
   error: string | undefined;
 }
 
+function normalizeToolCalls(raw: unknown): ParsedOutput['toolCalls'] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap(call => {
+    if (!call || typeof call !== 'object') return [];
+    const c = call as Record<string, unknown>;
+    return [{
+      toolName: typeof c.toolName === 'string' ? c.toolName : 'Unknown tool',
+      args: c.args && typeof c.args === 'object' && !Array.isArray(c.args)
+        ? (c.args as Record<string, unknown>)
+        : {},
+    }];
+  });
+}
+
 function parseOutput(output: unknown): ParsedOutput {
   const obj = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
   return {
     text: typeof obj.text === 'string' ? obj.text : undefined,
     object: obj.object && typeof obj.object === 'object' ? (obj.object as Record<string, unknown>) : undefined,
-    toolCalls: Array.isArray(obj.toolCalls) ? obj.toolCalls : [],
+    toolCalls: normalizeToolCalls(obj.toolCalls),
     toolResults: Array.isArray(obj.toolResults) ? obj.toolResults : [],
     usage: obj.usage && typeof obj.usage === 'object' ? (obj.usage as ParsedOutput['usage']) : undefined,
     traceId: typeof obj.traceId === 'string' ? obj.traceId : undefined,
@@ -446,11 +460,12 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
             onValueChange={setSelectedDatasetId}
             placeholder="Select a dataset..."
             variant="outline"
+            disabled={isRunning}
           />
         </div>
 
         {/* Scorer selector */}
-        <ScorerSelector selectedScorers={selectedScorers} setSelectedScorers={setSelectedScorers} />
+        <ScorerSelector selectedScorers={selectedScorers} setSelectedScorers={setSelectedScorers} disabled={isRunning} />
 
         {/* Run button */}
         <Button
