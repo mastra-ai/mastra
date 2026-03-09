@@ -60,7 +60,9 @@ export function DatasetHeader({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-not-allowed">
-                    <div className="pointer-events-none opacity-50">{experimentTriggerSlot}</div>
+                    <div className="pointer-events-none opacity-50" inert aria-disabled="true">
+                      {experimentTriggerSlot}
+                    </div>
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
@@ -69,10 +71,24 @@ export function DatasetHeader({
               experimentTriggerSlot
             )
           ) : onExperimentClick ? (
-            <Button variant="outline" size="sm" onClick={onExperimentClick} disabled={disableExperimentTrigger}>
-              <Play />
-              Run Experiment
-            </Button>
+            disableExperimentTrigger ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-not-allowed">
+                    <Button variant="outline" size="sm" disabled tabIndex={-1}>
+                      <Play />
+                      Run Experiment
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Add items to the dataset before running an experiment</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button variant="outline" size="sm" onClick={onExperimentClick}>
+                <Play />
+                Run Experiment
+              </Button>
+            )
           ) : null}
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>

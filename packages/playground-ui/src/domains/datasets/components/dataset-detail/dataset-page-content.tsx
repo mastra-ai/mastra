@@ -77,6 +77,9 @@ export function DatasetPageContent({
     isFetchingNextPage,
     hasNextPage,
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
+  // Unfiltered query (no search) to determine if dataset has any items — avoids
+  // incorrectly disabling the experiment button when a search yields no matches.
+  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(datasetId, undefined, activeDatasetVersion);
   const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
   const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
     datasetId,
@@ -191,7 +194,7 @@ export function DatasetPageContent({
               onDuplicateClick={() => setDuplicateDialogOpen(true)}
               onDeleteClick={onDeleteClick}
               experimentTriggerSlot={experimentTriggerSlot}
-              disableExperimentTrigger={!isItemsLoading && items.length === 0}
+              disableExperimentTrigger={!isUnfilteredLoading && unfilteredItems.length === 0}
               onExperimentClick={onExperimentClick}
             />
 

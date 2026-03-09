@@ -13,6 +13,7 @@ import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
+import { MastraError } from '../../error/index.js';
 
 // Re-export types and helpers
 export type {
@@ -122,7 +123,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
       const dataset = await datasetsStore.getDatasetById({ id: datasetId });
       if (!dataset) {
-        throw new Error(`Dataset not found: ${datasetId}`);
+        throw new MastraError({
+          id: 'DATASET_NOT_FOUND',
+          text: `Dataset not found: ${datasetId}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
       }
 
       datasetVersion = version ?? dataset.version;
@@ -132,7 +138,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       });
 
       if (versionItems.length === 0) {
-        throw new Error(`No items in dataset ${datasetId} at version ${datasetVersion}`);
+        throw new MastraError({
+          id: 'EXPERIMENT_NO_ITEMS',
+          text: `No items in dataset ${datasetId} at version ${datasetVersion}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
       }
 
       items = versionItems.map(v => ({
