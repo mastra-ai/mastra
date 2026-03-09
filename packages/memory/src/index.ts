@@ -8,27 +8,14 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
-  MemoryConfig,
+  MemoryConfigInternal,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
   MessageDeleteInput,
   ObservationalMemoryOptions,
+  MemoryConfig,
 } from '@mastra/core/memory';
-
-/**
- * Normalize a `boolean | object` observational memory config.
- * Returns the options object if enabled, undefined if disabled.
- * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
- */
-function normalizeObservationalMemoryConfig(
-  config: boolean | ObservationalMemoryOptions | undefined,
-): ObservationalMemoryOptions | undefined {
-  if (config === true) return { model: 'google/gemini-2.5-flash' };
-  if (config === false || config === undefined) return undefined;
-  if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
-  return config as ObservationalMemoryOptions;
-}
 import type {
   InputProcessor,
   InputProcessorOrWorkflow,
@@ -49,17 +36,29 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
-import { ZodObject } from 'zod';
-import type { ZodTypeAny } from 'zod';
 import {
   updateWorkingMemoryTool,
   __experimental_updateWorkingMemoryToolVNext,
   deepMergeWorkingMemory,
 } from './tools/working-memory';
+
+/**
+ * Normalize a `boolean | object` observational memory config.
+ * Returns the options object if enabled, undefined if disabled.
+ * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
+ */
+function normalizeObservationalMemoryConfig(
+  config: boolean | ObservationalMemoryOptions | undefined,
+): ObservationalMemoryOptions | undefined {
+  if (config === true) return { model: 'google/gemini-2.5-flash' };
+  if (config === false || config === undefined) return undefined;
+  if (typeof config === 'object' && (config as ObservationalMemoryOptions).enabled === false) return undefined;
+  return config as ObservationalMemoryOptions;
+}
 
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
@@ -72,14 +71,12 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
 
-const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
-
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
  * and message injection.
  */
 export class Memory extends MastraMemory {
-  constructor(config: SharedMemoryConfig = {}) {
+  constructor(config: Omit<SharedMemoryConfig, 'working'> = {}) {
     super({ name: 'Memory', ...config });
 
     const mergedConfig = this.getMergedThreadConfig({
@@ -130,7 +127,7 @@ export class Memory extends MastraMemory {
     return memoryStore.listMessagesByResourceId(args);
   }
 
-  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfig) {
+  protected async validateThreadIsOwnedByResource(threadId: string, resourceId: string, config: MemoryConfigInternal) {
     const resourceScope =
       (typeof config?.semanticRecall === 'object' && config?.semanticRecall?.scope !== `thread`) ||
       config.semanticRecall === true;
@@ -153,7 +150,7 @@ export class Memory extends MastraMemory {
 
   async recall(
     args: StorageListMessagesInput & {
-      threadConfig?: MemoryConfig;
+      threadConfig?: MemoryConfigInternal;
       vectorSearchString?: string;
       threadId: string;
     },
@@ -171,6 +168,12 @@ export class Memory extends MastraMemory {
 
     // Use perPage from args if provided, otherwise use threadConfig.lastMessages
     const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+
+    // lastMessages: false means "disable conversation history entirely".
+    // When the resolved perPage is false from config (not an explicit caller override),
+    // return empty messages. This prevents recall() from treating false as "no limit"
+    // and returning ALL messages when the user intended to disable history.
+    const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
 
     // When limiting messages (perPage !== false) without explicit orderBy, we need to:
     // 1. Query DESC to get the NEWEST messages (not oldest)
@@ -197,6 +200,7 @@ export class Memory extends MastraMemory {
       hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
       workingMemoryEnabled: config.workingMemory?.enabled,
       semanticRecallEnabled: Boolean(config.semanticRecall),
+      historyDisabledByConfig,
     });
 
     const defaultRange = DEFAULT_MESSAGE_RANGE;
@@ -226,6 +230,11 @@ export class Memory extends MastraMemory {
     }
 
     let usage: { tokens: number } | undefined;
+
+    // If history is disabled and there's no semantic recall to perform, return empty immediately
+    if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
+      return { messages: [], usage: undefined, total: 0, page: page ?? 0, perPage: 0, hasMore: false };
+    }
 
     if (config?.semanticRecall && vectorSearchString && this.vector) {
       const result = await this.embedMessageContent(vectorSearchString!);
@@ -261,10 +270,15 @@ export class Memory extends MastraMemory {
 
     // Get raw messages from storage
     const memoryStore = await this.getMemoryStore();
+
+    // When history is disabled by config, use perPage: 0 so only semantic recall
+    // include results are returned (not the full message history)
+    const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+
     const paginatedResult = await memoryStore.listMessages({
       threadId,
       resourceId,
-      perPage,
+      perPage: effectivePerPage,
       page,
       orderBy: effectiveOrderBy,
       filter,
@@ -314,7 +328,7 @@ export class Memory extends MastraMemory {
   }: {
     workingMemory: string;
     resourceId: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<void> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -338,7 +352,7 @@ export class Memory extends MastraMemory {
     memoryConfig,
   }: {
     thread: StorageThreadType;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
     const savedThread = await memoryStore.saveThread({ thread });
@@ -364,7 +378,7 @@ export class Memory extends MastraMemory {
     id: string;
     title: string;
     metadata: Record<string, unknown>;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
     const updatedThread = await memoryStore.updateThread({
@@ -441,7 +455,7 @@ export class Memory extends MastraMemory {
     threadId: string;
     resourceId?: string;
     workingMemory: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<void> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -511,7 +525,7 @@ export class Memory extends MastraMemory {
     resourceId?: string;
     workingMemory: string;
     searchString?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<{ success: boolean; reason: string }> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
 
@@ -880,9 +894,15 @@ ${workingMemory}`;
           return part;
         });
 
-      // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls) we need to skip the whole message, it was only working memory tool calls/results
+      // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
+      // only skip the message when it also has no text content left.
       if (newMessage.content.parts.length === 0) {
-        return null;
+        const hasContentText =
+          typeof newMessage.content.content === 'string' && newMessage.content.content.trim().length > 0;
+
+        if (!hasContentText) {
+          return null;
+        }
       }
     }
 
@@ -903,7 +923,7 @@ ${workingMemory}`;
   }: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig || {});
     if (!config.workingMemory?.enabled) {
@@ -949,7 +969,7 @@ ${workingMemory}`;
   public async getWorkingMemoryTemplate({
     memoryConfig,
   }: {
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -963,10 +983,13 @@ ${workingMemory}`;
         const schema = config.workingMemory.schema;
         let convertedSchema: JSONSchema7;
 
-        if (isZodObject(schema as ZodTypeAny)) {
-          convertedSchema = zodToJsonSchema(schema as ZodTypeAny);
+        // Convert any PublicSchema to StandardSchemaWithJSON, then extract JSON Schema
+        if (isStandardSchemaWithJSON(schema)) {
+          convertedSchema = schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
         } else {
-          convertedSchema = schema as JSONSchema7;
+          // Convert to standard schema first, then get JSON Schema
+          const standardSchema = toStandardSchema(schema);
+          convertedSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
         }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };
@@ -988,7 +1011,7 @@ ${workingMemory}`;
   }: {
     threadId: string;
     resourceId?: string;
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     const config = this.getMergedThreadConfig(memoryConfig);
     if (!config.workingMemory?.enabled) {
@@ -1163,7 +1186,7 @@ Notes:
     return Boolean(isMDWorkingMemory && isMDWorkingMemory.version === `vnext`);
   }
 
-  public listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     // Don't provide update tools in readOnly mode
     if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
@@ -1191,7 +1214,7 @@ Notes:
     memoryConfig,
   }: {
     messages: (Partial<MastraDBMessage> & { id: string })[];
-    memoryConfig?: MemoryConfig;
+    memoryConfig?: MemoryConfigInternal;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
@@ -1463,7 +1486,7 @@ Notes:
    */
   public async cloneThread(
     args: StorageCloneThreadInput,
-    memoryConfig?: MemoryConfig,
+    memoryConfig?: MemoryConfigInternal,
   ): Promise<StorageCloneThreadOutput> {
     const memoryStore = await this.getMemoryStore();
     const result = await memoryStore.cloneThread(args);
@@ -1658,7 +1681,7 @@ Notes:
    * Embed cloned messages for semantic recall.
    * This is similar to the embedding logic in saveMessages but operates on already-saved messages.
    */
-  private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfig): Promise<void> {
+  private async embedClonedMessages(messages: MastraDBMessage[], config: MemoryConfigInternal): Promise<void> {
     if (!this.vector || !this.embedder) {
       return;
     }
@@ -1963,6 +1986,12 @@ Notes:
         'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
           'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
           'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
+      );
+    }
+
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
       );
     }
 

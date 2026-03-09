@@ -9,9 +9,9 @@ packages:
 
 # Agent Networks
 
-:::warning[Supervisor Pattern Recommended]
+:::warning[Agent Network Deprecated — Supervisor Pattern Recommended]
 
-The [supervisor pattern](./supervisor-agents) using `agent.stream()` or `agent.generate()` is now the recommended approach for coordinating multiple agents. It provides the same multi-agent coordination capabilities as `.network()` with significant improvements:
+Agent networks are deprecated and will be removed in a future release. The [supervisor pattern](./supervisor-agents) using `agent.stream()` or `agent.generate()` is now the recommended approach for coordinating multiple agents. It provides the same multi-agent coordination capabilities as `.network()` with significant improvements:
 
 - **Better control**: Iteration hooks, delegation hooks, and task completion scoring give you fine-grained control over execution
 - **Simpler API**: Uses familiar `stream()` and `generate()` methods instead of a separate `.network()` API

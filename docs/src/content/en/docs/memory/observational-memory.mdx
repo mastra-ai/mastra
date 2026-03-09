@@ -75,6 +75,10 @@ OM solves both problems by compressing old context into dense observations.
 
 When message history tokens exceed a threshold (default: 30,000), the Observer creates observations — concise notes about what happened:
 
+Image parts contribute to this threshold with model-aware estimates, so multimodal conversations trigger observation at the right time. The same applies to image-like `file` parts when a transport normalizes an uploaded image as a file instead of an image part. For example, OpenAI image detail settings can materially change when OM decides to observe.
+
+The Observer can also see attachments in the history it reviews. OM keeps readable placeholders like `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript for readability, and forwards the actual attachment parts alongside the text. Image-like `file` parts are upgraded to image inputs for the Observer when possible, while non-image attachments are forwarded as file parts with normalized token counting. This applies to both normal thread observation and batched resource-scope observation.
+
 ```
 Date: 2026-01-15
 - 🔴 12:10 User is building a Next.js app with Supabase auth, due in 1 week (meaning January 22nd 2026)
@@ -196,7 +200,7 @@ OM caches tiktoken part estimates in message metadata to reduce repeat counting 
 - Per-part estimates are stored on `part.providerMetadata.mastra` and reused on subsequent passes when the cache version/tokenizer source matches.
 - For string-only message content (without parts), OM uses a message-level metadata fallback cache.
 - Message and conversation overhead are still recalculated on every pass. The cache only stores payload estimates, so counting semantics stay the same.
-- `data-*` and `reasoning` parts are still skipped and are not cached.
+- `data-*` and `reasoning` parts are still skipped and aren't cached.
 
 ## Async Buffering
 
@@ -245,7 +249,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering is not supported with `scope: 'resource'`. It is automatically disabled in resource scope.
+Async buffering isn't supported with `scope: 'resource'`. It's automatically disabled in resource scope.
 
 :::
 

@@ -105,6 +105,76 @@ describe('GoogleSchemaCompatLayer', () => {
 
       expect(jsonSchema).toMatchSnapshot();
     });
+
+    it('should handle nullish fields (optional + nullable)', () => {
+      const schema = z.object({
+        name: z.string(),
+        threadId: z.string().nullish(),
+        maxSteps: z.number().nullish(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      const jsonSchema = layer.processToJSONSchema(schema);
+
+      // Nullish fields should not produce union type arrays like ["string", "null"]
+      // which Gemini rejects with INVALID_ARGUMENT
+      expect(jsonSchema).toMatchSnapshot();
+      const properties = jsonSchema.properties as Record<string, any>;
+      if (properties?.threadId?.type) {
+        expect(Array.isArray(properties.threadId.type)).toBe(false);
+      }
+      if (properties?.maxSteps?.type) {
+        expect(Array.isArray(properties.maxSteps.type)).toBe(false);
+      }
+    });
+
+    it('should handle nullish fields in AI SDK schema', () => {
+      const schema = z.object({
+        name: z.string(),
+        threadId: z.string().nullish(),
+        maxSteps: z.number().nullish(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      const result = layer.processToAISDKSchema(schema);
+
+      expect(result).toHaveProperty('jsonSchema');
+      expect(result).toHaveProperty('validate');
+      // AI SDK schema should not contain union type arrays for nullish fields
+      const properties = (result.jsonSchema as any).properties;
+      if (properties?.threadId?.type) {
+        expect(Array.isArray(properties.threadId.type)).toBe(false);
+      }
+      if (properties?.maxSteps?.type) {
+        expect(Array.isArray(properties.maxSteps.type)).toBe(false);
+      }
+    });
+
+    it('should handle agent delegation tool schema pattern', () => {
+      // This mirrors the exact schema used in agent network delegation tools
+      const schema = z.object({
+        threadId: z.string().nullish().describe('The thread ID to use'),
+        resourceId: z.string().nullish().describe('The resource ID to use'),
+        instructions: z.string().describe('Instructions for the agent'),
+        maxSteps: z.number().nullish().describe('Max steps for the agent'),
+        suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
+        resumeData: z
+          .any()
+          .describe('The resumeData object created from the resumeSchema of suspended tool')
+          .optional(),
+      });
+
+      const layer = new GoogleSchemaCompatLayer(modelInfo);
+      const result = layer.processToAISDKSchema(schema);
+
+      // Verify no union type arrays exist in the schema
+      const properties = (result.jsonSchema as any).properties;
+      for (const [_key, prop] of Object.entries(properties || {})) {
+        if ((prop as any)?.type) {
+          expect(Array.isArray((prop as any).type)).toBe(false);
+        }
+      }
+    });
   });
 
   describe('processZodType - Nested Objects', () => {

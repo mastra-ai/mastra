@@ -131,6 +131,7 @@ function EditLayoutWrapper() {
   const isOnIdentityPage = location.pathname === basePath || location.pathname === `${basePath}/`;
   useEffect(() => {
     if (isCodeAgentOverride && isOnIdentityPage) {
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
       routerNavigate(`${basePath}/instruction-blocks${location.search}${location.hash}`, { replace: true });
     }
   }, [isCodeAgentOverride, isOnIdentityPage, routerNavigate, basePath, location.search, location.hash]);
