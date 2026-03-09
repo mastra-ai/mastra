@@ -8,7 +8,7 @@ import type {
   InstructionBlock,
   AgentFormValues,
 } from '../components/agent-edit-page/utils/form-validation';
-import { createInstructionBlock } from '../components/agent-edit-page/utils/form-validation';
+import { createInstructionBlock, createRefInstructionBlock } from '../components/agent-edit-page/utils/form-validation';
 
 // ---------------------------------------------------------------------------
 // Primitive helpers
@@ -160,14 +160,13 @@ export const normalizeWorkspaceFromApi = (
 // ---------------------------------------------------------------------------
 
 /** Map form instruction blocks to the API instruction array. */
-export const mapInstructionBlocksToApi = (
-  blocks: InstructionBlock[] | undefined,
-): Array<{ type: 'prompt_block'; content: string; rules?: InstructionBlock['rules'] }> =>
-  (blocks ?? []).map(block => ({
-    type: block.type,
-    content: block.content,
-    rules: block.rules,
-  }));
+export const mapInstructionBlocksToApi = (blocks: InstructionBlock[] | undefined): AgentInstructionBlock[] =>
+  (blocks ?? []).map(block => {
+    if (block.type === 'prompt_block_ref') {
+      return { type: 'prompt_block_ref' as const, id: block.promptBlockId };
+    }
+    return { type: 'prompt_block' as const, content: block.content, rules: block.rules };
+  });
 
 /** Map API instruction data to form instruction blocks. */
 export const mapInstructionBlocksFromApi = (
@@ -180,13 +179,18 @@ export const mapInstructionBlocksFromApi = (
         .join('\n\n')
     : instructionsRaw || '';
 
-  const instructionBlocks = Array.isArray(instructionsRaw)
+  const instructionBlocks: InstructionBlock[] = Array.isArray(instructionsRaw)
     ? instructionsRaw
         .filter(
-          (b: AgentInstructionBlock): b is Extract<AgentInstructionBlock, { type: 'prompt_block' }> =>
-            b.type === 'prompt_block',
+          (b: AgentInstructionBlock): b is Exclude<AgentInstructionBlock, { type: 'text' }> =>
+            b.type === 'prompt_block' || b.type === 'prompt_block_ref',
         )
-        .map(b => createInstructionBlock(b.content, b.rules))
+        .map(b => {
+          if (b.type === 'prompt_block_ref') {
+            return createRefInstructionBlock(b.id);
+          }
+          return createInstructionBlock(b.content, b.rules);
+        })
     : [createInstructionBlock(instructionsRaw || '')];
 
   return { instructionsString, instructionBlocks };

@@ -15,7 +15,7 @@ import type { ProviderStatus } from '../lifecycle';
 /**
  * State of a mount in the sandbox.
  */
-export type MountState = 'pending' | 'mounting' | 'mounted' | 'error' | 'unsupported';
+export type MountState = 'pending' | 'mounting' | 'mounted' | 'error' | 'unsupported' | 'unavailable';
 
 /**
  * Entry representing a mount in the sandbox.
@@ -25,7 +25,7 @@ export interface MountEntry {
   filesystem: WorkspaceFilesystem;
   /** Current state of the mount */
   state: MountState;
-  /** Error message if state is 'error' */
+  /** Error message if state is 'error' or 'unavailable' */
   error?: string;
   /** Resolved mount config from filesystem.getMountConfig() */
   config?: FilesystemMountConfig;
@@ -62,11 +62,15 @@ export interface CommandResult extends ExecutionResult {
 }
 
 // =============================================================================
-// Execution Options
+// Command Options
 // =============================================================================
 
-export interface ExecuteCommandOptions {
-  /** Timeout in milliseconds */
+/**
+ * Shared options for running commands in a sandbox.
+ * Base type for both executeCommand and spawn.
+ */
+export interface CommandOptions {
+  /** Timeout in milliseconds. Kills the process if exceeded. */
   timeout?: number;
   /** Environment variables */
   env?: NodeJS.ProcessEnv;
@@ -76,7 +80,12 @@ export interface ExecuteCommandOptions {
   onStdout?: (data: string) => void;
   /** Callback for stderr chunks (enables streaming) */
   onStderr?: (data: string) => void;
+  /** Abort signal to cancel the command */
+  abortSignal?: AbortSignal;
 }
+
+/** Options for executeCommand. */
+export interface ExecuteCommandOptions extends CommandOptions {}
 
 // =============================================================================
 // Sandbox Info

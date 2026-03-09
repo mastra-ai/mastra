@@ -186,9 +186,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       });
     }
     // Update status to running (both sync and async paths)
+    // Also set totalItems — needed for the async path where the experiment
+    // was created with totalItems: 0 before items were resolved.
     await experimentsStore.updateExperiment({
       id: experimentId,
       status: 'running',
+      totalItems: items.length,
       startedAt,
     });
   }
@@ -277,6 +280,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           item.id,
           execResult.scorerInput,
           execResult.scorerOutput,
+          execResult.traceId ?? undefined,
         );
 
         // Persist result with scores (if storage available)

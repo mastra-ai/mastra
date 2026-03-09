@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { Plus, Database } from 'lucide-react';
 import {
   Header,
   HeaderTitle,
@@ -13,6 +11,8 @@ import {
   DatasetsTable,
   CreateDatasetDialog,
 } from '@mastra/playground-ui';
+import { Plus, Database } from 'lucide-react';
+import { useState } from 'react';
 
 function Datasets() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);

@@ -1,5 +1,4 @@
 import { cn } from '@/index';
-import { WithLabel } from '../Checkbox/checkbox.stories';
 
 export type ColumnProps = {
   children: React.ReactNode;
@@ -10,7 +9,7 @@ export type ColumnProps = {
 
 export function ColumnRoot({ children, className, withLeftSeparator, withRightSeparator }: ColumnProps) {
   return (
-    <div className="COLUMN flex overflow-y-auto w-full">
+    <div className="flex overflow-y-auto w-full">
       {withLeftSeparator && <Separator />}
 
       <div className={cn(`grid gap-8 content-start w-full overflow-y-auto`, className)}>{children}</div>

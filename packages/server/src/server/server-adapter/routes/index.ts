@@ -1,12 +1,13 @@
 import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type z from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
+import { AUTH_ROUTES } from './auth';
 import { DATASETS_ROUTES } from './datasets';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
@@ -96,10 +97,22 @@ export type ServerRoute<
   openapi?: any; // Auto-generated OpenAPI spec for this route
   maxBodySize?: number; // Optional route-specific body size limit in bytes
   deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
+  /**
+   * Permission required to access this route (EE feature).
+   * If set, the user must have this permission to access the route.
+   * Uses the format: `resource:action` or `resource:action:resourceId`
+   *
+   * @example
+   * requiresPermission: 'agents:read'
+   * requiresPermission: 'workflows:execute'
+   */
+  requiresPermission?: string;
+  onValidationError?: ValidationErrorHook;
 };
 
 export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
   ...AGENTS_ROUTES,
+  ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,
   ...TOOLS_ROUTES,
   ...PROCESSORS_ROUTES,
@@ -126,5 +139,8 @@ export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [
 ];
 
 // Export route builder and OpenAPI utilities
-export { createRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
+export { createRoute, createPublicRoute, pickParams, jsonQueryParam, wrapSchemaForQueryParams } from './route-builder';
 export { generateOpenAPIDocument } from '../openapi-utils';
+
+// Export permission utilities
+export { derivePermission, extractResource, deriveAction, getEffectivePermission } from './permissions';

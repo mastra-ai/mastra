@@ -1,8 +1,11 @@
 import chalk from 'chalk';
+import { getThemeMode } from '../theme.js';
 
 const GRADIENT_WIDTH = 30; // Width of the bright spot as percentage of total text
 const BASE_COLOR = [124, 58, 237]; // #b588fe Mastra purple is too washed out, using #7c3aed
-const MIN_BRIGHTNESS = 0.45; // Dimmest characters (0-1)
+function getMinBrightness(): number {
+  return getThemeMode() === 'dark' ? 0.45 : 0.55;
+}
 
 /**
  * Parse a hex color string to [r, g, b].
@@ -46,7 +49,8 @@ export function applyGradientSweep(text: string, offset: number, color?: string,
       }
 
       const normalizedDistance = Math.min(distance / (GRADIENT_WIDTH / 2), 1);
-      const animBrightness = MIN_BRIGHTNESS + (1 - MIN_BRIGHTNESS) * (1 - normalizedDistance);
+      const minBrightness = getMinBrightness();
+      const animBrightness = minBrightness + (1 - minBrightness) * (1 - normalizedDistance);
 
       // Interpolate toward idle brightness as fade progresses
       const brightness = animBrightness + (IDLE_BRIGHTNESS - animBrightness) * fadeProgress;

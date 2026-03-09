@@ -28,15 +28,18 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   );
 }
 
+type ProviderTool = { type: 'provider-defined' | 'provider'; id: string; args?: Record<string, unknown> };
+
 /**
  * Checks if a tool is a provider-defined tool from the AI SDK.
- * Provider tools (like openai.tools.webSearch()) are created by the AI SDK with:
+ * Provider tools (like google.tools.googleSearch(), openai.tools.webSearch()) have:
  * - type: "provider-defined" (AI SDK v5) or "provider" (AI SDK v6)
- * - id: in format 'provider.tool_name' (e.g., 'openai.web_search')
+ * - id: in format 'provider.tool_name' (e.g., 'google.google_search')
+ *
+ * These tools have a lazy `inputSchema` function that returns an AI SDK Schema
+ * (not a Zod schema), so they require special handling during serialization.
  */
-export function isProviderTool(
-  tool: unknown,
-): tool is { type: 'provider-defined' | 'provider'; id: string; args?: Record<string, unknown> } {
+export function isProviderDefinedTool(tool: unknown): tool is ProviderTool {
   if (typeof tool !== 'object' || tool === null) return false;
   const t = tool as Record<string, unknown>;
   const isProviderType = t.type === 'provider-defined' || t.type === 'provider';
@@ -44,8 +47,13 @@ export function isProviderTool(
 }
 
 /**
+ * Alias for callers that prefer the shorter provider-tool terminology.
+ */
+export const isProviderTool = isProviderDefinedTool;
+
+/**
  * Extracts the model-facing tool name from a provider tool id.
- * e.g., 'openai.web_search' -> 'web_search'
+ * e.g. 'openai.web_search' -> 'web_search'
  */
 export function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');

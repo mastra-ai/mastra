@@ -4,6 +4,7 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
+import { resolveObservabilityContext, createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
@@ -51,7 +52,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   },
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
-  return async ({ inputData, bail, tracingContext }) => {
+  return async ({ inputData, bail, ...observabilityContext }) => {
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
@@ -113,7 +114,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       const modelOutput = await getModelOutputForTripwire<OUTPUT>({
         tripwire: memoryData.tripwire!,
         runId,
-        tracingContext,
+        ...resolveObservabilityContext(observabilityContext),
         options: options,
         model: agentModel,
         messageList: memoryData.messageList,
@@ -162,7 +163,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       methodType: modelMethodType,
       agentId,
       requestContext: result.requestContext!,
-      tracingContext: { currentSpan: agentSpan },
+      ...createObservabilityContext({ currentSpan: agentSpan }),
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
@@ -200,33 +201,40 @@ export function createMapResultsStep<OUTPUT = undefined>({
             return;
           }
 
-          try {
-            const outputText = messageList.get.all
-              .core()
-              .map(m => m.content)
-              .join('\n');
+          // Skip memory persistence when the abort signal has fired.
+          // The LLM response may have continued after the caller disconnected,
+          // and we should not persist a partial or full response for an aborted request.
+          const aborted = options.abortSignal?.aborted;
 
-            await capabilities.executeOnFinish({
-              result: payload,
-              outputText,
-              thread: result.thread,
-              threadId: result.threadId,
-              readOnlyMemory: memoryConfig?.readOnly,
-              resourceId,
-              memoryConfig,
-              requestContext,
-              agentSpan: agentSpan,
-              runId,
-              messageList,
-              threadExists: memoryData.threadExists,
-              structuredOutput: !!options.structuredOutput?.schema,
-              overrideScorers: options.scorers,
-            });
-          } catch (e) {
-            capabilities.logger.error('Error saving memory on finish', {
-              error: e,
-              runId,
-            });
+          if (!aborted) {
+            try {
+              const outputText = messageList.get.all
+                .core()
+                .map(m => m.content)
+                .join('\n');
+
+              await capabilities.executeOnFinish({
+                result: payload,
+                outputText,
+                thread: result.thread,
+                threadId: result.threadId,
+                readOnlyMemory: memoryConfig?.readOnly,
+                resourceId,
+                memoryConfig,
+                requestContext,
+                agentSpan: agentSpan,
+                runId,
+                messageList,
+                threadExists: memoryData.threadExists,
+                structuredOutput: !!options.structuredOutput?.schema,
+                overrideScorers: options.scorers,
+              });
+            } catch (e) {
+              capabilities.logger.error('Error saving memory on finish', {
+                error: e,
+                runId,
+              });
+            }
           }
 
           await options?.onFinish?.({
@@ -253,6 +261,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
       },
       messageList: memoryData.messageList!,
       maxProcessorRetries: options.maxProcessorRetries,
+      // IsTaskComplete scoring for supervisor patterns
+      isTaskComplete: options.isTaskComplete,
+      // Iteration hook for supervisor patterns
+      onIterationComplete: options.onIterationComplete,
       processorStates: memoryData.processorStates,
     };
 

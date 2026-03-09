@@ -284,8 +284,9 @@ test.describe('Agent Creation Persistence - Instruction Blocks', () => {
     await editor1.click();
     await page.keyboard.type(block1Content);
 
-    // Add second block
+    // Add second block (click dropdown trigger, then select inline option)
     await page.getByRole('button', { name: 'Add Instruction block' }).click();
+    await page.getByRole('menuitem', { name: 'Write inline block' }).click();
     await page.waitForTimeout(500);
 
     // Fill second block

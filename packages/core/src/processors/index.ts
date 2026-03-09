@@ -6,7 +6,7 @@ import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
 import type { DataChunkType } from '../stream/types';
@@ -30,15 +30,13 @@ export interface ProcessorStreamWriter {
 /**
  * Base context shared by all processor methods
  */
-export interface ProcessorContext<TTripwireMetadata = unknown> {
+export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<ObservabilityContext> {
   /**
    * Function to abort processing with an optional reason and options.
    * @param reason - The reason for aborting
    * @param options - Options including retry flag and metadata
    */
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
-  /** Optional tracing context for observability */
-  tracingContext?: TracingContext;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
   /**
@@ -121,6 +119,10 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
+  /** The active assistant response message ID for this step, when this processor is running inside an agent loop */
+  messageId?: string;
+  /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
+  rotateResponseMessageId?: () => string;
 
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
@@ -151,7 +153,14 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
-export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort' | 'state'>;
+export type RunProcessInputStepArgs = Omit<
+  ProcessInputStepArgs,
+  'messages' | 'systemMessages' | 'abort' | 'state' | 'messageId' | 'rotateResponseMessageId' | 'retryCount'
+> & {
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
+  retryCount?: number;
+};
 
 /**
  * Result from processInputStep method
@@ -161,6 +170,8 @@ export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 's
  */
 export type ProcessInputStepResult = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
+  /** Override the active assistant response message ID for this step */
+  messageId?: string;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;

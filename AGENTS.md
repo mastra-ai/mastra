@@ -57,9 +57,7 @@ This file provides guidance to coding agents when working with code in this repo
 
 The `@docs/` directory contains the source code and contents of the documentation site.
 
-Whenever you change or add code, you MUST update/add related documentation for those changes.
-
-Read `@docs/AGENTS.md` to learn more about how to work with documentation.
+Whenever you change or add code, you MUST update/add related documentation for those changes. You always need to follow `@docs/styleguides/DOC.md` when writing documentation. The `@docs/styleguides/` folder also contains styleguides for specific types of documentation. Read `@docs/AGENTS.md` to learn more about how to work with documentation.
 
 ## Changelogs
 
@@ -77,6 +75,16 @@ Mastra is a modular AI framework built around central orchestration with pluggab
 - **Memory** (`memory/`) - Thread-based conversation persistence with semantic recall and working memory
 - **Workflows** (`workflows/`) - Step-based execution with suspend/resume
 - **Storage** (`storage/`) - Pluggable backends with standardized interfaces
+
+## Enterprise Edition (EE) licensing
+
+Some code in this repository is licensed under the Mastra Enterprise License instead of Apache-2.0. EE code lives in directories named `ee/` within existing packages.
+
+- **EE directories**: Any directory named `ee/` (e.g., `packages/core/src/auth/ee/`) is under the Mastra Enterprise License (see `ee/LICENSE`)
+- **Everything else**: Apache-2.0
+- **Import convention**: EE code is accessed via subpath exports like `@mastra/core/auth/ee`
+- **When adding EE features**: Place them in an `ee/` subdirectory within the relevant package
+- **License file**: The root `LICENSE.md` maps directories to their licenses
 
 ### Key patterns
 
