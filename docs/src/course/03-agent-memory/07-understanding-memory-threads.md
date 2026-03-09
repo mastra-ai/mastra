@@ -15,7 +15,7 @@ Without these identifiers, your agent would have no way to know which conversati
 
 ## Thread ID and Resource ID Relationship
 
-**Important:** Each thread has an owner (its `resourceId`) that is set when the thread is created. Once created, a thread's owner cannot be changed.
+**Important:** Each thread has an owner (its `resourceId`) that is set when the thread is created. In a trusted server context (when `MASTRA_RESOURCE_ID_KEY` is not set by middleware), the thread's owner can be reassigned by passing a new `resourceId` to `thread.update()`. When `MASTRA_RESOURCE_ID_KEY` is set by middleware, the thread's owner is locked and cannot be changed.
 
 The relationship works like this:
 

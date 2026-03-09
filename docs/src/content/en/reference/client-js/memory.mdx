@@ -65,6 +65,8 @@ const updated = await thread.update({
 })
 ```
 
+Passing `resourceId` transfers thread ownership. This only works in a trusted server context where `MASTRA_RESOURCE_ID_KEY` is not set by middleware. When middleware sets the resource ID, the value is locked and cannot be changed through updates.
+
 ### Delete Thread
 
 Delete a thread and its messages:

@@ -1773,6 +1773,45 @@ describe('Memory Handlers', () => {
           }),
         ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
       });
+
+      it('should prevent resourceId reassignment when middleware sets MASTRA_RESOURCE_ID_KEY', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'user-a-thread', resourceId: 'user-a' });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+          agentId: 'test-agent',
+          threadId: 'user-a-thread',
+          resourceId: 'user-b', // Client tries to reassign to user-b
+          title: 'Updated Title',
+        });
+
+        // resourceId should remain user-a (middleware value takes precedence)
+        expect(result.resourceId).toBe('user-a');
+        expect(result.title).toBe('Updated Title');
+      });
+
+      it('should allow resourceId reassignment in trusted server context (no middleware)', async () => {
+        const mastra = new Mastra({
+          logger: false,
+          agents: { 'test-agent': mockAgent },
+        });
+
+        await mockMemory.createThread({ threadId: 'transfer-thread', resourceId: 'user-a' });
+
+        const result = await UPDATE_THREAD_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          agentId: 'test-agent',
+          threadId: 'transfer-thread',
+          resourceId: 'user-b', // Transfer ownership to user-b
+        });
+
+        expect(result.resourceId).toBe('user-b');
+      });
     });
 
     describe('SAVE_MESSAGES_ROUTE - resourceId validation', () => {

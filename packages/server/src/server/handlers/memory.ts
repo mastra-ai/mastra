@@ -1,6 +1,7 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import type { MastraMemory } from '@mastra/core/memory';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { HTTPException } from '../http-exception';
@@ -926,7 +927,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
   handler: async ({ mastra, agentId, threadId, title, metadata, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+      const contextResourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       const updatedAt = new Date();
@@ -941,14 +942,19 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       if (!thread) {
         throw new HTTPException(404, { message: 'Thread not found' });
       }
-      await validateThreadOwnership(thread, effectiveResourceId);
+
+      // When middleware sets MASTRA_RESOURCE_ID_KEY, validate ownership and prevent reassignment.
+      // When no middleware is present (trusted server context), allow resourceId reassignment
+      // by only validating against the middleware-set value, not the client-provided one.
+      await validateThreadOwnership(thread, contextResourceId);
 
       const updatedThread = {
         ...thread,
         title: title || thread.title,
         metadata: metadata || thread.metadata,
-        // Don't allow changing resourceId if effectiveResourceId is set (prevents reassigning threads)
-        resourceId: effectiveResourceId || resourceId || thread.resourceId,
+        // If middleware set the resourceId, lock it (prevents reassignment from untrusted clients).
+        // Otherwise, allow the client-provided resourceId for ownership transfer in trusted contexts.
+        resourceId: contextResourceId || resourceId || thread.resourceId,
         createdAt: thread.createdAt,
         updatedAt,
       };
