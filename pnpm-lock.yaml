@@ -2156,12 +2156,6 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
-      '@internal/llm-recorder':
-        specifier: workspace:*
-        version: link:../_llm-recorder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
       '@types/node':
         specifier: 22.19.13
         version: 22.19.13
@@ -2852,6 +2846,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
@@ -4151,6 +4148,9 @@ importers:
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../../stores/_test-utils
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder

@@ -20,6 +20,7 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts'],
+          setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
         },
       },
