@@ -158,6 +158,20 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         tool = mastra.getToolById(toolId);
       }
 
+      // Fallback: search dynamically-resolved agent tools (toolsResolver)
+      if (!tool) {
+        const agents = mastra.listAgents() || {};
+        for (const agent of Object.values(agents) as any[]) {
+          try {
+            const agentTools = await agent.listTools({ requestContext });
+            tool = Object.values(agentTools || {}).find((t: any) => t.id === toolId);
+            if (tool) break;
+          } catch {
+            // continue to next agent
+          }
+        }
+      }
+
       if (!tool) {
         throw new HTTPException(404, { message: 'Tool not found' });
       }
