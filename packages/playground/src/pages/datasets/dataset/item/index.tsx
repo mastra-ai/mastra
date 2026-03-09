@@ -220,16 +220,6 @@ function DatasetItemPage() {
     return null;
   }
 
-  if (error && is403ForbiddenError(error)) {
-    return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
-      </MainContentLayout>
-    );
-  }
-
   // No versions = item never existed
   if (!datasetId || !itemId || !versions || versions.length === 0) {
     return (
