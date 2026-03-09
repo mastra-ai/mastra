@@ -74,9 +74,10 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   // e.g. {command:"value"} → {"command":"value"}
   repaired = repaired.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
 
-  // Fix 3: Single quotes → double quotes
-  // Simple approach: replace single quotes that act as JSON delimiters
-  repaired = repaired.replace(/'/g, '"');
+  // Fix 3: Single quotes → double quotes (only when used as JSON delimiters)
+  // Walk the string character-by-character to avoid corrupting apostrophes
+  // inside already-double-quoted values (e.g. "don't delete").
+  repaired = replaceSingleQuoteDelimiters(repaired);
 
   // Fix 4: Trailing commas before closing braces/brackets
   // e.g. {"a":1,} → {"a":1}
@@ -87,6 +88,40 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Replace single quotes that act as JSON string delimiters with double quotes,
+ * while leaving apostrophes inside already-double-quoted strings untouched.
+ *
+ * Walks the string character-by-character, tracking whether we are currently
+ * inside a double-quoted region. Single quotes encountered outside a
+ * double-quoted region are treated as JSON delimiters and converted.
+ */
+function replaceSingleQuoteDelimiters(input: string): string {
+  const chars = input.split('');
+  let inDoubleQuote = false;
+
+  for (let i = 0; i < chars.length; i++) {
+    const ch = chars[i]!;
+
+    if (ch === '\\') {
+      // Skip escaped character
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+
+    if (ch === "'" && !inDoubleQuote) {
+      chars[i] = '"';
+    }
+  }
+
+  return chars.join('');
 }
 
 export type StreamPart =

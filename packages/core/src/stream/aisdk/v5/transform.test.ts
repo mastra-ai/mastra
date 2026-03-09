@@ -468,6 +468,13 @@ describe('convertFullStreamChunkToMastra', () => {
       const result = tryRepairJson('{_id:"123",_type:"user"}');
       expect(result).toEqual({ _id: '123', _type: 'user' });
     });
+
+    it('should preserve apostrophes inside double-quoted values when replacing single-quote delimiters', () => {
+      // Single quotes as delimiters should become double quotes,
+      // but the apostrophe in "don't" must survive.
+      const result = tryRepairJson(`{'message':"don't delete",'count':1}`);
+      expect(result).toEqual({ message: "don't delete", count: 1 });
+    });
   });
 
   describe('other chunk types', () => {
