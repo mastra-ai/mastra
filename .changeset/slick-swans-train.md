@@ -1,7 +1,6 @@
 ---
 '@mastra/clickhouse': minor
 '@mastra/libsql': minor
-'@mastra/mongodb': minor
 '@mastra/mssql': minor
 '@mastra/pg': minor
 ---
