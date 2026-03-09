@@ -327,6 +327,8 @@ export class CustomOutputProcessor implements Processor {
 }
 ```
 
+The `processOutputStream` method receives all streaming chunks, including custom `data-*` chunks emitted by tools via `writer.custom()`. This means you can use output processors to inspect, modify, or block tool-emitted data chunks before they reach the client.
+
 #### Accessing generation result data
 
 The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This makes it easy to access token usage, generated text, finish reason, and step details.
