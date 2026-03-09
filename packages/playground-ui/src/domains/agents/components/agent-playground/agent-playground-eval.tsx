@@ -1,5 +1,5 @@
 import { Play, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/ds/components/Button';
@@ -383,6 +383,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const isStartingExperimentRef = useRef(false);
   const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null);
 
   const { form } = useAgentEditFormContext();
@@ -394,11 +395,14 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
   const { data: experiments, isLoading: isLoadingExperiments } = useAgentExperiments(agentId);
 
   const handleRunExperiment = useCallback(async () => {
+    if (isStartingExperimentRef.current) return;
+
     if (!selectedDatasetId) {
       toast.error('Please select a dataset');
       return;
     }
 
+    isStartingExperimentRef.current = true;
     setIsRunning(true);
     try {
       // Save draft first to persist current config
@@ -419,6 +423,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
     } catch (error) {
       toast.error(`Failed to start experiment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
+      isStartingExperimentRef.current = false;
       setIsRunning(false);
     }
   }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext, queryClient]);
