@@ -2852,9 +2852,6 @@ importers:
       '@internal/llm-recorder':
         specifier: workspace:*
         version: link:../_llm-recorder
-      '@internal/test-utils':
-        specifier: workspace:*
-        version: link:../_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
