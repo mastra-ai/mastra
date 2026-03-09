@@ -1,6 +1,6 @@
 services:
   db:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:26.2.3.2
     container_name: 'clickhouse-test-db'
     ports:
       - '8123:8123'
@@ -9,7 +9,11 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-password}
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-volumes:
-  clickhouse_data:
+    healthcheck:
+      test: ['CMD-SHELL', "clickhouse-client --query 'SELECT 1'"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 3s
+    tmpfs:
+      - /var/lib/clickhouse
