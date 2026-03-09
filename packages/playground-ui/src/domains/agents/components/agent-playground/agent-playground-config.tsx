@@ -122,11 +122,11 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
   const prevBlocksArr = Array.isArray(previousBlocks) ? previousBlocks : [];
   const currBlocksArr = Array.isArray(currentBlocks) ? currentBlocks : [];
 
-  const { data: prevText, isLoading: isLoadingPrev } = usePreviewInstructions(
+  const { data: prevText, isLoading: isLoadingPrev, isError: isPrevError } = usePreviewInstructions(
     prevBlocksArr.length > 0 ? prevBlocksArr : undefined,
     prevBlocksArr.length > 0,
   );
-  const { data: currText, isLoading: isLoadingCurr } = usePreviewInstructions(
+  const { data: currText, isLoading: isLoadingCurr, isError: isCurrError } = usePreviewInstructions(
     currBlocksArr.length > 0 ? currBlocksArr : undefined,
     currBlocksArr.length > 0,
   );
@@ -136,6 +136,14 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
       <div className="flex items-center justify-center py-6">
         <Spinner className="h-4 w-4" />
       </div>
+    );
+  }
+
+  if (isPrevError || isCurrError) {
+    return (
+      <Txt variant="ui-sm" className="text-red-400 py-2">
+        Failed to load instruction preview
+      </Txt>
     );
   }
 
