@@ -7,7 +7,7 @@ export { buildModePrompt, buildModePromptFn } from './build.js';
 export { planModePrompt } from './plan.js';
 export { fastModePrompt } from './fast.js';
 
-import { hasTavilyKey } from '../../tools/index.js';
+import { hasMorphKey, hasTavilyKey } from '../../tools/index.js';
 import { loadAgentInstructions, formatAgentInstructions } from './agent-instructions.js';
 import { buildBasePrompt } from './base.js';
 import type { PromptContext as BasePromptContext } from './base.js';
@@ -49,7 +49,7 @@ export function buildFullPrompt(ctx: PromptContext): string {
   }
 
   // Build mode-aware tool guidance
-  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch, deniedTools });
+  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch, hasCodebaseSearch: hasMorphKey(), deniedTools });
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {

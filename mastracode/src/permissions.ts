@@ -46,6 +46,7 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   'web-search': 'read',
   web_extract: 'read',
   'web-extract': 'read',
+  codebase_search: 'mcp', // sends data to external API
   // Edit tools — modify files
   [MC_TOOLS.STRING_REPLACE_LSP]: 'edit',
   [MC_TOOLS.AST_SMART_EDIT]: 'edit',
