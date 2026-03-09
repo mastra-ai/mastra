@@ -504,6 +504,15 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
     mode = 'record';
   }
 
+  // Load existing recordings / metadata before any mutations (backward compatible)
+  let savedRecordings: LLMRecording[] = [];
+  let existingMeta: RecordingMeta | undefined;
+  if (recordingExists) {
+    const file = loadRecordingFile(recordingPath, options.name);
+    existingMeta = file.meta;
+    savedRecordings = file.recordings;
+  }
+
   // Resolve mode to an effective action
   if (mode === 'update' || mode === 'record') {
     // Update/record: force record (delete existing recording to re-record)
@@ -511,6 +520,8 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       fs.unlinkSync(recordingPath);
     }
     mode = 'record';
+    // Don't replay existing recordings in record mode
+    savedRecordings = [];
   } else if (mode === 'auto') {
     // Auto: replay if recording exists, record if not
     if (recordingExists) {
@@ -552,17 +563,6 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
   const recordings: LLMRecording[] = [];
   const isRecordMode = mode === 'record';
   let saved = false;
-
-  // Load existing recordings / metadata (backward compatible)
-  let savedRecordings: LLMRecording[] = [];
-  let existingMeta: RecordingMeta | undefined;
-  if (recordingExists) {
-    const file = loadRecordingFile(recordingPath, options.name);
-    existingMeta = file.meta;
-    if (!isRecordMode) {
-      savedRecordings = file.recordings;
-    }
-  }
 
   // Create handlers for each LLM API host (or a filtered subset)
   const interceptHosts = options.hosts ?? LLM_API_HOSTS;

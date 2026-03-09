@@ -30,12 +30,12 @@
  * ```
  */
 
+import type {LLMRecorderOptions, LLMRecorderInstance} from '@internal/llm-recorder';
 import {
-  setupLLMRecording,
-  type LLMRecorderOptions,
-  type LLMRecorderInstance,
+  setupLLMRecording, defaultNameGenerator 
+  
+  
 } from '@internal/llm-recorder';
-import { defaultNameGenerator } from '@internal/llm-recorder';
 
 /**
  * Minimal model shape we need — just `provider` and `modelId`.
