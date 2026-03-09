@@ -894,9 +894,15 @@ ${workingMemory}`;
           return part;
         });
 
-      // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls) we need to skip the whole message, it was only working memory tool calls/results
+      // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
+      // only skip the message when it also has no text content left.
       if (newMessage.content.parts.length === 0) {
-        return null;
+        const hasContentText =
+          typeof newMessage.content.content === 'string' && newMessage.content.content.trim().length > 0;
+
+        if (!hasContentText) {
+          return null;
+        }
       }
     }
 
