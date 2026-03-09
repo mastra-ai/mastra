@@ -495,6 +495,23 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
+      // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const list = new MessageList().add(includeMessages, 'memory');
+        const messages = list.get.all.db();
+        return {
+          messages: direction === 'DESC' ? messages.reverse() : messages,
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const total = await collection.countDocuments(query);
 

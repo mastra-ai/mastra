@@ -1066,7 +1066,7 @@ export class MemoryPG extends MemoryStorage {
 
         return {
           messages: direction === 'DESC' ? finalMessages.reverse() : finalMessages,
-          total: finalMessages.length,
+          total: 0,
           page,
           perPage: perPageForResponse,
           hasMore: false,
