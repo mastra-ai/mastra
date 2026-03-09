@@ -692,8 +692,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     vectorType?: VectorType;
     metadataIndexes?: string[];
   }) {
-    const input =
-      indexName + dimension + metric + (type || 'ivfflat') + vectorType + (metadataIndexes?.toSorted().join(',') ?? '');
+    const input = JSON.stringify([
+      indexName,
+      dimension,
+      metric,
+      type || 'ivfflat',
+      vectorType,
+      metadataIndexes?.toSorted() ?? [],
+    ]);
     return (await this.hasher).h32(input);
   }
   private cachedIndexExists(indexName: string, newKey: number) {
