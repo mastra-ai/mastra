@@ -511,67 +511,83 @@ export class MemoryMSSQL extends MemoryStorage {
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
+    const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+    const selectColumns = `id, content, role, type, [createdAt], thread_id AS threadId, [resourceId], seq_id`;
+
+    // Phase 1: Batch-fetch metadata for all target messages in a single query.
+    // This eliminates the correlated subselects that previously ran per-include.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const metaReq = this.pool.request();
+    const idPlaceholders = targetIds.map((id, i) => {
+      const paramName = `tid${i}`;
+      metaReq.input(paramName, id);
+      return `@${paramName}`;
+    });
+    const metaResult = await metaReq.query(
+      `SELECT id, thread_id, [createdAt] FROM ${tableName} WHERE id IN (${idPlaceholders.join(', ')})`,
+    );
+    const targetRows = metaResult.recordset || [];
+
+    if (targetRows.length === 0) return null;
+
+    const targetMap = new Map(targetRows.map((r: any) => [r.id, { threadId: r.thread_id, createdAt: r.createdAt }]));
+
+    // Phase 2: Build cursor-based subqueries using materialized constants from Phase 1.
+    // Uses [createdAt] directly for ordering so the (thread_id, createdAt) index covers the query.
     const unionQueries: string[] = [];
     const paramValues: any[] = [];
-    let paramIdx = 1;
     const paramNames: string[] = [];
-    const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+    let paramIdx = 1;
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // Query by message ID directly - get the threadId from the message itself via subquery
+      const target = targetMap.get(id);
+      if (!target) continue;
 
-      const pId = `@p${paramIdx}`;
-      const pPrev = `@p${paramIdx + 1}`;
-      const pNext = `@p${paramIdx + 2}`;
-
-      unionQueries.push(
-        `
-          SELECT
-            m.id, 
-            m.content, 
-            m.role, 
-            m.type,
-            m.[createdAt], 
-            m.thread_id AS threadId,
-            m.[resourceId],
-            m.seq_id
-          FROM (
-            SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
-            FROM ${tableName}
-            WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId})
-          ) AS m
-          WHERE m.id = ${pId}
-          OR EXISTS (
-            SELECT 1
-            FROM (
-              SELECT *, ROW_NUMBER() OVER (ORDER BY [createdAt] ASC) as row_num
-              FROM ${tableName}
-              WHERE [thread_id] = (SELECT thread_id FROM ${tableName} WHERE id = ${pId})
-            ) AS target
-            WHERE target.id = ${pId}
-            AND (
-              -- Get previous messages (messages that come BEFORE the target)
-              (m.row_num < target.row_num AND m.row_num >= target.row_num - ${pPrev})
-              OR
-              -- Get next messages (messages that come AFTER the target)
-              (m.row_num > target.row_num AND m.row_num <= target.row_num + ${pNext})
-            )
-          )
-        `,
-      );
-
-      paramValues.push(id, withPreviousMessages, withNextMessages);
+      // Fetch the target message itself plus previous messages.
+      // Uses createdAt <= target's createdAt, ordered DESC, limited to withPreviousMessages + 1
+      const pThread = `@p${paramIdx}`;
+      const pCreatedAt = `@p${paramIdx + 1}`;
+      const pLimit = `@p${paramIdx + 2}`;
+      unionQueries.push(`(
+        SELECT TOP (${pLimit}) ${selectColumns}
+        FROM ${tableName}
+        WHERE [thread_id] = ${pThread}
+          AND [createdAt] <= ${pCreatedAt}
+        ORDER BY [createdAt] DESC
+      )`);
+      paramValues.push(target.threadId, target.createdAt, withPreviousMessages + 1);
       paramNames.push(`p${paramIdx}`, `p${paramIdx + 1}`, `p${paramIdx + 2}`);
       paramIdx += 3;
+
+      // Fetch messages after the target (only if requested)
+      if (withNextMessages > 0) {
+        const pThread2 = `@p${paramIdx}`;
+        const pCreatedAt2 = `@p${paramIdx + 1}`;
+        const pLimit2 = `@p${paramIdx + 2}`;
+        unionQueries.push(`(
+          SELECT TOP (${pLimit2}) ${selectColumns}
+          FROM ${tableName}
+          WHERE [thread_id] = ${pThread2}
+            AND [createdAt] > ${pCreatedAt2}
+          ORDER BY [createdAt] ASC
+        )`);
+        paramValues.push(target.threadId, target.createdAt, withNextMessages);
+        paramNames.push(`p${paramIdx}`, `p${paramIdx + 1}`, `p${paramIdx + 2}`);
+        paramIdx += 3;
+      }
     }
 
-    const finalQuery = `
-      SELECT * FROM (
-        ${unionQueries.join(' UNION ALL ')}
-      ) AS union_result
-      ORDER BY [seq_id] ASC
-    `;
+    if (unionQueries.length === 0) return null;
+
+    let finalQuery: string;
+    if (unionQueries.length === 1) {
+      finalQuery = unionQueries[0]!.slice(1, -1);
+    } else {
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY [createdAt] ASC`;
+    }
 
     const req = this.pool.request();
     for (let i = 0; i < paramValues.length; ++i) {
@@ -696,6 +712,19 @@ export class MemoryMSSQL extends MemoryStorage {
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
       };
+
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        const list = new MessageList().add(includeMessages ?? [], 'memory');
+        return {
+          messages: list.get.all.db(),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
       // Get total count
       const countRequest = this.pool.request();

@@ -217,6 +217,82 @@ export class MemoryConvex extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
+    // When perPage is 0, we only need included messages — skip full thread load
+    if (perPage === 0 && include && include.length > 0) {
+      const messages: MastraDBMessage[] = [];
+      const messageIds = new Set<string>();
+      const threadMessagesCache = new Map<string, StoredMessage[]>();
+
+      for (const includeItem of include) {
+        let targetThreadId: string | undefined;
+        let target: StoredMessage | undefined;
+
+        // Check in cached threads first
+        for (const [tid, cachedRows] of threadMessagesCache) {
+          target = cachedRows.find(row => row.id === includeItem.id);
+          if (target) {
+            targetThreadId = tid;
+            break;
+          }
+        }
+
+        // If not found, query by message ID directly
+        if (!target) {
+          const messageRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
+            { field: 'id', value: includeItem.id },
+          ]);
+          if (messageRows.length > 0) {
+            target = messageRows[0];
+            targetThreadId = target!.thread_id;
+
+            if (targetThreadId && !threadMessagesCache.has(targetThreadId)) {
+              const otherThreadRows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, [
+                { field: 'thread_id', value: targetThreadId },
+              ]);
+              threadMessagesCache.set(targetThreadId, otherThreadRows);
+            }
+          }
+        }
+
+        if (!target || !targetThreadId) continue;
+
+        if (!messageIds.has(target.id)) {
+          messages.push(this.parseStoredMessage(target));
+          messageIds.add(target.id);
+        }
+
+        const targetThreadRows = threadMessagesCache.get(targetThreadId) || [];
+        await this.addContextMessages({
+          includeItem,
+          allMessages: targetThreadRows,
+          targetThreadId,
+          messageIds,
+          messages,
+        });
+      }
+
+      messages.sort((a, b) => {
+        const aValue =
+          field === 'createdAt' || field === 'updatedAt' ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue =
+          field === 'createdAt' || field === 'updatedAt' ? new Date((b as any)[field]).getTime() : (b as any)[field];
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      return {
+        messages,
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+
     // Fetch messages from all threads
     let rows: StoredMessage[] = [];
     for (const tid of threadIds) {

@@ -652,6 +652,18 @@ export class StoreMemoryUpstash extends MemoryStorage {
         includedMessages = included.map(this.parseStoredMessage);
       }
 
+      // When perPage is 0, we only need included messages — skip thread load entirely
+      if (perPage === 0 && includedMessages.length > 0) {
+        const list = new MessageList().add(includedMessages, 'memory');
+        return {
+          messages: list.get.all.db(),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get all message IDs from all thread sorted sets
       const allMessageIdsWithThreads: { threadId: string; messageId: string }[] = [];
       for (const tid of threadIds) {

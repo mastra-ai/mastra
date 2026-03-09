@@ -274,6 +274,19 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
 
+      // When perPage is 0, we only need included messages — skip data and COUNT queries
+      if (perPageForQuery === 0 && include && include.length > 0) {
+        const includeResult = await this._getIncludedMessages({ include });
+        const list = new MessageList().add(includeResult, 'memory');
+        return {
+          messages: list.get.all.db(),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Apply pagination
       if (perPageForResponse === false) {
         // Get all messages
@@ -356,92 +369,15 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(paginatedMessages.map((m: MastraDBMessage) => m.id));
-      let includeMessages: MastraDBMessage[] = [];
 
       if (include && include.length > 0) {
-        // Batch lookup threadIds for includes that don't have one (avoids N+1 queries)
-        const includesNeedingThread = include.filter(inc => !inc.threadId);
-        const threadByMessageId = new Map<string, string>();
+        const includeMessages = await this._getIncludedMessages({ include });
 
-        if (includesNeedingThread.length > 0) {
-          const { messages: includeLookup } = await this.listMessagesById({
-            messageIds: includesNeedingThread.map(inc => inc.id),
-          });
-          for (const msg of includeLookup) {
-            if (msg.threadId) {
-              threadByMessageId.set(msg.id, msg.threadId);
-            }
-          }
-        }
-
-        const unionQueries: string[] = [];
-        const params: any[] = [];
-        let paramIdx = 1;
-
-        for (const inc of include) {
-          const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-
-          // Get the threadId for this included message
-          // If inc.threadId is provided, use it; otherwise use the batched lookup
-          const searchThreadId = inc.threadId ?? threadByMessageId.get(id);
-
-          if (!searchThreadId) continue; // Skip if message not found
-
-          unionQueries.push(`
-            SELECT * FROM (
-              WITH numbered_messages AS (
-                SELECT
-                  id, content, role, type, "createdAt", thread_id, "resourceId",
-                  ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-                FROM "${TABLE_MESSAGES}"
-                WHERE thread_id = {var_thread_id_${paramIdx}:String}
-              ),
-              target_positions AS (
-                SELECT row_num as target_pos
-                FROM numbered_messages
-                WHERE id = {var_include_id_${paramIdx}:String}
-              )
-              SELECT DISTINCT m.id, m.content, m.role, m.type, m."createdAt", m.thread_id AS "threadId", m."resourceId"
-              FROM numbered_messages m
-              CROSS JOIN target_positions t
-              WHERE m.row_num BETWEEN (t.target_pos - {var_withPreviousMessages_${paramIdx}:Int64}) AND (t.target_pos + {var_withNextMessages_${paramIdx}:Int64})
-            ) AS query_${paramIdx}
-          `);
-
-          params.push(
-            { [`var_thread_id_${paramIdx}`]: searchThreadId },
-            { [`var_include_id_${paramIdx}`]: id },
-            { [`var_withPreviousMessages_${paramIdx}`]: withPreviousMessages },
-            { [`var_withNextMessages_${paramIdx}`]: withNextMessages },
-          );
-          paramIdx++;
-        }
-
-        // Only run the query if we have any valid includes
-        if (unionQueries.length > 0) {
-          const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
-          const mergedParams = params.reduce((acc, paramObj) => ({ ...acc, ...paramObj }), {});
-
-          const includeResult = await this.client.query({
-            query: finalQuery,
-            query_params: mergedParams,
-            clickhouse_settings: {
-              date_time_input_format: 'best_effort',
-              date_time_output_format: 'iso',
-              use_client_time_zone: 1,
-              output_format_json_quote_64bit_integers: 0,
-            },
-          });
-
-          const includeRows = await includeResult.json();
-          includeMessages = transformRows<MastraDBMessage>(includeRows.data);
-
-          // Deduplicate: only add messages that aren't already in the paginated results
-          for (const includeMsg of includeMessages) {
-            if (!messageIds.has(includeMsg.id)) {
-              paginatedMessages.push(includeMsg);
-              messageIds.add(includeMsg.id);
-            }
+        // Deduplicate: only add messages that aren't already in the paginated results
+        for (const includeMsg of includeMessages) {
+          if (!messageIds.has(includeMsg.id)) {
+            paginatedMessages.push(includeMsg);
+            messageIds.add(includeMsg.id);
           }
         }
       }
@@ -511,6 +447,87 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore: false,
       };
     }
+  }
+
+  private async _getIncludedMessages({
+    include,
+  }: {
+    include: StorageListMessagesInput['include'];
+  }): Promise<MastraDBMessage[]> {
+    if (!include || include.length === 0) return [];
+
+    // Batch lookup threadIds for includes that don't have one
+    const includesNeedingThread = include.filter(inc => !inc.threadId);
+    const threadByMessageId = new Map<string, string>();
+
+    if (includesNeedingThread.length > 0) {
+      const { messages: includeLookup } = await this.listMessagesById({
+        messageIds: includesNeedingThread.map(inc => inc.id),
+      });
+      for (const msg of includeLookup) {
+        if (msg.threadId) {
+          threadByMessageId.set(msg.id, msg.threadId);
+        }
+      }
+    }
+
+    const unionQueries: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    for (const inc of include) {
+      const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const searchThreadId = inc.threadId ?? threadByMessageId.get(id);
+      if (!searchThreadId) continue;
+
+      unionQueries.push(`
+        SELECT * FROM (
+          WITH numbered_messages AS (
+            SELECT
+              id, content, role, type, "createdAt", thread_id, "resourceId",
+              ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
+            FROM "${TABLE_MESSAGES}"
+            WHERE thread_id = {var_thread_id_${paramIdx}:String}
+          ),
+          target_positions AS (
+            SELECT row_num as target_pos
+            FROM numbered_messages
+            WHERE id = {var_include_id_${paramIdx}:String}
+          )
+          SELECT DISTINCT m.id, m.content, m.role, m.type, m."createdAt", m.thread_id AS "threadId", m."resourceId"
+          FROM numbered_messages m
+          CROSS JOIN target_positions t
+          WHERE m.row_num BETWEEN (t.target_pos - {var_withPreviousMessages_${paramIdx}:Int64}) AND (t.target_pos + {var_withNextMessages_${paramIdx}:Int64})
+        ) AS query_${paramIdx}
+      `);
+
+      params.push(
+        { [`var_thread_id_${paramIdx}`]: searchThreadId },
+        { [`var_include_id_${paramIdx}`]: id },
+        { [`var_withPreviousMessages_${paramIdx}`]: withPreviousMessages },
+        { [`var_withNextMessages_${paramIdx}`]: withNextMessages },
+      );
+      paramIdx++;
+    }
+
+    if (unionQueries.length === 0) return [];
+
+    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+    const mergedParams = params.reduce((acc, paramObj) => ({ ...acc, ...paramObj }), {});
+
+    const includeResult = await this.client.query({
+      query: finalQuery,
+      query_params: mergedParams,
+      clickhouse_settings: {
+        date_time_input_format: 'best_effort',
+        date_time_output_format: 'iso',
+        use_client_time_zone: 1,
+        output_format_json_quote_64bit_integers: 0,
+      },
+    });
+
+    const includeRows = await includeResult.json();
+    return transformRows<MastraDBMessage>(includeRows.data);
   }
 
   async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {

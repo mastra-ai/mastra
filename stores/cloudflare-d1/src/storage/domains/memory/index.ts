@@ -593,71 +593,91 @@ export class MemoryStorageD1 extends MemoryStorage {
   private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
     if (!include || include.length === 0) return null;
 
+    const tableName = this.#db.getTableName(TABLE_MESSAGES);
+
+    // Phase 1: Batch-fetch metadata for all target messages in a single query.
+    // This eliminates the correlated subselects that previously ran per-subquery.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const idPlaceholders = targetIds.map(() => '?').join(', ');
+    const targetResult = await this.#db.executeQuery({
+      sql: `SELECT id, thread_id, createdAt FROM ${tableName} WHERE id IN (${idPlaceholders})`,
+      params: targetIds,
+    });
+
+    if (!Array.isArray(targetResult) || targetResult.length === 0) return null;
+
+    const targetMap = new Map(
+      targetResult.map((r: any) => [r.id as string, { threadId: r.thread_id as string, createdAt: r.createdAt }]),
+    );
+
+    // Phase 2: Build cursor-based subqueries using materialized constants from Phase 1.
+    // Uses createdAt directly so the (thread_id, createdAt) index covers the query.
     const unionQueries: string[] = [];
     const params: any[] = [];
-    let paramIdx = 1;
-    const tableName = this.#db.getTableName(TABLE_MESSAGES);
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // Query by message ID directly - get the threadId from the message itself via subquery
+      const target = targetMap.get(id);
+      if (!target) continue;
 
-      unionQueries.push(`
-                SELECT * FROM (
-                  WITH target_thread AS (
-                    SELECT thread_id FROM ${tableName} WHERE id = ?
-                  ),
-                  ordered_messages AS (
-                    SELECT
-                      *,
-                      ROW_NUMBER() OVER (ORDER BY createdAt ASC) AS row_num
-                    FROM ${tableName}
-                    WHERE thread_id = (SELECT thread_id FROM target_thread)
-                  )
-                  SELECT
-                    m.id,
-                    m.content,
-                    m.role,
-                    m.type,
-                    m.createdAt,
-                    m.thread_id AS threadId,
-                    m.resourceId
-                  FROM ordered_messages m
-                  WHERE m.id = ?
-                  OR EXISTS (
-                    SELECT 1 FROM ordered_messages target
-                    WHERE target.id = ?
-                    AND (
-                      (m.row_num <= target.row_num + ? AND m.row_num > target.row_num)
-                      OR
-                      (m.row_num >= target.row_num - ? AND m.row_num < target.row_num)
-                    )
-                  )
-                ) AS query_${paramIdx}
-            `);
+      // Fetch the target message itself plus previous messages.
+      unionQueries.push(`(
+        SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
+        FROM ${tableName}
+        WHERE thread_id = ?
+          AND createdAt <= ?
+        ORDER BY createdAt DESC
+        LIMIT ?
+      )`);
+      params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
 
-      params.push(id, id, id, withNextMessages, withPreviousMessages);
-      paramIdx++;
+      // Fetch messages after the target (only if requested)
+      if (withNextMessages > 0) {
+        unionQueries.push(`(
+          SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
+          FROM ${tableName}
+          WHERE thread_id = ?
+            AND createdAt > ?
+          ORDER BY createdAt ASC
+          LIMIT ?
+        )`);
+        params.push(target.threadId, target.createdAt, withNextMessages);
+      }
     }
 
-    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
+    if (unionQueries.length === 0) return null;
+
+    let finalQuery: string;
+    if (unionQueries.length === 1) {
+      finalQuery = unionQueries[0]!.slice(1, -1);
+    } else {
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) ORDER BY createdAt ASC`;
+    }
     const messages = await this.#db.executeQuery({ sql: finalQuery, params });
 
     if (!Array.isArray(messages)) {
       return [];
     }
 
-    // Parse message content
-    const processedMessages = messages.map((message: Record<string, any>) => {
-      const processedMsg: Record<string, any> = {};
-
-      for (const [key, value] of Object.entries(message)) {
-        if (key === `type` && value === `v2`) continue;
-        processedMsg[key] = deserializeValue(value);
-      }
-
-      return processedMsg;
-    });
+    // Parse message content and deduplicate
+    const seen = new Set<string>();
+    const processedMessages = messages
+      .filter((message: Record<string, any>) => {
+        const id = message.id as string;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      })
+      .map((message: Record<string, any>) => {
+        const processedMsg: Record<string, any> = {};
+        for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
+          processedMsg[key] = deserializeValue(value);
+        }
+        return processedMsg;
+      });
 
     return processedMessages;
   }
@@ -780,6 +800,18 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
+      // When perPage is 0 and we have include targets, skip COUNT and data queries.
+      // This is the semantic recall path where we only need the included messages.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeResult = await this._getIncludedMessages(include);
+        if (!Array.isArray(includeResult) || includeResult.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const list = new MessageList().add(includeResult as MastraMessageV1[] | MastraDBMessage[], 'memory');
+        return { messages: list.get.all.db(), total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       query += ` ORDER BY "${field}" ${direction}`;
 
       // Apply pagination

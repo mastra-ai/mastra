@@ -820,6 +820,26 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
+      // When perPage is 0, we only need included messages — skip full thread load
+      if (perPage === 0 && include && include.length > 0) {
+        const includedMessageIds = new Set<string>();
+        await this.getIncludedMessagesWithContext(include, includedMessageIds);
+        const includedMessages = await this.fetchAndParseMessagesFromMultipleThreads(
+          Array.from(includedMessageIds),
+          include,
+          undefined,
+        );
+
+        const list = new MessageList().add(includedMessages as MastraMessageV1[], 'memory');
+        return {
+          messages: list.get.all.db(),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Step 1: Get thread messages from all specified threads (for pagination)
       const threadMessageIds = new Set<string>();
       for (const tid of threadIds) {

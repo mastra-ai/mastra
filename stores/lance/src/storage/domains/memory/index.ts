@@ -373,6 +373,32 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const whereClause = conditions.join(' AND ');
 
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        // Fetch messages from all relevant threads for includes
+        const includeThreadIds = [...new Set(include.map(item => item.threadId || threadId))];
+        const allThreadMessages: any[] = [];
+        for (const tid of includeThreadIds) {
+          const flatTid = Array.isArray(tid) ? tid[0] : tid;
+          const threadQuery = table.query().where(`thread_id = '${flatTid}'`);
+          const threadRecords = await threadQuery.toArray();
+          allThreadMessages.push(...threadRecords);
+        }
+        allThreadMessages.sort((a, b) => a.createdAt - b.createdAt);
+
+        const contextMessages = this.processMessagesWithContext(allThreadMessages, include);
+        const includedMessages = contextMessages.map((row: any) => this.normalizeMessage(row));
+
+        const list = new MessageList().add(includedMessages, 'memory');
+        return {
+          messages: list.get.all.db(),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const total = await table.countRows(whereClause);
 
