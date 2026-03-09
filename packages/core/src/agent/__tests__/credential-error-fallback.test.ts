@@ -241,14 +241,10 @@ describe('Credential/Auth Error Fallback', () => {
   });
 
   describe('retry behavior for non-retryable errors', () => {
-    it('should not retry non-retryable 401 on the same model (maxRetries should be ignored)', async () => {
-      // BUG: executeStreamWithFallbackModels retries all errors regardless of isRetryable.
-      // The p-retry layer in execute.ts correctly checks isRetryable, but the outer
-      // retry loop in llm-execution-step.ts does not, causing redundant retries
-      // for non-retryable errors like 401/403.
-      //
-      // Expected: primaryCallCount === 1 (no retry for non-retryable error)
-      // Actual:   primaryCallCount === 4 (maxRetries + 1 attempts)
+    it('should not retry non-retryable 401 on the same model', async () => {
+      // Non-retryable errors (401/403) should not be retried - p-retry correctly
+      // checks isRetryable and skips retries. The outer fallback loop only handles
+      // model switching, not retries.
       const primary = createCountingErrorModel(401, 'Unauthorized', false);
       const secondaryModel = createSuccessModel('Fallback success');
 
@@ -268,14 +264,8 @@ describe('Credential/Auth Error Fallback', () => {
       // Fallback works correctly
       expect(fullText).toBe('Fallback success');
 
-      // BUG: 401 (isRetryable: false) is retried maxRetries times by the outer loop.
-      // The outer executeStreamWithFallbackModels loop does not check isRetryable,
-      // so it retries all errors including non-retryable ones.
-      // Current behavior: 4 calls (1 initial + 3 retries)
-      // Expected behavior: 1 call (no retries for non-retryable errors)
-      expect(primary.getCallCount()).toBe(4); // Documents current (buggy) behavior
-      // TODO: After fix, this should be:
-      // expect(primary.getCallCount()).toBe(1);
+      // 401 (isRetryable: false) is not retried - only 1 call to the primary model
+      expect(primary.getCallCount()).toBe(1);
     });
 
     it('should retry retryable 429 on the same model before falling back', async () => {
@@ -296,15 +286,9 @@ describe('Credential/Auth Error Fallback', () => {
       const fullText = await result.text;
 
       expect(fullText).toBe('Fallback success');
-      // BUG: Retries are duplicated across two layers:
-      // - Layer 1 (p-retry in execute.ts): retries maxRetries times for retryable errors
-      // - Layer 2 (executeStreamWithFallbackModels): also retries maxRetries times
-      // Result: (maxRetries + 1) * (maxRetries + 1) = 3 * 3 = 9 calls instead of 3
-      // Current behavior: 9 calls (double retry)
-      // Expected behavior: 3 calls (1 initial + 2 retries, single layer)
-      expect(primary.getCallCount()).toBe(9); // Documents current (buggy) behavior
-      // TODO: After fix, this should be:
-      // expect(primary.getCallCount()).toBe(3);
+      // Retries are handled by a single layer (p-retry in execute.ts) which respects isRetryable.
+      // With maxRetries: 2, we get 3 calls (1 initial + 2 retries) before falling back.
+      expect(primary.getCallCount()).toBe(3);
     });
   });
 });
