@@ -33,7 +33,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
       // Create a ProcessorRunner for data-* chunks so they go through output processors
-      // instead of bypassing them (fixes #13341)
       const hasOutputProcessors = rest.outputProcessors && rest.outputProcessors.length > 0;
       const dataChunkProcessorRunner = hasOutputProcessors
         ? new ProcessorRunner({
@@ -49,7 +48,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
         if (chunk.type.startsWith('data-')) {
-          // Run data-* chunks through output processors before persisting (fixes #13341)
+          // Run data-* chunks through output processors before persisting
           let processedChunk = chunk;
           if (dataChunkProcessorRunner) {
             const {
