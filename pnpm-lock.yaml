@@ -2907,7 +2907,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.13)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.31.1)(msw@2.12.10(@types/node@22.19.13)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
       vscode-jsonrpc:
-        specifier: ^8.2.0
+        specifier: ^8.2.1
         version: 8.2.1
       vscode-languageserver-protocol:
         specifier: ^3.17.0

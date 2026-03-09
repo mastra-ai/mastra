@@ -295,7 +295,7 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "vscode-jsonrpc": "^8.2.0",
+    "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.0",
     "zod": "^3.25.76"
   },
