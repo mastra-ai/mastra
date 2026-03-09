@@ -160,31 +160,33 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
         }
 
         // Handle case where LLM passes empty object or no memory field
-        if (inputData.memory === undefined || inputData.memory === null) {
+        const memoryInput = inputData.memory;
+        if (memoryInput === undefined || memoryInput === null) {
           // No data to update - return existing data unchanged
           return { success: true, message: 'No memory data provided, existing memory unchanged.' };
         }
 
         let newData: unknown;
-        if (typeof inputData.memory === 'string') {
+        if (typeof memoryInput === 'string') {
           try {
-            newData = JSON.parse(inputData.memory);
+            newData = JSON.parse(memoryInput);
           } catch (parseError) {
             const errorMessage = parseError instanceof Error ? parseError.message : String(parseError);
             throw new Error(
               `Failed to parse working memory input as JSON: ${errorMessage}. ` +
-                `Raw input: ${inputData.memory.length > 500 ? inputData.memory.slice(0, 500) + '...' : inputData.memory}`,
+                `Raw input: ${memoryInput.length > 500 ? memoryInput.slice(0, 500) + '...' : memoryInput}`,
             );
           }
         } else {
-          newData = inputData.memory;
+          newData = memoryInput;
         }
 
         const mergedData = deepMergeWorkingMemory(existingData, newData as Record<string, unknown>);
         workingMemory = JSON.stringify(mergedData);
       } else {
         // Template-based (Markdown): use existing replace semantics
-        workingMemory = typeof inputData.memory === 'string' ? inputData.memory : JSON.stringify(inputData.memory);
+        const memoryInput = inputData.memory;
+        workingMemory = typeof memoryInput === 'string' ? memoryInput : JSON.stringify(memoryInput);
 
         // Validate that we're not replacing good data with an empty template
         // This prevents accidental data loss when the LLM returns just the template
