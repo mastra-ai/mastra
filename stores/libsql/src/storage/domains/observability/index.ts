@@ -41,6 +41,12 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: SPAN_SCHEMA,
+      ifNotExists: ['requestContext'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

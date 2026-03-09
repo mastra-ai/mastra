@@ -211,6 +211,7 @@ export class MastraLLMVNext extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     // Create model span tracker that will be shared across all LLM execution steps

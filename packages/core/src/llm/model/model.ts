@@ -188,6 +188,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
@@ -343,6 +344,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {
@@ -514,6 +516,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
@@ -731,6 +734,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {

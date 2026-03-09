@@ -52,6 +52,12 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: TABLE_SCHEMAS[TABLE_SPANS],
+      ifNotExists: ['requestContext'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
