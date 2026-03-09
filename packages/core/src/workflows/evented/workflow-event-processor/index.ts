@@ -1502,6 +1502,8 @@ export class WorkflowEventProcessor extends EventProcessor {
                 result: foreachSuspendResult,
                 suspendedPaths,
                 resumeLabels: collectedResumeLabels,
+                waitingPaths: {},
+                waitingPathConditions: {},
               },
             });
           }
@@ -1666,8 +1668,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             result: prevResult,
             suspendedPaths,
             resumeLabels,
-            ...(Object.keys(waitingPaths).length > 0 ? { waitingPaths } : {}),
-            ...(Object.keys(waitingPathConditions).length > 0 ? { waitingPathConditions } : {}),
+            waitingPaths,
+            waitingPathConditions,
           },
         });
       }
