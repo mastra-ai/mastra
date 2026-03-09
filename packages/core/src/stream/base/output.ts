@@ -20,8 +20,10 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  ProviderMetadata,
   StreamTransport,
   StepTripwireData,
+  ToolCallChunk,
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
@@ -182,7 +184,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallDeltaIdNameMap: Record<string, string> = {};
   #toolCallStreamingMeta: Record<
     string,
-    { toolName: string; providerExecuted?: boolean; providerMetadata?: unknown }
+    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata }
   > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
@@ -463,7 +465,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               delete self.#toolCallArgsDeltas[toolCallId];
               delete self.#toolCallDeltaIdNameMap[toolCallId];
               if (meta) {
-                const synthetic: ChunkType<OUTPUT> = {
+                const synthetic: ToolCallChunk = {
                   type: 'tool-call',
                   runId: chunk.runId,
                   from: chunk.from,
@@ -474,7 +476,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
                   },
-                } as ChunkType<OUTPUT>;
+                };
                 self.#toolCalls.push(synthetic);
                 self.#bufferedByStep.toolCalls.push(synthetic);
                 // Emit streaming-end then synthetic so studio receives tool-input-end then tool-input-available before tool-output-available

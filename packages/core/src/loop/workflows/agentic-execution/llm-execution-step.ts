@@ -260,9 +260,7 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'tool-call-input-streaming-end': {
-        if (isControllerOpen(controller)) {
-          controller.enqueue(chunk);
-        }
+        safeEnqueue(controller, chunk);
         break;
       }
 
