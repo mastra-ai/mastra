@@ -93,11 +93,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
             runId,
           });
 
-          // Flush accumulated messages to persistent storage so they survive
-          // an abort/disconnect.  Without this, saveStepMessages only adds to
-          // the in-memory MessageList and the only persistence path is
-          // executeOnFinish which is gated by !abortSignal.aborted.
-          // See: https://github.com/mastra-ai/mastra/issues/13984
           if (saveQueueManager && memoryData.thread?.id) {
             await saveQueueManager.flushMessages(memoryData.messageList!, memoryData.thread.id, memoryConfig);
           }
