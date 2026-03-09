@@ -1,6 +1,6 @@
+import { transformSync } from '@babel/core';
 import { describe, it, expect } from 'vitest';
 import { detectPinoTransports } from './detect-pino-transports';
-import { transformSync } from '@babel/core';
 
 /**
  * Helper to run the plugin and return detected transports
