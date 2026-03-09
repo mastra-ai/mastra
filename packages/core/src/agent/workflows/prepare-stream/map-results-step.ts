@@ -3,7 +3,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
-import type { MemoryConfig } from '../../../memory/types';
+import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext, createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
@@ -22,7 +22,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   runId: string;
   requestContext: RequestContext;
   memory?: MastraMemory;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;

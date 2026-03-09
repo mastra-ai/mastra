@@ -22,6 +22,7 @@ import { useThreadInput } from '@/domains/conversation';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { ComposerModelSwitcher } from '@/domains/agents/components/composer-model-switcher';
 import { BracketOverlay } from './components/bracket-overlay';
+import { SaveFullConversationAction } from './messages/dataset-save-action';
 
 export interface ThreadProps {
   agentName?: string;
@@ -56,6 +57,9 @@ export const Thread = ({ agentName, agentId, hasMemory, hasModelList }: ThreadPr
         </div>
 
         <ThreadPrimitive.If empty={false}>
+          <ThreadPrimitive.If running={false}>
+            <SaveFullConversationAction />
+          </ThreadPrimitive.If>
           <div />
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
@@ -80,7 +84,7 @@ export interface ThreadWelcomeProps {
 const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
   return (
     <ThreadPrimitive.Empty>
-      <div className="flex w-full flex-grow flex-col items-center justify-center">
+      <div className="flex w-full flex-grow flex-col items-center pt-[15vh]">
         <Avatar name={agentName || 'Agent'} size="lg" />
         <p className="mt-4 font-medium">How can I help you today?</p>
       </div>
