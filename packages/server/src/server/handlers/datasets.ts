@@ -36,8 +36,23 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 // ============================================================================
-// Feature gate + local type guards
+// Feature gate + helpers
 // ============================================================================
+
+/**
+ * The server adapter overwrites body.requestContext with the framework's
+ * RequestContext class instance.  When we need the plain-object payload
+ * (e.g. for dataset item validation), convert it back.
+ */
+function toPlainRequestContext(value: unknown): unknown {
+  if (value == null) return undefined;
+  if (typeof value === 'object' && 'toJSON' in value && typeof (value as any).toJSON === 'function') {
+    const plain = (value as any).toJSON();
+    // toJSON on an empty RequestContext returns {}
+    return Object.keys(plain).length > 0 ? plain : undefined;
+  }
+  return value;
+}
 
 function assertDatasetsAvailable(): void {
   if (!coreFeatures.has('datasets')) {
@@ -46,7 +61,7 @@ function assertDatasetsAvailable(): void {
 }
 
 interface SchemaValidationLike extends Error {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'requestContext';
   errors: Array<{ path: string; code: string; message: string }>;
 }
 
@@ -54,7 +69,7 @@ interface SchemaUpdateValidationLike extends Error {
   failingItems: Array<{
     index: number;
     data: unknown;
-    field: 'input' | 'groundTruth';
+    field: 'input' | 'groundTruth' | 'requestContext';
     errors: Array<{ path: string; code: string; message: string }>;
   }>;
 }
@@ -126,12 +141,22 @@ export const CREATE_DATASET_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
+      const {
+        name,
+        description,
+        metadata,
+        inputSchema,
+        groundTruthSchema,
+        defaultRequestContext,
+        requestContextSchema,
+      } = params as {
         name: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
+        defaultRequestContext?: unknown;
+        requestContextSchema?: Record<string, unknown> | null;
       };
       const ds = await mastra.datasets.create({
         name,
@@ -139,6 +164,8 @@ export const CREATE_DATASET_ROUTE = createRoute({
         metadata,
         inputSchema,
         groundTruthSchema,
+        defaultRequestContext,
+        requestContextSchema,
       });
       const details = await ds.getDetails();
       return details as any;
@@ -189,12 +216,22 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
+      const {
+        name,
+        description,
+        metadata,
+        inputSchema,
+        groundTruthSchema,
+        defaultRequestContext,
+        requestContextSchema,
+      } = params as {
         name?: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
+        defaultRequestContext?: unknown;
+        requestContextSchema?: Record<string, unknown> | null;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.update({
@@ -203,6 +240,8 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         metadata,
         inputSchema,
         groundTruthSchema,
+        defaultRequestContext,
+        requestContextSchema,
       });
       return result as any;
     } catch (error) {
@@ -305,13 +344,20 @@ export const ADD_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, metadata } = params as {
+      const {
+        input,
+        groundTruth,
+        requestContext: rawRequestContext,
+        metadata,
+      } = params as {
         input: unknown;
         groundTruth?: unknown;
+        requestContext?: unknown;
         metadata?: Record<string, unknown>;
       };
+      const requestContext = toPlainRequestContext(rawRequestContext);
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.addItem({ input, groundTruth, metadata });
+      return await ds.addItem({ input, groundTruth, requestContext, metadata });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -369,18 +415,25 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, metadata } = params as {
+      const {
+        input,
+        groundTruth,
+        requestContext: rawRequestContext,
+        metadata,
+      } = params as {
         input?: unknown;
         groundTruth?: unknown;
+        requestContext?: unknown;
         metadata?: Record<string, unknown>;
       };
+      const requestContext = toPlainRequestContext(rawRequestContext);
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
       const existing = await ds.getItem({ itemId });
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, metadata });
+      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -717,7 +770,12 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
     assertDatasetsAvailable();
     try {
       const { items } = params as {
-        items: Array<{ input: unknown; groundTruth?: unknown; metadata?: Record<string, unknown> }>;
+        items: Array<{
+          input: unknown;
+          groundTruth?: unknown;
+          requestContext?: unknown;
+          metadata?: Record<string, unknown>;
+        }>;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const addedItems = await ds.addItems({ items });

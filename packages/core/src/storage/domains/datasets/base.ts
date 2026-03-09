@@ -61,9 +61,12 @@ export abstract class DatasetsStorage extends StorageDomain {
     const groundTruthSchemaChanging =
       args.groundTruthSchema !== undefined &&
       JSON.stringify(args.groundTruthSchema) !== JSON.stringify(existing.groundTruthSchema);
+    const requestContextSchemaChanging =
+      args.requestContextSchema !== undefined &&
+      JSON.stringify(args.requestContextSchema) !== JSON.stringify(existing.requestContextSchema);
 
     // If schemas changing, validate all existing items against new schemas
-    if (inputSchemaChanging || groundTruthSchemaChanging) {
+    if (inputSchemaChanging || groundTruthSchemaChanging || requestContextSchemaChanging) {
       const itemsResult = await this.listItems({
         datasetId: args.id,
         pagination: { page: 0, perPage: false }, // Get all items
@@ -75,13 +78,16 @@ export abstract class DatasetsStorage extends StorageDomain {
         const newInputSchema = args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema;
         const newOutputSchema =
           args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema;
+        const newRequestContextSchema =
+          args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema;
 
         const result = validator.validateBatch(
-          items.map(i => ({ input: i.input, groundTruth: i.groundTruth })),
+          items.map(i => ({ input: i.input, groundTruth: i.groundTruth, requestContext: i.requestContext })),
           newInputSchema,
           newOutputSchema,
           `dataset:${args.id}:schema-update`,
           10, // Max 10 errors to report
+          newRequestContextSchema,
         );
 
         if (result.invalid.length > 0) {
@@ -91,6 +97,7 @@ export abstract class DatasetsStorage extends StorageDomain {
         // Clear old cache since schema changed
         validator.clearCache(`dataset:${args.id}:input`);
         validator.clearCache(`dataset:${args.id}:output`);
+        validator.clearCache(`dataset:${args.id}:requestContext`);
       }
     }
 
@@ -122,6 +129,15 @@ export abstract class DatasetsStorage extends StorageDomain {
       validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
     }
 
+    if (dataset.requestContextSchema && args.requestContext !== undefined) {
+      validator.validate(
+        args.requestContext,
+        dataset.requestContextSchema,
+        'requestContext',
+        `${cacheKey}:requestContext`,
+      );
+    }
+
     return this._doAddItem(args);
   }
 
@@ -148,6 +164,15 @@ export abstract class DatasetsStorage extends StorageDomain {
 
     if (args.groundTruth !== undefined && dataset.groundTruthSchema) {
       validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
+    }
+
+    if (args.requestContext !== undefined && dataset.requestContextSchema) {
+      validator.validate(
+        args.requestContext,
+        dataset.requestContextSchema,
+        'requestContext',
+        `${cacheKey}:requestContext`,
+      );
     }
 
     return this._doUpdateItem(args);
@@ -198,6 +223,14 @@ export abstract class DatasetsStorage extends StorageDomain {
       }
       if (dataset.groundTruthSchema && itemData.groundTruth !== undefined) {
         validator.validate(itemData.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
+      }
+      if (dataset.requestContextSchema && itemData.requestContext !== undefined) {
+        validator.validate(
+          itemData.requestContext,
+          dataset.requestContextSchema,
+          'requestContext',
+          `${cacheKey}:requestContext`,
+        );
       }
     }
 

@@ -2030,6 +2030,7 @@ export interface DatasetItem {
   input: unknown;
   groundTruth?: unknown;
   metadata?: unknown;
+  requestContext?: unknown;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
@@ -2041,6 +2042,8 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown> | null;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
+  defaultRequestContext?: unknown;
+  requestContextSchema?: Record<string, unknown>;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2091,6 +2094,8 @@ export interface CreateDatasetParams {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  defaultRequestContext?: unknown;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetParams {
@@ -2100,6 +2105,8 @@ export interface UpdateDatasetParams {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  defaultRequestContext?: unknown;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemParams {
@@ -2107,6 +2114,7 @@ export interface AddDatasetItemParams {
   input: unknown;
   groundTruth?: unknown;
   metadata?: Record<string, unknown>;
+  requestContext?: unknown;
 }
 
 export interface UpdateDatasetItemParams {
@@ -2115,6 +2123,7 @@ export interface UpdateDatasetItemParams {
   input?: unknown;
   groundTruth?: unknown;
   metadata?: Record<string, unknown>;
+  requestContext?: unknown;
 }
 
 export interface BatchInsertDatasetItemsParams {
@@ -2123,6 +2132,7 @@ export interface BatchInsertDatasetItemsParams {
     input: unknown;
     groundTruth?: unknown;
     metadata?: Record<string, unknown>;
+    requestContext?: unknown;
   }>;
 }
 
@@ -2160,6 +2170,7 @@ export interface DatasetItemVersionResponse {
   input: unknown;
   groundTruth?: unknown;
   metadata?: Record<string, unknown>;
+  requestContext?: unknown;
   validTo: number | null;
   isDeleted: boolean;
   createdAt: string | Date;

@@ -86,6 +86,17 @@ export class DatasetsPG extends DatasetsStorage {
       compositePrimaryKey: TABLE_CONFIGS[TABLE_DATASET_ITEMS]?.compositePrimaryKey,
     });
     await this.#db.createTable({ tableName: TABLE_DATASET_VERSIONS, schema: DATASET_VERSIONS_SCHEMA });
+    // Add new columns for backwards compatibility with existing databases
+    await this.#db.alterTable({
+      tableName: TABLE_DATASETS,
+      schema: DATASETS_SCHEMA,
+      ifNotExists: ['defaultRequestContext', 'requestContextSchema'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_DATASET_ITEMS,
+      schema: DATASET_ITEMS_SCHEMA,
+      ifNotExists: ['requestContext'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -149,6 +160,8 @@ export class DatasetsPG extends DatasetsStorage {
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       inputSchema: row.inputSchema ? safelyParseJSON(row.inputSchema) : undefined,
       groundTruthSchema: row.groundTruthSchema ? safelyParseJSON(row.groundTruthSchema) : undefined,
+      defaultRequestContext: row.defaultRequestContext ? safelyParseJSON(row.defaultRequestContext) : undefined,
+      requestContextSchema: row.requestContextSchema ? safelyParseJSON(row.requestContextSchema) : undefined,
       version: row.version as number,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
@@ -162,6 +175,7 @@ export class DatasetsPG extends DatasetsStorage {
       datasetVersion: row.datasetVersion as number,
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
+      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
@@ -177,6 +191,7 @@ export class DatasetsPG extends DatasetsStorage {
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
+      requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
       updatedAt: ensureDate(row.updatedAtZ || row.updatedAt)!,
@@ -209,6 +224,8 @@ export class DatasetsPG extends DatasetsStorage {
           metadata: input.metadata ?? null,
           inputSchema: input.inputSchema ?? null,
           groundTruthSchema: input.groundTruthSchema ?? null,
+          defaultRequestContext: input.defaultRequestContext ?? null,
+          requestContextSchema: input.requestContextSchema ?? null,
           version: 0,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -222,6 +239,8 @@ export class DatasetsPG extends DatasetsStorage {
         metadata: input.metadata,
         inputSchema: input.inputSchema ?? undefined,
         groundTruthSchema: input.groundTruthSchema ?? undefined,
+        defaultRequestContext: input.defaultRequestContext ?? undefined,
+        requestContextSchema: input.requestContextSchema ?? undefined,
         version: 0,
         createdAt: now,
         updatedAt: now,
@@ -293,6 +312,14 @@ export class DatasetsPG extends DatasetsStorage {
         setClauses.push(`"groundTruthSchema" = $${paramIndex++}`);
         values.push(args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema));
       }
+      if (args.defaultRequestContext !== undefined) {
+        setClauses.push(`"defaultRequestContext" = $${paramIndex++}`);
+        values.push(args.defaultRequestContext === null ? null : JSON.stringify(args.defaultRequestContext));
+      }
+      if (args.requestContextSchema !== undefined) {
+        setClauses.push(`"requestContextSchema" = $${paramIndex++}`);
+        values.push(args.requestContextSchema === null ? null : JSON.stringify(args.requestContextSchema));
+      }
 
       values.push(args.id);
       await this.#db.client.none(
@@ -308,6 +335,12 @@ export class DatasetsPG extends DatasetsStorage {
         inputSchema: (args.inputSchema !== undefined ? args.inputSchema : existing.inputSchema) ?? undefined,
         groundTruthSchema:
           (args.groundTruthSchema !== undefined ? args.groundTruthSchema : existing.groundTruthSchema) ?? undefined,
+        defaultRequestContext:
+          (args.defaultRequestContext !== undefined ? args.defaultRequestContext : existing.defaultRequestContext) ??
+          undefined,
+        requestContextSchema:
+          (args.requestContextSchema !== undefined ? args.requestContextSchema : existing.requestContextSchema) ??
+          undefined,
         updatedAt: new Date(now),
       };
     } catch (error) {
@@ -442,13 +475,14 @@ export class DatasetsPG extends DatasetsStorage {
         newVersion = row.version as number;
 
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [
             id,
             args.datasetId,
             newVersion,
             JSON.stringify(args.input),
             jsonbArg(args.groundTruth),
+            jsonbArg(args.requestContext),
             jsonbArg(args.metadata),
             nowIso,
             nowIso,
@@ -469,6 +503,7 @@ export class DatasetsPG extends DatasetsStorage {
         datasetVersion: newVersion!,
         input: args.input,
         groundTruth: args.groundTruth,
+        requestContext: args.requestContext,
         metadata: args.metadata,
         createdAt: now,
         updatedAt: now,
@@ -520,6 +555,7 @@ export class DatasetsPG extends DatasetsStorage {
       // Merge fields: use new value if provided, else keep existing
       const mergedInput = args.input ?? existing.input;
       const mergedGroundTruth = args.groundTruth ?? existing.groundTruth;
+      const mergedRequestContext = args.requestContext ?? existing.requestContext;
       const mergedMetadata = args.metadata ?? existing.metadata;
 
       let newVersion: number;
@@ -540,13 +576,14 @@ export class DatasetsPG extends DatasetsStorage {
 
         // 3. Insert new row with merged fields, preserving original createdAt
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [
             args.id,
             args.datasetId,
             newVersion,
             JSON.stringify(mergedInput),
             jsonbArg(mergedGroundTruth),
+            jsonbArg(mergedRequestContext),
             jsonbArg(mergedMetadata),
             existing.createdAt.toISOString(),
             existing.createdAt.toISOString(),
@@ -567,6 +604,7 @@ export class DatasetsPG extends DatasetsStorage {
         datasetVersion: newVersion!,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
+        requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         updatedAt: now,
       };
@@ -622,13 +660,14 @@ export class DatasetsPG extends DatasetsStorage {
 
         // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [
             id,
             datasetId,
             newVersion,
             JSON.stringify(existing.input),
             jsonbArg(existing.groundTruth),
+            jsonbArg(existing.requestContext),
             jsonbArg(existing.metadata),
             existing.createdAt.toISOString(),
             existing.createdAt.toISOString(),
@@ -695,13 +734,14 @@ export class DatasetsPG extends DatasetsStorage {
         // 2. N item inserts
         for (const { id, input: itemInput } of itemsWithIds) {
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,false,$4,$5,$6,$7,$8,$9,$10,$11)`,
             [
               id,
               input.datasetId,
               newVersion,
               JSON.stringify(itemInput.input),
               jsonbArg(itemInput.groundTruth),
+              jsonbArg(itemInput.requestContext),
               jsonbArg(itemInput.metadata),
               nowIso,
               nowIso,
@@ -724,6 +764,7 @@ export class DatasetsPG extends DatasetsStorage {
         datasetVersion: newVersion!,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
+        requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
         createdAt: now,
         updatedAt: now,
@@ -788,13 +829,14 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","validTo","isDeleted","input","groundTruth","requestContext","metadata","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,NULL,true,$4,$5,$6,$7,$8,$9,$10,$11)`,
             [
               item.id,
               input.datasetId,
               newVersion,
               JSON.stringify(item.input),
               jsonbArg(item.groundTruth),
+              jsonbArg(item.requestContext),
               jsonbArg(item.metadata),
               item.createdAt.toISOString(),
               item.createdAt.toISOString(),

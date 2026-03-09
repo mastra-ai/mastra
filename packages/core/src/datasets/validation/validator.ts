@@ -34,7 +34,12 @@ export class SchemaValidator {
   }
 
   /** Validate data against schema */
-  validate(data: unknown, schema: JSONSchema7, field: 'input' | 'groundTruth', cacheKey: string): void {
+  validate(
+    data: unknown,
+    schema: JSONSchema7,
+    field: 'input' | 'groundTruth' | 'requestContext',
+    cacheKey: string,
+  ): void {
     const zodSchema = this.getValidator(schema, cacheKey);
     const result = zodSchema.safeParse(data);
     if (!result.success) {
@@ -44,17 +49,21 @@ export class SchemaValidator {
 
   /** Validate multiple items, returning valid/invalid split */
   validateBatch(
-    items: Array<{ input: unknown; groundTruth?: unknown }>,
+    items: Array<{ input: unknown; groundTruth?: unknown; requestContext?: unknown }>,
     inputSchema: JSONSchema7 | null | undefined,
     outputSchema: JSONSchema7 | null | undefined,
     cacheKeyPrefix: string,
     maxErrors = 10,
+    requestContextSchema?: JSONSchema7 | null,
   ): BatchValidationResult {
     const result: BatchValidationResult = { valid: [], invalid: [] };
 
     // Pre-compile schemas for performance
     const inputValidator = inputSchema ? this.getValidator(inputSchema, `${cacheKeyPrefix}:input`) : null;
     const outputValidator = outputSchema ? this.getValidator(outputSchema, `${cacheKeyPrefix}:output`) : null;
+    const requestContextValidator = requestContextSchema
+      ? this.getValidator(requestContextSchema, `${cacheKeyPrefix}:requestContext`)
+      : null;
 
     for (const [i, item] of items.entries()) {
       let hasError = false;
@@ -83,6 +92,21 @@ export class SchemaValidator {
             data: item,
             field: 'groundTruth',
             errors: this.formatErrors(outputResult.error),
+          });
+          hasError = true;
+          if (result.invalid.length >= maxErrors) break;
+        }
+      }
+
+      // Validate requestContext if schema enabled and value provided
+      if (!hasError && requestContextValidator && item.requestContext !== undefined) {
+        const rcResult = requestContextValidator.safeParse(item.requestContext);
+        if (!rcResult.success) {
+          result.invalid.push({
+            index: i,
+            data: item,
+            field: 'requestContext',
+            errors: this.formatErrors(rcResult.error),
           });
           hasError = true;
           if (result.invalid.length >= maxErrors) break;
