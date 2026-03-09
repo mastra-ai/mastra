@@ -58,6 +58,11 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   transportResolver?: () => StreamTransport | undefined;
 };
 
+function buildResponseModelMetadata(runState: AgenticRunState): { metadata: Record<string, unknown> } | undefined {
+  const modelId = runState.state.responseMetadata?.modelId;
+  return modelId ? { metadata: { modelId } } : undefined;
+}
+
 async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
@@ -131,6 +136,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 ...(providerMetadata ? { providerMetadata } : {}),
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
@@ -274,6 +280,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -313,6 +320,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 providerMetadata: chunk.payload.providerMetadata ?? runState.state.providerOptions,
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
@@ -346,6 +354,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   mimeType: chunk.payload.mimeType,
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -373,6 +382,7 @@ async function processOutputStream<OUTPUT = undefined>({
                   },
                 },
               ],
+              ...buildResponseModelMetadata(runState),
             },
             createdAt: new Date(),
           };
@@ -1075,6 +1085,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 providerExecuted: toolCall.providerExecuted,
               };
             }),
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };

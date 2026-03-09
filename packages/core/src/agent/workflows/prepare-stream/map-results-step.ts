@@ -10,6 +10,7 @@ import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
 import type { Step } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { SaveQueueManager } from '../../save-queue';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
@@ -26,6 +27,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentSpan: Span<SpanType.AGENT_RUN>;
   agentId: string;
   methodType: AgentMethodType;
+  saveQueueManager?: SaveQueueManager;
   /**
    * Shared processor state map that persists across agent turns.
    */
@@ -43,6 +45,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentSpan,
   agentId,
   methodType,
+  saveQueueManager,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
   unknown,
@@ -89,6 +92,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
             messageList: memoryData.messageList!,
             runId,
           });
+
+          if (saveQueueManager && memoryData.thread?.id) {
+            await saveQueueManager.flushMessages(memoryData.messageList!, memoryData.thread.id, memoryConfig);
+          }
         }
 
         return options.onStepFinish?.({ ...props, runId });
