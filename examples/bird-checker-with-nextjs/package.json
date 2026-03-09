@@ -28,8 +28,7 @@
   "pnpm": {
     "overrides": {
       "@mastra/core": "link:../../packages/core",
-      "@mastra/client-js": "link:../../client-sdks/client-js",
-      "next": "^15.5.8"
+      "@mastra/client-js": "link:../../client-sdks/client-js"
     }
   },
   "devDependencies": {

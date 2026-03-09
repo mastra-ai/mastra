@@ -75,8 +75,7 @@
       "@mastra/core": "link:../../packages/core",
       "@mastra/memory": "link:../../packages/memory",
       "@mastra/pg": "link:../../stores/pg",
-      "@mastra/loggers": "link:../../packages/loggers",
-      "next": "^15.5.8"
+      "@mastra/loggers": "link:../../packages/loggers"
     }
   },
   "devDependencies": {
