@@ -22,7 +22,7 @@ import type { ServerRoute } from '.';
  * These routes provide API access to agent configurations stored in the database,
  * enabling dynamic creation and management of agents via Mastra Studio.
  */
-export const STORED_AGENTS_ROUTES: readonly ServerRoute<any, any, any>[] = [
+export const STORED_AGENTS_ROUTES: readonly ServerRoute[] = [
   // ============================================================================
   // Stored Agents CRUD Routes
   // IMPORTANT: Routes with literal paths (e.g., /preview-instructions) must come

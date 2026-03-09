@@ -304,7 +304,7 @@ export function createRoute<
 
   return {
     ...baseRoute,
-    openapi: openapi as any,
+    openapi,
     deprecated,
     requiresAuth,
     requiresPermission,

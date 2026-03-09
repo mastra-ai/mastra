@@ -471,7 +471,12 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
   InferParams<typeof agentVersionPathParams, typeof compareVersionsQuerySchema, undefined>,
   z.infer<typeof compareVersionsResponseSchema>,
   'json',
-  RouteSchemas,
+  RouteSchemas<
+    typeof agentVersionPathParams,
+    typeof compareVersionsQuerySchema,
+    undefined,
+    typeof compareVersionsResponseSchema
+  >,
   'GET',
   '/stored/agents/:agentId/versions/compare'
 > = createRoute({

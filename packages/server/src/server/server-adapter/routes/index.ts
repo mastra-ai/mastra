@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type z from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
+import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
 import { AGENTS_ROUTES } from './agents';
@@ -101,9 +102,9 @@ export interface RouteSchemas<
 }
 
 export type ServerRoute<
-  TParams = Record<string, unknown>,
+  TParams = never,
   TResponse = unknown,
-  TResponseType extends ResponseType = 'json',
+  TResponseType extends ResponseType = ResponseType,
   TSchemas extends RouteSchemas = RouteSchemas,
   TMethod extends string = string,
   TPath extends string = string,
@@ -117,7 +118,7 @@ export type ServerRoute<
   queryParamSchema?: z.ZodSchema;
   bodySchema?: z.ZodSchema;
   responseSchema?: z.ZodSchema;
-  openapi?: any; // Auto-generated OpenAPI spec for this route
+  openapi?: OpenAPIRoute; // Auto-generated OpenAPI spec for this route
   maxBodySize?: number; // Optional route-specific body size limit in bytes
   deprecated?: boolean; // Flag for deprecated routes (used for route parity, skipped in tests)
   /**
@@ -135,7 +136,7 @@ export type ServerRoute<
   readonly __schemas?: TSchemas;
 };
 
-export const SERVER_ROUTES: readonly ServerRoute<any, any, any>[] = [
+export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENTS_ROUTES,
   ...AUTH_ROUTES,
   ...WORKFLOWS_ROUTES,

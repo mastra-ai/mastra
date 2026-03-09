@@ -1,13 +1,11 @@
 import type { z } from 'zod';
 import type { RouteSchemas, ServerRoute, ServerRoutes } from '../server-adapter/routes';
 
-// Use a permissive base type to avoid contravariance issues with handler params
-type AnyServerRoute = ServerRoute<any, any, any, any>;
-
 /**
  * Extract the RouteSchemas phantom type from a route via its 4th generic parameter.
  */
-type ExtractSchemas<R> = R extends ServerRoute<any, any, any, infer S> ? S : RouteSchemas;
+type ExtractSchemas<R> =
+  R extends ServerRoute<infer _P, infer _Res, infer _RT, infer S, infer _M, infer _Path> ? S : RouteSchemas;
 
 /**
  * Infer the path parameter types from a route's pathParamSchema.
@@ -18,8 +16,8 @@ type ExtractSchemas<R> = R extends ServerRoute<any, any, any, infer S> ? S : Rou
  * // => { agentId: string }
  * ```
  */
-export type InferPathParams<R extends AnyServerRoute> =
-  ExtractSchemas<R> extends RouteSchemas<infer TPath, any, any, any>
+export type InferPathParams<R extends ServerRoutes[number]> =
+  ExtractSchemas<R> extends RouteSchemas<infer TPath, infer _Q, infer _B, infer _R>
     ? TPath extends z.ZodTypeAny
       ? z.infer<TPath>
       : never
@@ -34,8 +32,8 @@ export type InferPathParams<R extends AnyServerRoute> =
  * // => { partial?: string }
  * ```
  */
-export type InferQueryParams<R extends AnyServerRoute> =
-  ExtractSchemas<R> extends RouteSchemas<any, infer TQuery, any, any>
+export type InferQueryParams<R extends ServerRoutes[number]> =
+  ExtractSchemas<R> extends RouteSchemas<infer _P, infer TQuery, infer _B, infer _R>
     ? TQuery extends z.ZodTypeAny
       ? z.infer<TQuery>
       : never
@@ -50,8 +48,8 @@ export type InferQueryParams<R extends AnyServerRoute> =
  * // => { messages: CoreMessage[], ... }
  * ```
  */
-export type InferBody<R extends AnyServerRoute> =
-  ExtractSchemas<R> extends RouteSchemas<any, any, infer TBody, any>
+export type InferBody<R extends ServerRoutes[number]> =
+  ExtractSchemas<R> extends RouteSchemas<infer _P, infer _Q, infer TBody, infer _R>
     ? TBody extends z.ZodTypeAny
       ? z.infer<TBody>
       : never
@@ -66,8 +64,8 @@ export type InferBody<R extends AnyServerRoute> =
  * // => { name: string, tools: ..., ... }
  * ```
  */
-export type InferResponse<R extends AnyServerRoute> =
-  ExtractSchemas<R> extends RouteSchemas<any, any, any, infer TResp>
+export type InferResponse<R extends ServerRoutes[number]> =
+  ExtractSchemas<R> extends RouteSchemas<infer _P, infer _Q, infer _B, infer TResp>
     ? TResp extends z.ZodTypeAny
       ? z.infer<TResp>
       : never

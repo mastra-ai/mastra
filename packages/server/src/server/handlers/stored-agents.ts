@@ -138,7 +138,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
   InferParams<undefined, undefined, typeof createStoredAgentBodySchema>,
   z.infer<typeof createStoredAgentResponseSchema>,
   'json',
-  RouteSchemas,
+  RouteSchemas<undefined, undefined, typeof createStoredAgentBodySchema, typeof createStoredAgentResponseSchema>,
   'POST',
   '/stored/agents'
 > = createRoute({
@@ -249,7 +249,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   InferParams<typeof storedAgentIdPathParams, undefined, typeof updateStoredAgentBodySchema>,
   z.infer<typeof updateStoredAgentResponseSchema>,
   'json',
-  RouteSchemas,
+  RouteSchemas<
+    typeof storedAgentIdPathParams,
+    undefined,
+    typeof updateStoredAgentBodySchema,
+    typeof updateStoredAgentResponseSchema
+  >,
   'PATCH',
   '/stored/agents/:storedAgentId'
 > = createRoute({
