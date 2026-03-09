@@ -1,6 +1,6 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
 import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
-import type { AgentExecutionOptions } from '@mastra/core/agent';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
@@ -91,22 +91,30 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = un
     }
   }
 
+  const { structuredOutput: restStructuredOutput, ...restOptions } = rest;
+  const { structuredOutput: defaultStructuredOutput, ...defaultOptionsRest } = defaultOptions ?? {};
+  const structuredOutput = restStructuredOutput ?? defaultStructuredOutput;
+
   const mergedProviderOptions = {
     ...defaultOptions?.providerOptions,
-    ...rest.providerOptions,
+    ...restOptions.providerOptions,
   };
 
-  const mergedOptions = {
-    ...defaultOptions,
-    ...rest,
+  const baseOptions = {
+    ...defaultOptionsRest,
+    ...restOptions,
     ...(runId && { runId }),
     requestContext: requestContext || defaultOptions?.requestContext,
     ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };
 
   const result = resumeData
-    ? await agentObj.resumeStream<OUTPUT>(resumeData, mergedOptions)
-    : await agentObj.stream<OUTPUT>(messagesToSend, mergedOptions);
+    ? structuredOutput
+      ? await agentObj.resumeStream(resumeData, { ...baseOptions, structuredOutput })
+      : await agentObj.resumeStream(resumeData, baseOptions as AgentExecutionOptionsBase<unknown>)
+    : structuredOutput
+      ? await agentObj.stream(messagesToSend, { ...baseOptions, structuredOutput })
+      : await agentObj.stream(messagesToSend, baseOptions as AgentExecutionOptionsBase<unknown>);
 
   return createUIMessageStream<UI_MESSAGE>({
     originalMessages: messages,
