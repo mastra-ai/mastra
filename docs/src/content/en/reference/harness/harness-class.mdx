@@ -196,6 +196,13 @@ await harness.sendMessage({ content: 'Hello!' })
             isOptional: true,
           },
           {
+            name: 'allowedWorkspaceTools',
+            type: 'string[]',
+            description:
+              'Workspace tool names the subagent is allowed to use. Uses the exposed names (after any renames via workspace tool config). When set, workspace tools not in this list are hidden from the model. Non-workspace tools are never affected. When omitted, all workspace tools are visible.',
+            isOptional: true,
+          },
+          {
             name: 'defaultModelId',
             type: 'string',
             description: 'Default model ID for this subagent type.',
@@ -745,7 +752,7 @@ if (harness.isWorkspaceReady()) {
 
 #### `destroyWorkspace()`
 
-Destroy the workspace and release resources. Only applies to static workspaces — dynamic workspaces are not destroyed.
+Destroy the workspace and release resources. Only applies to static workspaces — dynamic workspaces aren't destroyed.
 
 ```typescript
 await harness.destroyWorkspace()

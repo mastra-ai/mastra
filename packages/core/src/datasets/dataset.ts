@@ -114,6 +114,7 @@ export class Dataset {
     metadata?: Record<string, unknown>;
     inputSchema?: unknown;
     groundTruthSchema?: unknown;
+    requestContextSchema?: Record<string, unknown> | null;
   }): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
@@ -144,6 +145,7 @@ export class Dataset {
   async addItem(input: {
     input: unknown;
     groundTruth?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
@@ -151,6 +153,7 @@ export class Dataset {
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      requestContext: input.requestContext,
       metadata: input.metadata,
     });
   }
@@ -162,6 +165,7 @@ export class Dataset {
     items: Array<{
       input: unknown;
       groundTruth?: unknown;
+      requestContext?: Record<string, unknown>;
       metadata?: Record<string, unknown>;
     }>;
   }): Promise<DatasetItem[]> {
@@ -210,6 +214,7 @@ export class Dataset {
     itemId: string;
     input?: unknown;
     groundTruth?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
@@ -218,6 +223,7 @@ export class Dataset {
       datasetId: this.id,
       input: input.input,
       groundTruth: input.groundTruth,
+      requestContext: input.requestContext,
       metadata: input.metadata,
     });
   }

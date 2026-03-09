@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
-import type { InternalCoreTool } from './tools';
+import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
@@ -314,9 +314,11 @@ describe('makeCoreTool', () => {
       mockOptions,
     );
 
+    const schema = toStandardSchema(coreTool.parameters);
+
     // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
+    expect(() => schema['~standard'].validate({})).not.toThrow();
+    expect(() => schema['~standard'].validate({ extra: 'field' })).not.toThrow();
   });
 });
 

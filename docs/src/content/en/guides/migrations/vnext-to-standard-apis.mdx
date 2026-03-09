@@ -45,7 +45,7 @@ Choose the migration path that fits your needs:
 
 - Bump all your model provider packages by a major version.
 
-> This will ensure that they are all v5 models now. Follow the guide below to understand the key differences and update your code accordingly.
+> This will ensure that they're all v5 models now. Follow the guide below to understand the key differences and update your code accordingly.
 
 ## Key differences
 
@@ -308,7 +308,7 @@ The following options are available in the standard `.stream()` and `generate()`
 
 - `output`
 
-  The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if your model does not natively support `response_format`.
+  The `output` property is deprecated in favor of `structuredOutput`, to achieve the same results, omit the model and only pass `structuredOutput.schema`, optionally add `jsonPromptInjection: true` if your model doesn't natively support `response_format`.
 
   ```typescript
   const result = await agent.generate(messages, {

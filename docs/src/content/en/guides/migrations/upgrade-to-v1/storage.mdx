@@ -32,7 +32,7 @@ ALTER TABLE mastra_scorers DROP COLUMN "runtimeContext";
 
 ### Duplicate spans migration
 
-If you're upgrading from an older version of Mastra, you may have duplicate `(traceId, spanId)` entries in your `mastra_spans` table. V1 adds a unique constraint on these columns to ensure data integrity, but this constraint cannot be added if duplicates exist.
+If you're upgrading from an older version of Mastra, you may have duplicate `(traceId, spanId)` entries in your `mastra_spans` table. V1 adds a unique constraint on these columns to ensure data integrity, but this constraint can't be added if duplicates exist.
 
 :::note[Who needs this migration]
 Only if you have existing spans data from Mastra versions prior to v1 and encounter errors about duplicate key violations or constraint creation failures.
