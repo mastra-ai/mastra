@@ -324,6 +324,7 @@ export class CoreToolBuilder extends MastraBase {
       const tracingContext = execOptions.tracingContext || options.tracingContext;
 
       // Create tool span if we have a current span available
+      const toolRequestContext = execOptions.requestContext ?? options.requestContext;
       const toolSpan = tracingContext?.currentSpan?.createChildSpan({
         type: SpanType.TOOL_CALL,
         name: `tool: '${options.name}'`,
@@ -336,6 +337,7 @@ export class CoreToolBuilder extends MastraBase {
           toolType: logType || 'tool',
         },
         tracingPolicy: options.tracingPolicy,
+        requestContext: toolRequestContext,
       });
 
       try {

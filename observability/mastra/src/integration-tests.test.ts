@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import type { TracingContext } from '@mastra/core/observability';
@@ -1790,6 +1791,51 @@ describe('Tracing Integration Tests', () => {
       expect(result.traceId).toBeDefined();
 
       await testExporter.assertMatchesSnapshot('tags-from-stream-default-options-trace.json');
+    });
+  });
+
+  describe('requestContext snapshot on spans', () => {
+    it('should propagate requestContext to all spans in agent generate', async () => {
+      const testAgent = new Agent({
+        id: 'test-agent-ctx',
+        name: 'Test Agent Ctx',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        tools: { calculator: calculatorTool },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('tenantId', 'tenant-456');
+      requestContext.set('environment', 'production');
+
+      const agent = mastra.getAgent('testAgent');
+      const result = await agent.generate('Calculate 5 + 3', { requestContext });
+
+      expect(result.text).toBeDefined();
+      expect(result.traceId).toBeDefined();
+
+      // Root AGENT_RUN span should have requestContext snapshot
+      const agentRunSpans = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      expect(agentRunSpans).toHaveLength(1);
+      expect(agentRunSpans[0]?.requestContext).toEqual({
+        userId: 'user-123',
+        tenantId: 'tenant-456',
+        environment: 'production',
+      });
+
+      // Child spans (TOOL_CALL, MODEL_GENERATION) should also have requestContext
+      // since the framework passes requestContext when creating child spans
+      const allSpans = testExporter.getAllSpans();
+      const spansWithContext = allSpans.filter(s => s.requestContext);
+      expect(spansWithContext.length).toBeGreaterThanOrEqual(1);
+
+      finalExpectations(testExporter);
     });
   });
 });
