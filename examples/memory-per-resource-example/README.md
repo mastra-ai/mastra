@@ -1,13 +1,13 @@
 # Per-Resource Working Memory Example
 
-This example demonstrates the new **per-resource working memory** feature in Mastra, where working memory persists across all conversation threads for the same user (resourceId).
+This example demonstrates **resource-scoped working memory** in Mastra, where working memory persists across all conversation threads for the same user (resourceId).
 
-## 🆕 What's New
+## 📖 Overview
 
-### Resource-Scoped Working Memory
+### Resource-Scoped Working Memory (Default)
 
-- **Traditional behavior**: Working memory was stored per-thread and didn't persist across conversations
-- **New behavior**: Working memory is stored per-resource (user) and persists across ALL conversation threads
+- **Resource-scoped** (default): Working memory is stored per-resource (user) and persists across ALL conversation threads
+- **Thread-scoped** (optional): Working memory can be isolated per-thread by setting `scope: 'thread'`
 
 ### Key Benefits
 

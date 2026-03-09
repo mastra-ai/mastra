@@ -1,7 +1,6 @@
-import { removeAllOptionsExceptServer } from './babel/remove-all-options-server';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { Config } from '@mastra/core/mastra';
 import { extractMastraOption, extractMastraOptionBundler } from './shared/extract-mastra-option';
-import type { IMastraLogger } from '@mastra/core/logger';
 
 export function getServerOptionsBundler(
   entryFile: string,
@@ -9,7 +8,7 @@ export function getServerOptionsBundler(
     hasCustomConfig: false;
   },
 ) {
-  return extractMastraOptionBundler('server', entryFile, removeAllOptionsExceptServer, result);
+  return extractMastraOptionBundler('server', entryFile, result);
 }
 
 export async function getServerOptions(
@@ -17,13 +16,7 @@ export async function getServerOptions(
   outputDir: string,
   logger?: IMastraLogger,
 ): Promise<Config['server'] | null> {
-  const result = await extractMastraOption<Config['server']>(
-    'server',
-    entryFile,
-    removeAllOptionsExceptServer,
-    outputDir,
-    logger,
-  );
+  const result = await extractMastraOption('server', entryFile, outputDir, logger);
   if (!result) {
     return null;
   }

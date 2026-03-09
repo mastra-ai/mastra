@@ -1,5 +1,5 @@
 export * from './trace-timeline';
-export * from './trace-timeline-legend';
+export * from './trace-timeline-tools';
 export * from './trace-timeline-span';
 export * from './shared';
 export * from './trace-dialog';
@@ -8,3 +8,4 @@ export * from './traces-list';
 export * from './span-score-list';
 export * from './span-scoring';
 export * from './span-tabs';
+export * from './trace-as-item-dialog';

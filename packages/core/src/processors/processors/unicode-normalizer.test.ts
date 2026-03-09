@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { UnicodeNormalizer } from './unicode-normalizer';
 
-function createTestMessage(text: string, id = 'test-id'): MastraMessageV2 {
+function createTestMessage(text: string, id = 'test-id'): MastraDBMessage {
   return {
     id,
     role: 'user',
@@ -14,7 +14,7 @@ function createTestMessage(text: string, id = 'test-id'): MastraMessageV2 {
   };
 }
 
-function createTestMessageWithContent(text: string, content: string, id = 'test-id'): MastraMessageV2 {
+function createTestMessageWithContent(text: string, content: string, id = 'test-id'): MastraDBMessage {
   return {
     id,
     role: 'user',
@@ -31,7 +31,7 @@ describe('UnicodeNormalizer', () => {
   describe('constructor and default options', () => {
     it('should use default options when none provided', () => {
       const normalizer = new UnicodeNormalizer();
-      expect(normalizer.name).toBe('unicode-normalizer');
+      expect(normalizer.id).toBe('unicode-normalizer');
     });
 
     it('should accept custom options', () => {
@@ -41,7 +41,7 @@ describe('UnicodeNormalizer', () => {
         collapseWhitespace: false,
         trim: false,
       });
-      expect(normalizer.name).toBe('unicode-normalizer');
+      expect(normalizer.id).toBe('unicode-normalizer');
     });
   });
 
@@ -278,7 +278,7 @@ describe('UnicodeNormalizer', () => {
         throw new Error('abort');
       };
 
-      const message: MastraMessageV2 = {
+      const message: MastraDBMessage = {
         id: 'test-id',
         role: 'user',
         content: {

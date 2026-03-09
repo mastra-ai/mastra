@@ -1,8 +1,8 @@
 import pMap from 'p-map';
-import type { Mastra } from '..';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
-import { saveScorePayloadSchema } from '../scores';
-import type { ScoringHookInput } from '../scores/types';
+import { saveScorePayloadSchema } from '../evals';
+import type { ScoringHookInput } from '../evals/types';
+import type { Mastra } from '../mastra';
 import type { MastraStorage } from '../storage';
 
 export function createOnScorerHook(mastra: Mastra) {
@@ -14,18 +14,25 @@ export function createOnScorerHook(mastra: Mastra) {
       return;
     }
 
-    const entityId = hookData.entity.id;
+    const entityId = hookData.entity.id as string;
     const entityType = hookData.entityType;
     const scorer = hookData.scorer;
+    const scorerId = scorer.id as string;
+
+    if (!scorerId) {
+      mastra.getLogger()?.warn('Scorer ID not found, skipping score validation and saving');
+      return;
+    }
+
     try {
-      const scorerToUse = await findScorer(mastra, entityId, entityType, scorer.name);
+      const scorerToUse = await findScorer(mastra, entityId, entityType, scorerId);
 
       if (!scorerToUse) {
         throw new MastraError({
           id: 'MASTRA_SCORER_NOT_FOUND',
           domain: ErrorDomain.MASTRA,
           category: ErrorCategory.USER,
-          text: `Scorer with ID ${hookData.scorer.id} not found`,
+          text: `Scorer with ID ${scorerId} not found`,
         });
       }
 
@@ -52,9 +59,13 @@ export function createOnScorerHook(mastra: Mastra) {
         ...rest,
         ...runResult,
         entityId,
-        scorerId: hookData.scorer.name,
+        scorerId: scorerId,
         spanId,
         traceId,
+        scorer: {
+          ...rest.scorer,
+          hasJudge: !!scorerToUse.scorer.judge,
+        },
         metadata: {
           structuredOutput: !!structuredOutput,
         },
@@ -63,19 +74,24 @@ export function createOnScorerHook(mastra: Mastra) {
 
       if (currentSpan && spanId && traceId) {
         await pMap(
-          currentSpan.aiTracing.getExporters(),
+          currentSpan.observabilityInstance.getExporters(),
           async exporter => {
             if (exporter.addScoreToTrace) {
-              await exporter.addScoreToTrace({
-                traceId: traceId,
-                spanId: spanId,
-                score: runResult.score,
-                reason: runResult.reason,
-                scorerName: scorerToUse.scorer.name,
-                metadata: {
-                  ...(currentSpan.metadata ?? {}),
-                },
-              });
+              try {
+                await exporter.addScoreToTrace({
+                  traceId: traceId,
+                  spanId: spanId,
+                  score: runResult.score as number,
+                  reason: runResult.reason as string,
+                  scorerName: scorerToUse.scorer.id,
+                  metadata: {
+                    ...(currentSpan.metadata ?? {}),
+                  },
+                });
+              } catch (error) {
+                // Log error but don't fail the hook if exporter fails
+                mastra.getLogger()?.error(`Failed to add score to trace via exporter: ${error}`);
+              }
             }
           },
           { concurrency: 3 },
@@ -88,7 +104,7 @@ export function createOnScorerHook(mastra: Mastra) {
           domain: ErrorDomain.SCORER,
           category: ErrorCategory.USER,
           details: {
-            scorerId: scorer.id,
+            scorerId,
             entityId,
             entityType,
           },
@@ -103,24 +119,53 @@ export function createOnScorerHook(mastra: Mastra) {
 }
 
 export async function validateAndSaveScore(storage: MastraStorage, payload: unknown) {
+  const scoresStore = await storage.getStore('scores');
+  if (!scoresStore) {
+    throw new MastraError({
+      id: 'MASTRA_SCORES_STORAGE_NOT_AVAILABLE',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      text: 'Scores storage domain is not available',
+    });
+  }
   const payloadToSave = saveScorePayloadSchema.parse(payload);
-  await storage?.saveScore(payloadToSave);
+  await scoresStore.saveScore(payloadToSave);
 }
 
-async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerName: string) {
+async function findScorer(mastra: Mastra, entityId: string, entityType: string, scorerId: string) {
   let scorerToUse;
   if (entityType === 'AGENT') {
-    const scorers = await mastra.getAgentById(entityId).getScorers();
-    for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.name === scorerName) {
-        scorerToUse = scorer;
-        break;
+    // Try code-defined agents first
+    try {
+      const agent = mastra.getAgentById(entityId);
+      const scorers = await agent.listScorers();
+      for (const [_, scorer] of Object.entries(scorers)) {
+        if (scorer.scorer.id === scorerId) {
+          scorerToUse = scorer;
+          break;
+        }
+      }
+    } catch {
+      // Agent not found in code-defined agents, try stored agents via editor
+      try {
+        const storedAgent = (await mastra.getEditor()?.agent.getById(entityId)) ?? null;
+        if (storedAgent) {
+          const scorers = await storedAgent.listScorers();
+          for (const [_, scorer] of Object.entries(scorers) as [string, any][]) {
+            if (scorer.scorer.id === scorerId) {
+              scorerToUse = scorer;
+              break;
+            }
+          }
+        }
+      } catch {
+        // Stored agent also not found, will fall back to mastra-registered scorer
       }
     }
   } else if (entityType === 'WORKFLOW') {
-    const scorers = await mastra.getWorkflowById(entityId).getScorers();
+    const scorers = await mastra.getWorkflowById(entityId).listScorers();
     for (const [_, scorer] of Object.entries(scorers)) {
-      if (scorer.scorer.name === scorerName) {
+      if (scorer.scorer.id === scorerId) {
         scorerToUse = scorer;
         break;
       }
@@ -129,7 +174,7 @@ async function findScorer(mastra: Mastra, entityId: string, entityType: string, 
 
   // Fallback to mastra-registered scorer
   if (!scorerToUse) {
-    const mastraRegisteredScorer = mastra.getScorerByName(scorerName);
+    const mastraRegisteredScorer = mastra.getScorerById(scorerId);
     scorerToUse = mastraRegisteredScorer ? { scorer: mastraRegisteredScorer } : undefined;
   }
 

@@ -3,7 +3,6 @@ import * as pkg from 'empathic/package';
 import type { WorkspacesRoot } from 'find-workspaces';
 import { findWorkspacesRoot, findWorkspaces } from 'find-workspaces';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DepsService } from '../services';
 import {
   collectTransitiveWorkspaceDependencies,
   packWorkspaceDependencies,
@@ -24,13 +23,25 @@ vi.mock('fs-extra', () => ({
   ensureDir: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../services', () => ({
-  DepsService: vi.fn().mockImplementation(() => ({
-    __setLogger: vi.fn(),
-    getWorkspaceDependencyPath: vi.fn().mockReturnValue('mock-tgz-path'),
-    pack: vi.fn().mockResolvedValue('mock-tgz-path'),
-  })),
-}));
+// Create shared mock methods that can be accessed in tests
+const mockDepsServiceMethods = {
+  __setLogger: vi.fn(),
+  getWorkspaceDependencyPath: vi.fn().mockReturnValue('mock-tgz-path'),
+  pack: vi.fn().mockResolvedValue('mock-tgz-path'),
+};
+
+vi.mock('../services', () => {
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockDepsService {
+    __setLogger = mockDepsServiceMethods.__setLogger;
+    getWorkspaceDependencyPath = mockDepsServiceMethods.getWorkspaceDependencyPath;
+    pack = mockDepsServiceMethods.pack;
+  }
+
+  return {
+    DepsService: MockDepsService,
+  };
+});
 
 describe('workspaceDependencies', () => {
   const mockLogger = {
@@ -122,15 +133,11 @@ describe('workspaceDependencies', () => {
 
   describe('packWorkspaceDependencies', () => {
     const mockRoot = { location: '/root' };
-    const mockDepsService = {
-      pack: vi.fn(),
-      __setLogger: vi.fn(),
-      getWorkspaceDependencyPath: vi.fn().mockReturnValue('mock-tgz-path'),
-    };
 
     beforeEach(() => {
       vi.mocked(findWorkspacesRoot).mockReturnValue(mockRoot as unknown as WorkspacesRoot);
-      vi.mocked(DepsService).mockImplementation(() => mockDepsService as unknown as DepsService);
+      // Reset mock functions
+      vi.clearAllMocks();
     });
 
     it('should package workspace dependencies in batches', async () => {
@@ -151,7 +158,7 @@ describe('workspaceDependencies', () => {
         logger: mockLogger,
       });
 
-      expect(mockDepsService.pack).toHaveBeenCalledTimes(3);
+      expect(mockDepsServiceMethods.pack).toHaveBeenCalledTimes(3);
       expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully packaged 3'));
     });
 
@@ -162,7 +169,7 @@ describe('workspaceDependencies', () => {
         bundleOutputDir: '/output',
         logger: mockLogger,
       });
-      expect(mockDepsService.pack).not.toHaveBeenCalled();
+      expect(mockDepsServiceMethods.pack).not.toHaveBeenCalled();
     });
 
     it('should throw error when workspace root not found', async () => {

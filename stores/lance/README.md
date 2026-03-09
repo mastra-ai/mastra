@@ -114,7 +114,7 @@ const message = await storage.load({
 });
 
 // Load messages from a thread
-const messages = await storage.getMessages({
+const messages = await storage.listMessages({
   threadId: '123e4567-e89b-12d3-a456-426614174001',
 });
 ```
@@ -175,10 +175,12 @@ const messages: MessageType[] = [
 // Save messages
 await storage.saveMessages({ messages });
 
-// Retrieve messages with context
-const retrievedMessages = await storage.getMessages({
+// Retrieve messages with pagination and context
+const retrievedMessages = await storage.listMessages({
   threadId: '123e4567-e89b-12d3-a456-426614174010',
-  selectBy: [
+  perPage: 10,
+  page: 0,
+  include: [
     {
       id: 'msg-001',
       withPreviousMessages: 5, // Include up to 5 messages before this one
@@ -261,3 +263,58 @@ await storage.clearTable({ tableName: TABLE_MESSAGES });
 // Get table schema
 const schema = await storage.getTableSchema(TABLE_MESSAGES);
 ```
+
+## Storage Methods
+
+### Thread Operations
+
+- `saveThread({ thread })`: Create or update a thread
+- `getThreadById({ threadId })`: Get a thread by ID
+- `listThreadsByResourceId({ resourceId, offset, limit, orderBy? })`: List paginated threads for a resource
+- `updateThread({ id, title, metadata })`: Update thread title and/or metadata
+- `deleteThread({ threadId })`: Delete a thread and its messages
+
+### Message Operations
+
+- `saveMessages({ messages })`: Save multiple messages in a transaction
+- `listMessages({ threadId, resourceId?, perPage?, page?, orderBy?, filter?, include? })`: Get messages for a thread with pagination and optional context inclusion
+- `listMessagesById({ messageIds })`: Get specific messages by their IDs
+- `updateMessages({ messages })`: Update existing messages
+
+### Resource Operations
+
+- `getResourceById({ resourceId })`: Get a resource by ID
+- `saveResource({ resource })`: Create or save a resource
+- `updateResource({ resourceId, workingMemory })`: Update resource working memory
+
+### Workflow Operations
+
+- `persistWorkflowSnapshot({ workflowName, runId, snapshot })`: Save workflow state
+- `loadWorkflowSnapshot({ workflowName, runId })`: Load workflow state
+- `listWorkflowRuns({ workflowName?, pagination? })`: List workflow runs with pagination
+- `getWorkflowRunById({ runId, workflowName? })`: Get a specific workflow run
+- `updateWorkflowState({ workflowName, runId, state })`: Update workflow state
+- `updateWorkflowResults({ workflowName, runId, results })`: Update workflow results
+
+### Evaluation/Scoring Operations
+
+- `getScoreById({ id })`: Get a score by ID
+- `saveScore(score)`: Save an evaluation score
+- `listScoresByScorerId({ scorerId, pagination })`: List scores by scorer with pagination
+- `listScoresByRunId({ runId, pagination })`: List scores by run with pagination
+- `listScoresByEntityId({ entityId, entityType, pagination })`: List scores by entity with pagination
+- `listScoresBySpan({ traceId, spanId, pagination })`: List scores by span with pagination
+
+### Low-Level Operations
+
+- `createTable({ tableName, schema })`: Create a new table with schema
+- `dropTable({ tableName })`: Drop a table
+- `clearTable({ tableName })`: Clear all records from a table
+- `insert({ tableName, record })`: Insert a single record
+- `batchInsert({ tableName, records })`: Insert multiple records
+- `load({ tableName, keys })`: Load a record by keys
+
+### Operations Not Currently Supported
+
+- `deleteMessages(messageIds)`: Message deletion is not currently supported
+- AI Observability (traces/spans): Not currently supported

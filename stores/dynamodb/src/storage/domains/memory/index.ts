@@ -1,25 +1,104 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { StorageThreadType, MastraMessageV1, MastraMessageV2 } from '@mastra/core/memory';
-import { MemoryStorage, resolveMessageLimit } from '@mastra/core/storage';
+import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastra/core/memory';
+import {
+  createStorageErrorId,
+  filterByDateRange,
+  MemoryStorage,
+  normalizePerPage,
+  calculatePagination,
+  TABLE_THREADS,
+  TABLE_MESSAGES,
+  TABLE_RESOURCES,
+} from '@mastra/core/storage';
 import type {
-  PaginationInfo,
-  StorageGetMessagesArg,
   StorageResourceType,
-  ThreadSortOptions,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import type { Service } from 'electrodb';
+import type { ThreadEntityData, MessageEntityData, ResourceEntityData } from '../../../entities/utils';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
+import type { DynamoDBTtlConfig } from '../../index';
+import { getTtlProps } from '../../ttl';
+import { deleteTableData } from '../utils';
 
 export class MemoryStorageDynamoDB extends MemoryStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  private ttlConfig?: DynamoDBTtlConfig;
+
+  constructor(config: DynamoDBDomainConfig) {
     super();
-    this.service = service;
+    const resolved = resolveDynamoDBConfig(config);
+    this.service = resolved.service;
+    this.ttlConfig = resolved.ttl;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await deleteTableData(this.service, TABLE_THREADS);
+    await deleteTableData(this.service, TABLE_MESSAGES);
+    await deleteTableData(this.service, TABLE_RESOURCES);
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (!messageIds || messageIds.length === 0) {
+      return;
+    }
+
+    this.logger.debug('Deleting messages', { count: messageIds.length });
+
+    try {
+      // Collect thread IDs to update timestamps
+      const threadIds = new Set<string>();
+
+      // Delete messages in batches of 25 (DynamoDB limit)
+      const batchSize = 25;
+      for (let i = 0; i < messageIds.length; i += batchSize) {
+        const batch = messageIds.slice(i, i + batchSize);
+
+        // Get messages to find their threadIds before deleting
+        const messagesToDelete = await Promise.all(
+          batch.map(async id => {
+            const result = await this.service.entities.message.get({ entity: 'message', id }).go();
+            return result.data;
+          }),
+        );
+
+        // Collect threadIds and delete messages
+        for (const message of messagesToDelete) {
+          if (message) {
+            if (message.threadId) {
+              threadIds.add(message.threadId);
+            }
+            await this.service.entities.message.delete({ entity: 'message', id: message.id }).go();
+          }
+        }
+      }
+
+      // Update thread timestamps
+      const now = new Date().toISOString();
+      for (const threadId of threadIds) {
+        await this.service.entities.thread.update({ entity: 'thread', id: threadId }).set({ updatedAt: now }).go();
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { count: messageIds.length },
+        },
+        error,
+      );
+    }
   }
 
   // Helper function to parse message data (handle JSON fields)
-  private parseMessageData(data: any): MastraMessageV2 | MastraMessageV1 {
+  private parseMessageData(data: any): MastraDBMessage | MastraMessageV1 {
     // Removed try/catch and JSON.parse logic - now handled by entity 'get' attributes
     // This function now primarily ensures correct typing and Date conversion.
     return {
@@ -33,7 +112,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper function to transform and sort threads
-  private transformAndSortThreads(rawThreads: any[], orderBy: string, sortDirection: string): StorageThreadType[] {
+  private transformAndSortThreads(rawThreads: any[], field: string, direction: string): StorageThreadType[] {
     return rawThreads
       .map((data: any) => ({
         ...data,
@@ -42,11 +121,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         updatedAt: typeof data.updatedAt === 'string' ? new Date(data.updatedAt) : data.updatedAt,
       }))
       .sort((a: StorageThreadType, b: StorageThreadType) => {
-        const fieldA = orderBy === 'createdAt' ? a.createdAt : a.updatedAt;
-        const fieldB = orderBy === 'createdAt' ? b.createdAt : b.updatedAt;
+        const fieldA = field === 'createdAt' ? a.createdAt : a.updatedAt;
+        const fieldB = field === 'createdAt' ? b.createdAt : b.updatedAt;
 
         const comparison = fieldA.getTime() - fieldB.getTime();
-        return sortDirection === 'DESC' ? -comparison : comparison;
+        return direction === 'DESC' ? -comparison : comparison;
       }) as StorageThreadType[];
   }
 
@@ -72,42 +151,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREAD_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
-        },
-        error,
-      );
-    }
-  }
-
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    const resourceId = args.resourceId;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
-
-    this.logger.debug('Getting threads by resource ID', { resourceId, orderBy, sortDirection });
-
-    try {
-      const result = await this.service.entities.thread.query.byResource({ entity: 'thread', resourceId }).go();
-
-      if (!result.data.length) {
-        return [];
-      }
-
-      // Use shared helper method for transformation and sorting
-      return this.transformAndSortThreads(result.data, orderBy, sortDirection);
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREADS_BY_RESOURCE_ID_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId },
         },
         error,
       );
@@ -119,7 +166,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const threadData = {
+    const threadData: ThreadEntityData = {
       entity: 'thread',
       id: thread.id,
       resourceId: thread.resourceId,
@@ -127,6 +174,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       createdAt: thread.createdAt?.toISOString() || now.toISOString(),
       updatedAt: thread.updatedAt?.toISOString() || now.toISOString(),
       metadata: thread.metadata ? JSON.stringify(thread.metadata) : undefined,
+      ...getTtlProps('thread', this.ttlConfig),
     };
 
     try {
@@ -137,13 +185,13 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         resourceId: thread.resourceId,
         title: threadData.title,
         createdAt: thread.createdAt || now,
-        updatedAt: now,
+        updatedAt: thread.updatedAt || now,
         metadata: thread.metadata,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: thread.id },
@@ -213,7 +261,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId: id },
@@ -228,14 +276,15 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     try {
       // First, delete all messages associated with this thread
-      const messages = await this.getMessages({ threadId });
+      // Use perPage: false to fetch ALL messages, not just the first page
+      const { messages } = await this.listMessages({ threadId, perPage: false });
       if (messages.length > 0) {
         // Delete messages in batches
         const batchSize = 25; // DynamoDB batch limits
         for (let i = 0; i < messages.length; i += batchSize) {
           const batch = messages.slice(i, i + batchSize);
           await Promise.all(
-            batch.map(message =>
+            batch.map((message: MastraDBMessage) =>
               this.service.entities.message
                 .delete({
                   entity: 'message',
@@ -253,7 +302,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_DELETE_THREAD_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { threadId },
@@ -263,118 +312,9 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    this.logger.debug('Getting messages', { threadId, selectBy });
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      const messages: MastraMessageV2[] = [];
-      const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
-
-      // Handle included messages first (like libsql)
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages(threadId, selectBy);
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      // Get remaining messages only if limit is not 0
-      if (limit !== 0) {
-        // Query messages by thread ID using the GSI
-        const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
-
-        // Get messages from the main thread
-        let results;
-        if (limit !== Number.MAX_SAFE_INTEGER && limit > 0) {
-          // Use limit in query to get only the last N messages
-          results = await query.go({ limit, order: 'desc' });
-          // Reverse the results since we want ascending order
-          results.data = results.data.reverse();
-        } else {
-          // Get all messages
-          results = await query.go();
-        }
-
-        let allThreadMessages = results.data
-          .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
-
-        // Sort by createdAt ASC to get proper order
-        allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
-          const timeA = a.createdAt.getTime();
-          const timeB = b.createdAt.getTime();
-          if (timeA === timeB) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeA - timeB;
-        });
-
-        messages.push(...allThreadMessages);
-      }
-
-      // Sort by createdAt ASC to match libsql behavior, with ID tiebreaker for stable ordering
-      messages.sort((a, b) => {
-        const timeA = a.createdAt.getTime();
-        const timeB = b.createdAt.getTime();
-        if (timeA === timeB) {
-          return a.id.localeCompare(b.id);
-        }
-        return timeA - timeB;
-      });
-
-      // Deduplicate messages by ID (like libsql)
-      const uniqueMessages = messages.filter(
-        (message, index, self) => index === self.findIndex(m => m.id === message.id),
-      );
-
-      const list = new MessageList({ threadId, resourceId }).add(uniqueMessages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-    }
-  }
-
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     this.logger.debug('Getting messages by ID', { messageIds });
-    if (messageIds.length === 0) return [];
+    if (messageIds.length === 0) return { messages: [] };
 
     try {
       const results = await Promise.all(
@@ -385,20 +325,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       let parsedMessages = data
         .map((data: any) => this.parseMessageData(data))
-        .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
+        .filter((msg: any): msg is MastraDBMessage => 'content' in msg);
 
       // Deduplicate messages by ID (like libsql)
       const uniqueMessages = parsedMessages.filter(
         (message, index, self) => index === self.findIndex(m => m.id === message.id),
       );
 
-      const list = new MessageList().add(uniqueMessages, 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      const list = new MessageList().add(uniqueMessages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { messageIds: JSON.stringify(messageIds) },
@@ -408,16 +347,189 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+        },
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    // When perPage is false (get all), ignore page offset
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'INVALID_PAGE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      // Determine sort field and direction
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
+      this.logger.debug('Getting messages with listMessages', {
+        threadId,
+        resourceId,
+        perPageInput,
+        offset,
+        perPage,
+        page,
+        field,
+        direction,
+      });
+
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
+      const results = await query.go();
+
+      let allThreadMessages = results.data
+        .map((data: any) => this.parseMessageData(data))
+        .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
+
+      // Apply resourceId filter
+      if (resourceId) {
+        allThreadMessages = allThreadMessages.filter((msg: MastraDBMessage) => msg.resourceId === resourceId);
+      }
+
+      // Apply date range filter
+      allThreadMessages = filterByDateRange(
+        allThreadMessages,
+        (msg: MastraDBMessage) => new Date(msg.createdAt),
+        filter?.dateRange,
+      );
+
+      // Sort messages by the specified field and direction
+      allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Save total before pagination
+      const total = allThreadMessages.length;
+
+      // Apply pagination
+      const paginatedMessages = allThreadMessages.slice(offset, offset + perPage);
+      const paginatedCount = paginatedMessages.length;
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && paginatedCount === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(paginatedMessages.map((m: MastraDBMessage) => m.id));
+      let includeMessages: MastraDBMessage[] = [];
+
+      if (include && include.length > 0) {
+        // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
+        const selectBy = { include };
+        includeMessages = await this._getIncludedMessages(selectBy);
+
+        // Deduplicate: only add messages that aren't already in the paginated results
+        for (const includeMsg of includeMessages) {
+          if (!messageIds.has(includeMsg.id)) {
+            paginatedMessages.push(includeMsg);
+            messageIds.add(includeMsg.id);
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(paginatedMessages, 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      let hasMore = false;
+      if (perPageInput !== false && !allThreadMessagesReturned) {
+        hasMore = offset + paginatedCount < total;
+      }
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'LIST_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
     this.logger.debug('Saving messages', { count: messages.length });
 
     if (!messages.length) {
-      return [];
+      return { messages: [] };
     }
 
     const threadId = messages[0]?.threadId;
@@ -426,22 +538,22 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
 
     // Ensure 'entity' is added and complex fields are handled
-    const messagesToSave = messages.map(msg => {
+    const messagesToSave: MessageEntityData[] = messages.map(msg => {
       const now = new Date().toISOString();
       return {
-        entity: 'message', // Add entity type
+        entity: 'message' as const,
         id: msg.id,
         threadId: msg.threadId,
         role: msg.role,
         type: msg.type,
         resourceId: msg.resourceId,
-        // Ensure complex fields are stringified if not handled by attribute setters
         content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
         toolCallArgs: `toolCallArgs` in msg && msg.toolCallArgs ? JSON.stringify(msg.toolCallArgs) : undefined,
         toolCallIds: `toolCallIds` in msg && msg.toolCallIds ? JSON.stringify(msg.toolCallIds) : undefined,
         toolNames: `toolNames` in msg && msg.toolNames ? JSON.stringify(msg.toolNames) : undefined,
         createdAt: msg.createdAt instanceof Date ? msg.createdAt.toISOString() : msg.createdAt || now,
-        updatedAt: now, // Add updatedAt
+        updatedAt: now,
+        ...getTtlProps('message', this.ttlConfig),
       };
     });
 
@@ -483,13 +595,12 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         })
         .go();
 
-      const list = new MessageList().add(messages, 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -499,214 +610,160 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     }
   }
 
-  async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page?: number;
-      perPage?: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page = 0, perPage = 100 } = args;
-    const orderBy = this.castThreadOrderBy(args.orderBy);
-    const sortDirection = this.castThreadSortDirection(args.sortDirection);
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    this.logger.debug('Getting threads by resource ID with pagination', {
-      resourceId,
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            page,
+            ...(perPageInput !== undefined && { perPage: perPageInput }),
+          },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { field, direction } = this.parseOrderBy(orderBy);
+
+    // Log only safe fields to avoid leaking PII/secrets in metadata values
+    this.logger.debug('Listing threads with filters', {
+      resourceId: filter?.resourceId,
+      metadataKeys: filter?.metadata ? Object.keys(filter.metadata) : [],
       page,
       perPage,
-      orderBy,
-      sortDirection,
+      field,
+      direction,
     });
 
     try {
-      // Query threads by resource ID using the GSI
-      const query = this.service.entities.thread.query.byResource({ entity: 'thread', resourceId });
+      // Fetch threads from DynamoDB
+      // Use query with GSI for resourceId filtering (efficient), otherwise scan all threads
+      const rawThreads = filter?.resourceId
+        ? (
+            await this.service.entities.thread.query
+              .byResource({
+                entity: 'thread',
+                resourceId: filter.resourceId,
+              })
+              .go({ pages: 'all' })
+          ).data
+        : (await this.service.entities.thread.scan.go({ pages: 'all' })).data;
 
-      // Get all threads for this resource ID (DynamoDB doesn't support OFFSET/LIMIT)
-      const results = await query.go();
+      // Transform threads
+      let allThreads = this.transformAndSortThreads(rawThreads, field, direction);
 
-      // Use shared helper method for transformation and sorting
-      const allThreads = this.transformAndSortThreads(results.data, orderBy, sortDirection);
+      // Apply metadata filters if provided (AND logic)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        allThreads = allThreads.filter(thread => {
+          // Handle both object and stringified JSON metadata
+          let threadMeta: Record<string, unknown> | null = null;
+
+          if (typeof thread.metadata === 'string') {
+            try {
+              threadMeta = JSON.parse(thread.metadata);
+            } catch {
+              return false; // Invalid JSON, exclude thread
+            }
+          } else if (thread.metadata && typeof thread.metadata === 'object') {
+            threadMeta = thread.metadata as Record<string, unknown>;
+          }
+
+          if (!threadMeta) return false;
+
+          // Compare metadata values using strict equality
+          return Object.entries(filter.metadata!).every(([key, value]) => threadMeta![key] === value);
+        });
+      }
 
       // Apply pagination in memory
-      const startIndex = page * perPage;
-      const endIndex = startIndex + perPage;
-      const paginatedThreads = allThreads.slice(startIndex, endIndex);
+      const endIndex = offset + perPage;
+      const paginatedThreads = allThreads.slice(offset, endIndex);
 
       // Calculate pagination info
       const total = allThreads.length;
-      const hasMore = endIndex < total;
+      const hasMore = offset + perPage < total;
 
       return {
         threads: paginatedThreads,
         total,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore,
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { resourceId, page, perPage },
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!(filter?.metadata && Object.keys(filter.metadata).length),
+            page,
+            perPage: perPageForResponse,
+          },
         },
         error,
       );
-    }
-  }
-
-  async getMessagesPaginated(
-    args: StorageGetMessagesArg & { format?: 'v1' | 'v2' },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    const { threadId, resourceId, selectBy, format = 'v1' } = args;
-    const { page = 0, perPage = 40, dateRange } = selectBy?.pagination || {};
-    const fromDate = dateRange?.start;
-    const toDate = dateRange?.end;
-    const limit = resolveMessageLimit({ last: selectBy?.last, defaultLimit: Number.MAX_SAFE_INTEGER });
-
-    this.logger.debug('Getting messages with pagination', { threadId, page, perPage, fromDate, toDate, limit });
-
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-      let messages: MastraMessageV2[] = [];
-
-      // Handle include messages first
-      if (selectBy?.include?.length) {
-        const includeMessages = await this._getIncludedMessages(threadId, selectBy);
-        if (includeMessages) {
-          messages.push(...includeMessages);
-        }
-      }
-
-      // Get remaining messages only if limit is not 0
-      if (limit !== 0) {
-        // Query messages by thread ID using the GSI
-        const query = this.service.entities.message.query.byThread({ entity: 'message', threadId });
-
-        // Get messages from the main thread
-        let results;
-        if (limit !== Number.MAX_SAFE_INTEGER && limit > 0) {
-          // Use limit in query to get only the last N messages
-          results = await query.go({ limit, order: 'desc' });
-          // Reverse the results since we want ascending order
-          results.data = results.data.reverse();
-        } else {
-          // Get all messages
-          results = await query.go();
-        }
-
-        let allThreadMessages = results.data
-          .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraMessageV2 => 'content' in msg);
-
-        // Sort by createdAt ASC to get proper order
-        allThreadMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
-          const timeA = a.createdAt.getTime();
-          const timeB = b.createdAt.getTime();
-          if (timeA === timeB) {
-            return a.id.localeCompare(b.id);
-          }
-          return timeA - timeB;
-        });
-
-        // Exclude already included messages
-        const excludeIds = messages.map(m => m.id);
-        if (excludeIds.length > 0) {
-          allThreadMessages = allThreadMessages.filter((msg: MastraMessageV2) => !excludeIds.includes(msg.id));
-        }
-
-        messages.push(...allThreadMessages);
-      }
-
-      // Sort all messages by createdAt (oldest first for final result)
-      messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      // Apply date filtering if needed
-      if (fromDate || toDate) {
-        messages = messages.filter(msg => {
-          const createdAt = new Date(msg.createdAt).getTime();
-          if (fromDate && createdAt < new Date(fromDate).getTime()) return false;
-          if (toDate && createdAt > new Date(toDate).getTime()) return false;
-          return true;
-        });
-      }
-
-      // Save total before pagination
-      const total = messages.length;
-
-      // Apply offset-based pagination in memory
-      const start = page * perPage;
-      const end = start + perPage;
-      const paginatedMessages = messages.slice(start, end);
-      const hasMore = end < total;
-
-      const list = new MessageList({ threadId, resourceId }).add(paginatedMessages as MastraMessageV2[], 'memory');
-      const finalMessages = format === 'v2' ? list.get.all.v2() : list.get.all.v1();
-
-      return {
-        messages: finalMessages,
-        total,
-        page,
-        perPage,
-        hasMore,
-      };
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'STORAGE_DYNAMODB_STORE_GET_MESSAGES_PAGINATED_FAILED',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-      this.logger?.trackException?.(mastraError);
-      this.logger?.error?.(mastraError.toString());
-      return { messages: [], total: 0, page, perPage, hasMore: false };
     }
   }
 
   // Helper method to get included messages with context
-  private async _getIncludedMessages(threadId: string, selectBy: any): Promise<MastraMessageV2[]> {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
+  private async _getIncludedMessages(selectBy: any): Promise<MastraDBMessage[]> {
     if (!selectBy?.include?.length) {
       return [];
     }
 
-    const includeMessages: MastraMessageV2[] = [];
+    const includeMessages: MastraDBMessage[] = [];
 
     for (const includeItem of selectBy.include) {
       try {
-        const { id, threadId: targetThreadId, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
-        const searchThreadId = targetThreadId || threadId;
+        const { id, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
+
+        // Step 1: Get the target message by ID to find its threadId
+        const targetResult = await this.service.entities.message.get({ entity: 'message', id }).go();
+        if (!targetResult.data) {
+          this.logger.warn('Target message not found', { id });
+          continue;
+        }
+
+        const targetMessageData = targetResult.data as any;
+        const searchThreadId = targetMessageData.threadId;
 
         this.logger.debug('Getting included messages for', {
           id,
-          targetThreadId,
           searchThreadId,
           withPreviousMessages,
           withNextMessages,
         });
 
-        // Get all messages for the target thread
+        // Step 2: Get all messages for the target thread
         const query = this.service.entities.message.query.byThread({ entity: 'message', threadId: searchThreadId });
         const results = await query.go();
         const allMessages = results.data
           .map((data: any) => this.parseMessageData(data))
-          .filter((msg: any): msg is MastraMessageV2 => 'content' in msg && typeof msg.content === 'object');
+          .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
 
         this.logger.debug('Found messages in thread', {
           threadId: searchThreadId,
           messageCount: allMessages.length,
-          messageIds: allMessages.map((m: MastraMessageV2) => m.id),
+          messageIds: allMessages.map((m: MastraDBMessage) => m.id),
         });
 
         // Sort by createdAt ASC to get proper order, with ID tiebreaker for stable ordering
-        allMessages.sort((a: MastraMessageV2, b: MastraMessageV2) => {
+        allMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
           const timeA = a.createdAt.getTime();
           const timeB = b.createdAt.getTime();
           if (timeA === timeB) {
@@ -715,10 +772,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           return timeA - timeB;
         });
 
-        // Find the target message
-        const targetIndex = allMessages.findIndex((msg: MastraMessageV2) => msg.id === id);
+        // Find the target message index
+        const targetIndex = allMessages.findIndex((msg: MastraDBMessage) => msg.id === id);
         if (targetIndex === -1) {
-          this.logger.warn('Target message not found', { id, threadId: searchThreadId });
+          this.logger.warn('Target message not found in thread', { id, threadId: searchThreadId });
           continue;
         }
 
@@ -733,7 +790,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           startIndex,
           endIndex,
           contextCount: contextMessages.length,
-          contextIds: contextMessages.map((m: MastraMessageV2) => m.id),
+          contextIds: contextMessages.map((m: MastraDBMessage) => m.id),
         });
 
         includeMessages.push(...contextMessages);
@@ -744,19 +801,19 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     this.logger.debug('Total included messages', {
       count: includeMessages.length,
-      ids: includeMessages.map((m: MastraMessageV2) => m.id),
+      ids: includeMessages.map((m: MastraDBMessage) => m.id),
     });
 
     return includeMessages;
   }
 
   async updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+    messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
         content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
       }[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
 
@@ -764,7 +821,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
       return [];
     }
 
-    const updatedMessages: MastraMessageV2[] = [];
+    const updatedMessages: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
 
     try {
@@ -778,7 +835,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           continue;
         }
 
-        const existingMsg = this.parseMessageData(existingMessage.data) as MastraMessageV2;
+        const existingMsg = this.parseMessageData(existingMessage.data) as MastraDBMessage;
         const originalThreadId = existingMsg.threadId;
         affectedThreadIds.add(originalThreadId!);
 
@@ -828,7 +885,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         // Get the updated message
         const updatedMessage = await this.service.entities.message.get({ entity: 'message', id }).go();
         if (updatedMessage.data) {
-          updatedMessages.push(this.parseMessageData(updatedMessage.data) as MastraMessageV2);
+          updatedMessages.push(this.parseMessageData(updatedMessage.data) as MastraDBMessage);
         }
       }
 
@@ -846,7 +903,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
@@ -879,7 +936,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_RESOURCE_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -894,13 +951,14 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
     const now = new Date();
 
-    const resourceData = {
+    const resourceData: ResourceEntityData = {
       entity: 'resource',
       id: resource.id,
       workingMemory: resource.workingMemory,
       metadata: resource.metadata ? JSON.stringify(resource.metadata) : undefined,
       createdAt: resource.createdAt?.toISOString() || now.toISOString(),
       updatedAt: now.toISOString(),
+      ...getTtlProps('resource', this.ttlConfig),
     };
 
     try {
@@ -916,7 +974,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_SAVE_RESOURCE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId: resource.id },
@@ -984,7 +1042,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_UPDATE_RESOURCE_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },

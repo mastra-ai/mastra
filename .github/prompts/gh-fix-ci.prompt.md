@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: Use the GH CLI to fix CI failures on a pull request
 ---
 

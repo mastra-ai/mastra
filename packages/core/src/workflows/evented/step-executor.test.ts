@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Mastra } from '../..';
-import type { StepFlowEntry, StepResult } from '../..';
-import { EventEmitterPubSub } from '../../events/event-emitter';
-import { RuntimeContext } from '../../runtime-context';
+import { z } from 'zod';
+import { MastraError } from '../../error';
+import { Mastra } from '../../mastra';
+import { RequestContext } from '../../request-context';
+import type { StepFlowEntry, StepResult } from '../types';
+import { createStep } from '../workflow';
 import { StepExecutor } from './step-executor';
 
 interface SleepFnContext {
   workflowId: string;
   runId: string;
   mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   inputData: any;
-  runCount: number;
+  retryCount: number;
   resumeData: any;
   getInitData: () => any;
   getStepResult: (step: { id?: string }) => any;
@@ -29,13 +31,13 @@ describe('StepExecutor', () => {
   let stepExecutor: StepExecutor;
   let mastra: Mastra;
   let capturedContexts: SleepFnContext[];
-  let runtimeContext: RuntimeContext;
+  let requestContext: RequestContext;
 
   beforeEach(() => {
     mastra = new Mastra();
     stepExecutor = new StepExecutor({ mastra });
     capturedContexts = [];
-    runtimeContext = new RuntimeContext();
+    requestContext = new RequestContext();
   });
 
   it('should return step.duration directly when provided', async () => {
@@ -53,12 +55,8 @@ describe('StepExecutor', () => {
       workflowId: 'test-workflow',
       step,
       runId: 'test-run',
-      runtimeContext,
+      requestContext,
       stepResults: {},
-      emitter: {
-        runtime: new EventEmitterPubSub(),
-        events: new EventEmitterPubSub(),
-      },
     });
 
     // Assert: Verify return value and fn was not called
@@ -71,12 +69,8 @@ describe('StepExecutor', () => {
     const baseParams = {
       workflowId: 'test-workflow',
       runId: 'test-run',
-      runtimeContext,
+      requestContext,
       stepResults: {},
-      emitter: {
-        runtime: new EventEmitterPubSub(),
-        events: new EventEmitterPubSub(),
-      },
     };
 
     // Test undefined fn case
@@ -111,8 +105,8 @@ describe('StepExecutor', () => {
     const runId = 'test-run';
     const inputData = { key: 'value' };
     const resumeData = { state: 'resumed' };
-    const runCount = 2;
-    const runtimeContext = new RuntimeContext();
+    const retryCount = 2;
+    const requestContext = new RequestContext();
 
     const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
       id: 'sleep-1',
@@ -134,11 +128,6 @@ describe('StepExecutor', () => {
       },
     };
 
-    const emitter = {
-      runtime: new EventEmitterPubSub(),
-      events: new EventEmitterPubSub(),
-    };
-
     // Act: Call resolveSleep with test parameters
     const result = await stepExecutor.resolveSleep({
       workflowId,
@@ -147,9 +136,8 @@ describe('StepExecutor', () => {
       input: inputData,
       resumeData,
       stepResults,
-      emitter,
-      runtimeContext,
-      runCount,
+      requestContext,
+      retryCount,
     });
 
     // Assert: Verify context passed to fn and return value
@@ -159,9 +147,9 @@ describe('StepExecutor', () => {
     expect(capturedContext.workflowId).toBe(workflowId);
     expect(capturedContext.runId).toBe(runId);
     expect(capturedContext.mastra).toBe(mastra);
-    expect(capturedContext.runtimeContext).toBe(runtimeContext);
+    expect(capturedContext.requestContext).toBe(requestContext);
     expect(capturedContext.inputData).toBe(inputData);
-    expect(capturedContext.runCount).toBe(runCount);
+    expect(capturedContext.retryCount).toBe(retryCount);
     expect(capturedContext.resumeData).toBe(resumeData);
 
     // Verify helper functions work correctly
@@ -187,15 +175,239 @@ describe('StepExecutor', () => {
       step: throwingStep,
       runId: 'test-run',
       stepResults: {},
-      emitter: {
-        runtime: new EventEmitterPubSub(),
-        events: new EventEmitterPubSub(),
-      },
-      runtimeContext,
+      requestContext,
     };
 
     // Act & Assert: Call resolveSleep and verify it returns 0
     const result = await stepExecutor.resolveSleep(params);
     expect(result).toBe(0);
+  });
+
+  it('should save only error message without stack trace when step fails', async () => {
+    const errorMessage = 'Test error: step execution failed.';
+    const thrownError = new Error(errorMessage);
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: vi.fn().mockImplementation(() => {
+        throw thrownError;
+      }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: failingStep,
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(result.status).toBe('failed');
+    const failedResult = result as Extract<typeof result, { status: 'failed' }>;
+    // Error is now preserved as Error instance instead of string
+    expect(failedResult.error).toBeInstanceOf(Error);
+    // Verify exact same error instance is preserved
+    expect(failedResult.error).toBe(thrownError);
+    expect((failedResult.error as Error).message).toBe(errorMessage);
+    // Stack is preserved on instance for debugging, but excluded from JSON serialization
+    // (per getErrorFromUnknown with serializeStack: false)
+    expect((failedResult.error as Error).stack).toBeDefined();
+    // Verify stack is not in JSON output
+    const serialized = JSON.stringify(failedResult.error);
+    expect(serialized).not.toContain('stack');
+  });
+
+  it('should save MastraError message without stack trace when step fails', async () => {
+    const errorMessage = 'Test MastraError: step execution failed.';
+    const thrownError = new MastraError({
+      id: 'VALIDATION_ERROR',
+      domain: 'MASTRA_WORKFLOW',
+      category: 'USER',
+      text: errorMessage,
+      details: { field: 'test' },
+    });
+    const failingStep = createStep({
+      id: 'failing-step',
+      execute: vi.fn().mockImplementation(() => {
+        throw thrownError;
+      }),
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    });
+
+    const result = await stepExecutor.execute({
+      workflowId: 'test-workflow',
+      step: failingStep,
+      runId: 'test-run',
+      input: {},
+      stepResults: {},
+      state: {},
+      requestContext,
+    });
+
+    expect(result.status).toBe('failed');
+    const failedResult = result as Extract<typeof result, { status: 'failed' }>;
+    // Error is now preserved as Error instance instead of string, including MastraError properties
+    expect(failedResult.error).toBeInstanceOf(Error);
+    // Verify exact same error instance is preserved
+    expect(failedResult.error).toBe(thrownError);
+    expect((failedResult.error as Error).message).toBe(errorMessage);
+    // MastraError properties should be preserved
+    expect((failedResult.error as any).id).toBe('VALIDATION_ERROR');
+    expect((failedResult.error as any).domain).toBe('MASTRA_WORKFLOW');
+    expect((failedResult.error as any).category).toBe('USER');
+    expect((failedResult.error as any).details).toEqual({ field: 'test' });
+    // Stack is preserved on instance for debugging, but excluded from JSON serialization
+    // (per getErrorFromUnknown with serializeStack: false)
+    expect((failedResult.error as Error).stack).toBeDefined();
+    // Verify stack is not in JSON output
+    const serialized = JSON.stringify(failedResult.error);
+    expect(serialized).not.toContain('stack');
+  });
+
+  describe('abort signal propagation', () => {
+    it('should propagate parent abortController to resolveSleep fn context', async () => {
+      // Arrange: Create a parent abort controller and track what abortSignal the fn receives
+      const parentAbortController = new AbortController();
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
+        type: 'sleep',
+        fn: context => {
+          receivedAbortSignal = context.abortSignal;
+          return 1000;
+        },
+      };
+
+      // Act: Call resolveSleep with parent abort controller
+      await stepExecutor.resolveSleep({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        abortController: parentAbortController,
+      });
+
+      // Assert: The fn should receive the parent's abort signal
+      expect(receivedAbortSignal).toBe(parentAbortController.signal);
+    });
+
+    it('should reflect parent abort in resolveSleep fn context when parent is aborted', async () => {
+      // Arrange: Create a parent abort controller
+      const parentAbortController = new AbortController();
+      let wasAbortedDuringExecution = false;
+
+      const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
+        type: 'sleep',
+        fn: context => {
+          // Abort the parent controller during fn execution
+          parentAbortController.abort();
+          wasAbortedDuringExecution = context.abortSignal.aborted;
+          return 1000;
+        },
+      };
+
+      // Act: Call resolveSleep with parent abort controller
+      await stepExecutor.resolveSleep({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        abortController: parentAbortController,
+      });
+
+      // Assert: The abort should be reflected in the fn's context
+      expect(wasAbortedDuringExecution).toBe(true);
+    });
+
+    it('should propagate parent abortController to resolveSleepUntil fn context', async () => {
+      // Arrange: Create a parent abort controller and track what abortSignal the fn receives
+      const parentAbortController = new AbortController();
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'sleepUntil' }> = {
+        type: 'sleepUntil',
+        fn: context => {
+          receivedAbortSignal = context.abortSignal;
+          return new Date(Date.now() + 1000);
+        },
+      };
+
+      // Act: Call resolveSleepUntil with parent abort controller
+      await stepExecutor.resolveSleepUntil({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        abortController: parentAbortController,
+      });
+
+      // Assert: The fn should receive the parent's abort signal
+      expect(receivedAbortSignal).toBe(parentAbortController.signal);
+    });
+
+    it('should propagate parent abortController to evaluateConditions condition fn context', async () => {
+      // Arrange: Create a parent abort controller and track what abortSignal the condition receives
+      const parentAbortController = new AbortController();
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'conditional' }> = {
+        type: 'conditional',
+        conditions: [
+          context => {
+            receivedAbortSignal = context.abortSignal;
+            return true;
+          },
+        ],
+        branches: [[{ type: 'step', step: { id: 'dummy' } as any }]],
+      };
+
+      // Act: Call evaluateConditions with parent abort controller
+      await stepExecutor.evaluateConditions({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        state: {},
+        abortController: parentAbortController,
+      });
+
+      // Assert: The condition fn should receive the parent's abort signal
+      expect(receivedAbortSignal).toBe(parentAbortController.signal);
+    });
+
+    it('should create a new AbortController when none is provided (backwards compatibility)', async () => {
+      // Arrange: Track that an abortSignal is still provided even without parent controller
+      let receivedAbortSignal: AbortSignal | undefined;
+
+      const step: Extract<StepFlowEntry, { type: 'sleep' }> = {
+        type: 'sleep',
+        fn: context => {
+          receivedAbortSignal = context.abortSignal;
+          return 1000;
+        },
+      };
+
+      // Act: Call resolveSleep WITHOUT parent abort controller
+      await stepExecutor.resolveSleep({
+        workflowId: 'test-workflow',
+        step,
+        runId: 'test-run',
+        requestContext,
+        stepResults: {},
+        // No abortController provided
+      });
+
+      // Assert: An abortSignal should still be provided (from internally created controller)
+      expect(receivedAbortSignal).toBeDefined();
+      expect(receivedAbortSignal).toBeInstanceOf(AbortSignal);
+    });
   });
 });

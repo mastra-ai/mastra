@@ -6,4 +6,7 @@ Try the demo: [Text to SQL](https://mastra-text-to-sql.vercel.app/)
 
 Mastra Source code: [mastra-text-to-sql](https://github.com/mastra-ai/text-to-sql-example)
 
-// TODO: add blog post
+## Blog Post
+
+Detailed walkthrough:
+[Text to SQL with Mastra](https://mastra.ai/blog/txt-to-sql)

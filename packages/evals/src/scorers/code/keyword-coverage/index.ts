@@ -1,16 +1,18 @@
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import keyword_extractor from 'keyword-extractor';
+import { getTextContentFromMastraDBMessage } from '../../utils';
 
 export function createKeywordCoverageScorer() {
   return createScorer({
+    id: 'keyword-coverage-scorer',
     name: 'Keyword Coverage Scorer',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      const input = run.input?.inputMessages?.map((i: { content: string }) => i.content).join(', ') || '';
-      const output = run.output?.map((i: { content: string }) => i.content).join(', ') || '';
+      const input = run.input?.inputMessages?.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
+      const output = run.output?.map(i => getTextContentFromMastraDBMessage(i)).join(', ') || '';
 
       if (!input && !output) {
         return {

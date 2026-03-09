@@ -1,27 +1,35 @@
-import { randomUUID } from 'crypto';
-import type { Span } from '@opentelemetry/api';
+import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../di';
+import { RequestContext } from '../di';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { PubSub } from '../events';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { DefaultExecutionEngine } from './default';
-import type { Emitter, StepResult } from './types';
+import type { FormattedWorkflowResult, StepResult } from './types';
+
+class TestableExecutionEngine extends DefaultExecutionEngine {
+  async fmtReturnValuePublic(
+    pubsub: PubSub,
+    stepResults: Record<string, StepResult<any, any, any, any>>,
+    lastOutput: StepResult<any, any, any, any>,
+    error?: Error | unknown,
+    stepExecutionPath?: string[],
+  ) {
+    return this.fmtReturnValue<FormattedWorkflowResult>(pubsub, stepResults, lastOutput, error, stepExecutionPath);
+  }
+}
 
 describe('DefaultExecutionEngine.executeConditional error handling', () => {
   let engine: DefaultExecutionEngine;
-  let emitter: Emitter;
-  let runtimeContext: RuntimeContext;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
   let abortController: AbortController;
 
   beforeEach(() => {
     engine = new DefaultExecutionEngine({ mastra: undefined });
-    emitter = {
-      emit: async (_event: string, _data: any) => {},
-      on: (_event: string, _callback: (data: any) => void) => {},
-      off: (_event: string, _callback: (data: any) => void) => {},
-      once: (_event: string, _callback: (data: any) => void) => {},
-    };
-    runtimeContext = new RuntimeContext();
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
     abortController = new AbortController();
   });
 
@@ -64,7 +72,6 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       runId,
       entry,
       prevOutput: null,
-      prevStep: null as any,
       serializedStepGraph: [],
       stepResults: {} as Record<string, StepResult<any, any, any, any>>,
       executionContext: {
@@ -76,11 +83,13 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
           attempts: 3,
           delay: 1000,
         },
-        executionSpan: {} as Span,
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
       },
-      emitter,
+      pubsub,
       abortController,
-      runtimeContext,
+      requestContext,
       tracingContext: {},
     });
   }
@@ -166,7 +175,164 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     expect(wrappedError.category).toBe(ErrorCategory.USER);
     expect(wrappedError.details).toEqual({ workflowId, runId });
 
-    // Verify that the original stack trace is preserved
-    expect(wrappedError.stack).toContain(regularError.stack?.split('\n')[1] || '');
+    // Verify that the original error is preserved as the cause
+    expect(wrappedError.cause).toBe(regularError);
+  });
+});
+
+describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload deduplication', () => {
+  let engine: TestableExecutionEngine;
+  let pubsub: PubSub;
+
+  beforeEach(() => {
+    engine = new TestableExecutionEngine({ mastra: undefined });
+    pubsub = new EventEmitterPubSub();
+  });
+
+  it('should include stepExecutionPath in the result', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: { status: 'success', output: { value: 2 }, payload: { value: 1 }, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.stepExecutionPath).toEqual(['step1']);
+  });
+
+  it('should remove payload when it matches the previous step output', async () => {
+    const sharedData = { value: 1 };
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: sharedData as any,
+      step1: { status: 'success', output: { value: 2 }, payload: sharedData, startedAt: 1, endedAt: 2 },
+      step2: { status: 'success', output: { value: 3 }, payload: { value: 2 }, startedAt: 3, endedAt: 4 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step2!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1', 'step2']);
+
+    expect(result.steps.step1.payload).toBeUndefined();
+    expect(result.steps.step2.payload).toBeUndefined();
+  });
+
+  it('should preserve payload when it does not match the previous step output', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: { status: 'success', output: { value: 2 }, payload: { different: true }, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toEqual({ different: true });
+  });
+
+  it('should handle structural equality after deserialization', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: {
+        status: 'success',
+        output: { value: 2 },
+        payload: JSON.parse(JSON.stringify({ value: 1 })),
+        startedAt: 1,
+        endedAt: 2,
+      },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBeUndefined();
+  });
+
+  it('should not deduplicate when there is no input in stepResults', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      step1: { status: 'success', output: { value: 2 }, payload: { value: 1 }, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toEqual({ value: 1 });
+  });
+
+  it('should not mutate original stepResults', async () => {
+    const originalPayload = { value: 1 };
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: { status: 'success', output: { value: 2 }, payload: originalPayload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(stepResults.step1!.payload).toBe(originalPayload);
+  });
+
+  it('should not apply deduplication when stepExecutionPath is not provided', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: { status: 'success', output: { value: 2 }, payload: { value: 1 }, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput);
+
+    expect(result.stepExecutionPath).toBeUndefined();
+    expect(result.steps.step1.payload).toEqual({ value: 1 });
+  });
+
+  it('should skip steps in path that are not in stepResults', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step2: { status: 'success', output: { value: 3 }, payload: { value: 1 }, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step2!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, [
+      'missing_step',
+      'step2',
+    ]);
+
+    expect(result.steps.step2.payload).toBeUndefined();
+  });
+
+  it('should only track previous output from successful steps', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: {
+        status: 'failed',
+        error: new Error('fail'),
+        output: { value: 999 },
+        payload: { value: 1 },
+        startedAt: 1,
+        endedAt: 2,
+      },
+      step2: { status: 'success', output: { value: 3 }, payload: { value: 1 }, startedAt: 3, endedAt: 4 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step2!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1', 'step2']);
+
+    // step1 payload matches input, should be removed
+    expect(result.steps.step1.payload).toBeUndefined();
+    // step2 payload matches input (not step1.output since step1 failed), should be removed
+    expect(result.steps.step2.payload).toBeUndefined();
+  });
+
+  it('should not throw when payload contains non-JSON-serializable values', async () => {
+    const circular: any = { value: 1 };
+    circular.self = circular;
+
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: { value: 1 } as any,
+      step1: { status: 'success', output: { value: 2 }, payload: circular, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBe(circular);
   });
 });

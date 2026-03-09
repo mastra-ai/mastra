@@ -1,27 +1,26 @@
 import type {
+  EmbedManyResult as AiEmbedManyResult,
+  EmbedResult as AiEmbedResult,
   CoreAssistantMessage as AiCoreAssistantMessage,
   CoreMessage as AiCoreMessage,
   CoreSystemMessage as AiCoreSystemMessage,
   CoreToolMessage as AiCoreToolMessage,
   CoreUserMessage as AiCoreUserMessage,
-  EmbedManyResult as AiEmbedManyResult,
-  EmbedResult as AiEmbedResult,
-  TelemetrySettings,
+  UIMessage,
   streamText,
   streamObject,
   generateText,
   generateObject,
-  UIMessage,
   StreamTextOnFinishCallback,
   StreamObjectOnFinishCallback,
-} from 'ai';
-import type { SystemModelMessage } from 'ai-v5';
+} from '@internal/ai-sdk-v4';
+import type { SystemModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z, ZodSchema } from 'zod';
 
-import type { TracingContext } from '../ai-tracing';
+import type { ObservabilityContext } from '../observability';
+import type { RequestContext } from '../request-context';
 import type { Run } from '../run/types';
-import type { RuntimeContext } from '../runtime-context';
 import type { CoreTool } from '../tools/types';
 import type { MastraLanguageModel } from './model/shared.types';
 
@@ -103,7 +102,6 @@ type MastraCustomLLMOptionsKeys =
   | 'model'
   | 'onStepFinish'
   | 'experimental_output'
-  | 'experimental_telemetry'
   | 'messages'
   | 'onFinish'
   | 'output';
@@ -113,15 +111,13 @@ export type DefaultLLMTextObjectOptions = Omit<GenerateObjectOptions, MastraCust
 export type DefaultLLMStreamOptions = Omit<StreamTextOptions, MastraCustomLLMOptionsKeys>;
 export type DefaultLLMStreamObjectOptions = Omit<StreamObjectOptions, MastraCustomLLMOptionsKeys>;
 
-type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+type MastraCustomLLMOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = ObservabilityContext & {
   tools?: Record<string, CoreTool>;
   onStepFinish?: (step: unknown) => Promise<void> | void;
   experimental_output?: Z;
-  telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
-  tracingContext: TracingContext;
+  requestContext: RequestContext;
 } & Run;
 
 export type LLMTextOptions<Z extends ZodSchema | JSONSchema7 | undefined = undefined> = {
@@ -151,6 +147,8 @@ export type LLMStreamObjectOptions<Z extends ZodSchema | JSONSchema7 | undefined
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
 
-export type { ProviderConfig } from './model/gateways/base';
+export type { ProviderConfig, GatewayLanguageModel } from './model/gateways/base';
+export { MastraModelGateway, NetlifyGateway, ModelsDevGateway, AzureOpenAIGateway } from './model/gateways';
+export type { AzureOpenAIGatewayConfig } from './model/gateways';
 
-export { ModelRouterEmbeddingModel, type EmbeddingModelId } from './model';
+export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';

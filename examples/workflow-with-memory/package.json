@@ -11,9 +11,9 @@
   "license": "Apache-2.0",
   "description": "",
   "devDependencies": {
-    "@types/node": "^20.17.57",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.3",
+    "@types/node": "22.19.7",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "zod": "^3.25.76"
   },
   "dependencies": {

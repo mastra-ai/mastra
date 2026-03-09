@@ -1,87 +1,304 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+  ensureDate,
+} from '@mastra/core/storage';
+import type {
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Redis } from '@upstash/redis';
-import type { StoreOperationsUpstash } from '../operations';
-import { ensureDate, getKey } from '../utils';
+import { UpstashDB, resolveUpstashConfig } from '../../db';
+import type { UpstashDomainConfig } from '../../db';
+import { getKey } from '../utils';
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
+export class WorkflowsUpstash extends WorkflowsStorage {
+  private client: Redis;
+  #db: UpstashDB;
+
+  constructor(config: UpstashDomainConfig) {
+    super();
+    const client = resolveUpstashConfig(config);
+    this.client = client;
+    this.#db = new UpstashDB({ client });
+  }
+
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: ensureDate(row.createdAt)!,
+      updatedAt: ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace: 'workflows',
+        workflow_name: workflowName,
+        run_id: runId,
+      });
+
+      const now = new Date().toISOString();
+
+      // Use Lua script for atomic read-modify-write operation
+      // This ensures concurrent updates don't overwrite each other
+      // The script returns the updated full record as JSON string
+      const luaScript = `
+        local key = KEYS[1]
+        local stepId = ARGV[1]
+        local resultJson = ARGV[2]
+        local requestContextJson = ARGV[3]
+        local now = ARGV[4]
+        local namespace = ARGV[5]
+        local workflowName = ARGV[6]
+        local runId = ARGV[7]
+        local timestamp = tonumber(ARGV[8])
+
+        -- Get existing data
+        local existing = redis.call('GET', key)
+        local data
+        local snapshot
+
+        if existing then
+          data = cjson.decode(existing)
+          snapshot = data.snapshot
+          if type(snapshot) == 'string' then
+            snapshot = cjson.decode(snapshot)
+          end
+        else
+          -- Create new record with default snapshot
+          snapshot = {
+            context = {},
+            activePaths = {},
+            timestamp = timestamp,
+            suspendedPaths = {},
+            activeStepsPath = {},
+            resumeLabels = {},
+            serializedStepGraph = {},
+            status = 'pending',
+            value = {},
+            waitingPaths = {},
+            runId = runId,
+            requestContext = {}
+          }
+          data = {
+            namespace = namespace,
+            workflow_name = workflowName,
+            run_id = runId,
+            createdAt = now,
+            updatedAt = now
+          }
+        end
+
+        -- Initialize context if nil
+        if snapshot.context == nil then
+          snapshot.context = {}
+        end
+
+        -- Merge the new step result
+        local stepResult = cjson.decode(resultJson)
+        snapshot.context[stepId] = stepResult
+
+        -- Merge request context
+        local newRequestContext = cjson.decode(requestContextJson)
+        if snapshot.requestContext == nil then
+          snapshot.requestContext = {}
+        end
+        for k, v in pairs(newRequestContext) do
+          snapshot.requestContext[k] = v
+        end
+
+        -- Update the record
+        data.snapshot = snapshot
+        data.updatedAt = now
+
+        -- Save back
+        redis.call('SET', key, cjson.encode(data))
+
+        -- Return the full updated data
+        return cjson.encode(data)
+      `;
+
+      const resultJson = await this.client.eval(
+        luaScript,
+        [key],
+        [
+          stepId,
+          JSON.stringify(result),
+          JSON.stringify(requestContext),
+          now,
+          'workflows',
+          workflowName,
+          runId,
+          String(Date.now()),
+        ],
+      );
+
+      // Parse the result - handle both string and already-parsed object
+      let data: any;
+      if (typeof resultJson === 'string') {
+        data = JSON.parse(resultJson);
+      } else {
+        data = resultJson;
+      }
+
+      const snapshot = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
+      return snapshot.context;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId, stepId },
+        },
+        error,
+      );
     }
   }
 
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: ensureDate(row.createdAt)!,
-    updatedAt: ensureDate(row.updatedAt)!,
-    resourceId: row.resourceId,
-  };
-}
-export class WorkflowsUpstash extends WorkflowsStorage {
-  private client: Redis;
-  private operations: StoreOperationsUpstash;
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace: 'workflows',
+        workflow_name: workflowName,
+        run_id: runId,
+      });
 
-  constructor({ client, operations }: { client: Redis; operations: StoreOperationsUpstash }) {
-    super();
-    this.client = client;
-    this.operations = operations;
-  }
+      const now = new Date().toISOString();
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
-  }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+      // Use Lua script for atomic read-modify-write operation
+      // This ensures concurrent updates don't overwrite each other
+      const luaScript = `
+        local key = KEYS[1]
+        local optsJson = ARGV[1]
+        local now = ARGV[2]
+
+        -- Get existing data
+        local existing = redis.call('GET', key)
+
+        if not existing then
+          return nil
+        end
+
+        local data = cjson.decode(existing)
+        local snapshot = data.snapshot
+
+        if type(snapshot) == 'string' then
+          snapshot = cjson.decode(snapshot)
+        end
+
+        if not snapshot or not snapshot.context then
+          return nil
+        end
+
+        -- Merge the new options with the existing snapshot
+        local opts = cjson.decode(optsJson)
+        for k, v in pairs(opts) do
+          snapshot[k] = v
+        end
+
+        -- Update the record
+        data.snapshot = snapshot
+        data.updatedAt = now
+
+        -- Save back
+        redis.call('SET', key, cjson.encode(data))
+
+        -- Return the full updated data
+        return cjson.encode(data)
+      `;
+
+      const resultJson = await this.client.eval(luaScript, [key], [JSON.stringify(opts), now]);
+
+      if (!resultJson) {
+        return undefined;
+      }
+
+      // Parse the result - handle both string and already-parsed object
+      let data: any;
+      if (typeof resultJson === 'string') {
+        data = JSON.parse(resultJson);
+      } else {
+        data = resultJson;
+      }
+
+      const snapshot = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
+      return snapshot;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot(params: {
-    namespace: string;
+    namespace?: string;
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
-    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot } = params;
+    const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
           namespace,
@@ -89,14 +306,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           run_id: runId,
           resourceId,
           snapshot,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: createdAt ?? new Date(),
+          updatedAt: updatedAt ?? new Date(),
         },
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('UPSTASH', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -133,7 +350,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -157,7 +374,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     try {
       const key =
         getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.operations.scanKeys(key);
+      const keys = await this.#db.scanKeys(key);
       const workflows = await Promise.all(
         keys.map(async key => {
           const data = await this.client.get<{
@@ -173,11 +390,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       );
       const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
       if (!data) return null;
-      return parseWorkflowRun(data);
+      return this.parseWorkflowRun(data);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('UPSTASH', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -191,22 +408,49 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
+    try {
+      await this.client.del(key);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            namespace: 'workflows',
+            runId,
+            workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
+      if (page !== undefined && page < 0) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('UPSTASH', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
       // Get all workflow keys
       let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
       if (workflowName && resourceId) {
@@ -226,7 +470,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           resourceId,
         });
       }
-      const keys = await this.operations.scanKeys(pattern);
+      const keys = await this.#db.scanKeys(pattern);
 
       // Check if we have any keys before using pipeline
       if (keys.length === 0) {
@@ -247,10 +491,22 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         )
         // Only filter by workflowName if it was specifically requested
         .filter(record => !workflowName || record.workflow_name === workflowName)
-        .map(w => parseWorkflowRun(w!))
+        .map(w => this.parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
+          if (status) {
+            let snapshot = w.snapshot;
+            if (typeof snapshot === 'string') {
+              try {
+                snapshot = JSON.parse(snapshot) as WorkflowRunState;
+              } catch (e) {
+                this.logger.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                return false;
+              }
+            }
+            return snapshot.status === status;
+          }
           return true;
         })
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -258,15 +514,18 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const total = runs.length;
 
       // Apply pagination if requested
-      if (limit !== undefined && offset !== undefined) {
-        runs = runs.slice(offset, offset + limit);
+      if (typeof perPage === 'number' && typeof page === 'number') {
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page * normalizedPerPage;
+        runs = runs.slice(offset, offset + normalizedPerPage);
       }
 
       return { runs, total };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
-          id: 'STORAGE_UPSTASH_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('UPSTASH', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

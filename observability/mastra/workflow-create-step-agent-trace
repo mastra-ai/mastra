@@ -1,0 +1,233 @@
+{
+  "__structure__": [
+    "workflow_run: \"workflow run: 'testWorkflow'\"",
+    "├── workflow_step: \"workflow step: 'mapping_<mapping-1>'\"",
+    "├── workflow_step: \"workflow step: 'workflow-agent'\"",
+    "│   └── agent_run: \"agent run: 'workflow-agent'\"",
+    "│       └── model_generation: \"llm: 'mock-model-id'\"",
+    "│           └── model_step: \"step: 0\"",
+    "└── workflow_step: \"workflow step: 'mapping_<mapping-2>'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "workflow run: 'testWorkflow'",
+        "type": "workflow_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "workflow_run",
+        "entityId": "testWorkflow",
+        "attributes": {
+          "status": "success"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": {
+          "query": "test query"
+        },
+        "output": {
+          "text": "Test response from agent"
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'mapping_<mapping-1>'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "mapping_<mapping-1>",
+            "attributes": {
+              "status": "success"
+            },
+            "input": {
+              "query": "test query"
+            },
+            "output": {
+              "prompt": "test query"
+            }
+          }
+        },
+        {
+          "span": {
+            "id": "<span-3>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'workflow-agent'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "workflow-agent",
+            "attributes": {
+              "status": "success"
+            },
+            "input": {
+              "prompt": "test query"
+            },
+            "output": {
+              "text": "Test response from agent"
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-4>",
+                "traceId": "<trace-1>",
+                "name": "agent run: 'workflow-agent'",
+                "type": "agent_run",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-3>",
+                "entityType": "agent",
+                "entityId": "workflow-agent",
+                "attributes": {
+                  "instructions": "You are an agent in a workflow"
+                },
+                "metadata": {
+                  "runId": "<runId-2>"
+                },
+                "input": "test query",
+                "output": {
+                  "text": "Test response from agent",
+                  "files": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
+                    "name": "llm: 'mock-model-id'",
+                    "type": "model_generation",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-4>",
+                    "entityType": "workflow_step",
+                    "entityId": "stream-text-step",
+                    "attributes": {
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "parameters": {
+                        "temperature": 0
+                      },
+                      "finishReason": "stop",
+                      "responseId": "1",
+                      "completionStartTime": "<date>",
+                      "usage": {
+                        "inputTokens": 10,
+                        "outputTokens": 20
+                      }
+                    },
+                    "metadata": {
+                      "runId": "<runId-2>"
+                    },
+                    "input": {
+                      "messages": [
+                        {
+                          "role": "system",
+                          "content": "You are an agent in a workflow"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "test query"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "output": {
+                      "files": [],
+                      "reasoning": [],
+                      "sources": [],
+                      "text": "Test response from agent",
+                      "warnings": []
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-6>",
+                        "traceId": "<trace-1>",
+                        "name": "step: 0",
+                        "type": "model_step",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-5>",
+                        "entityType": "workflow_step",
+                        "entityId": "stream-text-step",
+                        "attributes": {
+                          "stepIndex": 0,
+                          "messageId": "<messageId-1>",
+                          "usage": {
+                            "inputTokens": 10,
+                            "outputTokens": 20
+                          },
+                          "isContinued": false,
+                          "finishReason": "stop"
+                        },
+                        "metadata": {
+                          "id": "1",
+                          "modelMetadata": {
+                            "modelId": "mock-model-id",
+                            "modelVersion": "v2",
+                            "modelProvider": "mock-provider"
+                          }
+                        },
+                        "input": {},
+                        "output": {
+                          "text": "Test response from agent",
+                          "toolCalls": []
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "span": {
+            "id": "<span-7>",
+            "traceId": "<trace-1>",
+            "name": "workflow step: 'mapping_<mapping-2>'",
+            "type": "workflow_step",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "workflow_step",
+            "entityId": "mapping_<mapping-2>",
+            "attributes": {
+              "status": "success"
+            },
+            "input": {
+              "text": "Test response from agent"
+            },
+            "output": {
+              "text": "Test response from agent"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,16 @@
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { Mastra } from '../../mastra';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
+import { AISDKV5LanguageModel } from './aisdk/v5/model';
+import { AISDKV6LanguageModel } from './aisdk/v6/model';
 import { ModelRouterLanguageModel } from './router';
-import type { MastraModelConfig, MastraLanguageModel, OpenAICompatibleConfig } from './shared.types';
+import type {
+  MastraModelConfig,
+  OpenAICompatibleConfig,
+  MastraLanguageModel,
+  MastraLegacyLanguageModel,
+} from './shared.types';
 
 /**
  * Type guard to check if a model config is an OpenAICompatibleConfig object
@@ -11,10 +20,10 @@ export function isOpenAICompatibleObjectConfig(
   modelConfig:
     | MastraModelConfig
     | (({
-        runtimeContext,
+        requestContext,
         mastra,
       }: {
-        runtimeContext: RuntimeContext;
+        requestContext: RequestContext;
         mastra?: Mastra;
       }) => MastraModelConfig | Promise<MastraModelConfig>),
 ): modelConfig is OpenAICompatibleConfig {
@@ -38,7 +47,7 @@ export function isOpenAICompatibleObjectConfig(
  * - Dynamic functions that return any of the above
  *
  * @param modelConfig The model configuration
- * @param runtimeContext Optional runtime context for dynamic resolution
+ * @param requestContext Optional request context for dynamic resolution
  * @param mastra Optional Mastra instance for dynamic resolution
  * @returns A resolved LanguageModel instance
  *
@@ -55,7 +64,7 @@ export function isOpenAICompatibleObjectConfig(
  *
  * // Dynamic resolution
  * const model = await resolveModelConfig(
- *   ({ runtimeContext }) => runtimeContext.get("preferredModel")
+ *   ({ requestContext }) => requestContext.get("preferredModel")
  * );
  * ```
  */
@@ -63,32 +72,56 @@ export async function resolveModelConfig(
   modelConfig:
     | MastraModelConfig
     | (({
-        runtimeContext,
+        requestContext,
         mastra,
       }: {
-        runtimeContext: RuntimeContext;
+        requestContext: RequestContext;
         mastra?: Mastra;
       }) => MastraModelConfig | Promise<MastraModelConfig>),
-  runtimeContext: RuntimeContext = new RuntimeContext(),
+  requestContext: RequestContext = new RequestContext(),
   mastra?: Mastra,
-): Promise<MastraLanguageModel> {
-  // If it's already a LanguageModel, return it
-  if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
+): Promise<MastraLanguageModel | MastraLegacyLanguageModel> {
+  // If it's a function, resolve it first
+  if (typeof modelConfig === 'function') {
+    modelConfig = await modelConfig({ requestContext, mastra });
+  }
+
+  // Filter out custom language model instances
+  // TODO need a better trick, maybe symbol
+  if (
+    modelConfig instanceof ModelRouterLanguageModel ||
+    modelConfig instanceof AISDKV5LanguageModel ||
+    modelConfig instanceof AISDKV6LanguageModel
+  ) {
     return modelConfig;
   }
 
-  // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
-  if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {
-    return new ModelRouterLanguageModel(modelConfig);
+  // If it's already a LanguageModel, wrap it with the appropriate wrapper
+  if (typeof modelConfig === 'object' && 'specificationVersion' in modelConfig) {
+    if (modelConfig.specificationVersion === 'v2') {
+      return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
+    }
+    if (modelConfig.specificationVersion === 'v3') {
+      return new AISDKV6LanguageModel(modelConfig as LanguageModelV3);
+    }
+    if (modelConfig.specificationVersion === 'v1') {
+      return modelConfig;
+    }
+    // Unknown specificationVersion from a third-party provider (e.g. ollama-ai-provider-v2).
+    // If the model has doStream/doGenerate methods, wrap it as a modern model
+    // to prevent the stream()/streamLegacy() catch-22 where neither method accepts the model.
+    if (typeof (modelConfig as any).doStream === 'function' && typeof (modelConfig as any).doGenerate === 'function') {
+      return new AISDKV5LanguageModel(modelConfig as LanguageModelV2);
+    }
+    return modelConfig;
   }
 
-  // If it's a function, resolve it first
-  if (typeof modelConfig === 'function') {
-    const fromDynamic = await modelConfig({ runtimeContext, mastra });
-    if (typeof fromDynamic === 'string' || isOpenAICompatibleObjectConfig(fromDynamic)) {
-      return new ModelRouterLanguageModel(fromDynamic);
-    }
-    return fromDynamic;
+  const gatewayRecord = mastra?.listGateways();
+  const customGateways = gatewayRecord ? Object.values(gatewayRecord) : undefined;
+
+  // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
+  if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {
+    return new ModelRouterLanguageModel(modelConfig, customGateways);
   }
 
   throw new Error('Invalid model configuration provided');

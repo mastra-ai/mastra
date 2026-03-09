@@ -4,7 +4,7 @@ Mastra is a framework for building AI-powered applications and agents with a mod
 
 It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
 
-This is the `@mastra/core` package, which includes the main functionality of Mastra, including agents, workflows, tools, memory, and tracing.
+This is the `@mastra/core` package, which includes the main functionality of Mastra, including agents, workflows, tools, and memory.
 
 ## Installation
 
@@ -36,8 +36,7 @@ npm install @mastra/core
 - **MCP** (`/mcp`) - Model Context Protocol integration enabling external tool sources. Supports SSE, HTTP, and Hono-based MCP servers with automatic tool conversion and
   registration. [Learn more about MCP](https://mastra.ai/docs/tools-mcp/mcp-overview)
 
-- **AI Tracing** (`/ai-tracing`) - Type-safe observability system tracking AI operations through spans. Provides OpenTelemetry-compatible tracing with event-driven exports,
-  flexible sampling, and pluggable processors for real-time monitoring. [Learn more about AI Tracing](https://mastra.ai/docs/observability/ai-tracing/overview)
+- **Observability** - Type-safe observability system tracking AI operations through spans. Provides flexible tracing with event-driven exports, configurable sampling, and pluggable processors and exporters for real-time monitoring. Full observability features are available in the `@mastra/observability` package. [Learn more about Observability](https://mastra.ai/docs/observability/tracing/overview)
 
 - **Storage** (`/storage`) - Pluggable storage layer with standardized interfaces for multiple backends. Supports PostgreSQL, LibSQL, MongoDB, and other databases for
   persisting agent data, memory, and workflow state. [Learn more about Storage](https://mastra.ai/docs/server-db/storage)

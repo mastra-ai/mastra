@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
-import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/scores';
+import { randomUUID } from 'node:crypto';
+import type { ScoreRowData, ScoringEntityType, ScoringSource } from '@mastra/core/evals';
 
 export function createSampleScore({
   scorerId,
@@ -36,7 +36,7 @@ export function createSampleScore({
     },
     score: 0.8,
     analyzePrompt: 'Sample analyze prompt',
-    reasonPrompt: 'Sample reason prompt',
+    generateReasonPrompt: 'Sample reason prompt',
     scorer: {
       id: scorerId,
       name: 'my-eval',
@@ -57,6 +57,10 @@ export function createSampleScore({
       id: entityId ?? 'eval-agent',
       name: 'Sample entity',
     },
-    runtimeContext: {},
+    requestContext: {},
+    metadata: {
+      scorerVersion: '1.0.0',
+      customField: 'test-value',
+    },
   };
 }

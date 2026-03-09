@@ -1,6 +1,8 @@
 ---
-title: "Agents and Tools | Workflows | Mastra Docs"
+title: "Agents and Tools | Workflows"
 description: "Learn how to call agents and tools from workflow steps and choose between execute functions and step composition."
+packages:
+  - "@mastra/core"
 ---
 
 # Agents and Tools
@@ -9,65 +11,67 @@ Workflow steps can call agents to leverage LLM reasoning or call tools for type-
 
 ## Using agents in workflows
 
-Use agents in workflow steps when you need reasoning, language generation, or other LLM-based tasks. Call from a step's `execute` function for more control over the agent call (e.g., track conversation history or return structured output). Compose agents as steps when you don't need to modify how the agent is invoked.
+Use agents in workflow steps when you need reasoning, language generation, or other LLM-based tasks. Call from a step's `execute` function for more control over the agent call (e.g., track message history or return structured output). Compose agents as steps when you don't need to modify how the agent is invoked.
 
 ### Calling agents
 
 Call agents inside a step's `execute` function using `.generate()` or `.stream()`. This lets you modify the agent call and handle the response before passing it to the next step.
 
-```typescript {7-12} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
+```typescript {6-14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  // ...
   execute: async ({ inputData, mastra }) => {
-    const { message } = inputData;
+    const { message } = inputData
 
-    const testAgent = mastra.getAgent("testAgent");
-    const response = await testAgent.generate(`Convert this message into bullet points: ${message}`, {
-      memory: {
-        thread: "user-123",
-        resource: "test-123"
-      }
-    });
+    const testAgent = mastra.getAgent('testAgent')
+    const response = await testAgent.generate(
+      `Convert this message into bullet points: ${message}`,
+      {
+        memory: {
+          thread: 'user-123',
+          resource: 'test-123',
+        },
+      },
+    )
 
     return {
-      list: response.text
-    };
-  }
-});
+      list: response.text,
+    }
+  },
+})
 ```
-
-> See [Calling Agents](../../examples/agents/calling-agents.mdx) for more examples.
 
 ### Agents as steps
 
 Compose an agent as a step using `createStep()` when you don't need to modify the agent call. Use `.map()` to transform the previous step's output into a `prompt` the agent can use.
 
-![Agent as step](/image/workflows/workflows-agent-tools-agent-step.jpg)
+![Agent as step](/img/workflows/workflows-agent-tools-agent-step.jpg)
 
-```typescript {1,3,8-13} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testAgent } from "../agents/test-agent";
+```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
+import { testAgent } from '../agents/test-agent'
 
-const step1 = createStep(testAgent);
+const step1 = createStep(testAgent)
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .map(async ({ inputData }) => {
-    const { message } = inputData;
+    const { message } = inputData
     return {
-      prompt: `Convert this message into bullet points: ${message}`
-    };
+      prompt: `Convert this message into bullet points: ${message}`,
+    }
   })
   .then(step1)
   .then(step2)
-  .commit();
+  .commit()
 ```
 
-  > See [Input Data Mapping](./input-data-mapping.mdx) for more information.
+:::info
 
-Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
+Visit [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping) for more information.
 
-```json
+:::
+
+When no `structuredOutput` option is provided, Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
+
+```typescript prettier:false
 {
   inputSchema: {
     prompt: string
@@ -78,6 +82,47 @@ Mastra agents use a default schema that expects a `prompt` string as input and r
 }
 ```
 
+### Agents with structured output
+
+When you need the agent to return structured data instead of plain text, pass the `structuredOutput` option to `createStep()`. The step's output schema will match your provided schema, enabling type-safe chaining to subsequent steps.
+
+```typescript {1-6,8-10} title="src/mastra/workflows/test-workflow.ts"
+const articleSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+})
+
+const agentStep = createStep(testAgent, {
+  structuredOutput: { schema: articleSchema },
+})
+
+// Next step receives typed structured data
+const processStep = createStep({
+  id: 'process',
+  inputSchema: articleSchema, // Matches agent's outputSchema
+  outputSchema: z.object({ tagCount: z.number() }),
+  execute: async ({ inputData }) => ({
+    tagCount: inputData.tags.length, // Fully typed
+  }),
+})
+
+export const testWorkflow = createWorkflow({})
+  .map(async ({ inputData }) => ({
+    prompt: `Generate an article about: ${inputData.topic}`,
+  }))
+  .then(agentStep)
+  .then(processStep)
+  .commit()
+```
+
+The `structuredOutput.schema` option accepts any Zod schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
+
+:::info
+
+Visit [Structured Output](/docs/agents/structured-output) for more options like error handling strategies and streaming with structured output.
+
+:::
 
 ## Using tools in workflows
 
@@ -87,59 +132,58 @@ Use tools in workflow steps to leverage existing tool logic. Call from a step's 
 
 Call tools inside a step's `execute` function using `.execute()`. This gives you more control over the tool's input context, or process its response before passing it to the next step.
 
-```typescript {8-13,16} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testTool } from "../tools/test-tool";
+```typescript {7-12} title="src/mastra/workflows/test-workflow.ts"
+import { testTool } from '../tools/test-tool'
 
 const step2 = createStep({
-  // ...
-  execute: async ({ inputData, runtimeContext }) => {
-    const { formatted } = inputData;
+  execute: async ({ inputData, requestContext }) => {
+    const { formatted } = inputData
 
-    const response = await testTool.execute({
-      context: {
-        text: formatted
-      },
-      runtimeContext
-    });
+    const response = await testTool.execute({ text: formatted }, { requestContext })
 
     return {
-      emphasized: response.emphasized
-    };
-  }
-});
+      emphasized: response.emphasized,
+    }
+  },
+})
 ```
 
-> See [Calling Tools](../../examples/tools/calling-tools.mdx) for more examples.
+:::info
+
+Visit [Calling Tools](/docs/workflows/agents-and-tools#calling-tools) for more examples.
+
+:::
 
 ### Tools as steps
 
 Compose a tool as a step using `createStep()` when the previous step's output matches the tool's input context. You can use `.map()` to transform the previous step's output if they don't.
 
-![Tool as step](/image/workflows/workflows-agent-tools-tool-step.jpg)
+![Tool as step](/img/workflows/workflows-agent-tools-tool-step.jpg)
 
-```typescript {1,3,9-14} filename="src/mastra/workflows/test-workflow.ts" showLineNumbers copy
-import { testTool } from "../tools/test-tool";
+```typescript {1,3,7-12} title="src/mastra/workflows/test-workflow.ts"
+import { testTool } from '../tools/test-tool'
 
-const step2 = createStep(testTool);
+const step2 = createStep(testTool)
 
-export const testWorkflow = createWorkflow({
-  // ...
-})
+export const testWorkflow = createWorkflow({})
   .then(step1)
   .map(async ({ inputData }) => {
-    const { formatted } = inputData;
+    const { formatted } = inputData
     return {
-      text: formatted
-    };
+      text: formatted,
+    }
   })
   .then(step2)
-  .commit();
+  .commit()
 ```
 
-> See [Input Data Mapping](./input-data-mapping.mdx) for more information.
+:::info
+
+Visit [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping) for more information.
+
+:::
 
 ## Related
 
-- [Using Agents](../agents/overview.mdx)
-- [Using Tools](../tools-mcp/overview.mdx)
-
+- [Using Agents](/docs/agents/overview)
+- [MCP Overview](/docs/mcp/overview)

@@ -14,7 +14,7 @@ You should see output like:
 
 ```bash
 🚀 Mastra Dev Server starting...
-📊 Playground available at: http://localhost:4111
+📊 Studio available at: http://localhost:4111
 ```
 
 ## Accessing Workflows in Playground

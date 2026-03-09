@@ -1,6 +1,5 @@
-import fs from 'fs';
-import path from 'path';
-
+import fs from 'node:fs';
+import path from 'node:path';
 import babel from '@babel/core';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
@@ -49,18 +48,18 @@ export default defineConfig({
     '!src/action/index.ts',
     'src/*/index.ts',
     'src/tools/is-vercel-tool.ts',
-    'src/workflows/legacy/index.ts',
     'src/workflows/constants.ts',
+    'src/storage/constants.ts',
     'src/workflows/evented/index.ts',
     'src/network/index.ts',
     'src/network/vNext/index.ts',
     'src/vector/filter/index.ts',
-    'src/telemetry/otel-vendor.ts',
     'src/test-utils/llm-mock.ts',
-    'src/agent/input-processor/index.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
-    'src/scores/scoreTraces/index.ts',
+    'src/evals/scoreTraces/index.ts',
+    'src/agent/message-list/index.ts',
+    'src/auth/ee/index.ts',
   ],
   format: ['esm', 'cjs'],
   clean: true,
@@ -72,7 +71,11 @@ export default defineConfig({
   plugins: [treeshakeDecorators],
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    await generateTypes(
+      process.cwd(),
+      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types']),
+    );
 
     // Copy provider-registry.json to dist folder
     const srcJson = path.join(process.cwd(), 'src/llm/model/provider-registry.json');

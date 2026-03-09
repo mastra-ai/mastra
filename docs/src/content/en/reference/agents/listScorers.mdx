@@ -1,0 +1,70 @@
+---
+title: "Reference: Agent.listScorers() | Agents"
+description: "Documentation for the `Agent.listScorers()` method in Mastra agents, which retrieves the scoring configuration."
+packages:
+  - "@mastra/core"
+---
+
+# Agent.listScorers()
+
+The `.listScorers()` method retrieves the scoring configuration configured for an agent, resolving it if it's a function. This method provides access to the scoring system used for evaluating agent responses and performance.
+
+## Usage example
+
+```typescript
+await agent.listScorers()
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'new RequestContext()',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'scorers',
+    type: 'MastraScorers | Promise<MastraScorers>',
+    description:
+      'The scoring configuration configured for the agent, either as a direct object or a promise that resolves to the scorers.',
+  },
+]}
+/>
+
+## Extended usage example
+
+```typescript
+await agent.listScorers({
+  requestContext: new RequestContext(),
+})
+```
+
+## Related
+
+- [Agents overview](/docs/agents/overview)
+- [Request Context](/docs/server/request-context)

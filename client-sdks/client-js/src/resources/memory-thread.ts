@@ -1,40 +1,59 @@
+import type { RequestContext } from '@mastra/core/di';
 import type { StorageThreadType } from '@mastra/core/memory';
 
 import type {
-  GetMemoryThreadMessagesResponse,
   ClientOptions,
   UpdateMemoryThreadParams,
-  GetMemoryThreadMessagesParams,
-  GetMemoryThreadMessagesPaginatedParams,
-  GetMemoryThreadMessagesPaginatedResponse,
+  ListMemoryThreadMessagesParams,
+  ListMemoryThreadMessagesResponse,
+  CloneMemoryThreadParams,
+  CloneMemoryThreadResponse,
 } from '../types';
 
+import { requestContextQueryString } from '../utils';
 import { BaseResource } from './base';
 
+/**
+ * MemoryThread resource for interacting with memory threads.
+ *
+ * agentId is optional - when not provided, the server will use storage directly.
+ */
 export class MemoryThread extends BaseResource {
   constructor(
     options: ClientOptions,
     private threadId: string,
-    private agentId: string,
+    private agentId?: string,
   ) {
     super(options);
   }
 
   /**
+   * Builds the query string for agentId (if provided)
+   */
+  private getAgentIdQueryParam(prefix: '?' | '&' = '?'): string {
+    return this.agentId ? `${prefix}agentId=${this.agentId}` : '';
+  }
+
+  /**
    * Retrieves the memory thread details
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing thread details including title and metadata
    */
-  get(): Promise<StorageThreadType> {
-    return this.request(`/api/memory/threads/${this.threadId}?agentId=${this.agentId}`);
+  get(requestContext?: RequestContext | Record<string, any>): Promise<StorageThreadType> {
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`);
   }
 
   /**
    * Updates the memory thread properties
-   * @param params - Update parameters including title and metadata
+   * @param params - Update parameters including title, metadata, and optional request context
    * @returns Promise containing updated thread details
    */
   update(params: UpdateMemoryThreadParams): Promise<StorageThreadType> {
-    return this.request(`/api/memory/threads/${this.threadId}?agentId=${this.agentId}`, {
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(params.requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
       method: 'PATCH',
       body: params,
     });
@@ -42,58 +61,81 @@ export class MemoryThread extends BaseResource {
 
   /**
    * Deletes the memory thread
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion result
    */
-  delete(): Promise<{ result: string }> {
-    return this.request(`/api/memory/threads/${this.threadId}?agentId=${this.agentId}`, {
+  delete(requestContext?: RequestContext | Record<string, any>): Promise<{ result: string }> {
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/memory/threads/${this.threadId}${agentIdParam}${contextParam}`, {
       method: 'DELETE',
     });
   }
 
   /**
-   * Retrieves messages associated with the thread
-   * @param params - Optional parameters including limit for number of messages to retrieve
-   * @returns Promise containing thread messages and UI messages
-   */
-  getMessages(params?: GetMemoryThreadMessagesParams): Promise<GetMemoryThreadMessagesResponse> {
-    const query = new URLSearchParams({
-      agentId: this.agentId,
-      ...(params?.limit ? { limit: params.limit.toString() } : {}),
-    });
-    return this.request(`/api/memory/threads/${this.threadId}/messages?${query.toString()}`);
-  }
-
-  /**
-   * Retrieves paginated messages associated with the thread with advanced filtering and selection options
-   * @param params - Pagination parameters including selectBy criteria, page, perPage, date ranges, and message inclusion options
+   * Retrieves paginated messages associated with the thread with filtering and ordering options
+   * @param params - Pagination parameters including page, perPage, orderBy, filter, include options, and request context
    * @returns Promise containing paginated thread messages with pagination metadata (total, page, perPage, hasMore)
    */
-  getMessagesPaginated({
-    selectBy,
-    ...rest
-  }: GetMemoryThreadMessagesPaginatedParams): Promise<GetMemoryThreadMessagesPaginatedResponse> {
-    const query = new URLSearchParams({
-      ...rest,
-      ...(selectBy ? { selectBy: JSON.stringify(selectBy) } : {}),
-    });
-    return this.request(`/api/memory/threads/${this.threadId}/messages/paginated?${query.toString()}`);
+  listMessages(
+    params: ListMemoryThreadMessagesParams & {
+      requestContext?: RequestContext | Record<string, any>;
+    } = {},
+  ): Promise<ListMemoryThreadMessagesResponse> {
+    const { page, perPage, orderBy, filter, include, resourceId, requestContext } = params;
+    const queryParams: Record<string, string> = {};
+
+    if (this.agentId) queryParams.agentId = this.agentId;
+    if (resourceId) queryParams.resourceId = resourceId;
+    if (page !== undefined) queryParams.page = String(page);
+    if (perPage !== undefined) queryParams.perPage = String(perPage);
+    if (orderBy) queryParams.orderBy = JSON.stringify(orderBy);
+    if (filter) queryParams.filter = JSON.stringify(filter);
+    if (include) queryParams.include = JSON.stringify(include);
+
+    const query = new URLSearchParams(queryParams);
+    const queryString = query.toString();
+    const url = `/memory/threads/${this.threadId}/messages${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`;
+    return this.request(url);
   }
 
   /**
    * Deletes one or more messages from the thread
    * @param messageIds - Can be a single message ID (string), array of message IDs,
    *                     message object with id property, or array of message objects
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion result
    */
   deleteMessages(
     messageIds: string | string[] | { id: string } | { id: string }[],
+    requestContext?: RequestContext | Record<string, any>,
   ): Promise<{ success: boolean; message: string }> {
-    const query = new URLSearchParams({
-      agentId: this.agentId,
-    });
-    return this.request(`/api/memory/messages/delete?${query.toString()}`, {
+    const queryParams: Record<string, string> = {};
+    if (this.agentId) queryParams.agentId = this.agentId;
+
+    const query = new URLSearchParams(queryParams);
+    const queryString = query.toString();
+    return this.request(
+      `/memory/messages/delete${queryString ? `?${queryString}` : ''}${requestContextQueryString(requestContext, queryString ? '&' : '?')}`,
+      {
+        method: 'POST',
+        body: { messageIds },
+      },
+    );
+  }
+
+  /**
+   * Clones the thread with all its messages to a new thread
+   * @param params - Clone parameters including optional new thread ID, title, metadata, and message filters
+   * @returns Promise containing the cloned thread and copied messages
+   */
+  clone(params: CloneMemoryThreadParams = {}): Promise<CloneMemoryThreadResponse> {
+    const { requestContext, ...body } = params;
+    const agentIdParam = this.getAgentIdQueryParam('?');
+    const contextParam = requestContextQueryString(requestContext, agentIdParam ? '&' : '?');
+    return this.request(`/memory/threads/${this.threadId}/clone${agentIdParam}${contextParam}`, {
       method: 'POST',
-      body: { messageIds },
+      body,
     });
   }
 }

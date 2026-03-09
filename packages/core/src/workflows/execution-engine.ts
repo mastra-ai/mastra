@@ -1,11 +1,19 @@
-import type { Mastra, SerializedStepFlowEntry } from '..';
-import type { AISpan, AISpanType, TracingPolicy } from '../ai-tracing';
 import { MastraBase } from '../base';
-import type { RuntimeContext } from '../di';
+import type { RequestContext } from '../di';
+import type { PubSub } from '../events/pubsub';
 import { RegisteredLogger } from '../logger';
-import type { ChunkType } from '../stream/types';
-import type { Emitter, StepResult, WorkflowRunStatus } from './types';
-import type { StepFlowEntry } from '.';
+import type { IMastraLogger } from '../logger';
+import type { Mastra } from '../mastra';
+import type { Span, SpanType, TracingPolicy } from '../observability';
+import type {
+  OutputWriter,
+  SerializedStepFlowEntry,
+  StepResult,
+  WorkflowRunStatus,
+  WorkflowFinishCallbackResult,
+  WorkflowErrorCallbackInfo,
+} from './types';
+import type { RestartExecutionParams, StepFlowEntry, TimeTravelExecutionParams } from '.';
 
 /**
  * Represents an execution graph for a workflow
@@ -23,13 +31,25 @@ export interface ExecutionEngineOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Called when workflow execution completes (success, failed, suspended, or tripwire).
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+
+  /**
+   * Called only when workflow execution fails (failed or tripwire status).
+   * Errors thrown in this callback are caught and logged, not propagated.
+   */
+  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
 }
 /**
  * Execution engine abstract class for building and executing workflow graphs
  * Providers will implement this class to provide their own execution logic
  */
 export abstract class ExecutionEngine extends MastraBase {
-  protected mastra?: Mastra;
+  public mastra?: Mastra;
   public options: ExecutionEngineOptions;
   constructor({ mastra, options }: { mastra?: Mastra; options: ExecutionEngineOptions }) {
     super({ name: 'ExecutionEngine', component: RegisteredLogger.WORKFLOW });
@@ -39,6 +59,84 @@ export abstract class ExecutionEngine extends MastraBase {
 
   __registerMastra(mastra: Mastra) {
     this.mastra = mastra;
+    const logger = mastra?.getLogger();
+    if (logger) {
+      this.__setLogger(logger);
+    }
+  }
+
+  public getLogger(): IMastraLogger {
+    return this.logger;
+  }
+
+  /**
+   * Invokes the onFinish and onError lifecycle callbacks if they are defined.
+   * Errors in callbacks are caught and logged, not propagated.
+   * @param result The workflow result containing status, result, error, steps, tripwire info, and context
+   */
+  public async invokeLifecycleCallbacks(result: {
+    status: WorkflowRunStatus;
+    result?: any;
+    error?: any;
+    steps: Record<string, StepResult<any, any, any, any>>;
+    tripwire?: any;
+    runId: string;
+    workflowId: string;
+    resourceId?: string;
+    input?: any;
+    requestContext: RequestContext;
+    state: Record<string, any>;
+    stepExecutionPath?: string[];
+  }): Promise<void> {
+    const { onFinish, onError } = this.options;
+
+    // Build common context for callbacks
+    const commonContext = {
+      runId: result.runId,
+      workflowId: result.workflowId,
+      resourceId: result.resourceId,
+      getInitData: () => result.input,
+      mastra: this.mastra,
+      requestContext: result.requestContext,
+      logger: this.logger,
+      state: result.state,
+      stepExecutionPath: result.stepExecutionPath,
+    };
+
+    // Always call onFinish if defined (for any terminal status)
+    if (onFinish) {
+      try {
+        await Promise.resolve(
+          onFinish({
+            status: result.status,
+            result: result.result,
+            error: result.error,
+            steps: result.steps,
+            tripwire: result.tripwire,
+            ...commonContext,
+          }),
+        );
+      } catch (err) {
+        this.logger.error('Error in onFinish callback', { error: err });
+      }
+    }
+
+    // Call onError only for failure states (failed or tripwire)
+    if (onError && (result.status === 'failed' || result.status === 'tripwire')) {
+      try {
+        await Promise.resolve(
+          onError({
+            status: result.status as 'failed' | 'tripwire',
+            error: result.error,
+            steps: result.steps,
+            tripwire: result.tripwire,
+            ...commonContext,
+          }),
+        );
+      } catch (err) {
+        this.logger.error('Error in onError callback', { error: err });
+      }
+    }
   }
 
   /**
@@ -56,27 +154,31 @@ export abstract class ExecutionEngine extends MastraBase {
     serializedStepGraph: SerializedStepFlowEntry[];
     input?: TInput;
     initialState?: TState;
+    timeTravel?: TimeTravelExecutionParams;
+    restart?: RestartExecutionParams;
     resume?: {
       steps: string[];
       stepResults: Record<string, StepResult<any, any, any, any>>;
       resumePayload: any;
       resumePath: number[];
+      stepExecutionPath?: string[];
       forEachIndex?: number;
       label?: string;
     };
-    emitter: Emitter;
-    runtimeContext: RuntimeContext;
-    workflowAISpan?: AISpan<AISpanType.WORKFLOW_RUN>;
+    pubsub: PubSub;
+    requestContext: RequestContext;
+    workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;
       delay?: number;
     };
     abortController: AbortController;
-    writableStream?: WritableStream<ChunkType>;
+    outputWriter?: OutputWriter;
     format?: 'legacy' | 'vnext' | undefined;
     outputOptions?: {
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
+    perStep?: boolean;
   }): Promise<TOutput>;
 }

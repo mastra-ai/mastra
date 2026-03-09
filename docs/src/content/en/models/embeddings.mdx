@@ -1,9 +1,9 @@
 ---
 title: "Embedding Models"
+sidebar_position: 2
+sidebar_label: "Embeddings"
 description: "Use embedding models through Mastra's model router for semantic search and RAG."
 ---
-
-import { Callout } from "nextra/components";
 
 # Embedding Models
 
@@ -12,15 +12,12 @@ Mastra's model router supports embedding models using the same `provider/model` 
 ## Quick Start
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
-
-// Create an embedding model
-const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 
 // Generate embeddings
 const { embeddings } = await embedMany({
-  model: embedder,
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: ["Hello world", "Semantic search is powerful"],
 });
 ```
@@ -30,7 +27,7 @@ const { embeddings } = await embedMany({
 ### OpenAI
 
 - `text-embedding-3-small` - 1536 dimensions, 8191 max tokens
-- `text-embedding-3-large` - 3072 dimensions, 8191 max tokens  
+- `text-embedding-3-large` - 3072 dimensions, 8191 max tokens
 - `text-embedding-ada-002` - 1536 dimensions, 8191 max tokens
 
 ```typescript
@@ -39,8 +36,7 @@ const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 
 ### Google
 
-- `gemini-embedding-001` - 768 dimensions (recommended), 2048 max tokens
-- `text-embedding-004` - 768 dimensions, 3072 max tokens
+- `gemini-embedding-001` - 768 dimensions, 2048 max tokens
 
 ```typescript
 const embedder = new ModelRouterEmbeddingModel("google/gemini-embedding-001");
@@ -64,7 +60,7 @@ GOOGLE_GENERATIVE_AI_API_KEY=...
 You can use any OpenAI-compatible embedding endpoint with a custom URL:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const embedder = new ModelRouterEmbeddingModel({
   providerId: "ollama",
@@ -80,38 +76,41 @@ The embedding model router integrates seamlessly with Mastra's memory system:
 
 ```typescript
 import { Memory } from "@mastra/memory";
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 
 const agent = new Agent({
+  id: "my-agent",
   name: "my-agent",
   instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o",
+  model: "openai/gpt-5.1",
   memory: new Memory({
-    embedder: "openai/text-embedding-3-small", // String with autocomplete
+    embedder: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   }),
 });
 ```
 
-<Callout type="info">
+:::info
+
 The `embedder` field accepts:
+
 - `EmbeddingModelId` (string with autocomplete)
 - `EmbeddingModel<string>` (AI SDK v1)
 - `EmbeddingModelV2<string>` (AI SDK v2)
-</Callout>
+
+:::
 
 ## Usage with RAG
 
 Use embedding models for document chunking and retrieval:
 
 ```typescript
-import { ModelRouterEmbeddingModel } from "@mastra/core";
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
 import { embedMany } from "ai";
-
-const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
 
 // Embed document chunks
 const { embeddings } = await embedMany({
-  model: embedder,
+  model: new ModelRouterEmbeddingModel("openai/text-embedding-3-small"),
   values: chunks.map((chunk) => chunk.text),
 });
 
@@ -121,7 +120,7 @@ await vectorStore.upsert(
     id: chunk.id,
     vector: embeddings[i],
     metadata: chunk.metadata,
-  }))
+  })),
 );
 ```
 
@@ -156,7 +155,9 @@ Missing API keys are also caught early:
 
 ```typescript
 try {
-  const embedder = new ModelRouterEmbeddingModel("openai/text-embedding-3-small");
+  const embedder = new ModelRouterEmbeddingModel(
+    "openai/text-embedding-3-small",
+  );
   // Throws if OPENAI_API_KEY is not set
 } catch (error) {
   console.error(error.message);

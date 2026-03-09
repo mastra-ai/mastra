@@ -1,13 +1,8 @@
-import {
-  EntryList,
-  EntryListSkeleton,
-  getShortId,
-  getToNextEntryFn,
-  getToPreviousEntryFn,
-} from '@/components/ui/elements';
+import { EntryList, EntryListSkeleton, getToNextEntryFn, getToPreviousEntryFn } from '@/ds/components/EntryList';
+import { getShortId } from '@/ds/components/Text';
 import { ScoreDialog } from '@/domains/scores';
 import { useLinkComponent } from '@/lib/framework';
-import { ClientScoreRowData, GetScoresResponse } from '@mastra/client-js';
+import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
 import { isToday, format } from 'date-fns';
 import { useEffect, useState } from 'react';
 
@@ -20,7 +15,7 @@ export const traceScoresListColumns = [
 ];
 
 type SpanScoreListProps = {
-  scoresData?: GetScoresResponse | null;
+  scoresData?: ListScoresResponse | null;
   isLoadingScoresData?: boolean;
   initialScoreId?: string;
   traceId?: string;
@@ -29,7 +24,7 @@ type SpanScoreListProps = {
   computeTraceLink: (traceId: string, spanId?: string) => string;
 };
 
-type SelectedScore = ClientScoreRowData | undefined;
+type SelectedScore = ScoreRowData | undefined;
 
 export function SpanScoreList({
   scoresData,
@@ -51,7 +46,7 @@ export function SpanScoreList({
   }, [initialScoreId]);
 
   const handleOnScore = (scoreId: string) => {
-    const score = scoresData?.scores?.find(s => s?.id === scoreId);
+    const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
     setSelectedScore(score);
     setDialogIsOpen(true);
   };
@@ -61,7 +56,7 @@ export function SpanScoreList({
   }
 
   const updateSelectedScore = (scoreId: string) => {
-    const score = scoresData?.scores?.find(s => s?.id === scoreId);
+    const score = scoresData?.scores?.find((s: ScoreRowData) => s?.id === scoreId);
     setSelectedScore(score);
   };
 
@@ -84,7 +79,7 @@ export function SpanScoreList({
           <EntryList.Header columns={traceScoresListColumns} />
           {scoresData?.scores && scoresData.scores.length > 0 ? (
             <EntryList.Entries>
-              {scoresData?.scores?.map(score => {
+              {scoresData?.scores?.map((score: ScoreRowData) => {
                 const createdAtDate = new Date(score.createdAt);
                 const isTodayDate = isToday(createdAtDate);
 
@@ -94,7 +89,7 @@ export function SpanScoreList({
                   date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                   time: format(createdAtDate, 'h:mm:ss aaa'),
                   score: score?.score,
-                  scorer: score?.scorer?.name,
+                  scorer: score?.scorer?.name || score?.scorer?.id,
                 };
 
                 return (
@@ -107,7 +102,9 @@ export function SpanScoreList({
                     {traceScoresListColumns.map(col => {
                       const key = `col-${col.name}`;
                       return (
-                        <EntryList.EntryText key={key}>{entry?.[col.name as keyof typeof entry]}</EntryList.EntryText>
+                        <EntryList.EntryText key={key}>
+                          {String(entry?.[col.name as keyof typeof entry] ?? '')}
+                        </EntryList.EntryText>
                       );
                     })}
                   </EntryList.Entry>
@@ -126,8 +123,8 @@ export function SpanScoreList({
         />
       </EntryList>
       <ScoreDialog
-        scorerName={selectedScore?.scorer?.name || ''}
-        score={selectedScore as ClientScoreRowData}
+        scorerName={(selectedScore?.scorer?.name as string) || (selectedScore?.scorer?.id as string) || ''}
+        score={selectedScore as ScoreRowData}
         isOpen={dialogIsOpen}
         onClose={() => {
           if (traceId) {
@@ -139,7 +136,7 @@ export function SpanScoreList({
         onNext={toNextScore}
         onPrevious={toPreviousScore}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
-        usageContext="aiSpanDialog"
+        usageContext="SpanDialog"
       />
     </>
   );

@@ -1,8 +1,8 @@
-# Stagehand & Mastra Integration
+# Browser Agent
 
 A powerful integration that combines the capabilities of [Browserbase's Stagehand](https://stagehand.dev) with [Mastra](https://mastra.ai/) for advanced web automation, scraping, and AI-powered web interactions.
 
-## Overview
+## Why we built this
 
 This project enables AI agents to interact with web pages through the Mastra framework using Stagehand's browser automation capabilities. It provides tools for web navigation, element observation, data extraction, and action execution, all orchestrated through Mastra's agent system.
 
@@ -15,80 +15,26 @@ This project enables AI agents to interact with web pages through the Mastra fra
 - **Session Management**: Smart session handling with automatic timeouts and reconnection
 - **AI-Powered Interactions**: Leverage OpenAI models for intelligent web interactions
 
-## Installation
+## Prerequisites
 
-### Prerequisites
+- [OpenAI API key](https://platform.openai.com/api-keys) — used by default, but you can swap in any model
+- [Browserbase API key](https://browserbase.com/) — for page scraping
 
-- Node.js (v20+)
-- pnpm
-- Browserbase account
-- OpenAI API access
+## Quickstart 🚀
 
-### Setup
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template browsing-agent` to scaffold the project locally.
+2. **Add your API keys**
+   - Copy `.env.example` to `.env` and fill in your keys.
+3. **Start the dev server**
+   - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
-1. Clone the repository:
+## Making it yours
 
-   ```
-   git clone https://github.com/mastra-ai/template-browsing-agent.git
-   cd template-browsing-agent
-   ```
+Open Studio and select the "Web Assistant" agent.
 
-2. Install dependencies:
+## About Mastra templates
 
-   ```
-   pnpm install
-   ```
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
 
-3. Create a `.env` file with your API keys:
-   ```
-   BROWSERBASE_PROJECT_ID=your_project_id
-   BROWSERBASE_API_KEY=your_api_key
-   OPENAI_API_KEY=your_openai_key
-   ```
-
-## Usage
-
-### Running the development server
-
-```
-pnpm run dev
-```
-
-This will start the Mastra development server, giving you access to the integrated web agent.
-
-## Architecture
-
-### Core Components
-
-1. **Stagehand Session Manager**
-   - Handles browser session initialization and management
-   - Implements automatic session timeouts
-   - Provides error recovery and reconnection logic
-
-2. **Mastra Tools**
-   - `stagehandActTool`: Performs actions on web pages
-   - `stagehandObserveTool`: Identifies elements on web pages
-   - `stagehandExtractTool`: Extracts data from web pages
-
-3. **Web Agent**
-   - AI-powered agent using OpenAI's model
-   - Provides natural language interface to web automation
-   - Integrates all tools into a unified experience
-
-### Flow Diagram
-
-```
-User Query → Mastra Agent → Stagehand Tools → Browser Interaction → Web Page → Data/Results → Agent Response
-```
-
-## Configuration
-
-The project can be configured through the `.env` file and by modifying the agent instructions in `src/mastra/agents/index.ts`.
-
-## Credits
-
-This project is built with:
-
-- [Mastra](https://mastra.ai) - AI Agent framework
-- [Stagehand by Browserbase](https:/stagehand.dev) - Browser automation
-- [OpenAI](https://openai.com/) - AI models
+Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-browsing-agent/CONTRIBUTING.md).

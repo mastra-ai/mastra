@@ -9,7 +9,7 @@ This example demonstrates how to store embeddings in [Chroma](https://docs.trych
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 - Optional: Chroma Cloud API key

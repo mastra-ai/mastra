@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import { Agent, isSupportedLanguageModel } from '@mastra/core/agent';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
 import { defaultTitleCombinePromptTemplate, defaultTitleExtractorPromptTemplate, PromptTemplate } from '../prompts';
 import type { TitleCombinePrompt, TitleExtractorPrompt } from '../prompts';
 import { TextNode } from '../schema';
@@ -16,7 +16,7 @@ type ExtractTitle = {
  * Extract title from a list of nodes.
  */
 export class TitleExtractor extends BaseExtractor {
-  llm: MastraLanguageModel;
+  llm: MastraLegacyLanguageModel | MastraLanguageModel;
   isTextNodeOnly: boolean = false;
   nodes: number = 5;
   nodeTemplate: TitleExtractorPrompt;
@@ -114,20 +114,21 @@ export class TitleExtractor extends BaseExtractor {
 
       let title = '';
 
-      if (this.llm.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(this.llm)) {
         const miniAgent = new Agent({
+          id: 'title-extractor',
           model: this.llm,
           name: 'title-extractor',
           instructions:
             'You are a title extractor. You are given a list of nodes and you need to extract the title from the nodes.',
         });
-        const result = await miniAgent.generate(
-          [{ role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) }],
-          { format: 'mastra' },
-        );
+        const result = await miniAgent.generate([
+          { role: 'user', content: this.combineTemplate.format({ context: combinedTitles }) },
+        ]);
         title = result.text;
       } else {
         const miniAgent = new Agent({
+          id: 'title-extractor-v1',
           model: this.llm,
           name: 'title-extractor',
           instructions:
@@ -151,6 +152,7 @@ export class TitleExtractor extends BaseExtractor {
 
   private async getTitlesCandidates(nodes: BaseNode[]): Promise<string[]> {
     const miniAgent = new Agent({
+      id: 'titles-candidates-extractor',
       model: this.llm,
       name: 'titles-candidates-extractor',
       instructions:
@@ -159,11 +161,10 @@ export class TitleExtractor extends BaseExtractor {
 
     const titleJobs = nodes.map(async node => {
       let completion: string;
-      if (this.llm.specificationVersion === 'v2') {
-        const result = await miniAgent.generate(
-          [{ role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) }],
-          { format: 'mastra' },
-        );
+      if (isSupportedLanguageModel(this.llm)) {
+        const result = await miniAgent.generate([
+          { role: 'user', content: this.nodeTemplate.format({ context: node.getContent() }) },
+        ]);
         completion = result.text;
       } else {
         const result = await miniAgent.generateLegacy([

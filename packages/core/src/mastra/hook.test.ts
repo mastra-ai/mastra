@@ -2,11 +2,18 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { validateAndSaveScore, createOnScorerHook } from './hooks';
 
 describe('validateAndSaveScore', () => {
+  let mockScoresStore: any;
   let mockStorage: any;
 
   beforeEach(() => {
-    mockStorage = {
+    mockScoresStore = {
       saveScore: vi.fn().mockResolvedValue({ score: 'mocked' }),
+    };
+    mockStorage = {
+      getStore: vi.fn((domain: string) => {
+        if (domain === 'scores') return Promise.resolve(mockScoresStore);
+        return Promise.resolve(undefined);
+      }),
     };
   });
 
@@ -26,8 +33,8 @@ describe('validateAndSaveScore', () => {
     await validateAndSaveScore(mockStorage, sampleScore);
 
     // Verify saveScore was called
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
-    expect(mockStorage.saveScore).toHaveBeenCalledWith(
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
       expect.objectContaining({
         runId: 'test-run-id',
         scorerId: 'test-scorer-id',
@@ -46,7 +53,7 @@ describe('validateAndSaveScore', () => {
     await expect(validateAndSaveScore(mockStorage, invalidScore)).rejects.toThrow();
 
     // Verify saveScore was not called
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should filter out invalid fields', async () => {
@@ -78,19 +85,26 @@ describe('validateAndSaveScore', () => {
       // invalidField should be removed
     };
 
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
-    expect(mockStorage.saveScore).toHaveBeenCalledWith(expectedScore);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(expectedScore);
   });
 });
 
 describe('createOnScorerHook', () => {
+  let mockScoresStore: any;
   let mockStorage: any;
   let mockMastra: any;
   let hook: (hookData: any) => Promise<void>;
 
   beforeEach(() => {
-    mockStorage = {
+    mockScoresStore = {
       saveScore: vi.fn().mockResolvedValue({ score: 'mocked' }),
+    };
+    mockStorage = {
+      getStore: vi.fn((domain: string) => {
+        if (domain === 'scores') return Promise.resolve(mockScoresStore);
+        return Promise.resolve(undefined);
+      }),
     };
 
     mockMastra = {
@@ -102,7 +116,7 @@ describe('createOnScorerHook', () => {
       }),
       getAgentById: vi.fn(),
       getWorkflowById: vi.fn(),
-      getScorerByName: vi.fn(),
+      getScorerById: vi.fn(),
     };
 
     hook = createOnScorerHook(mockMastra);
@@ -120,7 +134,7 @@ describe('createOnScorerHook', () => {
 
     await hookWithoutStorage({
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE',
@@ -129,13 +143,13 @@ describe('createOnScorerHook', () => {
     });
 
     // Should not call any storage methods
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should save score', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [{ message: 'test' }],
       output: { result: 'test' },
       source: 'LIVE' as const,
@@ -147,19 +161,20 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.8 }),
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
 
     // Verify saveScore was called
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
-    expect(mockStorage.saveScore).toHaveBeenCalledWith(
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledWith(
       expect.objectContaining({
         score: 0.8,
         entityId: 'test-entity',
@@ -181,21 +196,21 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({}), // Empty scorers
+      listScorers: vi.fn().mockReturnValue({}), // Empty scorers
     });
-    mockMastra.getScorerByName.mockReturnValue(null);
+    mockMastra.getScorerById.mockReturnValue(null);
 
     // Confirm it doesn't throw
     await expect(hook(hookData)).resolves.not.toThrow();
 
     // Should not call saveScore
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should handle scorer run failure without throwing', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -204,24 +219,25 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       run: vi.fn().mockRejectedValue(new Error('Scorer failed')),
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     // Confirm it doesn't throw
     await expect(hook(hookData)).resolves.not.toThrow();
 
     // Should not call saveScore
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should handle validation errors without throwing', async () => {
     const hookData = {
       runId: 'test-run',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -230,6 +246,7 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       run: vi.fn().mockResolvedValue({
         // Missing required fields that will cause validation to fail
         invalidField: 'invalid',
@@ -237,14 +254,14 @@ describe('createOnScorerHook', () => {
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     // Confirm it doesn't throw even with validation errors
     await expect(hook(hookData)).resolves.not.toThrow();
 
     // Should not call saveScore due to validation failure
-    expect(mockStorage.saveScore).not.toHaveBeenCalled();
+    expect(mockScoresStore.saveScore).not.toHaveBeenCalled();
   });
 
   it('should call addScoreToTrace on exporters with expected arguments', async () => {
@@ -254,7 +271,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-1',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -266,7 +283,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-abc',
           isValid: true,
           metadata: { sessionId: 'session-789', extra: 'meta' },
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [mockExporter],
           },
         },
@@ -274,12 +291,13 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.9, reason: 'great' }),
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
@@ -301,7 +319,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-2',
-      scorer: { name: 'perf-scorer' },
+      scorer: { id: 'perf-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -313,7 +331,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-zzz',
           isValid: true,
           metadata: { key: 'value' },
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [exporterA, exporterB],
           },
         },
@@ -321,12 +339,13 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'perf-scorer',
       name: 'perf-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.42, reason: 'ok' }),
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'perf-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'perf-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
@@ -352,7 +371,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-3',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -364,7 +383,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-def',
           isValid: true,
           metadata: {},
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [exporterWithMethod, exporterWithoutMethod],
           },
         },
@@ -372,12 +391,13 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.7 }),
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     await hook(hookData);
@@ -401,7 +421,7 @@ describe('createOnScorerHook', () => {
 
     const hookData = {
       runId: 'run-4',
-      scorer: { name: 'test-scorer' },
+      scorer: { id: 'test-scorer' },
       input: [],
       output: {},
       source: 'LIVE' as const,
@@ -413,7 +433,7 @@ describe('createOnScorerHook', () => {
           traceId: 'trace-ghi',
           isValid: true,
           metadata: { test: 'data' },
-          aiTracing: {
+          observabilityInstance: {
             getExporters: () => [mockExporter],
           },
         },
@@ -421,12 +441,13 @@ describe('createOnScorerHook', () => {
     };
 
     const mockScorer = {
+      id: 'test-scorer',
       name: 'test-scorer',
       run: vi.fn().mockResolvedValue({ score: 0.8, reason: 'good' }),
     };
 
     mockMastra.getAgentById.mockReturnValue({
-      getScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
+      listScorers: vi.fn().mockReturnValue({ 'test-scorer': { scorer: mockScorer } }),
     });
 
     // Should not throw even if addScoreToTrace fails
@@ -444,6 +465,6 @@ describe('createOnScorerHook', () => {
     });
 
     // Storage should still be called despite exporter failure
-    expect(mockStorage.saveScore).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,49 +1,62 @@
 import { z } from 'zod';
-import type { ModelLoopStreamArgs } from '../../../llm/model/model.loop.types';
-import { RuntimeContext } from '../../../runtime-context';
-import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
+import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
+import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import type { MastraMemory } from '../../../memory/memory';
+import type { MemoryConfig } from '../../../memory/types';
+import { resolveObservabilityContext } from '../../../observability';
+import { RequestContext } from '../../../request-context';
+import { MastraModelOutput } from '../../../stream';
 import { createStep } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
+import type { SaveQueueManager } from '../../save-queue';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 
-interface StreamStepOptions<FORMAT extends 'aisdk' | 'mastra' | undefined = undefined> {
+interface StreamStepOptions {
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
+  methodType: AgentMethodType;
+  saveQueueManager?: SaveQueueManager;
+  memoryConfig?: MemoryConfig;
+  memory?: MastraMemory;
+  resourceId?: string;
+  autoResumeSuspendedTools?: boolean;
+  workspace?: Workspace;
 }
 
-export function createStreamStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createStreamStep<OUTPUT = undefined>({
   capabilities,
   runId,
   returnScorerData,
-  format = 'mastra' as FORMAT,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
-}: StreamStepOptions<FORMAT>) {
+  methodType,
+  saveQueueManager,
+  memoryConfig,
+  memory,
+  resourceId,
+  autoResumeSuspendedTools,
+  workspace,
+}: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
-    outputSchema: z.union([
-      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
-      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
-    ]),
-    execute: async ({ inputData, tracingContext }) => {
+    outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
+    execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
       const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
 
@@ -56,30 +69,38 @@ export function createStreamStep<
         (capabilities.outputProcessors
           ? typeof capabilities.outputProcessors === 'function'
             ? await capabilities.outputProcessors({
-                runtimeContext: validatedInputData.runtimeContext || new RuntimeContext(),
+                requestContext: validatedInputData.requestContext || new RequestContext(),
               })
             : capabilities.outputProcessors
           : []);
+
+      const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
       const streamResult = capabilities.llm.stream({
         ...validatedInputData,
         outputProcessors: processors,
         returnScorerData,
-        tracingContext,
+        ...resolveObservabilityContext(observabilityContext),
         requireToolApproval,
+        toolCallConcurrency,
         resumeContext,
         _internal: {
           generateId: capabilities.generateMessageId,
+          saveQueueManager,
+          memoryConfig,
+          threadId: validatedInputData.threadId,
+          resourceId,
+          memory,
         },
         agentId,
+        agentName,
         toolCallId,
+        methodType: modelMethodType,
+        autoResumeSuspendedTools,
+        workspace,
       });
 
-      if (format === 'aisdk') {
-        return streamResult.aisdk.v5;
-      }
-
-      return streamResult;
+      return streamResult as unknown as MastraModelOutput<OUTPUT>;
     },
   });
 }

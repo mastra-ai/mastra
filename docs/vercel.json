@@ -1,0 +1,659 @@
+{
+  "redirects": [
+    {
+      "source": "/docs/getting-started/start",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/index",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/v1/:path*",
+      "destination": "/docs/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/models/v1/:path*",
+      "destination": "/models/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/v1/:path*",
+      "destination": "/guides/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/reference/v1/:path*",
+      "destination": "/reference/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/examples/memory/memory-with-mongodb",
+      "destination": "/reference/storage/mongodb",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/installation",
+      "destination": "/guides/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/ai-sdk-v5-integration",
+      "destination": "/guides/getting-started/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/calling-agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/system-prompt",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/logging",
+      "destination": "/docs/observability/logging",
+      "permanent": true
+    },
+    {
+      "source": "/examples/memory/working-memory-schema",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
+      "permanent": true
+    },
+    {
+      "source": "/examples/memory/working-memory-template",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/ai-sdk",
+      "destination": "/guides/build-your-ui/ai-sdk-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/assistant-ui",
+      "destination": "/guides/build-your-ui/assistant-ui",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agentic-uis/openrouter",
+      "destination": "/models/gateways/openrouter",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/astro",
+      "destination": "/guides/getting-started/astro",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/next-js",
+      "destination": "/guides/getting-started/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/sveltekit",
+      "destination": "/guides/getting-started/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/web-frameworks/vite-react",
+      "destination": "/guides/getting-started/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/servers/express",
+      "destination": "/guides/getting-started/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/guide/manual-install",
+      "destination": "/docs/getting-started/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/manual-install",
+      "destination": "/docs/getting-started/manual-install",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/nextjs",
+      "destination": "/guides/getting-started/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/guides/quickstarts/standalone-server",
+      "destination": "/guides/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/quickstart",
+      "destination": "/guides/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/templates",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/whatsapp-chat-bot",
+      "destination": "/guides/guide/whatsapp-chat-bot",
+      "permanent": true
+    },
+    {
+      "source": "/examples/processors/message-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-message-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/examples/processors/response-length-limiter",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-length-limiter",
+      "permanent": true
+    },
+    {
+      "source": "/examples/processors/response-validator",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/processors-response-validator",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/image-analysis",
+      "destination": "/docs/agents/overview#analyzing-images",
+      "permanent": true
+    },
+    {
+      "source": "/examples/evals/running-in-ci",
+      "destination": "/docs/evals/running-in-ci",
+      "permanent": true
+    },
+    {
+      "source": "/examples/observability/basic-ai-tracing",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/chunking/chunk-text",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/chunking/chunk-html",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/chunking/chunk-json",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/chunking/chunk-markdown",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/chunking/adjust-chunk-size",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/chunking/adjust-chunk-delimiters",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/embedding/embed-text-chunk",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/embedding/embed-chunk-array",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/embedding/embed-text-with-cohere",
+      "destination": "/docs/rag/chunking-and-embedding",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/upsert/upsert-embeddings",
+      "destination": "/docs/rag/vector-databases",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/query/retrieve-results",
+      "destination": "/docs/rag/retrieval",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/rerank/rerank",
+      "destination": "/docs/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/rerank/rerank-rag",
+      "destination": "/docs/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/rerank/reranking-with-cohere",
+      "destination": "/docs/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/rerank/reranking-with-zeroentropy",
+      "destination": "/docs/rag/retrieval#re-ranking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/usage/basic-rag",
+      "destination": "/docs/rag/retrieval",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/human-in-the-loop-with-tools",
+      "destination": "/docs/agents/agent-approval",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/request-context",
+      "destination": "/docs/server/request-context",
+      "permanent": true
+    },
+    {
+      "source": "/examples/agents/supervisor-agent",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/supervisor-agent",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/workflows/streamVNext",
+      "destination": "/reference/streaming/workflows/stream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/workflows/observeStreamVNext",
+      "destination": "/reference/streaming/workflows/observeStream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/streaming/workflows/resumeStreamVNext",
+      "destination": "/reference/streaming/workflows/resumeStream",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/listThreadsByResourceId",
+      "destination": "/reference/memory/listThreads",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/storage",
+      "destination": "/docs/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/mastra-server",
+      "destination": "/docs/server/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/server-adapters",
+      "destination": "/docs/server/server-adapters",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/custom-adapters",
+      "destination": "/docs/server/custom-adapters",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/middleware",
+      "destination": "/docs/server/middleware",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/request-context",
+      "destination": "/docs/server/request-context",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/custom-api-routes",
+      "destination": "/docs/server/custom-api-routes",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server-db/mastra-client",
+      "destination": "/docs/server/mastra-client",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth",
+      "destination": "/docs/server/auth",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/index",
+      "destination": "/docs/server/auth/index",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/jwt",
+      "destination": "/docs/server/auth/jwt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/clerk",
+      "destination": "/docs/server/auth/clerk",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/supabase",
+      "destination": "/docs/server/auth/supabase",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/firebase",
+      "destination": "/docs/server/auth/firebase",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/workos",
+      "destination": "/docs/server/auth/workos",
+      "permanent": true
+    },
+    {
+      "source": "/docs/auth/auth0",
+      "destination": "/docs/server/auth/auth0",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/usage/database-specific-config",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/database-specific-config",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/usage/cleanup-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cleanup-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/usage/filter-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/usage/cot-rag",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/cot-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/query/hybrid-vector-search",
+      "destination": "/docs/rag/retrieval#metadata-filtering",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/usage/graph-rag",
+      "destination": "/docs/rag/graph-rag",
+      "permanent": true
+    },
+    {
+      "source": "/examples/rag/embedding/metadata-extraction",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/metadata-extraction",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/overview",
+      "destination": "/docs/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/setting-up",
+      "destination": "/docs/mastra-cloud/setup",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/dashboard",
+      "destination": "/docs/mastra-cloud/studio",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/mastra-cloud/observability",
+      "destination": "/docs/mastra-cloud/observability",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/amazon-ec2",
+      "destination": "/guides/deployment/amazon-ec2",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/aws-lambda",
+      "destination": "/guides/deployment/aws-lambda",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/azure-app-services",
+      "destination": "/guides/deployment/azure-app-services",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/cloudflare-deployer",
+      "destination": "/guides/deployment/cloudflare",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/digital-ocean",
+      "destination": "/guides/deployment/digital-ocean",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/netlify-deployer",
+      "destination": "/guides/deployment/netlify",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/vercel-deployer",
+      "destination": "/guides/deployment/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/building-mastra",
+      "destination": "/docs/deployment/mastra-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/inngest-workflow",
+      "destination": "/guides/deployment/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/examples/workflows/inngest-workflow",
+      "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/inngest",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/overview",
+      "destination": "/docs/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-pg",
+      "destination": "/reference/storage/postgresql",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-libsql",
+      "destination": "/reference/storage/libsql",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-mongodb",
+      "destination": "/reference/storage/mongodb",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/memory-with-upstash",
+      "destination": "/reference/storage/upstash",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/threads-and-resources",
+      "destination": "/docs/memory/storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/conversation-history",
+      "destination": "/docs/memory/message-history",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/setting-up",
+      "destination": "/docs/mastra-cloud/setup",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-cloud/dashboard",
+      "destination": "/docs/mastra-cloud/overview",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment",
+      "destination": "/docs/deployment/cloud-providers",
+      "permanent": true
+    },
+    {
+      "source": "/examples/voice/text-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/voice/speech-to-text",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-text",
+      "permanent": true
+    },
+    {
+      "source": "/examples/voice/speech-to-speech",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/speech-to-speech",
+      "permanent": true
+    },
+    {
+      "source": "/examples/voice/turn-taking",
+      "destination": "https://github.com/mastra-ai/voice-examples/tree/main/text-to-speech/turn-taking",
+      "permanent": true
+    },
+    {
+      "source": "/examples/v1",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/reference/core/setTelemetry",
+      "destination": "/reference/logging/pino-logger",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workflows/workflow-methods/sendEvent",
+      "destination": "/docs/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workflows/workflow-methods/waitForEvent",
+      "destination": "/docs/workflows/suspend-and-resume",
+      "permanent": true
+    },
+    {
+      "source": "/reference/memory/query",
+      "destination": "/reference/memory/recall",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/overview",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/mcp-docs-server",
+      "destination": "/docs/build-with-ai/mcp-docs-server",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/netlify-deployer",
+      "destination": "/guides/deployment/netlify",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/vercel-deployer",
+      "destination": "/guides/deployment/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/advanced-usage",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/mcp-overview",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/overview",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/input-data-mapping",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/reference/tools/client",
+      "destination": "/reference/tools/mcp-client",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/cloudflare-deployer",
+      "destination": "/guides/deployment/cloudflare",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/overview",
+      "destination": "https://code.mastra.ai/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/modes",
+      "destination": "https://code.mastra.ai/modes",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/tools",
+      "destination": "https://code.mastra.ai/tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/configuration",
+      "destination": "https://code.mastra.ai/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/customization",
+      "destination": "https://code.mastra.ai/customization",
+      "permanent": true
+    },
+    {
+      "source": "/reference/mastra-code/createMastraCode",
+      "destination": "https://code.mastra.ai/",
+      "permanent": true
+    }
+  ]
+}

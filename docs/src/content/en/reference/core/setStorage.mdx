@@ -1,39 +1,42 @@
 ---
-title: "Reference: Mastra.setStorage() | Core | Mastra Docs"
+title: "Reference: Mastra.setStorage() | Core"
 description: "Documentation for the `Mastra.setStorage()` method in Mastra, which sets the storage instance for the Mastra instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.setStorage()
 
-The `.setStorage()` method is used to set the storage instance for the Mastra instance. This method accepts a single `MastraStorage` parameter.
+The `.setStorage()` method is used to set the storage instance for the Mastra instance. This method accepts a single `MastraCompositeStore` parameter.
 
 ## Usage example
 
-```typescript copy
+```typescript
 mastra.setStorage(
   new LibSQLStore({
-    url: ":memory:"
-  })
-);
+    id: 'mastra-storage',
+    url: ':memory:',
+  }),
+)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "storage",
-      type: "MastraStorage",
-      description: "The storage instance to set for the Mastra instance.",
-    },
-  ]}
+  {
+    name: 'storage',
+    type: 'MastraCompositeStore',
+    description: 'The storage instance to set for the Mastra instance.',
+  },
+]}
 />
 
 ## Returns
 
-This method does not return a value.
+This method doesn't return a value.
 
 ## Related
 
-- [Storage overview](../../docs/server-db/storage.mdx)
-- [Storage reference](../../reference/storage/libsql.mdx)
+- [Storage overview](/reference/storage/overview)
+- [Storage reference](/reference/storage/libsql)

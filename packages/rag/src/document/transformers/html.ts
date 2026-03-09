@@ -242,6 +242,29 @@ export class HTMLSectionTransformer {
     return '/' + parts.join('/');
   }
 
+  private getTextContent(element: any): string {
+    if (!element) return '';
+
+    // For text nodes, return their content
+    if (!element.tagName) {
+      return element.text || '';
+    }
+
+    // For element nodes, combine their text with children's text
+    let content = element.text || '';
+
+    if (element.childNodes) {
+      for (const child of element.childNodes) {
+        const childText = this.getTextContent(child);
+        if (childText) {
+          content += ' ' + childText;
+        }
+      }
+    }
+
+    return content.trim();
+  }
+
   private splitHtmlByHeaders(htmlDoc: string): Array<{
     header: string;
     content: string;
@@ -259,21 +282,36 @@ export class HTMLSectionTransformer {
     const headers = Object.keys(this.headersToSplitOn);
     const headerElements = root.querySelectorAll(headers.join(','));
 
-    headerElements.forEach((headerElement, index) => {
+    headerElements.forEach(headerElement => {
       const header = headerElement.text?.trim() || '';
       const tagName = headerElement.tagName;
       const xpath = this.getXPath(headerElement);
       let content = '';
 
-      // @ts-expect-error - nextElementSibling is not defined on type Element
-      let currentElement = headerElement.nextElementSibling;
-      const nextHeader = headerElements[index + 1];
+      // Use parentNode.childNodes approach (same as HTMLHeaderTransformer)
+      // This is more reliable than nextElementSibling which isn't supported
+      const parentNode = headerElement.parentNode;
 
-      while (currentElement && (!nextHeader || currentElement !== nextHeader)) {
-        if (currentElement.text) {
-          content += currentElement.text.trim() + ' ';
+      if (parentNode && parentNode.childNodes) {
+        let foundHeader = false;
+        for (const node of parentNode.childNodes) {
+          // Start collecting content after we find our header
+          if (node === headerElement) {
+            foundHeader = true;
+            continue;
+          }
+
+          // If we found our header and hit another header, stop
+          // @ts-expect-error - node.tagName is not defined on type Node
+          if (foundHeader && node.tagName && headers.includes(node.tagName.toLowerCase())) {
+            break;
+          }
+
+          // Collect content between headers
+          if (foundHeader) {
+            content += this.getTextContent(node) + ' ';
+          }
         }
-        currentElement = currentElement.nextElementSibling;
       }
 
       content = content.trim();

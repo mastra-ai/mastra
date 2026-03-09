@@ -1,8 +1,24 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
+import type { WorkflowSnapshotEntityData } from '../../../entities/utils';
+import { resolveDynamoDBConfig } from '../../db';
+import type { DynamoDBDomainConfig } from '../../db';
+import type { DynamoDBTtlConfig } from '../../index';
+import { getTtlProps } from '../../ttl';
+import { deleteTableData } from '../utils';
 
 // Define the structure for workflow snapshot items retrieved from DynamoDB
 interface WorkflowSnapshotDBItem {
@@ -26,49 +42,271 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
   };
 }
 
+// Maximum retry attempts for optimistic locking conflicts
+const MAX_RETRIES = 5;
+const BASE_DELAY_MS = 50;
+
 export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   private service: Service<Record<string, any>>;
-  constructor({ service }: { service: Service<Record<string, any>> }) {
+  private ttlConfig?: DynamoDBTtlConfig;
+
+  constructor(config: DynamoDBDomainConfig) {
     super();
-
-    this.service = service;
+    const resolved = resolveDynamoDBConfig(config);
+    this.service = resolved.service;
+    this.ttlConfig = resolved.ttl;
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  supportsConcurrentUpdates(): boolean {
+    return true;
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async dangerouslyClearAll(): Promise<void> {
+    await deleteTableData(this.service, TABLE_WORKFLOW_SNAPSHOT);
+  }
+
+  /**
+   * Helper to check if an error is a DynamoDB conditional check failure
+   */
+  private isConditionalCheckFailed(error: unknown): boolean {
+    if (error && typeof error === 'object') {
+      const err = error as { name?: string; code?: string; __type?: string; message?: string; cause?: unknown };
+      // Check direct DynamoDB error properties
+      if (
+        err.name === 'ConditionalCheckFailedException' ||
+        err.code === 'ConditionalCheckFailedException' ||
+        (err.__type?.includes('ConditionalCheckFailedException') ?? false)
+      ) {
+        return true;
+      }
+      // Check ElectroDB wrapped error message
+      if (err.message?.includes('conditional request failed')) {
+        return true;
+      }
+      // Check nested cause for the original DynamoDB error
+      if (err.cause && typeof err.cause === 'object') {
+        const cause = err.cause as { name?: string; code?: string };
+        if (cause.name === 'ConditionalCheckFailedException' || cause.code === 'ConditionalCheckFailedException') {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Helper to delay with exponential backoff and jitter
+   */
+  private async delay(attempt: number): Promise<void> {
+    const backoff = BASE_DELAY_MS * Math.pow(2, attempt);
+    const jitter = Math.random() * backoff * 0.5;
+    await new Promise(resolve => setTimeout(resolve, backoff + jitter));
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    // Use optimistic locking with retry for atomic updates
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        // Load existing record with updatedAt for version checking
+        const existingRecord = await this.service.entities.workflow_snapshot
+          .get({
+            entity: 'workflow_snapshot',
+            workflow_name: workflowName,
+            run_id: runId,
+          })
+          .go();
+
+        const now = new Date();
+        let snapshot: WorkflowRunState;
+        let previousUpdatedAt: string | undefined;
+
+        if (!existingRecord.data) {
+          // Create new snapshot if none exists
+          snapshot = {
+            context: {},
+            activePaths: [],
+            timestamp: Date.now(),
+            suspendedPaths: {},
+            activeStepsPath: {},
+            resumeLabels: {},
+            serializedStepGraph: [],
+            status: 'pending',
+            value: {},
+            waitingPaths: {},
+            runId,
+            requestContext: {},
+          } as WorkflowRunState;
+        } else {
+          snapshot = existingRecord.data.snapshot as WorkflowRunState;
+          previousUpdatedAt = existingRecord.data.updatedAt;
+        }
+
+        // Merge the new step result and request context
+        snapshot.context[stepId] = result;
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+        const data: WorkflowSnapshotEntityData = {
+          entity: 'workflow_snapshot',
+          workflow_name: workflowName,
+          run_id: runId,
+          snapshot: JSON.stringify(snapshot),
+          createdAt: existingRecord.data?.createdAt ?? now.toISOString(),
+          updatedAt: now.toISOString(),
+          ...getTtlProps('workflow_snapshot', this.ttlConfig),
+        };
+
+        if (previousUpdatedAt) {
+          // Use conditional update - only succeed if updatedAt hasn't changed
+          await this.service.entities.workflow_snapshot
+            .upsert(data)
+            .where((attr: any, op: any) => op.eq(attr.updatedAt, previousUpdatedAt!))
+            .go();
+        } else {
+          // New record - use condition that item doesn't exist
+          await this.service.entities.workflow_snapshot
+            .create(data)
+            .where((attr: any, op: any) => op.notExists(attr.run_id))
+            .go();
+        }
+
+        return snapshot.context;
+      } catch (error) {
+        if (this.isConditionalCheckFailed(error)) {
+          // Conflict detected, retry with backoff
+          if (attempt < MAX_RETRIES - 1) {
+            this.logger.debug(
+              `Optimistic locking conflict in updateWorkflowResults, retrying (attempt ${attempt + 1})`,
+            );
+            await this.delay(attempt);
+            continue;
+          }
+        }
+        // Non-retryable error or max retries exceeded
+        if (error instanceof MastraError) throw error;
+        throw new MastraError(
+          {
+            id: createStorageErrorId('DYNAMODB', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { workflowName, runId, stepId },
+          },
+          error,
+        );
+      }
+    }
+
+    // Should not reach here, but TypeScript needs this
+    throw new MastraError(
+      {
+        id: createStorageErrorId('DYNAMODB', 'UPDATE_WORKFLOW_RESULTS', 'MAX_RETRIES_EXCEEDED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { workflowName, runId, stepId },
+      },
+      new Error('Max retries exceeded for optimistic locking'),
+    );
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    // Use optimistic locking with retry for atomic updates
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        // Load existing record with updatedAt for version checking
+        const existingRecord = await this.service.entities.workflow_snapshot
+          .get({
+            entity: 'workflow_snapshot',
+            workflow_name: workflowName,
+            run_id: runId,
+          })
+          .go();
+
+        if (!existingRecord.data) {
+          return undefined;
+        }
+
+        const existingSnapshot = existingRecord.data.snapshot as WorkflowRunState;
+
+        if (!existingSnapshot || !existingSnapshot.context) {
+          return undefined;
+        }
+
+        const previousUpdatedAt = existingRecord.data.updatedAt;
+
+        // Merge the new options with the existing snapshot
+        const updatedSnapshot = { ...existingSnapshot, ...opts };
+
+        const now = new Date();
+        const data: WorkflowSnapshotEntityData = {
+          entity: 'workflow_snapshot',
+          workflow_name: workflowName,
+          run_id: runId,
+          snapshot: JSON.stringify(updatedSnapshot),
+          createdAt: existingRecord.data.createdAt,
+          updatedAt: now.toISOString(),
+          resourceId: existingRecord.data.resourceId,
+          ...getTtlProps('workflow_snapshot', this.ttlConfig),
+        };
+
+        // Use conditional update - only succeed if updatedAt hasn't changed
+        await this.service.entities.workflow_snapshot
+          .upsert(data)
+          .where((attr: any, op: any) => op.eq(attr.updatedAt, previousUpdatedAt))
+          .go();
+
+        return updatedSnapshot;
+      } catch (error) {
+        if (this.isConditionalCheckFailed(error)) {
+          // Conflict detected, retry with backoff
+          if (attempt < MAX_RETRIES - 1) {
+            this.logger.debug(`Optimistic locking conflict in updateWorkflowState, retrying (attempt ${attempt + 1})`);
+            await this.delay(attempt);
+            continue;
+          }
+        }
+        // Non-retryable error or max retries exceeded
+        if (error instanceof MastraError) throw error;
+        throw new MastraError(
+          {
+            id: createStorageErrorId('DYNAMODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            details: { workflowName, runId },
+          },
+          error,
+        );
+      }
+    }
+
+    // Should not reach here, but TypeScript needs this
+    throw new MastraError(
+      {
+        id: createStorageErrorId('DYNAMODB', 'UPDATE_WORKFLOW_STATE', 'MAX_RETRIES_EXCEEDED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { workflowName, runId },
+      },
+      new Error('Max retries exceeded for optimistic locking'),
+    );
   }
 
   // Workflow operations
@@ -77,32 +315,37 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
     try {
-      const now = new Date().toISOString();
-      // Prepare data including the 'entity' type
-      const data = {
-        entity: 'workflow_snapshot', // Add entity type
+      const now = new Date();
+      const data: WorkflowSnapshotEntityData = {
+        entity: 'workflow_snapshot',
         workflow_name: workflowName,
         run_id: runId,
-        snapshot: JSON.stringify(snapshot), // Stringify the snapshot object
-        createdAt: now,
-        updatedAt: now,
+        snapshot: JSON.stringify(snapshot),
+        createdAt: (createdAt ?? now).toISOString(),
+        updatedAt: (updatedAt ?? now).toISOString(),
         resourceId,
+        ...getTtlProps('workflow_snapshot', this.ttlConfig),
       };
+
       // Use upsert instead of create to handle both create and update cases
       await this.service.entities.workflow_snapshot.upsert(data).go();
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -141,7 +384,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -151,20 +394,28 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  }): Promise<WorkflowRuns> {
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     this.logger.debug('Getting workflow runs', { args });
 
     try {
       // Default values
-      const limit = args?.limit || 10;
-      const offset = args?.offset || 0;
+      const perPage = args?.perPage !== undefined ? args.perPage : 10;
+      const page = args?.page !== undefined ? args.page : 0;
+
+      if (page < 0) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('DYNAMODB', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be >= 0'),
+        );
+      }
+
+      const normalizedPerPage = normalizePerPage(perPage, 10);
+      const offset = page * normalizedPerPage;
 
       let query;
 
@@ -194,6 +445,12 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
         if (pageResults.data && pageResults.data.length > 0) {
           let pageFilteredData: WorkflowSnapshotDBItem[] = pageResults.data;
+
+          if (args?.status) {
+            pageFilteredData = pageFilteredData.filter((snapshot: WorkflowSnapshotDBItem) => {
+              return snapshot.snapshot.status === args.status;
+            });
+          }
 
           // Apply date filters if specified
           if (args?.fromDate || args?.toDate) {
@@ -227,7 +484,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
       // Apply offset and limit to the accumulated filtered results
       const total = allMatchingSnapshots.length;
-      const paginatedData = allMatchingSnapshots.slice(offset, offset + limit);
+      const paginatedData = allMatchingSnapshots.slice(offset, offset + normalizedPerPage);
 
       // Format and return the results
       const runs = paginatedData.map((snapshot: WorkflowSnapshotDBItem) => formatWorkflowRun(snapshot));
@@ -239,7 +496,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName: args?.workflowName || '', resourceId: args?.resourceId || '' },
@@ -318,10 +575,34 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_DYNAMODB_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('DYNAMODB', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId, workflowName: args?.workflowName || '' },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    this.logger.debug('Deleting workflow run by ID', { runId, workflowName });
+
+    try {
+      await this.service.entities.workflow_snapshot
+        .delete({
+          entity: 'workflow_snapshot',
+          workflow_name: workflowName,
+          run_id: runId,
+        })
+        .go();
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
         },
         error,
       );

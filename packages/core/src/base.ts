@@ -2,18 +2,41 @@ import type { IMastraLogger } from './logger';
 import { RegisteredLogger } from './logger/constants';
 import { ConsoleLogger } from './logger/default-logger';
 
-import type { Telemetry } from './telemetry';
-
 export class MastraBase {
   component: RegisteredLogger = RegisteredLogger.LLM;
   protected logger: IMastraLogger;
   name?: string;
-  telemetry?: Telemetry;
+  #rawConfig?: Record<string, unknown>;
 
-  constructor({ component, name }: { component?: RegisteredLogger; name?: string }) {
+  constructor({
+    component,
+    name,
+    rawConfig,
+  }: {
+    component?: RegisteredLogger;
+    name?: string;
+    rawConfig?: Record<string, unknown>;
+  }) {
     this.component = component || RegisteredLogger.LLM;
     this.name = name;
+    this.#rawConfig = rawConfig;
     this.logger = new ConsoleLogger({ name: `${this.component} - ${this.name}` });
+  }
+
+  /**
+   * Returns the raw storage configuration this primitive was created from,
+   * or undefined if it was created from code.
+   */
+  toRawConfig(): Record<string, unknown> | undefined {
+    return this.#rawConfig;
+  }
+
+  /**
+   * Sets the raw storage configuration for this primitive.
+   * @internal
+   */
+  __setRawConfig(rawConfig: Record<string, unknown>): void {
+    this.#rawConfig = rawConfig;
   }
 
   /**
@@ -26,39 +49,6 @@ export class MastraBase {
     if (this.component !== RegisteredLogger.LLM) {
       this.logger.debug(`Logger updated [component=${this.component}] [name=${this.name}]`);
     }
-  }
-
-  /**
-   * Set the telemetry for the
-   * @param telemetry
-   */
-  __setTelemetry(telemetry: Telemetry) {
-    this.telemetry = telemetry;
-
-    if (this.component !== RegisteredLogger.LLM) {
-      this.logger.debug(`Telemetry updated [component=${this.component}] [name=${this.telemetry.name}]`);
-    }
-  }
-
-  /**
-   * Get the telemetry on the vector
-   * @returns telemetry
-   */
-  __getTelemetry() {
-    return this.telemetry;
-  }
-
-  /* 
-    get experimental_telemetry config
-    */
-  get experimental_telemetry() {
-    return this.telemetry
-      ? {
-          // tracer: this.telemetry.tracer,
-          tracer: this.telemetry.getBaggageTracer(),
-          isEnabled: !!this.telemetry.tracer,
-        }
-      : undefined;
   }
 }
 

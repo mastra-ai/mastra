@@ -54,11 +54,17 @@ describe('create mastra', () => {
             PORT: port.toString(),
           },
         });
-        proc!.stderr?.on('data', data => {
-          console.error(data?.toString());
-        });
-        await new Promise<void>(resolve => {
+
+        await new Promise<void>((resolve, reject) => {
           console.log('waiting for server to start');
+          proc!.stderr?.on('data', data => {
+            const output = data?.toString() ?? '';
+            console.error(output);
+            const errorPatterns = ['Error', 'ERR', 'failed', 'ENOENT', 'MODULE_NOT_FOUND'];
+            if (errorPatterns.some(pattern => output.toLowerCase().includes(pattern.toLowerCase()))) {
+              reject(new Error('failed to start dev: ' + data?.toString()));
+            }
+          });
           proc!.stdout?.on('data', data => {
             console.log(data?.toString());
             if (data?.toString()?.includes(`http://localhost:${port}`)) {
@@ -77,7 +83,7 @@ describe('create mastra', () => {
     });
 
     it(
-      'should open playground',
+      'should open studio',
       {
         timeout: 60 * 1000,
       },
@@ -97,10 +103,14 @@ describe('create mastra', () => {
         expect(response.status).toBe(200);
         await expect(response.json()).resolves.toMatchInlineSnapshot(`
           {
-            "weatherAgent": {
+            "weather-agent": {
               "agents": {},
-              "defaultGenerateOptions": {},
-              "defaultStreamOptions": {},
+              "defaultGenerateOptionsLegacy": {},
+              "defaultOptions": {},
+              "defaultStreamOptionsLegacy": {},
+              "description": "",
+              "hasDraft": false,
+              "id": "weather-agent",
               "inputProcessors": [],
               "instructions": "
                 You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
@@ -116,21 +126,24 @@ describe('create mastra', () => {
 
                 Use the weatherTool to fetch current weather data.
           ",
-              "modelId": "gpt-4o-mini",
+              "modelId": "gpt-5-mini",
               "modelVersion": "v2",
               "name": "Weather Agent",
               "outputProcessors": [],
               "provider": "openai",
+              "skills": [],
+              "source": "code",
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",
                   "id": "get-weather",
-                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"description":"City name","type":"string"}},"required":["location"],"additionalProperties":false}}",
+                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false}}",
                   "outputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false}}",
                   "requireApproval": false,
                 },
               },
               "workflows": {},
+              "workspaceTools": [],
             },
           }
         `);

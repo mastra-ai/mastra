@@ -1,12 +1,10 @@
 import type { LanguageModelV2StreamPart, SharedV2ProviderMetadata } from '@ai-sdk/provider-v5';
-import type { generateText as generateText5 } from 'ai-v5';
-import { convertArrayToReadableStream, mockId, MockLanguageModelV2 } from 'ai-v5/test';
+import type { generateText as generateText5, ToolSet } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, mockId } from '@internal/ai-sdk-v5/test';
 import { assertType, describe, expect, it } from 'vitest';
 import z from 'zod';
-import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
 import type { LoopOptions } from '../types';
-import { MockTracer } from './mockTracer';
 import {
   createMessageListWithUserMessage,
   createTestModels,
@@ -15,15 +13,17 @@ import {
   modelWithSources,
   testUsage,
 } from './utils';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
-  const generateText = async (args: Omit<LoopOptions, 'runId'>): ReturnType<typeof generateText5> => {
+  const generateText = async (args: Omit<LoopOptions, 'runId' | 'methodType'>): ReturnType<typeof generateText5> => {
     const output = await loopFn({
       runId,
+      methodType: 'generate',
       ...args,
     });
     // @ts-expect-error -- missing `experimental_output` in v5 getFullOutput
-    return output.aisdk.v5.getFullOutput();
+    return output.getFullOutput();
   };
 
   const dummyResponseValues = {
@@ -48,9 +48,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           agentId: 'agent-id',
           models: createTestModels({
             stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-              { type: 'text-start', id: '1' },
-              { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-              { type: 'text-end', id: '1' },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+              { type: 'text-end', id: 'text-1' },
               {
                 id: '123',
                 providerMetadata: {
@@ -68,9 +68,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               { type: 'reasoning-delta', id: '1', delta: 'I will open the conversation with witty banter.' },
               { type: 'reasoning-end', id: '1' },
               { type: 'tool-call', toolCallId: 'call-1', toolName: 'tool1', input: `{ "value": "value" }` },
-              { type: 'text-start', id: '2' },
-              { type: 'text-delta', id: '2', delta: 'More text' },
-              { type: 'text-end', id: '2' },
+              { type: 'text-start', id: 'text-2' },
+              { type: 'text-delta', id: 'text-2', delta: 'More text' },
+              { type: 'text-end', id: 'text-2' },
               {
                 type: 'finish',
                 finishReason: 'stop',
@@ -200,7 +200,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     });
 
     describe('result.files', () => {
-      it.todo('should contain files', async () => {
+      it('should contain files', async () => {
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
@@ -249,10 +249,10 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               },
             },
             { type: 'reasoning-end', id: '2' },
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello,' },
-            { type: 'text-delta', id: '1', delta: ' world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello,' },
+            { type: 'text-delta', id: 'text-1', delta: ' world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'finish',
               finishReason: 'stop',
@@ -265,9 +265,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
       const modelWithSources = new MockLanguageModelV2({
         doStream: async () => ({
           stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-            { type: 'text-start', id: '1' },
-            { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-            { type: 'text-end', id: '1' },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+            { type: 'text-end', id: 'text-1' },
             {
               type: 'source',
               sourceType: 'url',
@@ -575,9 +575,9 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                 }),
@@ -652,12 +652,19 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               maxRetries: 0,
               id: 'test-model',
               model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [{ type: 'text', text: 'Hello, world!' }],
+                  request: {
+                    body: 'test body',
+                  },
+                }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                   request: {
@@ -670,7 +677,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
           messageList: createMessageListWithUserMessage(),
         });
 
-        expect(await result.request).toStrictEqual({
+        expect(result.request).toStrictEqual({
           body: 'test body',
         });
       });
@@ -685,12 +692,27 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               maxRetries: 0,
               id: 'test-model',
               model: new MockLanguageModelV2({
+                doGenerate: async () => ({
+                  ...dummyResponseValues,
+                  content: [{ type: 'text', text: 'Hello, world!' }],
+                  response: {
+                    id: 'test-id-from-model',
+                    timestamp: new Date(10000),
+                    modelId: 'test-response-model-id',
+                    modelProvider: 'mock-provider',
+                    modelVersion: 'v2',
+                    headers: {
+                      'custom-response-header': 'response-header-value',
+                    },
+                    body: 'test body',
+                  },
+                }),
                 doStream: async ({}) => ({
                   ...dummyResponseValues,
                   stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello, world!' },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello, world!' },
+                    { type: 'text-end', id: 'text-1' },
                     { type: 'finish', finishReason: 'stop', usage: testUsage },
                   ]),
                   response: {
@@ -715,6 +737,23 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         expect(result.steps?.[0]?.response).toMatchInlineSnapshot(`
           {
             "body": "test body",
+            "dbMessages": [
+              {
+                "content": {
+                  "content": "Hello, world!",
+                  "format": 2,
+                  "parts": [
+                    {
+                      "text": "Hello, world!",
+                      "type": "text",
+                    },
+                  ],
+                },
+                "createdAt": 2024-01-01T00:00:00.001Z,
+                "id": "1234",
+                "role": "assistant",
+              },
+            ],
             "headers": {
               "custom-response-header": "response-header-value",
             },
@@ -743,7 +782,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "__originalContent": "Hello, world!",
                   "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
@@ -760,6 +798,23 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         expect(await result.response).toMatchInlineSnapshot(`
           {
             "body": "test body",
+            "dbMessages": [
+              {
+                "content": {
+                  "content": "Hello, world!",
+                  "format": 2,
+                  "parts": [
+                    {
+                      "text": "Hello, world!",
+                      "type": "text",
+                    },
+                  ],
+                },
+                "createdAt": 2024-01-01T00:00:00.001Z,
+                "id": "1234",
+                "role": "assistant",
+              },
+            ],
             "headers": {
               "custom-response-header": "response-header-value",
             },
@@ -788,7 +843,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
               {
                 "id": "1234",
                 "metadata": {
-                  "__originalContent": "Hello, world!",
                   "createdAt": 2024-01-01T00:00:00.001Z,
                 },
                 "parts": [
@@ -1979,194 +2033,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //   });
     // });
 
-    // describe.todo('telemetry', () => {
-    //   let tracer: MockTracer;
-
-    //   beforeEach(() => {
-    //     tracer = new MockTracer();
-    //   });
-
-    //   it('should not record any telemetry data when not explicitly enabled', async () => {
-    //     await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doGenerate: async ({}) => ({
-    //           ...dummyResponseValues,
-    //           content: [{ type: 'text', text: 'Hello, world!' }],
-    //         }),
-    //       }),
-    //       prompt: 'prompt',
-    //       experimental_telemetry: { tracer },
-    //     });
-
-    //     expect(tracer.jsonSpans).toMatchSnapshot();
-    //   });
-
-    //   it('should record telemetry data when enabled', async () => {
-    //     await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doGenerate: async ({}) => ({
-    //           ...dummyResponseValues,
-    //           content: [{ type: 'text', text: 'Hello, world!' }],
-    //           response: {
-    //             id: 'test-id-from-model',
-    //             timestamp: new Date(10000),
-    //             modelId: 'test-response-model-id',
-    //           },
-    //           providerMetadata: {
-    //             testProvider: {
-    //               testKey: 'testValue',
-    //             },
-    //           },
-    //         }),
-    //       }),
-    //       prompt: 'prompt',
-    //       topK: 0.1,
-    //       topP: 0.2,
-    //       frequencyPenalty: 0.3,
-    //       presencePenalty: 0.4,
-    //       temperature: 0.5,
-    //       stopSequences: ['stop'],
-    //       headers: {
-    //         header1: 'value1',
-    //         header2: 'value2',
-    //       },
-    //       experimental_telemetry: {
-    //         isEnabled: true,
-    //         functionId: 'test-function-id',
-    //         metadata: {
-    //           test1: 'value1',
-    //           test2: false,
-    //         },
-    //         tracer,
-    //       },
-    //     });
-
-    //     expect(tracer.jsonSpans).toMatchSnapshot();
-    //   });
-
-    it('should record successful tool call', async () => {
-      const tracer = new MockTracer();
-      const messageList = createMessageListWithUserMessage();
-      await generateText({
-        agentId: 'agent-id',
-        models: [
-          {
-            id: 'test-model',
-            maxRetries: 0,
-            model: new MockLanguageModelV2({
-              doStream: async ({}) => ({
-                ...dummyResponseValues,
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'tool-call',
-                    toolCallType: 'function',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsage,
-                  },
-                ]),
-              }),
-            }),
-          },
-        ],
-        tools: {
-          tool1: {
-            inputSchema: z.object({ value: z.string() }),
-            execute: async () => 'result1',
-          },
-        },
-        messageList,
-        mode: 'generate',
-        telemetry_settings: {
-          isEnabled: true,
-          tracer,
-        },
-        _internal: {
-          generateId: () => 'test-id',
-          now: () => new Date(0).getTime(),
-        },
-      });
-
-      expect(tracer.jsonSpans).toMatchInlineSnapshot(`
-        [
-          {
-            "attributes": {
-              "aisdk.model.id": "mock-model-id",
-              "aisdk.model.provider": "mock-provider",
-              "mastra.operationId": "mastra.generate",
-              "operation.name": "mastra.generate",
-              "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-              "stream.response.finishReason": "stop",
-              "stream.response.text": "",
-              "stream.response.toolCalls": "[{"type":"tool-call","toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
-              "stream.settings.maxRetries": 2,
-              "stream.usage.inputTokens": 3,
-              "stream.usage.outputTokens": 10,
-              "stream.usage.totalTokens": 13,
-            },
-            "events": [],
-            "name": "mastra.generate",
-          },
-          {
-            "attributes": {
-              "aisdk.model.id": "mock-model-id",
-              "aisdk.model.provider": "mock-provider",
-              "mastra.operationId": "mastra.generate.aisdk.doStream",
-              "operation.name": "mastra.generate.aisdk.doStream",
-              "stream.prompt.messages": "[{"role":"user","content":[{"type":"text","text":"test-input"}]}]",
-              "stream.prompt.toolChoice": "auto",
-              "stream.prompt.tools": [
-                "{"type":"function","name":"tool1","inputSchema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"],"additionalProperties":false,"$schema":"http://json-schema.org/draft-07/schema#"}}",
-              ],
-              "stream.response.avgOutputTokensPerSecond": Infinity,
-              "stream.response.finishReason": "stop",
-              "stream.response.id": "test-id",
-              "stream.response.model": "mock-model-id",
-              "stream.response.msToFinish": 0,
-              "stream.response.msToFirstChunk": 0,
-              "stream.response.text": "",
-              "stream.response.timestamp": "1970-01-01T00:00:00.000Z",
-              "stream.response.toolCalls": "[{"toolCallId":"call-1","args":{"value":"value"},"toolName":"tool1"}]",
-              "stream.settings.maxRetries": 2,
-              "stream.usage.inputTokens": 3,
-              "stream.usage.outputTokens": 10,
-              "stream.usage.totalTokens": 13,
-            },
-            "events": [
-              {
-                "attributes": {
-                  "ai.response.msToFirstChunk": 0,
-                },
-                "name": "ai.stream.firstChunk",
-              },
-              {
-                "attributes": undefined,
-                "name": "ai.stream.finish",
-              },
-            ],
-            "name": "mastra.generate.aisdk.doStream",
-          },
-          {
-            "attributes": {
-              "mastra.operationId": "mastra.stream.toolCall",
-              "operation.name": "mastra.stream.toolCall",
-              "stream.toolCall.args": "{"value":"value"}",
-              "stream.toolCall.result": ""result1"",
-              "stream.toolCall.toolCallId": "call-1",
-              "stream.toolCall.toolName": "tool1",
-            },
-            "events": [],
-            "name": "mastra.stream.toolCall",
-          },
-        ]
-      `);
-    });
-
     //   it('should record error on tool call', async () => {
     //     await generateText({
     //       model: new MockLanguageModelV2({
@@ -2192,10 +2058,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //         },
     //       },
     //       prompt: 'test-input',
-    //       experimental_telemetry: {
-    //         isEnabled: true,
-    //         tracer,
-    //       },
     //       _internal: {
     //         generateId: () => 'test-id',
     //         currentDate: () => new Date(0),
@@ -2226,45 +2088,6 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
     //     expect(exceptionEvent.attributes?.['exception.stack']).toContain('Tool execution failed');
     //     expect(exceptionEvent.time).toEqual([0, 0]);
     //   });
-
-    //   it('should not record telemetry inputs / outputs when disabled', async () => {
-    //     await generateText({
-    //       model: new MockLanguageModelV2({
-    //         doGenerate: async ({}) => ({
-    //           ...dummyResponseValues,
-    //           content: [
-    //             {
-    //               type: 'tool-call',
-    //               toolCallType: 'function',
-    //               toolCallId: 'call-1',
-    //               toolName: 'tool1',
-    //               input: `{ "value": "value" }`,
-    //             },
-    //           ],
-    //         }),
-    //       }),
-    //       tools: {
-    //         tool1: {
-    //           inputSchema: z.object({ value: z.string() }),
-    //           execute: async () => 'result1',
-    //         },
-    //       },
-    //       prompt: 'test-input',
-    //       experimental_telemetry: {
-    //         isEnabled: true,
-    //         recordInputs: false,
-    //         recordOutputs: false,
-    //         tracer,
-    //       },
-    //       _internal: {
-    //         generateId: () => 'test-id',
-    //         currentDate: () => new Date(0),
-    //       },
-    //     });
-
-    //     expect(tracer.jsonSpans).toMatchSnapshot();
-    //   });
-    // });
 
     // describe.todo('tool callbacks', () => {
     //   it('should invoke callbacks in the correct order', async () => {

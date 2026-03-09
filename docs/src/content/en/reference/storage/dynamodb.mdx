@@ -1,11 +1,24 @@
 ---
-title: "DynamoDB Storage | Storage System | Mastra Core"
+title: "Reference: DynamoDB Storage | Storage"
 description: "Documentation for the DynamoDB storage implementation in Mastra, using a single-table design with ElectroDB."
+packages:
+  - "@mastra/dynamodb"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # DynamoDB Storage
 
 The DynamoDB storage implementation provides a scalable and performant NoSQL database solution for Mastra, leveraging a single-table design pattern with [ElectroDB](https://electrodb.dev/).
+
+:::warning[Observability Not Supported]
+DynamoDB storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to DynamoDB, and Mastra Studio's observability features won't work with DynamoDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+:::
+
+:::warning[Item Size Limit]
+DynamoDB enforces a **400 KB maximum item size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/storage#handling-large-attachments) for workarounds including uploading attachments to external storage.
+:::
 
 ## Features
 
@@ -13,43 +26,40 @@ The DynamoDB storage implementation provides a scalable and performant NoSQL dat
 - Based on ElectroDB for type-safe DynamoDB access
 - Support for AWS credentials, regions, and endpoints
 - Compatible with AWS DynamoDB Local for development
-- Stores Thread, Message, Trace, Eval, and Workflow data
+- Stores Thread, Message, Eval, and Workflow data
 - Optimized for serverless environments
+- Configurable TTL (Time To Live) for automatic data expiration per entity type
 
 ## Installation
 
-```bash copy
+```bash npm2yarn
 npm install @mastra/dynamodb@latest
-# or
-pnpm add @mastra/dynamodb@latest
-# or
-yarn add @mastra/dynamodb@latest
 ```
 
 ## Prerequisites
 
 Before using this package, you **must** create a DynamoDB table with a specific structure, including primary keys and Global Secondary Indexes (GSIs). This adapter expects the DynamoDB table and its GSIs to be provisioned externally.
 
-Detailed instructions for setting up the table using AWS CloudFormation or AWS CDK are available in [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md). Please ensure your table is configured according to those instructions before proceeding.
+Detailed instructions for setting up the table using AWS CloudFormation or AWS CDK are available in [TABLE\_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md). Please ensure your table is configured according to those instructions before proceeding.
 
 ## Usage
 
 ### Basic Usage
 
-```typescript copy showLineNumbers
-import { Memory } from "@mastra/memory";
-import { DynamoDBStore } from "@mastra/dynamodb";
+```typescript
+import { Memory } from '@mastra/memory'
+import { DynamoDBStore } from '@mastra/dynamodb'
 
 // Initialize the DynamoDB storage
 const storage = new DynamoDBStore({
-  name: "dynamodb", // A name for this storage instance
+  id: 'dynamodb', // Unique identifier for this storage instance
   config: {
-    tableName: "mastra-single-table", // Name of your DynamoDB table
-    region: "us-east-1", // Optional: AWS region, defaults to 'us-east-1'
+    tableName: 'mastra-single-table', // Name of your DynamoDB table
+    region: 'us-east-1', // Optional: AWS region, defaults to 'us-east-1'
     // endpoint: "http://localhost:8000", // Optional: For local DynamoDB
     // credentials: { accessKeyId: "YOUR_ACCESS_KEY", secretAccessKey: "YOUR_SECRET_KEY" } // Optional
   },
-});
+})
 
 // Example: Initialize Memory with DynamoDB storage
 const memory = new Memory({
@@ -57,84 +67,208 @@ const memory = new Memory({
   options: {
     lastMessages: 10,
   },
-});
+})
 ```
 
 ### Local Development with DynamoDB Local
 
 For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html).
 
-1.  **Run DynamoDB Local (e.g., using Docker):**
+1. **Run DynamoDB Local (e.g., using Docker):**
 
-    ```bash
-    docker run -p 8000:8000 amazon/dynamodb-local
-    ```
+   ```bash
+   docker run -p 8000:8000 amazon/dynamodb-local
+   ```
 
-2.  **Configure `DynamoDBStore` to use the local endpoint:**
+1. **Configure `DynamoDBStore` to use the local endpoint:**
 
-    ```typescript copy showLineNumbers
-    import { DynamoDBStore } from "@mastra/dynamodb";
+   ```typescript
+   import { DynamoDBStore } from '@mastra/dynamodb'
 
-    const storage = new DynamoDBStore({
-      name: "dynamodb-local",
-      config: {
-        tableName: "mastra-single-table", // Ensure this table is created in your local DynamoDB
-        region: "localhost", // Can be any string for local, 'localhost' is common
-        endpoint: "http://localhost:8000",
-        // For DynamoDB Local, credentials are not typically required unless configured.
-        // If you've configured local credentials:
-        // credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }
-      },
-    });
-    ```
+   const storage = new DynamoDBStore({
+     id: 'dynamodb-local',
+     config: {
+       tableName: 'mastra-single-table', // Ensure this table is created in your local DynamoDB
+       region: 'localhost', // Can be any string for local, 'localhost' is common
+       endpoint: 'http://localhost:8000',
+       // For DynamoDB Local, credentials are not typically required unless configured.
+       // If you've configured local credentials:
+       // credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }
+     },
+   })
+   ```
 
-    You will still need to create the table and GSIs in your local DynamoDB instance, for example, using the AWS CLI pointed to your local endpoint.
+   You will still need to create the table and GSIs in your local DynamoDB instance, for example, using the AWS CLI pointed to your local endpoint.
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "name",
-      type: "string",
-      description: "A name for the storage instance.",
-      isOptional: false,
-    },
-    {
-      name: "config.tableName",
-      type: "string",
-      description: "The name of your DynamoDB table.",
-      isOptional: false,
-    },
-    {
-      name: "config.region",
-      type: "string",
-      description:
-        "AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
-      isOptional: true,
-    },
-    {
-      name: "config.endpoint",
-      type: "string",
-      description:
-        "Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
-      isOptional: true,
-    },
-    {
-      name: "config.credentials",
-      type: "object",
-      description:
-        "AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.",
-      isOptional: true,
-    },
-  ]}
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'config.tableName',
+    type: 'string',
+    description: 'The name of your DynamoDB table.',
+    isOptional: false,
+  },
+  {
+    name: 'config.region',
+    type: 'string',
+    description: "AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
+    isOptional: true,
+  },
+  {
+    name: 'config.endpoint',
+    type: 'string',
+    description: "Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
+    isOptional: true,
+  },
+  {
+    name: 'config.credentials',
+    type: 'object',
+    description:
+      'AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.',
+    isOptional: true,
+  },
+  {
+    name: 'config.ttl',
+    type: 'object',
+    description:
+      "TTL (Time To Live) configuration for automatic data expiration. Configure per entity type: thread, message, trace, eval, workflow_snapshot, resource, score. Each entity config includes: enabled (boolean), attributeName (string, default: 'ttl'), defaultTtlSeconds (number).",
+    isOptional: true,
+  },
+]}
 />
+
+## TTL (Time To Live) Configuration
+
+DynamoDB TTL allows you to automatically delete items after a specified time period. This is useful for:
+
+- **Cost optimization**: Automatically remove old data to reduce storage costs
+- **Data lifecycle management**: Implement retention policies for compliance
+- **Performance**: Prevent tables from growing indefinitely
+- **Privacy compliance**: Automatically purge personal data after specified periods
+
+### Enabling TTL
+
+To use TTL, you must:
+
+1. **Configure TTL in DynamoDBStore** (shown below)
+1. **Enable TTL on your DynamoDB table** via AWS Console or CLI, specifying the attribute name (default: `ttl`)
+
+```typescript
+import { DynamoDBStore } from '@mastra/dynamodb'
+
+const storage = new DynamoDBStore({
+  name: 'dynamodb',
+  config: {
+    tableName: 'mastra-single-table',
+    region: 'us-east-1',
+    ttl: {
+      // Messages expire after 30 days
+      message: {
+        enabled: true,
+        defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
+      },
+      // Threads expire after 90 days
+      thread: {
+        enabled: true,
+        defaultTtlSeconds: 90 * 24 * 60 * 60, // 90 days
+      },
+      // Traces expire after 7 days with custom attribute name
+      trace: {
+        enabled: true,
+        attributeName: 'expiresAt', // Custom TTL attribute
+        defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
+      },
+      // Workflow snapshots don't expire
+      workflow_snapshot: {
+        enabled: false,
+      },
+    },
+  },
+})
+```
+
+### Supported Entity Types
+
+TTL can be configured for these entity types:
+
+| Entity | Description |
+| - | - |
+| `thread` | Conversation threads |
+| `message` | Messages within threads |
+| `trace` | Observability traces |
+| `eval` | Evaluation results |
+| `workflow_snapshot` | Workflow state snapshots |
+| `resource` | User/resource data |
+| `score` | Scoring results |
+
+### TTL Entity Configuration
+
+Each entity type accepts the following configuration:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'enabled',
+    type: 'boolean',
+    description: 'Whether TTL is enabled for this entity type.',
+    isOptional: false,
+  },
+  {
+    name: 'attributeName',
+    type: 'string',
+    description:
+      "The DynamoDB attribute name to use for TTL. Must match the TTL attribute configured on your DynamoDB table. Defaults to 'ttl'.",
+    isOptional: true,
+  },
+  {
+    name: 'defaultTtlSeconds',
+    type: 'number',
+    description:
+      'Default TTL in seconds from item creation time. Items will be automatically deleted by DynamoDB after this duration.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Enabling TTL on Your DynamoDB Table
+
+After configuring TTL in your code, you must enable TTL on the DynamoDB table itself:
+
+**Using AWS CLI:**
+
+```bash
+aws dynamodb update-time-to-live \
+  --table-name mastra-single-table \
+  --time-to-live-specification "Enabled=true, AttributeName=ttl"
+```
+
+**Using AWS Console:**
+
+1. Go to the DynamoDB console
+1. Select your table
+1. Go to "Additional settings" tab
+1. Under "Time to Live (TTL)", select "Manage TTL"
+1. Enable TTL and specify the attribute name (default: `ttl`)
+
+:::note
+
+DynamoDB deletes expired items within 48 hours after expiration. Items remain queryable until actually deleted.
+
+:::
 
 ## AWS IAM Permissions
 
 The IAM role or user executing the code needs appropriate permissions to interact with the specified DynamoDB table and its indexes. Below is a sample policy. Replace `${YOUR_TABLE_NAME}` with your actual table name and `${YOUR_AWS_REGION}` and `${YOUR_AWS_ACCOUNT_ID}` with appropriate values.
 
-```json copy
+```json
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -164,7 +298,7 @@ The IAM role or user executing the code needs appropriate permissions to interac
 
 Before diving into the architectural details, keep these key points in mind when working with the DynamoDB storage adapter:
 
-- **External Table Provisioning:** This adapter _requires_ you to create and configure the DynamoDB table and its Global Secondary Indexes (GSIs) yourself, prior to using the adapter. Follow the guide in [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md).
+- **External Table Provisioning:** This adapter _requires_ you to create and configure the DynamoDB table and its Global Secondary Indexes (GSIs) yourself, prior to using the adapter. Follow the guide in [TABLE\_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md).
 - **Single-Table Design:** All Mastra data (threads, messages, etc.) is stored in one DynamoDB table. This is a deliberate design choice optimized for DynamoDB, differing from relational database approaches.
 - **Understanding GSIs:** Familiarity with how the GSIs are structured (as per `TABLE_SETUP.md`) is important for understanding data retrieval and potential query patterns.
 - **ElectroDB:** The adapter uses ElectroDB to manage interactions with DynamoDB, providing a layer of abstraction and type safety over raw DynamoDB operations.
@@ -176,7 +310,7 @@ This storage adapter utilizes a **single-table design pattern** leveraging [Elec
 Key aspects of this approach:
 
 - **DynamoDB Native:** The single-table design is optimized for DynamoDB's key-value and query capabilities, often leading to better performance and scalability compared to mimicking relational models.
-- **External Table Management:** Unlike some adapters that might offer helper functions to create tables via code, this adapter **expects the DynamoDB table and its associated Global Secondary Indexes (GSIs) to be provisioned externally** before use. Please refer to [TABLE_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) for detailed instructions using tools like AWS CloudFormation or CDK. The adapter focuses solely on interacting with the pre-existing table structure.
+- **External Table Management:** Unlike some adapters that might offer helper functions to create tables via code, this adapter **expects the DynamoDB table and its associated Global Secondary Indexes (GSIs) to be provisioned externally** before use. Please refer to [TABLE\_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) for detailed instructions using tools like AWS CloudFormation or CDK. The adapter focuses solely on interacting with the pre-existing table structure.
 - **Consistency via Interface:** While the underlying storage model differs, this adapter adheres to the same `MastraStorage` interface as other adapters, ensuring it can be used interchangeably within the Mastra `Memory` component.
 
 ### Mastra Data in the Single Table
@@ -189,8 +323,8 @@ For example, a `Thread` item might have a primary key like `THREAD#<threadId>`, 
 
 This implementation uses a single-table design pattern with ElectroDB, which offers several advantages within the context of DynamoDB:
 
-1.  **Lower cost (potentially):** Fewer tables can simplify Read/Write Capacity Unit (RCU/WCU) provisioning and management, especially with on-demand capacity.
-2.  **Better performance:** Related data can be co-located or accessed efficiently through GSIs, enabling fast lookups for common access patterns.
-3.  **Simplified administration:** Fewer distinct tables to monitor, back up, and manage.
-4.  **Reduced complexity in access patterns:** ElectroDB helps manage the complexity of item types and access patterns on a single table.
-5.  **Transaction support:** DynamoDB transactions can be used across different "entity" types stored within the same table if needed.
+1. **Lower cost (potentially):** Fewer tables can simplify Read/Write Capacity Unit (RCU/WCU) provisioning and management, especially with on-demand capacity.
+1. **Better performance:** Related data can be co-located or accessed efficiently through GSIs, enabling fast lookups for common access patterns.
+1. **Simplified administration:** Fewer distinct tables to monitor, back up, and manage.
+1. **Reduced complexity in access patterns:** ElectroDB helps manage the complexity of item types and access patterns on a single table.
+1. **Transaction support:** DynamoDB transactions can be used across different "entity" types stored within the same table if needed.

@@ -1,13 +1,37 @@
-import { analyzeEntry } from './analyzeEntry';
-import { describe, it, expect, vi } from 'vitest';
-import { readFile } from 'fs-extra';
-import { join } from 'path';
+import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
+import { readFile } from 'fs-extra';
+import { resolveModule } from 'local-pkg';
+import type * as LocalPkgModule from 'local-pkg';
+import { rollup } from 'rollup';
+import type * as RollupModule from 'rollup';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { analyzeEntry } from './analyzeEntry';
 
 vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
+vi.mock('local-pkg', async () => {
+  const actual = await vi.importActual<typeof LocalPkgModule>('local-pkg');
+  return {
+    ...actual,
+    resolveModule: vi.fn(),
+  };
+});
+vi.mock('rollup', async () => {
+  const actual = await vi.importActual<typeof RollupModule>('rollup');
+  return {
+    ...actual,
+    rollup: vi.fn(actual.rollup),
+  };
+});
 
 describe('analyzeEntry', () => {
+  beforeEach(() => {
+    vi.mocked(rollup).mockClear();
+    vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
+    vi.mocked(resolveModule).mockReset();
+  });
+
   it('should analyze the entry file', async () => {
     const entryAsString = await readFile(join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts'), 'utf-8');
 
@@ -15,6 +39,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.size).toBe(4);
@@ -55,6 +80,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.size).toBe(4);
@@ -84,6 +110,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap,
+      projectRoot: process.cwd(),
     });
 
     const loggerDep = result.dependencies.get('@mastra/core/logger');
@@ -103,13 +130,13 @@ describe('analyzeEntry', () => {
   it('should handle dynamic imports', async () => {
     const entryWithDynamicImport = `
       import { Mastra } from '@mastra/core/mastra';
-      
+
       export async function loadAgent() {
         const { Agent } = await import('@mastra/core/agent');
         const externalModule = await import('lodash');
         return new Agent();
       }
-      
+
       export const mastra = new Mastra({});
     `;
 
@@ -117,6 +144,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.has('@mastra/core/mastra')).toBe(true);
@@ -138,6 +166,7 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: true,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     // Note: Sourcemaps might be null depending on Rollup configuration
@@ -152,11 +181,11 @@ describe('analyzeEntry', () => {
   it('should handle entry with no external dependencies', async () => {
     const entryWithNoDeps = `
       const message = "Hello World";
-      
+
       function greet(name) {
         return message + ", " + name + "!";
       }
-      
+
       export { greet };
     `;
 
@@ -164,10 +193,72 @@ describe('analyzeEntry', () => {
       logger: noopLogger,
       sourcemapEnabled: false,
       workspaceMap: new Map(),
+      projectRoot: process.cwd(),
     });
 
     expect(result.dependencies.size).toBe(0);
     expect(result.output.code).toBeTruthy();
     expect(result.output.code).toContain('greet');
+  });
+
+  it('should handle recursive imports', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    vi.mocked(resolveModule).mockImplementation(dep => {
+      if (dep === '@internal/a') {
+        return join(root, 'packages', 'a', 'src', 'index.ts');
+      }
+      if (dep === '@internal/shared') {
+        return join(root, 'packages', 'shared', 'src', 'index.ts');
+      }
+
+      return undefined;
+    });
+
+    // Create a workspace map that includes @mastra/core to test recursive transitive dependencies
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/a',
+        {
+          location: `${root}/packages/a`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/shared',
+        {
+          location: `${root}/packages/shared`,
+          dependencies: {},
+          version: '1.0.0',
+        },
+      ],
+    ]);
+
+    const result = await analyzeEntry(
+      {
+        entry: join(process.cwd(), 'src', 'index.ts'),
+        isVirtualFile: false,
+      },
+      '',
+      {
+        shouldCheckTransitiveDependencies: true,
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap,
+        projectRoot: root,
+      },
+    );
+
+    expect(rollup).toHaveBeenCalledTimes(3);
+    expect(result.dependencies.size).toBe(2);
+    expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared']);
+    // Verify that the analyzer doesn't get stuck in infinite loops.
+    // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
+    // (Test will timeout if there's an infinite loop issue)
   });
 });

@@ -1,5 +1,6 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
-import { MastraVector } from '@mastra/core/vector';
+import { createVectorErrorId } from '@mastra/core/storage';
+import { MastraVector, validateUpsertInput, validateVectorValues } from '@mastra/core/vector';
 import type {
   QueryResult,
   IndexStats,
@@ -10,10 +11,12 @@ import type {
   DeleteIndexParams,
   DeleteVectorParams,
   UpdateVectorParams,
+  DeleteVectorsParams,
 } from '@mastra/core/vector';
 import { MongoClient } from 'mongodb';
 import type { MongoClientOptions, Document, Db, Collection } from 'mongodb';
 import { v4 as uuidv4 } from 'uuid';
+import packageJson from '../../package.json';
 
 import { MongoDBFilterTranslator } from './filter';
 import type { MongoDBVectorFilter } from './filter';
@@ -25,6 +28,23 @@ export interface MongoDBUpsertVectorParams extends UpsertVectorParams {
 
 interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVectorFilter> {
   documentFilter?: MongoDBVectorFilter;
+}
+
+export interface MongoDBVectorConfig {
+  /** Unique identifier for this vector store instance */
+  id: string;
+  /** MongoDB connection string */
+  uri: string;
+  /** Name of the MongoDB database to use */
+  dbName: string;
+  /** Optional MongoDB client options */
+  options?: MongoClientOptions;
+  /**
+   * Path to the field that stores vector embeddings.
+   * Supports nested paths using dot notation (e.g., 'text.contentEmbedding').
+   * @default 'embedding'
+   */
+  embeddingFieldPath?: string;
 }
 
 export interface MongoDBIndexReadyParams {
@@ -46,7 +66,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private client: MongoClient;
   private db: Db;
   private collections: Map<string, Collection<MongoDBDocument>>;
-  private readonly embeddingFieldName = 'embedding';
+  private readonly embeddingFieldName: string;
   private readonly metadataFieldName = 'metadata';
   private readonly documentFieldName = 'document';
   private collectionForValidation: Collection<MongoDBDocument> | null = null;
@@ -56,11 +76,24 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     dotproduct: 'dotProduct',
   };
 
-  constructor({ uri, dbName, options }: { uri: string; dbName: string; options?: MongoClientOptions }) {
-    super();
-    this.client = new MongoClient(uri, options);
+  constructor({ id, uri, dbName, options, embeddingFieldPath }: MongoDBVectorConfig) {
+    super({ id });
+
+    if (!uri) {
+      throw new Error('MongoDBVector requires a connection string. Provide "uri" in the constructor options.');
+    }
+
+    const client = new MongoClient(uri, {
+      ...options,
+      driverInfo: {
+        name: 'mastra-vector',
+        version: packageJson.version || '0.0.0',
+      },
+    });
+    this.client = client;
     this.db = this.client.db(dbName);
     this.collections = new Map();
+    this.embeddingFieldName = embeddingFieldPath ?? 'embedding';
   }
 
   // Public methods
@@ -70,7 +103,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_CONNECT_FAILED',
+          id: createVectorErrorId('MONGODB', 'CONNECT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -85,7 +118,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_DISCONNECT_FAILED',
+          id: createVectorErrorId('MONGODB', 'DISCONNECT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -108,7 +141,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_CREATE_INDEX_INVALID_ARGS',
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'INVALID_ARGS'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
@@ -167,7 +200,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       if (error.codeName !== 'IndexAlreadyExists') {
         throw new MastraError(
           {
-            id: 'STORAGE_MONGODB_VECTOR_CREATE_INDEX_FAILED',
+            id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
           },
@@ -182,7 +215,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_CREATE_INDEX_FAILED_STORE_METADATA',
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'STORE_METADATA_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -224,6 +257,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   async upsert({ indexName, vectors, metadata, ids, documents }: MongoDBUpsertVectorParams): Promise<string[]> {
+    // Validate input parameters
+    validateUpsertInput('MONGODB', vectors, metadata, ids);
+    validateVectorValues('MONGODB', vectors);
+
     try {
       const collection = await this.getCollection(indexName);
 
@@ -275,7 +312,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_UPSERT_FAILED',
+          id: createVectorErrorId('MONGODB', 'UPSERT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -294,6 +331,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     includeVector = false,
     documentFilter,
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for MongoDB queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     try {
       const collection = await this.getCollection(indexName, true);
       const indexNameInternal = `${indexName}_vector_index`;
@@ -319,14 +366,19 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         index: indexNameInternal,
         queryVector: queryVector,
         path: this.embeddingFieldName,
-        numCandidates: 100,
-        limit: topK,
+        numCandidates: Math.min(10000, Math.max(100, topK)),
+        limit: Math.min(10000, topK),
       };
 
       if (Object.keys(combinedFilter).length > 0) {
+        // Exclude the special metadata document
+        const filterWithExclusion = {
+          $and: [{ _id: { $ne: '__index_metadata__' } }, combinedFilter],
+        };
+
         // pre-filter for candidate document IDs
         const candidateIds = await collection
-          .aggregate([{ $match: combinedFilter }, { $project: { _id: 1 } }])
+          .aggregate([{ $match: filterWithExclusion }, { $project: { _id: 1 } }])
           .map(doc => doc._id)
           .toArray();
 
@@ -336,6 +388,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           // No documents match the filter, return empty results
           return [];
         }
+      } else {
+        // Even with no filter, exclude the metadata document
+        vectorSearch.filter = { _id: { $ne: '__index_metadata__' } };
       }
 
       // Build the aggregation pipeline
@@ -369,7 +424,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_QUERY_FAILED',
+          id: createVectorErrorId('MONGODB', 'QUERY', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -388,7 +443,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_LIST_INDEXES_FAILED',
+          id: createVectorErrorId('MONGODB', 'LIST_INDEXES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -423,7 +478,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_DESCRIBE_INDEX_FAILED',
+          id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -448,7 +503,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_DELETE_INDEX_FAILED',
+          id: createVectorErrorId('MONGODB', 'DELETE_INDEX', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -470,7 +525,31 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ indexName, id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector(params: UpdateVectorParams<MongoDBVectorFilter>): Promise<void> {
+    const { indexName, update } = params;
+
+    // Validate that both id and filter are not provided at the same time
+    if ('id' in params && params.id && 'filter' in params && params.filter) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'MUTUALLY_EXCLUSIVE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'id and filter are mutually exclusive - provide only one',
+      });
+    }
+
+    // Check if neither id nor filter is provided
+    if (!('id' in params || 'filter' in params) || (!params.id && !params.filter)) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'NO_TARGET'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Either id or filter must be provided',
+        details: { indexName },
+      });
+    }
+
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -499,17 +578,62 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         updateDoc[this.metadataFieldName] = normalizedMeta;
       }
 
-      await collection.findOneAndUpdate({ _id: id }, { $set: updateDoc });
+      // Type narrowing: check if updating by id or by filter
+      if ('id' in params && params.id) {
+        // Update by ID
+        await collection.findOneAndUpdate({ _id: params.id }, { $set: updateDoc });
+      } else if ('filter' in params && params.filter) {
+        // Update by filter
+        const filter = params.filter;
+
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'EMPTY_FILTER'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot update with empty filter',
+          });
+        }
+
+        const mongoFilter = this.transformFilter(filter);
+        const transformedFilter = this.transformMetadataFilter(mongoFilter);
+
+        if (!transformedFilter || Object.keys(transformedFilter).length === 0) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'INVALID_FILTER'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Filter produced empty query',
+          });
+        }
+
+        // Update multiple documents matching the filter
+        await collection.updateMany(transformedFilter, { $set: updateDoc });
+      }
     } catch (error: any) {
+      // If it's already a MastraError, rethrow it
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
+      const errorDetails: Record<string, any> = { indexName };
+
+      if ('id' in params && params.id) {
+        errorDetails.id = params.id;
+      }
+
+      if ('filter' in params && params.filter) {
+        errorDetails.filter = JSON.stringify(params.filter);
+      }
+
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_UPDATE_VECTOR_FAILED',
+          id: createVectorErrorId('MONGODB', 'UPDATE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: {
-            indexName,
-            id,
-          },
+          details: errorDetails,
         },
         error,
       );
@@ -530,12 +654,105 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'STORAGE_MONGODB_VECTOR_DELETE_VECTOR_FAILED',
+          id: createVectorErrorId('MONGODB', 'DELETE_VECTOR', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
             indexName,
             id,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<MongoDBVectorFilter>): Promise<void> {
+    // Validate that exactly one of filter or ids is provided
+    if (!filter && !ids) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'NO_TARGET'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Either filter or ids must be provided',
+      });
+    }
+
+    if (filter && ids) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: 'Cannot provide both filter and ids - they are mutually exclusive',
+      });
+    }
+
+    try {
+      const collection = await this.getCollection(indexName, true);
+
+      if (ids) {
+        // Delete by IDs
+        if (ids.length === 0) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'EMPTY_IDS'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty ids array',
+          });
+        }
+
+        await collection.deleteMany({ _id: { $in: ids } });
+      } else {
+        // Delete by filter
+        // Safety check: Don't allow empty filters to prevent accidental deletion of all vectors
+        if (!filter || Object.keys(filter).length === 0) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'EMPTY_FILTER'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Cannot delete with empty filter',
+          });
+        }
+
+        const mongoFilter = this.transformFilter(filter);
+        const transformedFilter = this.transformMetadataFilter(mongoFilter);
+
+        if (!transformedFilter || Object.keys(transformedFilter).length === 0) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'INVALID_FILTER'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName },
+            text: 'Filter produced empty query',
+          });
+        }
+
+        // Exclude the special metadata document and combine with user filter
+        const finalFilter = {
+          $and: [{ _id: { $ne: '__index_metadata__' } }, transformedFilter],
+        };
+
+        await collection.deleteMany(finalFilter);
+      }
+    } catch (error) {
+      // If it's already a MastraError, rethrow it
+      if (error instanceof MastraError) {
+        throw error;
+      }
+
+      throw new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            indexName,
+            ...(filter && { filter: JSON.stringify(filter) }),
+            ...(ids && { idsCount: ids.length }),
           },
         },
         error,
@@ -606,6 +823,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private transformMetadataFilter(filter: any): any {
     if (!filter || typeof filter !== 'object') return filter;
 
+    // Handle arrays (shouldn't happen at top level, but be defensive)
+    if (Array.isArray(filter)) {
+      return filter.map(item => this.transformMetadataFilter(item));
+    }
+
     const transformed: any = {};
 
     for (const [key, value] of Object.entries(filter)) {
@@ -614,18 +836,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // For logical operators like $and, $or, recursively transform their contents
         if (Array.isArray(value)) {
           transformed[key] = value.map(item => this.transformMetadataFilter(item));
-        } else {
+        } else if (typeof value === 'object' && value !== null) {
           transformed[key] = this.transformMetadataFilter(value);
+        } else {
+          transformed[key] = value;
         }
       }
       // Check if the key already has 'metadata.' prefix
       else if (key.startsWith('metadata.')) {
-        // Already prefixed, keep as is
-        transformed[key] = value;
+        // Already prefixed, keep as is but recursively transform the value if it's an object with operators
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          const hasOperator = Object.keys(value).some(k => k.startsWith('$'));
+          transformed[key] = hasOperator ? value : value;
+        } else {
+          transformed[key] = value;
+        }
       }
       // Check if this is a known metadata field that needs prefixing
       else if (this.isMetadataField(key)) {
         // Add metadata. prefix for fields stored in metadata subdocument
+        // If the value is an object with operators, keep the operators as-is
         transformed[`metadata.${key}`] = value;
       } else {
         // Keep other fields as is

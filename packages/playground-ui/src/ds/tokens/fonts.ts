@@ -1,15 +1,24 @@
 export const FontSizes = {
-  'header-md': '1rem', // 16px
-  'ui-lg': '0.813rem', // 13px
-  'ui-md': '0.75rem', // 12px
-  'ui-sm': '0.688rem', // 11px
-  'ui-xs': '0.625rem', // 10px
+  // UI text sizes
+  'ui-xs': '0.625rem', // 10px - small labels, badges
+  'ui-sm': '0.75rem', // 12px - secondary text
+  'ui-md': '0.875rem', // 14px - body text
+  'ui-lg': '1rem', // 16px - emphasized text
+
+  // Header sizes
+  'header-sm': '1.125rem', // 18px
+  'header-md': '1.25rem', // 20px
+  'header-lg': '1.5rem', // 24px
+  'header-xl': '1.75rem', // 28px
 };
 
 export const LineHeights = {
-  'header-md': '125%',
-  'ui-lg': '153.846%',
-  'ui-md': '166.667%',
-  'ui-sm': '181.818%',
-  'ui-xs': '200%',
+  'ui-xs': '160%', // 16px
+  'ui-sm': '150%', // 18px
+  'ui-md': '143%', // 20px
+  'ui-lg': '150%', // 24px
+  'header-sm': '133%', // 24px
+  'header-md': '140%', // 28px
+  'header-lg': '133%', // 32px
+  'header-xl': '129%', // 36px
 };

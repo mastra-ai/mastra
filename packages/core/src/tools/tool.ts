@@ -1,7 +1,18 @@
 import type { Mastra } from '../mastra';
-import type { ZodLikeSchema } from '../types/zod-compat';
-import type { ToolAction, ToolExecutionContext, MastraToolInvocationOptions } from './types';
-import { validateToolInput } from './validation';
+import { RequestContext } from '../request-context';
+import type { SchemaWithValidation } from '../stream/base/schema';
+import type { SuspendOptions } from '../workflows';
+import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
+import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
+
+/**
+ * Marker to identify Mastra tools even when `instanceof` fails.
+ * This can happen in environments like Vite SSR where the same module
+ * may be loaded multiple times, creating different class instances.
+ * Uses Symbol.for() so the same symbol is shared across module copies.
+ * Follows the naming convention: <org>.<product>.<category>.<className>
+ */
+export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
 /**
  * A type-safe tool that agents and workflows can call to perform specific actions.
@@ -21,8 +32,8 @@ import { validateToolInput } from './validation';
  *     location: z.string(),
  *     units: z.enum(['celsius', 'fahrenheit']).optional()
  *   }),
- *   execute: async ({ context }) => {
- *     return await fetchWeather(context.location, context.units);
+ *   execute: async (inputData) => {
+ *     return await fetchWeather(inputData.location, inputData.units);
  *   }
  * });
  * ```
@@ -34,8 +45,8 @@ import { validateToolInput } from './validation';
  *   description: 'Delete a file',
  *   requireApproval: true,
  *   inputSchema: z.object({ filepath: z.string() }),
- *   execute: async ({ context }) => {
- *     await fs.unlink(context.filepath);
+ *   execute: async (inputData) => {
+ *     await fs.unlink(inputData.filepath);
  *     return { deleted: true };
  *   }
  * });
@@ -47,51 +58,57 @@ import { validateToolInput } from './validation';
  *   id: 'save-data',
  *   description: 'Save data to storage',
  *   inputSchema: z.object({ key: z.string(), value: z.any() }),
- *   execute: async ({ context, mastra }) => {
- *     const storage = mastra?.getStorage();
- *     await storage?.set(context.key, context.value);
+ *   execute: async (inputData, context) => {
+ *     const storage = context?.mastra?.getStorage();
+ *     await storage?.set(inputData.key, inputData.value);
  *     return { saved: true };
  *   }
  * });
  * ```
  */
 export class Tool<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSchemaIn,
+  TSchemaIn = unknown,
+  TSchemaOut = unknown,
+  TSuspendSchema = unknown,
+  TResumeSchema = unknown,
+  TContext extends ToolExecutionContext<TSuspendSchema, TResumeSchema, any> = ToolExecutionContext<
     TSuspendSchema,
     TResumeSchema
   >,
-> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>
-{
+  TId extends string = string,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> implements ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext> {
   /** Unique identifier for the tool */
-  id: string;
+  id: TId;
 
   /** Description of what the tool does */
   description: string;
 
   /** Schema for validating input parameters */
-  inputSchema?: TSchemaIn;
+  inputSchema?: SchemaWithValidation<TSchemaIn>;
 
   /** Schema for validating output structure */
-  outputSchema?: TSchemaOut;
+  outputSchema?: SchemaWithValidation<TSchemaOut>;
 
   /** Schema for suspend operation data */
-  suspendSchema?: TSuspendSchema;
+  suspendSchema?: SchemaWithValidation<TSuspendSchema>;
 
   /** Schema for resume operation data */
-  resumeSchema?: TResumeSchema;
+  resumeSchema?: SchemaWithValidation<TResumeSchema>;
 
   /**
-   * Function that performs the tool's action
-   * @param context - Execution context with validated input
-   * @param options - Invocation options including suspend/resume data
-   * @returns Promise resolving to tool output
+   * Schema for validating request context values.
+   * When provided, the request context will be validated against this schema before tool execution.
    */
-  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'];
+  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+
+  /**
+   * Tool execution function
+   * @param inputData - The raw, validated input data
+   * @param context - Optional execution context with metadata
+   * @returns Promise resolving to tool output or a ValidationError if input validation fails
+   */
+  execute?: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute'];
 
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
@@ -107,6 +124,88 @@ export class Tool<
   requireApproval?: boolean;
 
   /**
+   * Provider-specific options passed to the model when this tool is used.
+   * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.
+   * @example
+   * ```typescript
+   * providerOptions: {
+   *   anthropic: {
+   *     cacheControl: { type: 'ephemeral' }
+   *   }
+   * }
+   * ```
+   */
+  providerOptions?: Record<string, Record<string, unknown>>;
+
+  /**
+   * Optional function to transform the tool's raw output before sending it to the model.
+   * The raw result is still available for application logic; only the model sees the transformed version.
+   */
+  toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
+   * Optional MCP-specific properties including annotations and metadata.
+   * Only relevant when the tool is being used in an MCP context.
+   * @example
+   * ```typescript
+   * mcp: {
+   *   annotations: {
+   *     title: 'Weather Lookup',
+   *     readOnlyHint: true,
+   *     destructiveHint: false
+   *   },
+   *   _meta: {
+   *     version: '1.0.0',
+   *     author: 'team@example.com'
+   *   }
+   * }
+   * ```
+   */
+  mcp?: MCPToolProperties;
+
+  onInputStart?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputStart'];
+  onInputDelta?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputDelta'];
+  onInputAvailable?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onInputAvailable'];
+  onOutput?: ToolAction<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspendSchema,
+    TResumeSchema,
+    TContext,
+    TId,
+    TRequestContext
+  >['onOutput'];
+
+  /**
+   * Examples of valid tool inputs passed through to the AI SDK.
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -116,32 +215,174 @@ export class Tool<
    *   id: 'my-tool',
    *   description: 'Does something useful',
    *   inputSchema: z.object({ name: z.string() }),
-   *   execute: async ({ context }) => ({ greeting: `Hello ${context.name}` })
+   *   execute: async (inputData) => ({ greeting: `Hello ${inputData.name}` })
    * });
    * ```
    */
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>) {
+  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>) {
+    (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
     this.inputSchema = opts.inputSchema;
     this.outputSchema = opts.outputSchema;
     this.suspendSchema = opts.suspendSchema;
     this.resumeSchema = opts.resumeSchema;
+    this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.providerOptions = opts.providerOptions;
+    this.toModelOutput = opts.toModelOutput;
+    this.inputExamples = opts.inputExamples;
+    this.mcp = opts.mcp;
+    this.onInputStart = opts.onInputStart;
+    this.onInputDelta = opts.onInputDelta;
+    this.onInputAvailable = opts.onInputAvailable;
+    this.onOutput = opts.onOutput;
 
-    // Wrap the execute function with validation if it exists
+    // Tools receive two parameters:
+    // 1. input - The raw, validated input data
+    // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (context: TContext, options?: MastraToolInvocationOptions) => {
-        const { resumeData, suspend } = options ?? {};
+      this.execute = async (inputData: unknown, context?: any) => {
         // Validate input if schema exists
-        const { data, error } = validateToolInput(this.inputSchema, context, this.id);
+        const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
           return error as any;
         }
 
-        return originalExecute({ ...(data as TContext), suspend, resumeData } as TContext, options);
+        // Validate request context if schema exists
+        const { error: requestContextError } = validateRequestContext(
+          this.requestContextSchema,
+          context?.requestContext,
+          this.id,
+        );
+        if (requestContextError) {
+          return requestContextError as any;
+        }
+
+        let suspendData = null;
+
+        const baseContext = context
+          ? {
+              ...context,
+              ...(context.suspend
+                ? {
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
+                      suspendData = args;
+                      return context.suspend?.(args, suspendOptions);
+                    },
+                  }
+                : {}),
+            }
+          : {};
+
+        // Organize context based on execution source
+        let organizedContext = baseContext;
+        if (!context) {
+          // No context provided - create a minimal context with requestContext
+          organizedContext = {
+            requestContext: new RequestContext(),
+            mastra: undefined,
+          };
+        } else {
+          // Check if this is agent execution (has toolCallId and messages)
+          const isAgentExecution = baseContext.toolCallId && baseContext.messages;
+
+          // Check if this is workflow execution (has workflow properties)
+          // Agent execution takes precedence - don't treat as workflow if it's an agent call
+          const isWorkflowExecution = !isAgentExecution && (baseContext.workflow || baseContext.workflowId);
+
+          if (isAgentExecution && !baseContext.agent) {
+            // Reorganize agent context - nest agent-specific properties under 'agent' key
+            const { toolCallId, messages, suspend, resumeData, threadId, resourceId, writableStream, ...rest } =
+              baseContext;
+            organizedContext = {
+              ...rest,
+              agent: {
+                toolCallId,
+                messages,
+                suspend,
+                resumeData,
+                threadId,
+                resourceId,
+                writableStream,
+              },
+              // Ensure requestContext is always present
+              requestContext: rest.requestContext || new RequestContext(),
+            };
+          } else if (isWorkflowExecution && !baseContext.workflow) {
+            // Reorganize workflow context - nest workflow-specific properties under 'workflow' key
+            const { workflowId, runId, state, setState, suspend, resumeData, ...rest } = baseContext;
+            organizedContext = {
+              ...rest,
+              workflow: {
+                workflowId,
+                runId,
+                state,
+                setState,
+                suspend,
+                resumeData,
+              },
+              // Ensure requestContext is always present
+              requestContext: rest.requestContext || new RequestContext(),
+            };
+          } else {
+            // Ensure requestContext is always present even for direct execution
+            organizedContext = {
+              ...baseContext,
+              agent: baseContext.agent
+                ? {
+                    ...baseContext.agent,
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
+                      suspendData = args;
+                      return baseContext.agent?.suspend?.(args, suspendOptions);
+                    },
+                  }
+                : baseContext.agent,
+              workflow: baseContext.workflow
+                ? {
+                    ...baseContext.workflow,
+                    suspend: (args: any, suspendOptions?: SuspendOptions) => {
+                      suspendData = args;
+                      return baseContext.workflow?.suspend?.(args, suspendOptions);
+                    },
+                  }
+                : baseContext.workflow,
+              requestContext: baseContext.requestContext || new RequestContext(),
+            };
+          }
+        }
+
+        const resumeData =
+          organizedContext.agent?.resumeData ?? organizedContext.workflow?.resumeData ?? organizedContext?.resumeData;
+
+        if (resumeData) {
+          const resumeValidation = validateToolInput(this.resumeSchema, resumeData, this.id);
+          if (resumeValidation.error) {
+            return resumeValidation.error as any;
+          }
+        }
+
+        // Call the original execute with validated input and organized context
+        const output = await originalExecute(data as any, organizedContext);
+
+        if (suspendData) {
+          const suspendValidation = validateToolSuspendData(this.suspendSchema, suspendData, this.id);
+          if (suspendValidation.error) {
+            return suspendValidation.error as any;
+          }
+        }
+
+        const skiptOutputValidation = !!(typeof output === 'undefined' && suspendData);
+
+        // Validate output if schema exists
+        const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
+        if (outputValidation.error) {
+          return outputValidation.error as any;
+        }
+
+        return outputValidation.data;
       };
     }
   }
@@ -179,10 +420,10 @@ export class Tool<
  *     a: z.number(),
  *     b: z.number()
  *   }),
- *   execute: async ({ context }) => {
- *     const result = context.operation === 'add'
- *       ? context.a + context.b
- *       : context.a - context.b;
+ *   execute: async (inputData) => {
+ *     const result = inputData.operation === 'add'
+ *       ? inputData.a + inputData.b
+ *       : inputData.a - inputData.b;
  *     return { result };
  *   }
  * });
@@ -199,8 +440,8 @@ export class Tool<
  *     name: z.string(),
  *     email: z.string()
  *   }),
- *   execute: async ({ context }) => {
- *     return await fetchUser(context.userId);
+ *   execute: async (inputData) => {
+ *     return await fetchUser(inputData.userId);
  *   }
  * });
  * ```
@@ -214,9 +455,9 @@ export class Tool<
  *     city: z.string(),
  *     units: z.enum(['metric', 'imperial']).default('metric')
  *   }),
- *   execute: async ({ context }) => {
+ *   execute: async (inputData) => {
  *     const response = await fetch(
- *       `https://api.weather.com/v1/weather?q=${context.city}&units=${context.units}`
+ *       `https://api.weather.com/v1/weather?q=${inputData.city}&units=${inputData.units}`
  *     );
  *     return response.json();
  *   }
@@ -224,32 +465,19 @@ export class Tool<
  * ```
  */
 export function createTool<
-  TSchemaIn extends ZodLikeSchema | undefined = undefined,
-  TSchemaOut extends ZodLikeSchema | undefined = undefined,
-  TSuspendSchema extends ZodLikeSchema = any,
-  TResumeSchema extends ZodLikeSchema = any,
-  TContext extends ToolExecutionContext<TSchemaIn, TSuspendSchema, TResumeSchema> = ToolExecutionContext<
-    TSchemaIn,
-    TSuspendSchema,
-    TResumeSchema
+  TId extends string = string,
+  TSchemaIn = unknown,
+  TSchemaOut = unknown,
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
   >,
-  TExecute extends ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext>['execute'] = ToolAction<
-    TSchemaIn,
-    TSchemaOut,
-    TSuspendSchema,
-    TResumeSchema,
-    TContext
-  >['execute'],
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-    execute?: TExecute;
-  },
-): [TSchemaIn, TSchemaOut, TExecute] extends [ZodLikeSchema, ZodLikeSchema, Function]
-  ? Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> & {
-      inputSchema: TSchemaIn;
-      outputSchema: TSchemaOut;
-      execute: (context: TContext, options: MastraToolInvocationOptions) => Promise<any>;
-    }
-  : Tool<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext> {
-  return new Tool(opts) as any;
+  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
+): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext> {
+  return new Tool(opts);
 }

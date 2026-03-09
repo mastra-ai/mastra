@@ -4,7 +4,7 @@ import { convertToDataContent, detectMediaType, imageMediaTypeSignatures } from 
 
 export function convertImageFilePart(
   part: ImagePart | FilePart,
-  downloadedAssets: Record<string, { mediaType: string | undefined; data: Uint8Array }>,
+  downloadedAssets?: Record<string, { mediaType: string | undefined; data: Uint8Array }>,
 ): LanguageModelV2TextPart | LanguageModelV2FilePart {
   let originalData: DataContent | URL;
   const type = part.type;
@@ -26,7 +26,7 @@ export function convertImageFilePart(
   let data: Uint8Array | string | URL = convertedData; // binary | base64 | url
 
   // If the content is a URL, we check if it was downloaded:
-  if (data instanceof URL) {
+  if (data instanceof URL && downloadedAssets) {
     const downloadedFile = downloadedAssets[data.toString()];
     if (downloadedFile) {
       data = downloadedFile.data;

@@ -9,7 +9,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { ToolsIcon, WorkflowIcon } from '@/ds/icons';
 import { MCPTableColumn } from './types';
 import { useMastraClient } from '@mastra/react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { useMCPServerTools } from '../../hooks/useMCPServerTools';
 
 const NameCell = ({ row }: { row: Row<MCPTableColumn> }) => {

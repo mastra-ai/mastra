@@ -15,6 +15,7 @@ describe('commonjs', () => {
     console.log('registry', registry);
     console.log('tag', tag);
     fixturePath = await mkdtemp(join(tmpdir(), 'mastra-commonjs-test-'));
+    console.log('fixturePath', fixturePath);
 
     process.env.npm_config_registry = registry;
     await setupTestProject(fixturePath);
@@ -55,7 +56,7 @@ describe('commonjs', () => {
 
             Your primary function is to help users get weather details for specific locations. When responding:
             - Always ask for a location if none is provided
-            - If the location name isn’t in English, please translate it
+            - If the location name isn't in English, please translate it
             - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
             - Include relevant details like humidity, wind conditions, and precipitation
             - Keep responses concise but informative

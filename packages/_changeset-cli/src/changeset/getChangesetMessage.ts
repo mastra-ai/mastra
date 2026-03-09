@@ -9,7 +9,7 @@ async function openEditor(template: string): Promise<string> {
       message: '',
       default: template,
       postfix: '.md',
-      waitForUseInput: false,
+      waitForUserInput: false,
     });
 
     // Remove comment lines and trim

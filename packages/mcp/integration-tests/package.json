@@ -10,17 +10,18 @@
     "@ai-sdk/react": "^1.2.12",
     "@mastra/client-js": "*",
     "@mastra/mcp": "*",
-    "dotenv": "^16.6.1",
+    "dotenv": "^17.2.3",
+    "vite": "^7.3.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@mastra/core": "*",
-    "@testing-library/react": "^16.3.0",
-    "@types/node": "^20.17.57",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "22.19.13",
     "get-port": "^7.1.0",
     "mastra": "*",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "pnpm": {
     "overrides": {

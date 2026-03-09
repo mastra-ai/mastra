@@ -1,5 +1,5 @@
-import { SelectField, SearchField } from '@/components/ui/elements';
-import { Button } from '@/components/ui/elements/buttons';
+import { SelectField, SearchField } from '@/ds/components/FormFields';
+import { Button } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 
@@ -34,8 +34,8 @@ export function TemplatesTools({
     return (
       <div
         className={cn(
-          'h-[6.5rem] flex items-center gap-[2rem]',
-          '[&>div]:bg-surface3 [&>div]:w-[12rem] [&>div]:h-[2rem] [&>div]:animate-pulse',
+          'h-[6.5rem] flex items-center gap-8',
+          '[&>div]:bg-surface3 [&>div]:w-48 [&>div]:h-8 [&>div]:animate-pulse',
           className,
         )}
       >
@@ -45,7 +45,7 @@ export function TemplatesTools({
   }
 
   return (
-    <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-[2rem] bg-surface2 py-[2rem]', className)}>
+    <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-8 bg-surface2 py-8', className)}>
       <SearchField
         label="Search templates"
         value={searchTerm}

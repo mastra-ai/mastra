@@ -1,43 +1,38 @@
 import { z } from 'zod';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
-import type { OutputSchema } from '../../../stream/base/schema';
+import type { Span, SpanType } from '../../../observability';
+import { createObservabilityContext } from '../../../observability';
+import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
-interface PrepareToolsStepOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface PrepareToolsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
+  requestContext: RequestContext;
+  agentSpan: Span<SpanType.AGENT_RUN>;
+  methodType: AgentMethodType;
   memory?: MastraMemory;
 }
 
-export function createPrepareToolsStep<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareToolsStep<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
   resourceId,
   runId,
-  runtimeContext,
-  agentAISpan,
+  requestContext,
+  agentSpan,
   methodType,
   memory,
-}: PrepareToolsStepOptions<OUTPUT, FORMAT>) {
+}: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
     inputSchema: z.object({}),
@@ -68,10 +63,13 @@ export function createPrepareToolsStep<
         threadId,
         resourceId,
         runId,
-        runtimeContext,
-        tracingContext: { currentSpan: agentAISpan },
-        writableStream: options.writableStream,
+        requestContext,
+        ...createObservabilityContext({ currentSpan: agentSpan }),
+        outputWriter: options.outputWriter,
         methodType,
+        memoryConfig: options.memory?.options,
+        autoResumeSuspendedTools: options.autoResumeSuspendedTools,
+        delegation: options.delegation,
       });
 
       return {

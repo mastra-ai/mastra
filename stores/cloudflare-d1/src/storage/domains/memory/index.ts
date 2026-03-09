@@ -1,30 +1,59 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMessageV1, MastraMessageV2, StorageThreadType } from '@mastra/core/memory';
+import type { MastraMessageV1, MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import {
+  createStorageErrorId,
   ensureDate,
   MemoryStorage,
-  resolveMessageLimit,
   serializeDate,
   TABLE_MESSAGES,
   TABLE_THREADS,
   TABLE_RESOURCES,
+  TABLE_SCHEMAS,
+  normalizePerPage,
+  calculatePagination,
 } from '@mastra/core/storage';
-import type { PaginationInfo, StorageGetMessagesArg, StorageResourceType } from '@mastra/core/storage';
+import type {
+  StorageResourceType,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
+} from '@mastra/core/storage';
+import { D1DB, resolveD1Config } from '../../db';
+import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
-import type { StoreOperationsD1 } from '../operations';
 import { deserializeValue, isArrayOfRecords } from '../utils';
 
 export class MemoryStorageD1 extends MemoryStorage {
-  private operations: StoreOperationsD1;
-  constructor({ operations }: { operations: StoreOperationsD1 }) {
+  #db: D1DB;
+
+  constructor(config: D1DomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new D1DB(resolveD1Config(config));
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+    await this.#db.createTable({ tableName: TABLE_MESSAGES, schema: TABLE_SCHEMAS[TABLE_MESSAGES] });
+    await this.#db.createTable({ tableName: TABLE_RESOURCES, schema: TABLE_SCHEMAS[TABLE_RESOURCES] });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_MESSAGES });
+    await this.#db.clearTable({ tableName: TABLE_THREADS });
+    await this.#db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
   async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    const resource = await this.operations.load<StorageResourceType>({
+    const resource = await this.#db.load<StorageResourceType>({
       tableName: TABLE_RESOURCES,
       keys: { id: resourceId },
     });
@@ -44,7 +73,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_RESOURCE_BY_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_RESOURCE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error processing resource ${resourceId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -59,7 +88,7 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    const fullTableName = this.operations.getTableName(TABLE_RESOURCES);
+    const fullTableName = this.#db.getTableName(TABLE_RESOURCES);
 
     // Prepare the record for SQL insertion
     const resourceToSave = {
@@ -71,7 +100,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     };
 
     // Process record for SQL insertion
-    const processedRecord = await this.operations.processRecord(resourceToSave);
+    const processedRecord = await this.#db.processRecord(resourceToSave);
 
     const columns = Object.keys(processedRecord);
     const values = Object.values(processedRecord);
@@ -90,12 +119,12 @@ export class MemoryStorageD1 extends MemoryStorage {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
       return resource;
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_SAVE_RESOURCE_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to save resource to ${fullTableName}: ${error instanceof Error ? error.message : String(error)}`,
@@ -140,7 +169,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       updatedAt,
     };
 
-    const fullTableName = this.operations.getTableName(TABLE_RESOURCES);
+    const fullTableName = this.#db.getTableName(TABLE_RESOURCES);
 
     const columns = ['workingMemory', 'metadata', 'updatedAt'];
     const values = [updatedResource.workingMemory, JSON.stringify(updatedResource.metadata), updatedAt.toISOString()];
@@ -150,12 +179,12 @@ export class MemoryStorageD1 extends MemoryStorage {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
       return updatedResource;
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_UPDATE_RESOURCE_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_RESOURCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to update resource ${resourceId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -167,7 +196,7 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    const thread = await this.operations.load<StorageThreadType>({
+    const thread = await this.#db.load<StorageThreadType>({
       tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
@@ -187,7 +216,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREAD_BY_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'GET_THREAD_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error processing thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -201,53 +230,45 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead
-   */
-  async getThreadsByResourceId({ resourceId }: { resourceId: string }): Promise<StorageThreadType[]> {
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
     try {
-      const query = createSqlBuilder().select('*').from(fullTableName).where('resourceId = ?', resourceId);
-
-      const { sql, params } = query.build();
-      const results = await this.operations.executeQuery({ sql, params });
-
-      return (isArrayOfRecords(results) ? results : []).map((thread: any) => ({
-        ...thread,
-        createdAt: ensureDate(thread.createdAt) as Date,
-        updatedAt: ensureDate(thread.updatedAt) as Date,
-        metadata:
-          typeof thread.metadata === 'string'
-            ? (JSON.parse(thread.metadata || '{}') as Record<string, any>)
-            : thread.metadata || {},
-      }));
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
     } catch (error) {
-      const mastraError = new MastraError(
+      throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
+          category: ErrorCategory.USER,
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
         },
-        error,
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
       );
-      this.logger?.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      return [];
     }
-  }
 
-  public async getThreadsByResourceIdPaginated(args: {
-    resourceId: string;
-    page: number;
-    perPage: number;
-  }): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    const { resourceId, page, perPage } = args;
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const { field, direction } = this.parseOrderBy(orderBy);
+    const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
     const mapRowToStorageThreadType = (row: Record<string, any>): StorageThreadType => ({
       ...(row as StorageThreadType),
@@ -260,40 +281,94 @@ export class MemoryStorageD1 extends MemoryStorage {
     });
 
     try {
-      const countQuery = createSqlBuilder().count().from(fullTableName).where('resourceId = ?', resourceId);
-      const countResult = (await this.operations.executeQuery(countQuery.build())) as {
+      let countQuery = createSqlBuilder().count().from(fullTableName);
+      let selectQuery = createSqlBuilder().select('*').from(fullTableName);
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        countQuery = countQuery.whereAnd('resourceId = ?', filter.resourceId);
+        selectQuery = selectQuery.whereAnd('resourceId = ?', filter.resourceId);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          // Validate filter value type - only allow scalar types
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError(
+              {
+                id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+                details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+              },
+              new Error('Invalid metadata filter value type'),
+            );
+          }
+
+          // Handle null values specially: json_extract returns NULL for null values,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            const condition = `json_extract(metadata, '$.${key}') IS NULL`;
+            countQuery = countQuery.whereAnd(condition);
+            selectQuery = selectQuery.whereAnd(condition);
+          } else {
+            // json_extract returns the raw value (unquoted for strings, native for numbers/booleans)
+            // Pass native values directly so SQLite compares types correctly
+            const condition = `json_extract(metadata, '$.${key}') = ?`;
+            // Type assertion is safe here because we've validated above that value is a scalar type
+            const filterValue = value as string | number | boolean;
+            countQuery = countQuery.whereAnd(condition, filterValue);
+            selectQuery = selectQuery.whereAnd(condition, filterValue);
+          }
+        }
+      }
+
+      const countResult = (await this.#db.executeQuery(countQuery.build())) as {
         count: number;
       }[];
       const total = Number(countResult?.[0]?.count ?? 0);
 
-      const selectQuery = createSqlBuilder()
-        .select('*')
-        .from(fullTableName)
-        .where('resourceId = ?', resourceId)
-        .orderBy('createdAt', 'DESC')
-        .limit(perPage)
-        .offset(page * perPage);
+      if (total === 0) {
+        return {
+          threads: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
-      const results = (await this.operations.executeQuery(selectQuery.build())) as Record<string, any>[];
+      const limitValue = perPageInput === false ? total : perPage;
+      selectQuery = selectQuery.orderBy(field, direction).limit(limitValue).offset(offset);
+
+      const results = (await this.#db.executeQuery(selectQuery.build())) as Record<string, any>[];
       const threads = results.map(mapRowToStorageThreadType);
 
       return {
         threads,
         total,
         page,
-        perPage,
-        hasMore: page * perPage + threads.length < total,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_THREADS_BY_RESOURCE_ID_PAGINATED_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Error getting threads by resourceId ${resourceId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { resourceId },
+          text: `Error listing threads: ${error instanceof Error ? error.message : String(error)}`,
+          details: {
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
+          },
         },
         error,
       );
@@ -303,14 +378,14 @@ export class MemoryStorageD1 extends MemoryStorage {
         threads: [],
         total: 0,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
   }
 
   async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
+    const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
     // Prepare the record for SQL insertion
     const threadToSave = {
@@ -323,7 +398,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     };
 
     // Process record for SQL insertion
-    const processedRecord = await this.operations.processRecord(threadToSave);
+    const processedRecord = await this.#db.processRecord(threadToSave);
 
     const columns = Object.keys(processedRecord);
     const values = Object.values(processedRecord);
@@ -343,12 +418,12 @@ export class MemoryStorageD1 extends MemoryStorage {
     const { sql, params } = query.build();
 
     try {
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
       return thread;
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_SAVE_THREAD_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to save thread to ${fullTableName}: ${error instanceof Error ? error.message : String(error)}`,
@@ -373,7 +448,7 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (!thread) {
         throw new Error(`Thread ${id} not found`);
       }
-      const fullTableName = this.operations.getTableName(TABLE_THREADS);
+      const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
       const mergedMetadata = {
         ...(typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata),
@@ -388,7 +463,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       const { sql, params } = query.build();
 
-      await this.operations.executeQuery({ sql, params });
+      await this.#db.executeQuery({ sql, params });
 
       return {
         ...thread,
@@ -402,7 +477,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_UPDATE_THREAD_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to update thread ${id}: ${error instanceof Error ? error.message : String(error)}`,
@@ -414,25 +489,25 @@ export class MemoryStorageD1 extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    const fullTableName = this.operations.getTableName(TABLE_THREADS);
+    const fullTableName = this.#db.getTableName(TABLE_THREADS);
 
     try {
       // Delete the thread
       const deleteThreadQuery = createSqlBuilder().delete(fullTableName).where('id = ?', threadId);
 
       const { sql: threadSql, params: threadParams } = deleteThreadQuery.build();
-      await this.operations.executeQuery({ sql: threadSql, params: threadParams });
+      await this.#db.executeQuery({ sql: threadSql, params: threadParams });
 
       // Also delete associated messages
-      const messagesTableName = this.operations.getTableName(TABLE_MESSAGES);
+      const messagesTableName = this.#db.getTableName(TABLE_MESSAGES);
       const deleteMessagesQuery = createSqlBuilder().delete(messagesTableName).where('thread_id = ?', threadId);
 
       const { sql: messagesSql, params: messagesParams } = deleteMessagesQuery.build();
-      await this.operations.executeQuery({ sql: messagesSql, params: messagesParams });
+      await this.#db.executeQuery({ sql: messagesSql, params: messagesParams });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_DELETE_THREAD_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DELETE_THREAD', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to delete thread ${threadId}: ${error instanceof Error ? error.message : String(error)}`,
@@ -443,13 +518,9 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    const { messages, format = 'v1' } = args;
-    if (messages.length === 0) return [];
+  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+    const { messages } = args;
+    if (messages.length === 0) return { messages: [] };
 
     try {
       const now = new Date();
@@ -492,25 +563,24 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Insert messages and update thread's updatedAt in parallel
       await Promise.all([
-        this.operations.batchUpsert({
+        this.#db.batchUpsert({
           tableName: TABLE_MESSAGES,
           records: messagesToInsert,
         }),
         // Update thread's updatedAt timestamp
-        this.operations.executeQuery({
-          sql: `UPDATE ${this.operations.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
+        this.#db.executeQuery({
+          sql: `UPDATE ${this.#db.getTableName(TABLE_THREADS)} SET updatedAt = ? WHERE id = ?`,
           params: [now.toISOString(), threadId],
         }),
       ]);
 
       this.logger.debug(`Saved ${messages.length} messages`);
       const list = new MessageList().add(messages, 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
+      return { messages: list.get.all.db() };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_SAVE_MESSAGES_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'SAVE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to save messages: ${error instanceof Error ? error.message : String(error)}`,
@@ -520,29 +590,29 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  private async _getIncludedMessages(threadId: string, selectBy: StorageGetMessagesArg['selectBy']) {
-    if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-
-    const include = selectBy?.include;
-    if (!include) return null;
+  private async _getIncludedMessages(include: StorageListMessagesInput['include']) {
+    if (!include || include.length === 0) return null;
 
     const unionQueries: string[] = [];
     const params: any[] = [];
     let paramIdx = 1;
+    const tableName = this.#db.getTableName(TABLE_MESSAGES);
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // if threadId is provided, use it, otherwise use threadId from args
-      const searchId = inc.threadId || threadId;
+      // Query by message ID directly - get the threadId from the message itself via subquery
 
       unionQueries.push(`
                 SELECT * FROM (
-                  WITH ordered_messages AS (
+                  WITH target_thread AS (
+                    SELECT thread_id FROM ${tableName} WHERE id = ?
+                  ),
+                  ordered_messages AS (
                     SELECT
                       *,
                       ROW_NUMBER() OVER (ORDER BY createdAt ASC) AS row_num
-                    FROM ${this.operations.getTableName(TABLE_MESSAGES)}
-                    WHERE thread_id = ?
+                    FROM ${tableName}
+                    WHERE thread_id = (SELECT thread_id FROM target_thread)
                   )
                   SELECT
                     m.id,
@@ -566,12 +636,12 @@ export class MemoryStorageD1 extends MemoryStorage {
                 ) AS query_${paramIdx}
             `);
 
-      params.push(searchId, id, id, withNextMessages, withPreviousMessages);
+      params.push(id, id, id, withNextMessages, withPreviousMessages);
       paramIdx++;
     }
 
     const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY createdAt ASC';
-    const messages = await this.operations.executeQuery({ sql: finalQuery, params });
+    const messages = await this.#db.executeQuery({ sql: finalQuery, params });
 
     if (!Array.isArray(messages)) {
       return [];
@@ -592,117 +662,9 @@ export class MemoryStorageD1 extends MemoryStorage {
     return processedMessages;
   }
 
-  /**
-   * @deprecated use getMessagesPaginated instead
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
-      const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
-      const limit = resolveMessageLimit({
-        last: selectBy?.last,
-        defaultLimit: 40,
-      });
-      const include = selectBy?.include || [];
-      const messages: any[] = [];
-
-      if (include.length) {
-        const includeResult = await this._getIncludedMessages(threadId, selectBy);
-        if (Array.isArray(includeResult)) messages.push(...includeResult);
-      }
-
-      // Exclude already fetched ids
-      const excludeIds = messages.map(m => m.id);
-      const query = createSqlBuilder()
-        .select(['id', 'content', 'role', 'type', 'createdAt', 'thread_id AS threadId'])
-        .from(fullTableName)
-        .where('thread_id = ?', threadId);
-
-      if (excludeIds.length > 0) {
-        query.andWhere(`id NOT IN (${excludeIds.map(() => '?').join(',')})`, ...excludeIds);
-      }
-
-      query.orderBy('createdAt', 'DESC').limit(limit);
-
-      const { sql, params } = query.build();
-
-      const result = await this.operations.executeQuery({ sql, params });
-
-      if (Array.isArray(result)) messages.push(...result);
-
-      // Sort by creation time to ensure proper order
-      messages.sort((a, b) => {
-        const aRecord = a as Record<string, any>;
-        const bRecord = b as Record<string, any>;
-        const timeA = new Date(aRecord.createdAt as string).getTime();
-        const timeB = new Date(bRecord.createdAt as string).getTime();
-        return timeA - timeB;
-      });
-
-      // Parse message content
-      const processedMessages = messages.map(message => {
-        const processedMsg: Record<string, any> = {};
-
-        for (const [key, value] of Object.entries(message)) {
-          if (key === `type` && value === `v2`) continue;
-          processedMsg[key] = deserializeValue(value);
-        }
-
-        return processedMsg;
-      });
-      this.logger.debug(`Retrieved ${messages.length} messages for thread ${threadId}`);
-      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      if (format === `v2`) return list.get.all.v2();
-      return list.get.all.v1();
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_ERROR',
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to retrieve messages for thread ${threadId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-          details: { threadId, resourceId: resourceId ?? '' },
-        },
-        error,
-      );
-      this.logger?.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
-      throw mastraError;
-    }
-  }
-
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format: 'v1';
-  }): Promise<MastraMessageV1[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  public async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    if (messageIds.length === 0) return [];
-    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
+  public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    if (messageIds.length === 0) return { messages: [] };
+    const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
     const messages: any[] = [];
 
     try {
@@ -715,7 +677,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       const { sql, params } = query.build();
 
-      const result = await this.operations.executeQuery({ sql, params });
+      const result = await this.#db.executeQuery({ sql, params });
 
       if (Array.isArray(result)) messages.push(...result);
 
@@ -731,13 +693,12 @@ export class MemoryStorageD1 extends MemoryStorage {
         return processedMsg;
       });
       this.logger.debug(`Retrieved ${messages.length} messages`);
-      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      if (format === `v1`) return list.get.all.v1();
-      return list.get.all.v2();
+      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      return { messages: list.get.all.db() };
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_BY_ID_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to retrieve messages by ID: ${error instanceof Error ? error.message : String(error)}`,
@@ -751,156 +712,226 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
   }
 
-  public async getMessagesPaginated({
-    threadId,
-    resourceId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<
-    PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }
-  > {
-    const { dateRange, page = 0, perPage: perPageInput } = selectBy?.pagination || {};
-    const { start: fromDate, end: toDate } = dateRange || {};
-    const perPage =
-      perPageInput !== undefined ? perPageInput : resolveMessageLimit({ last: selectBy?.last, defaultLimit: 40 });
+  public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
+    const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
 
-    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
-    const messages: any[] = [];
+    // Normalize threadId to array
+    const threadIds = Array.isArray(threadId) ? threadId : [threadId];
+
+    if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_THREAD_ID'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: Array.isArray(threadId) ? threadId.join(',') : threadId },
+        },
+        new Error('threadId must be a non-empty string or array of non-empty strings'),
+      );
+    }
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      if (!threadId.trim()) throw new Error('threadId must be a non-empty string');
+      const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
 
-      if (selectBy?.include?.length) {
-        const includeResult = await this._getIncludedMessages(threadId, selectBy);
-        if (Array.isArray(includeResult)) messages.push(...includeResult);
+      // Step 1: Get paginated messages from the thread first (without excluding included ones)
+      let query = `
+        SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
+        FROM ${fullTableName}
+        WHERE thread_id = ?
+      `;
+      const queryParams: any[] = [threadId];
+
+      if (resourceId) {
+        query += ` AND resourceId = ?`;
+        queryParams.push(resourceId);
       }
 
-      const countQuery = createSqlBuilder().count().from(fullTableName).where('thread_id = ?', threadId);
-
-      if (fromDate) {
-        countQuery.andWhere('createdAt >= ?', serializeDate(fromDate));
-      }
-      if (toDate) {
-        countQuery.andWhere('createdAt <= ?', serializeDate(toDate));
-      }
-
-      const countResult = (await this.operations.executeQuery(countQuery.build())) as {
-        count: number;
-      }[];
-      const total = Number(countResult[0]?.count ?? 0);
-
-      if (total === 0 && messages.length === 0) {
-        return {
-          messages: [],
-          total: 0,
-          page,
-          perPage,
-          hasMore: false,
-        };
+      const dateRange = filter?.dateRange;
+      if (dateRange?.start) {
+        const startDate =
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        query += ` AND createdAt ${startOp} ?`;
+        queryParams.push(startDate);
       }
 
-      // Exclude already included messages
-      const excludeIds = messages.map(m => m.id);
-      const excludeCondition = excludeIds.length > 0 ? `AND id NOT IN (${excludeIds.map(() => '?').join(',')})` : '';
-
-      let query: any;
-      let queryParams: any[] = [threadId];
-
-      if (fromDate) {
-        queryParams.push(serializeDate(fromDate));
-      }
-      if (toDate) {
-        queryParams.push(serializeDate(toDate));
+      if (dateRange?.end) {
+        const endDate =
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        query += ` AND createdAt ${endOp} ?`;
+        queryParams.push(endDate);
       }
 
-      if (excludeIds.length > 0) {
-        queryParams.push(...excludeIds);
+      // Build ORDER BY clause
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      query += ` ORDER BY "${field}" ${direction}`;
+
+      // Apply pagination
+      if (perPage !== Number.MAX_SAFE_INTEGER) {
+        query += ` LIMIT ? OFFSET ?`;
+        queryParams.push(perPage, offset);
       }
 
-      if (selectBy?.last && selectBy.last > 0) {
-        // Handle selectBy.last: get last N messages
-        query = `
-                    SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
-                    FROM ${fullTableName}
-                    WHERE thread_id = ?
-                    ${fromDate ? 'AND createdAt >= ?' : ''}
-                    ${toDate ? 'AND createdAt <= ?' : ''}
-                    ${excludeCondition}
-                    ORDER BY createdAt DESC
-                    LIMIT ?
-                `;
-        queryParams.push(selectBy.last);
-      } else {
-        // Regular pagination
-        query = `
-                    SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
-                    FROM ${fullTableName}
-                    WHERE thread_id = ?
-                    ${fromDate ? 'AND createdAt >= ?' : ''}
-                    ${toDate ? 'AND createdAt <= ?' : ''}
-                    ${excludeCondition}
-                    ORDER BY createdAt DESC
-                    LIMIT ? OFFSET ?
-                `;
-        queryParams.push(perPage, page * perPage);
-      }
-
-      const results = (await this.operations.executeQuery({ sql: query, params: queryParams })) as any[];
+      const results = await this.#db.executeQuery({ sql: query, params: queryParams });
 
       // Parse message content
-      const processedMessages = results.map(message => {
+      const paginatedMessages = (isArrayOfRecords(results) ? results : []).map((message: Record<string, any>) => {
         const processedMsg: Record<string, any> = {};
-
         for (const [key, value] of Object.entries(message)) {
           if (key === `type` && value === `v2`) continue;
           processedMsg[key] = deserializeValue(value);
         }
-
         return processedMsg;
       });
 
-      // For last N functionality, sort messages chronologically
-      if (selectBy?.last) {
-        processedMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      const paginatedCount = paginatedMessages.length;
+
+      // Get total count
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE thread_id = ?`;
+      const countParams: any[] = [threadId];
+
+      if (resourceId) {
+        countQuery += ` AND resourceId = ?`;
+        countParams.push(resourceId);
       }
 
-      const list = new MessageList().add(processedMessages as MastraMessageV1[] | MastraMessageV2[], 'memory');
-      messages.push(...(format === `v2` ? list.get.all.v2() : list.get.all.v1()));
+      if (dateRange?.start) {
+        const startDate =
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} ?`;
+        countParams.push(startDate);
+      }
+
+      if (dateRange?.end) {
+        const endDate =
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} ?`;
+        countParams.push(endDate);
+      }
+
+      const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {
+        count: number;
+      }[];
+      const total = Number(countResult[0]?.count ?? 0);
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && paginatedCount === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Step 2: Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(paginatedMessages.map((m: Record<string, any>) => m.id as string));
+      let includeMessages: MastraDBMessage[] = [];
+
+      if (include && include.length > 0) {
+        // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
+        const includeResult = (await this._getIncludedMessages(include)) as MastraDBMessage[];
+        if (Array.isArray(includeResult)) {
+          includeMessages = includeResult;
+
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              paginatedMessages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(paginatedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      // Calculate hasMore based on pagination window
+      // If all thread messages have been returned (through pagination or include), hasMore = false
+      // Otherwise, check if there are more pages in the pagination window
+      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore =
+        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
 
       return {
-        messages,
+        messages: finalMessages,
         total,
         page,
-        perPage,
-        hasMore: selectBy?.last ? false : page * perPage + messages.length < total,
+        perPage: perPageForResponse,
+        hasMore,
       };
-    } catch (error) {
+    } catch (error: any) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_GET_MESSAGES_PAGINATED_ERROR',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to retrieve messages for thread ${threadId}: ${
+          text: `Failed to list messages for thread ${Array.isArray(threadId) ? threadId.join(',') : threadId}: ${
             error instanceof Error ? error.message : String(error)
           }`,
-          details: { threadId, resourceId: resourceId ?? '' },
+          details: {
+            threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
+            resourceId: resourceId ?? '',
+          },
         },
         error,
       );
-      this.logger?.error(mastraError.toString());
-      this.logger?.trackException(mastraError);
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
       return {
         messages: [],
         total: 0,
         page,
-        perPage,
+        perPage: perPageForResponse,
         hasMore: false,
       };
     }
   }
 
   async updateMessages(args: {
-    messages: Partial<Omit<MastraMessageV2, 'createdAt'>> &
+    messages: Partial<Omit<MastraDBMessage, 'createdAt'>> &
       {
         id: string;
         content?: {
@@ -908,7 +939,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           content?: MastraMessageContentV2['content'];
         };
       }[];
-  }): Promise<MastraMessageV2[]> {
+  }): Promise<MastraDBMessage[]> {
     const { messages } = args;
     this.logger.debug('Updating messages', { count: messages.length });
 
@@ -917,14 +948,14 @@ export class MemoryStorageD1 extends MemoryStorage {
     }
 
     const messageIds = messages.map(m => m.id);
-    const fullTableName = this.operations.getTableName(TABLE_MESSAGES);
-    const threadsTableName = this.operations.getTableName(TABLE_THREADS);
+    const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
+    const threadsTableName = this.#db.getTableName(TABLE_THREADS);
 
     try {
       // Get existing messages
       const placeholders = messageIds.map(() => '?').join(',');
       const selectQuery = `SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId FROM ${fullTableName} WHERE id IN (${placeholders})`;
-      const existingMessages = (await this.operations.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const existingMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
 
       if (existingMessages.length === 0) {
         return [];
@@ -1005,7 +1036,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Execute all updates
       for (const query of updateQueries) {
-        await this.operations.executeQuery(query);
+        await this.#db.executeQuery(query);
       }
 
       // Update thread timestamps
@@ -1015,11 +1046,11 @@ export class MemoryStorageD1 extends MemoryStorage {
           .join(',');
         const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id IN (${threadPlaceholders})`;
         const threadUpdateParams = [new Date().toISOString(), ...Array.from(threadIdsToUpdate)];
-        await this.operations.executeQuery({ sql: threadUpdateQuery, params: threadUpdateParams });
+        await this.#db.executeQuery({ sql: threadUpdateQuery, params: threadUpdateParams });
       }
 
       // Re-fetch updated messages
-      const updatedMessages = (await this.operations.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const updatedMessages = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
 
       // Parse content back to objects
       return updatedMessages.map(message => {
@@ -1035,10 +1066,50 @@ export class MemoryStorageD1 extends MemoryStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_D1_STORAGE_UPDATE_MESSAGES_FAILED',
+          id: createStorageErrorId('CLOUDFLARE_D1', 'UPDATE_MESSAGES', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { count: messages.length },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteMessages(messageIds: string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
+    const threadsTableName = this.#db.getTableName(TABLE_THREADS);
+
+    try {
+      // Get unique thread IDs from messages before deleting
+      const placeholders = messageIds.map(() => '?').join(',');
+      const selectQuery = `SELECT DISTINCT thread_id FROM ${fullTableName} WHERE id IN (${placeholders})`;
+      const threadResults = (await this.#db.executeQuery({ sql: selectQuery, params: messageIds })) as any[];
+      const threadIds = threadResults.map((r: any) => r.thread_id).filter(Boolean);
+
+      // Delete the messages
+      const deleteQuery = createSqlBuilder()
+        .delete(fullTableName)
+        .where(`id IN (${placeholders})`, ...messageIds);
+      const { sql, params } = deleteQuery.build();
+      await this.#db.executeQuery({ sql, params });
+
+      // Update thread timestamps for affected threads
+      if (threadIds.length > 0) {
+        const threadPlaceholders = threadIds.map(() => '?').join(',');
+        const threadUpdateQuery = `UPDATE ${threadsTableName} SET updatedAt = ? WHERE id IN (${threadPlaceholders})`;
+        const threadUpdateParams = [new Date().toISOString(), ...threadIds];
+        await this.#db.executeQuery({ sql: threadUpdateQuery, params: threadUpdateParams });
+      }
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'DELETE_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { messageIds: JSON.stringify(messageIds) },
         },
         error,
       );

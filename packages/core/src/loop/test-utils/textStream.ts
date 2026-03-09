@@ -1,9 +1,10 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { createMessageListWithUserMessage } from './utils';
 import { testUsage } from '../../stream/aisdk/v5/test-utils';
 import type { loop } from '../loop';
+import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from './MastraLanguageModelV2Mock';
 
 export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('result.textStream', () => {
@@ -11,6 +12,7 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
       const messageList = createMessageListWithUserMessage();
 
       const result = await loopFn({
+        methodType: 'stream',
         runId,
         models: [
           {
@@ -29,11 +31,11 @@ export function textStreamTests({ loopFn, runId }: { loopFn: typeof loop; runId:
 
                 return {
                   stream: convertArrayToReadableStream([
-                    { type: 'text-start', id: '1' },
-                    { type: 'text-delta', id: '1', delta: 'Hello' },
-                    { type: 'text-delta', id: '1', delta: ', ' },
-                    { type: 'text-delta', id: '1', delta: `world!` },
-                    { type: 'text-end', id: '1' },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                    { type: 'text-delta', id: 'text-1', delta: ', ' },
+                    { type: 'text-delta', id: 'text-1', delta: `world!` },
+                    { type: 'text-end', id: 'text-1' },
                     {
                       type: 'finish',
                       finishReason: 'stop',

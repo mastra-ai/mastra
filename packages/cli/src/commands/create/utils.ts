@@ -1,9 +1,11 @@
-import fsSync from 'fs';
-import fs from 'fs/promises';
 import child_process from 'node:child_process';
+import fsSync from 'node:fs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import util from 'node:util';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
+import prettier from 'prettier';
 
 import { DepsService } from '../../services/service.deps.js';
 import { getPackageManagerAddCommand } from '../../utils/package-manager.js';
@@ -41,6 +43,79 @@ const execWithTimeout = async (command: string, timeoutMs?: number) => {
   } catch (error: unknown) {
     throw error;
   }
+};
+
+async function getInitCommand(pm: PackageManager): Promise<string> {
+  switch (pm) {
+    case 'npm':
+      return 'npm init -y';
+    case 'pnpm':
+      return 'pnpm init';
+    case 'yarn':
+      return 'yarn init -y';
+    case 'bun':
+      return 'bun init -y';
+    default:
+      return 'npm init -y';
+  }
+}
+
+async function initializePackageJson(pm: PackageManager): Promise<void> {
+  // Run the init command
+  const initCommand = await getInitCommand(pm);
+  await exec(initCommand);
+
+  // Read and update package.json directly (more reliable than pkg set)
+  const packageJsonPath = path.join(process.cwd(), 'package.json');
+  const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+
+  packageJson.type = 'module';
+  packageJson.engines = {
+    ...packageJson.engines,
+    node: '>=22.13.0',
+  };
+
+  await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
+}
+
+const writeReadmeFile = async ({ dirPath, projectName }: { dirPath: string; projectName: string }) => {
+  const packageManager = getPackageManager();
+  const readmePath = path.join(dirPath, 'README.md');
+
+  const content = `# ${projectName}
+
+Welcome to your new [Mastra](https://mastra.ai/) project! We're excited to see what you'll build.
+
+## Getting Started
+
+Start the development server:
+
+\`\`\`shell
+${packageManager} run dev
+\`\`\`
+
+Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/getting-started/studio). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+
+You can start editing files inside the \`src/mastra\` directory. The development server will automatically reload whenever you make changes.
+
+## Learn more
+
+To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).
+
+If you're new to AI agents, check out our [course](https://mastra.ai/course) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
+
+## Deploy on Mastra Cloud
+
+[Mastra Cloud](https://cloud.mastra.ai/) gives you a serverless agent environment with atomic deployments. Access your agents from anywhere and monitor performance. Make sure they don't go off the rails with evals and tracing.
+
+Check out the [deployment guide](https://mastra.ai/docs/deployment/overview) for more details.`;
+
+  const formattedContent = await prettier.format(content, {
+    parser: 'markdown',
+    singleQuote: true,
+  });
+
+  await fs.writeFile(readmePath, formattedContent);
 };
 
 async function installMastraDependency(
@@ -84,6 +159,8 @@ export const createMastraProject = async ({
   timeout,
   llmProvider,
   llmApiKey,
+  skills,
+  mcpServer,
   needsInteractive,
 }: {
   projectName?: string;
@@ -91,6 +168,8 @@ export const createMastraProject = async ({
   timeout?: number;
   llmProvider?: LLMProvider;
   llmApiKey?: string;
+  skills?: string[];
+  mcpServer?: string;
   needsInteractive?: boolean;
 }) => {
   p.intro(color.inverse(' Mastra Create '));
@@ -102,7 +181,7 @@ export const createMastraProject = async ({
       placeholder: 'my-mastra-app',
       defaultValue: 'my-mastra-app',
       validate: value => {
-        if (value.length === 0) return 'Project name cannot be empty';
+        if (!value || value.length === 0) return 'Project name cannot be empty';
         if (fsSync.existsSync(value)) {
           return `A directory named "${value}" already exists. Please choose a different name.`;
         }
@@ -114,20 +193,28 @@ export const createMastraProject = async ({
     process.exit(0);
   }
 
-  let result;
+  let result: Awaited<ReturnType<typeof interactivePrompt>> | undefined = undefined;
 
   if (needsInteractive) {
     result = await interactivePrompt({
       options: { showBanner: false },
-      skip: { llmProvider: llmProvider !== undefined, llmApiKey: llmApiKey !== undefined },
+      skip: {
+        llmProvider: llmProvider !== undefined,
+        llmApiKey: llmApiKey !== undefined,
+        skills: skills !== undefined && skills.length > 0,
+        mcpServer: mcpServer !== undefined,
+      },
     });
   }
   const s = p.spinner();
+  const originalCwd = process.cwd();
+  let projectPath: string | null = null;
 
   try {
     s.start('Creating project');
     try {
       await fs.mkdir(projectName);
+      projectPath = path.resolve(originalCwd, projectName);
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
         s.stop(`A directory named "${projectName}" already exists. Please choose a different name.`);
@@ -144,15 +231,14 @@ export const createMastraProject = async ({
 
     s.message('Initializing project structure');
     try {
-      await exec(`npm init -y`);
-      await exec(`npm pkg set type="module"`);
-      await exec(`npm pkg set engines.node=">=20.9.0"`);
+      await initializePackageJson(pm);
       const depsService = new DepsService();
       await depsService.addScriptsToPackageJson({
         dev: 'mastra dev',
         build: 'mastra build',
         start: 'mastra start',
       });
+      await writeReadmeFile({ dirPath: process.cwd(), projectName });
     } catch (error) {
       throw new Error(
         `Failed to initialize project structure: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -164,7 +250,7 @@ export const createMastraProject = async ({
     s.start(`Installing ${pm} dependencies`);
     try {
       await exec(`${pm} ${installCommand} zod@^4`);
-      await exec(`${pm} ${installCommand} typescript @types/node --save-dev`);
+      await exec(`${pm} ${installCommand} -D typescript @types/node`);
       await exec(`echo '{
   "compilerOptions": {
     "target": "ES2022",
@@ -221,6 +307,8 @@ export const createMastraProject = async ({
       await exec(`echo .env >> .gitignore`);
       await exec(`echo *.db >> .gitignore`);
       await exec(`echo *.db-* >> .gitignore`);
+      await exec(`echo .netlify >> .gitignore`);
+      await exec(`echo .vercel >> .gitignore`);
     } catch (error) {
       throw new Error(`Failed to create .gitignore: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -235,6 +323,20 @@ export const createMastraProject = async ({
 
     const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
     p.cancel(`Project creation failed: ${errorMessage}`);
+
+    // Clean up: remove the created directory on failure
+    if (projectPath && fsSync.existsSync(projectPath)) {
+      try {
+        // Change back to original directory before cleanup
+        process.chdir(originalCwd);
+        await fs.rm(projectPath, { recursive: true, force: true });
+      } catch (cleanupError) {
+        // Log but don't throw - we want to exit with the original error
+        console.error(
+          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+        );
+      }
+    }
 
     process.exit(1);
   }

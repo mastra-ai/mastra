@@ -1,8 +1,23 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import type { ResolveHookContext } from 'node:module';
+import type { LoadHookContext, ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { isDependencyPartOfPackage } from '../build/utils';
+
+const STUB_PREFIX = 'mastra-stub:';
+
+let _stubbedExternals: string[] | null = null;
+function getStubbedExternals(): string[] {
+  if (_stubbedExternals === null) {
+    try {
+      _stubbedExternals = JSON.parse(process.env.STUBBED_EXTERNALS || '[]') as string[];
+    } catch {
+      _stubbedExternals = [];
+    }
+  }
+  return _stubbedExternals;
+}
 
 const cache = new Map<string, Record<string, string>>();
 
@@ -41,24 +56,35 @@ function isRelativePath(specifier: string): boolean {
  */
 async function getParentPath(specifier: string, url: string): Promise<string | null> {
   if (!cache.size) {
-    const moduleResolveMap = JSON.parse(
-      // cwd refers to the output/build directory
-      await readFile(join(process.cwd(), 'module-resolve-map.json'), 'utf-8'),
-    ) as Record<string, Record<string, string>>;
+    let moduleResolveMapLocation = process.env.MODULE_MAP;
+    if (!moduleResolveMapLocation) {
+      moduleResolveMapLocation = join(process.cwd(), 'module-resolve-map.json');
+    }
+
+    let moduleResolveMap: Record<string, Record<string, string>> = {};
+    if (existsSync(moduleResolveMapLocation)) {
+      moduleResolveMap = JSON.parse(await readFile(moduleResolveMapLocation, 'utf-8')) as Record<
+        string,
+        Record<string, string>
+      >;
+    }
 
     for (const [id, rest] of Object.entries(moduleResolveMap)) {
-      cache.set(pathToFileURL(id).toString(), rest);
+      cache.set(id, rest);
     }
   }
 
   const importers = cache.get(url);
-  if (!importers || !importers[specifier]) {
+  if (!importers) {
     return null;
   }
 
-  const specifierParent = importers[specifier];
-
-  return pathToFileURL(specifierParent).toString();
+  const matchedPackage = Object.keys(importers).find(external => isDependencyPartOfPackage(specifier, external));
+  if (!matchedPackage) {
+    return null;
+  }
+  const specifierParent = importers[matchedPackage]!;
+  return specifierParent;
 }
 
 export async function resolve(
@@ -75,6 +101,15 @@ export async function resolve(
     return nextResolve(specifier, context);
   }
 
+  // Stub GLOBAL_EXTERNALS packages during validation
+  const stubbedExternals = getStubbedExternals();
+  if (stubbedExternals.length > 0) {
+    const isStubbed = stubbedExternals.some(ext => isDependencyPartOfPackage(specifier, ext));
+    if (isStubbed) {
+      return { url: `${STUB_PREFIX}${specifier}`, shortCircuit: true };
+    }
+  }
+
   if (context.parentURL) {
     const parentPath = await getParentPath(specifier, context.parentURL);
 
@@ -88,4 +123,15 @@ export async function resolve(
 
   // Continue resolution with the modified path
   return nextResolve(specifier, context);
+}
+
+export async function load(
+  url: string,
+  context: LoadHookContext,
+  nextLoad: (url: string, context: LoadHookContext) => Promise<{ format: string; source: string }>,
+) {
+  if (url.startsWith(STUB_PREFIX)) {
+    return { format: 'module', source: 'export default {}', shortCircuit: true };
+  }
+  return nextLoad(url, context);
 }

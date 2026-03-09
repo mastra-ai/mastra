@@ -1,5 +1,8 @@
 {
   "extends": "../../tsconfig.node.json",
   "include": ["src/**/*", "vitest.config.ts", "tsup.config.ts", "scripts/**/*"],
-  "exclude": ["node_modules", "**/*.test.ts"]
+  "exclude": ["node_modules", "**/*.test.ts"],
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2023"]
+  }
 }

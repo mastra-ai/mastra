@@ -2,12 +2,13 @@ import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions, writeTelemetryConfig, getBundlerOptions } from '@mastra/deployer/build';
+import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import type { RollupWatcherEvent } from 'rollup';
+import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
+import { shouldSkipDotenvLoading } from '../utils.js';
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -15,9 +16,16 @@ export class DevBundler extends Bundler {
   constructor(customEnvFile?: string) {
     super('Dev');
     this.customEnvFile = customEnvFile;
+    // Use 'neutral' platform for Bun to preserve Bun-specific globals, 'node' otherwise
+    this.platform = process.versions?.bun ? 'neutral' : 'node';
   }
 
   getEnvFiles(): Promise<string[]> {
+    // Skip loading .env files if MASTRA_SKIP_DOTENV is set
+    if (shouldSkipDotenvLoading()) {
+      return Promise.resolve([]);
+    }
+
     const possibleFiles = ['.env.development', '.env.local', '.env'];
     if (this.customEnvFile) {
       possibleFiles.unshift(this.customEnvFile);
@@ -41,8 +49,8 @@ export class DevBundler extends Bundler {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
 
-    const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-    await fsExtra.copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
+    const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+    await fsExtra.copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
       overwrite: true,
     });
   }
@@ -56,41 +64,22 @@ export class DevBundler extends Bundler {
     const __dirname = dirname(__filename);
 
     const envFiles = await this.getEnvFiles();
-
-    let sourcemapEnabled = false;
-    try {
-      const bundlerOptions = await getBundlerOptions(entryFile, outputDirectory);
-      sourcemapEnabled = !!bundlerOptions?.sourcemap;
-    } catch (error) {
-      this.logger.debug('Failed to get bundler options, sourcemap will be disabled', { error });
-    }
+    const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
+    const sourcemapEnabled = !!bundlerOptions?.sourcemap;
 
     const inputOptions = await getWatcherInputOptions(
       entryFile,
-      'node',
+      this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
       { sourcemap: sourcemapEnabled },
     );
-    const toolsInputOptions = await this.getToolsInputOptions(toolsPaths);
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
-    await writeTelemetryConfig(entryFile, outputDir, this.logger);
-
-    const mastraFolder = dirname(entryFile);
-    const fileService = new FileService();
-    const customInstrumentation = fileService.getFirstExistingFileOrUndefined([
-      join(mastraFolder, 'instrumentation.js'),
-      join(mastraFolder, 'instrumentation.ts'),
-      join(mastraFolder, 'instrumentation.mjs'),
-    ]);
-
-    await this.writeInstrumentationFile(outputDir, customInstrumentation);
 
     await this.writePackageJson(outputDir, new Map(), {});
-
-    const copyPublic = this.copyPublic.bind(this);
 
     const watcher = await createWatcher(
       {
@@ -107,24 +96,13 @@ export class DevBundler extends Bundler {
           }
         },
         plugins: [
-          // @ts-ignore - types are good
-
-          ...inputOptions.plugins,
+          ...(inputOptions.plugins as InputPluginOption[]),
           {
             name: 'env-watcher',
             buildStart() {
               for (const envFile of envFiles) {
                 this.addWatchFile(envFile);
               }
-            },
-          },
-          {
-            name: 'public-dir-watcher',
-            buildStart() {
-              this.addWatchFile(join(dirname(entryFile), 'public'));
-            },
-            buildEnd() {
-              return copyPublic(dirname(entryFile), outputDirectory);
             },
           },
           {
@@ -143,7 +121,7 @@ export class DevBundler extends Bundler {
               await writeFile(
                 join(outputDir, 'tools.mjs'),
                 `${toolImports.join('\n')}
-        
+
                 export const tools = [${toolsExports.join(', ')}]`,
               );
             },

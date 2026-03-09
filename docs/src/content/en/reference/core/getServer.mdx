@@ -1,6 +1,8 @@
 ---
-title: "Reference: Mastra.getServer() | Core | Mastra Docs"
+title: "Reference: Mastra.getServer() | Core"
 description: "Documentation for the `Mastra.getServer()` method in Mastra, which retrieves the configured server configuration."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getServer()
@@ -9,27 +11,28 @@ The `.getServer()` method is used to retrieve the server configuration that has 
 
 ## Usage example
 
-```typescript copy
-mastra.getServer();
+```typescript
+mastra.getServer()
 ```
 
 ## Parameters
 
-This method does not accept any parameters.
+This method doesn't accept any parameters.
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "server",
-      type: "ServerConfig | undefined",
-      description: "The configured server configuration including port, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.",
-    },
-  ]}
+  {
+    name: 'server',
+    type: 'ServerConfig | undefined',
+    description:
+      'The configured server configuration including port, host, studioBase, timeout, API routes, middleware, CORS settings, and build options, or undefined if no server has been configured.',
+  },
+]}
 />
 
 ## Related
 
-- [Server deployment](../../docs/deployment/server-deployment.mdx)
-- [Server configuration](../../docs/server-db/custom-api-routes.mdx)
+- [Server deployment](/docs/deployment/mastra-server)
+- [Server configuration](/docs/server/custom-api-routes)

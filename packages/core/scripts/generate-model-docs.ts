@@ -1,10 +1,10 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import type { ProviderConfig } from '../src/index.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants.js';
-import { generateProviderOptionsSection } from './generate-provider-options-docs.js';
+import type { ProviderConfig } from '../src/llm';
+import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
+import { generateProviderOptionsSection } from './generate-provider-options-docs';
 
 /**
  * Generate a comment indicating the file was auto-generated
@@ -83,7 +83,10 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel'];
+const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
+
+const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
+const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai'];
 
 interface ProviderInfo {
   id: string;
@@ -138,6 +141,10 @@ async function parseProviders(): Promise<GroupedProviders> {
   const other: ProviderInfo[] = [];
 
   for (const [id, config] of Object.entries<ProviderConfig>(PROVIDER_REGISTRY)) {
+    if (MANUALLY_DOCUMENTED_PROVIDERS.includes(id)) {
+      continue;
+    }
+
     // Check if it's a standalone gateway (like vercel, netlify, etc.)
     const isGateway = GATEWAY_PROVIDERS.includes(id);
 
@@ -183,6 +190,14 @@ async function parseProviders(): Promise<GroupedProviders> {
   // Sort other providers alphabetically
   other.sort((a, b) => a.name.localeCompare(b.name));
 
+  // Ensure manually documented gateways are present in the grouped map so that
+  // navigation pages can still reference them without generating files.
+  for (const gatewayId of MANUALLY_DOCUMENTED_GATEWAYS) {
+    if (!gateways.has(gatewayId)) {
+      gateways.set(gatewayId, []);
+    }
+  }
+
   return { gateways, popular, other };
 }
 
@@ -195,6 +210,8 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: any[]; p
     if (!provider?.models) return { models: [] };
 
     const models = Object.entries(provider.models)
+      // The model.status is an optional enum of 'alpha' | 'beta' | 'deprecated'. Filter out deprecated models.
+      .filter(([_, model]: [string, any]) => model.status !== 'deprecated')
       .map(([modelId, model]: [string, any]) => ({
         model: `${providerId}/${modelId}`,
         imageInput: model.modalities?.input?.includes('image') || false,
@@ -247,30 +264,26 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
 
   return `---
-title: "${provider.name} | Models | Mastra"
+title: "${provider.name} | Models"
 description: "Use ${provider.name} models with Mastra. ${modelCount} model${modelCount !== 1 ? 's' : ''} available."
 ---
 
 ${getGeneratedComment()}
 
-import { ProviderModelsTable } from "@/components/provider-models-table";
-import { PropertiesTable } from "@/components/properties-table";
-import { Callout } from "nextra/components";
-${provider.packageName && provider.packageName !== '@ai-sdk/openai-compatible' ? 'import { Tabs, Tab } from "@/components/tabs";' : ''}
-
 # <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
 
 ${introText}
 
-\`\`\`bash
+\`\`\`bash title=".env"
 ${provider.apiKeyEnvVar}=your-api-key
 \`\`\`
 
-\`\`\`typescript
-import { Agent } from "@mastra/core";
+\`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "${provider.id}/${provider.models[0]}"
 });
@@ -288,15 +301,17 @@ ${
   !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
     ? // if it's not a directly supported provider then it's openai compatible, so warn about it
       `
-<Callout type="info">
+:::info
+
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
-</Callout>
+
+:::
 `
     : ``
 }
 ## Models
 
-<ProviderModelsTable 
+<ProviderModelsTable
   models={${modelDataJson}}
 />
 
@@ -304,8 +319,9 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 
 ### Custom Headers
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
+  id: "custom-agent",
   name: "custom-agent",
   model: {${
     provider.url
@@ -313,7 +329,7 @@ const agent = new Agent({
     url: "${provider.url}",`
       : ''
   }
-    modelId: "${provider.models[0]}",
+    id: "${provider.id}/${provider.models[0]}",
     apiKey: process.env.${provider.apiKeyEnvVar},
     headers: {
       "X-Custom-Header": "value"
@@ -324,12 +340,13 @@ const agent = new Agent({
 
 ### Dynamic Model Selection
 
-\`\`\`typescript
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  name: "dynamic-agent",
-  model: ({ runtimeContext }) => {
-    const useAdvanced = runtimeContext.task === "complex";
-    return useAdvanced 
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
       ? "${provider.id}/${provider.models[provider.models.length - 1]}"
       : "${provider.id}/${provider.models[0]}";
   }
@@ -344,7 +361,7 @@ ${
 
 This provider can also be installed directly as a standalone package, which can be used instead of the Mastra model router string. View the [package documentation](https://www.npmjs.com/package/${provider.packageName}) for more details.
 
-\`\`\`bash npm2yarn copy
+\`\`\`bash npm2yarn
 npm install ${provider.packageName}
 \`\`\`
 ${
@@ -408,7 +425,7 @@ function hasLogoComponent(providerId: string): boolean {
  */
 function getLogoComponentImport(providerId: string): string {
   const componentName = providerId.charAt(0).toUpperCase() + providerId.slice(1) + 'Logo';
-  return `import { ${componentName} } from '@/components/logos/${componentName}';`;
+  return `import { ${componentName} } from '@site/src/components/logos/${componentName}';`;
 }
 
 /**
@@ -477,13 +494,13 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
 
   return `---
-title: "${displayName} | Models | Mastra"  
+title: "${displayName} | Models"
 description: "Use AI models through ${displayName}."
 ---
 
 ${getGeneratedComment()}
 
-${logoImport}import { Callout } from "nextra/components";
+${logoImport}
 
 # ${logoMarkup}${displayName}
 
@@ -491,27 +508,36 @@ ${introText}
 
 ## Usage
 
-\`\`\`typescript
-import { Agent } from "@mastra/core";
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   instructions: "You are a helpful assistant",
   model: "${gatewayName}/${providers[0]?.models[0] || 'model-name'}"
 });
 \`\`\`
 
-<Callout type="info">
+:::info
+
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. ${docUrl ? `Check the [${displayName} documentation](${docUrl}) for details.` : `Check the ${displayName} documentation for details.`}
-</Callout>
+
+:::
 
 ## Configuration
 
 \`\`\`bash
 # Use gateway API key
-${gatewayName.toUpperCase()}_API_KEY=your-gateway-key
+${(() => {
+  const envVar = providers[0]?.apiKeyEnvVar;
+  if (Array.isArray(envVar)) {
+    return envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
+  }
+  return `${envVar || `${gatewayName.toUpperCase()}_API_KEY`}=your-gateway-key`;
+})()}
 
-# Or use provider API keys directly  
+# Or use provider API keys directly
 OPENAI_API_KEY=sk-...
 ANTHROPIC_API_KEY=ant-...
 \`\`\`
@@ -535,10 +561,10 @@ description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models 
 
 ${getGeneratedComment()}
 
-import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
-import { Tab, Tabs } from "@/components/tabs";
-import { Callout } from "nextra/components";
-import { NetlifyLogo } from "@/components/logos/NetlifyLogo";
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 
 # Model Providers
 
@@ -548,9 +574,9 @@ Mastra provides a unified interface for working with LLMs across multiple provid
 
 - **One API for any model** - Access any model without having to install and manage additional provider dependencies.
 
-- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.  
+- **Access the newest AI** - Use new models the moment they're released, no matter which provider they come from. Avoid vendor lock-in with Mastra's provider-agnostic interface.
 
-- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.  
+- [**Mix and match models**](#mix-and-match-models) - Use different models for different tasks. For example, run GPT-4o-mini for large-context processing, then switch to Claude Opus 4.1 for reasoning tasks.
 
 - [**Model fallbacks**](#model-fallbacks) - If a provider experiences an outage, Mastra can automatically switch to another provider at the application level, minimizing latency compared to API gateways.
 
@@ -560,64 +586,78 @@ Whether you're using OpenAI, Anthropic, Google, or a gateway like OpenRouter, sp
 
 Mastra reads the relevant environment variable (e.g. \`ANTHROPIC_API_KEY\`) and routes requests to the provider. If an API key is missing, you'll get a clear runtime error showing exactly which variable to set.
 
-<Tabs items={["OpenAI", "Anthropic", "Google Gemini", "xAI", "OpenRouter"]}>
-  <Tab>
-    \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+<Tabs>
+  <TabItem value="OpenAI" label="OpenAI">
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "openai/gpt-5"
     })
     \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+
+  </TabItem>
+  <TabItem value="Anthropic" label="Anthropic">
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent", 
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "anthropic/claude-4-5-sonnet"
     })
     \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+
+  </TabItem>
+  <TabItem value="Google Gemini" label="Google Gemini">
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "google/gemini-2.5-flash"
     })
     \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+
+  </TabItem>
+  <TabItem value="xAI" label="xAI">
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
+      id: "my-agent",
+      name: "My Agent",
       instructions: "You are a helpful assistant",
       model: "xai/grok-4"
     })
     \`\`\`
-  </Tab>
-  <Tab>
-    \`\`\`typescript copy showLineNumbers
-    import { Agent } from "@mastra/core";
+
+  </TabItem>
+  <TabItem value="OpenRouter" label="OpenRouter">
+
+    \`\`\`typescript title="src/mastra/agents/my-agent.ts" {7}
+    import { Agent } from "@mastra/core/agent";
 
     const agent = new Agent({
-      name: "my-agent",
-      instructions: "You are a helpful assistant", 
+      id: "my-agent",
+      name: "My Agent",
+      instructions: "You are a helpful assistant",
       model: "openrouter/anthropic/claude-haiku-4-5"
     })
     \`\`\`
-  </Tab>
-</Tabs>
 
+  </TabItem>
+</Tabs>
 
 ## Model directory
 
@@ -626,7 +666,7 @@ Browse the directory of available models using the navigation on the left, or ex
 <CardGrid>
     <CardGridItem
       title="Gateways"
-      href="./models/gateways"
+      href="/models/gateways"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -666,7 +706,7 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
     </CardGridItem>
     <CardGridItem
       title="Providers"
-      href="./models/providers"
+      href="/models/providers"
     >
       <div className="space-y-3">
         <div className="flex flex-col gap-2">
@@ -690,44 +730,49 @@ ${grouped.gateways.size > 3 ? `        <div className="text-sm text-gray-600 dar
 
 You can also discover models directly in your editor. Mastra provides full autocomplete for the \`model\` field - just start typing, and your IDE will show available options.
 
-Alternatively, browse and test models in the [Playground](/docs/server-db/local-dev-playground) UI.
+Alternatively, browse and test models in [Studio](/docs/getting-started/studio) UI.
 
-<Callout type="info">
-In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Playground stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
-</Callout>
+:::info
 
+In development, we auto-refresh your local model list every hour, ensuring your TypeScript autocomplete and Studio stay up-to-date with the latest models. To disable, set \`MASTRA_AUTO_REFRESH_PROVIDERS=false\`. Auto-refresh is disabled by default in production.
+
+:::
 
 ## Mix and match models
 
 Some models are faster but less capable, while others offer larger context windows or stronger reasoning skills. Use different models from the same provider, or mix and match across providers to fit each task.
 
-\`\`\`typescript showLineNumbers
-import { Agent } from "@mastra/core";
+\`\`\`typescript title="src/mastra/agents/reasoning-agent.ts"
+import { Agent } from "@mastra/core/agent";
 
 // Use a cost-effective model for document processing
 const documentProcessor = new Agent({
-  name: "document-processor",
+  id: "document-processor",
+  name: "Document Processor",
   instructions: "Extract and summarize key information from documents",
-  model: "openai/gpt-4o-mini" 
+  model: "openai/gpt-4o-mini"
 })
 
 // Use a powerful reasoning model for complex analysis
 const reasoningAgent = new Agent({
-  name: "reasoning-agent", 
+  id: "reasoning-agent",
+  name: "Reasoning Agent",
   instructions: "Analyze data and provide strategic recommendations",
   model: "anthropic/claude-opus-4-1"
 })
 \`\`\`
+
 ## Dynamic model selection
 
-Since models are just strings, you can select them dynamically based on [runtime context](/docs/server-db/runtime-context), variables, or any other logic.
+Since models are just strings, you can select them dynamically based on [request context](/docs/server/request-context), variables, or any other logic.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript title="src/mastra/agents/dynamic-assistant-agent.ts"
 const agent = new Agent({
-  name: "dynamic-assistant",
-  model: ({ runtimeContext }) => {
-    const provider = runtimeContext.get("provider-id");
-    const model = runtimeContext.get("model-id");
+  id: "dynamic-assistant",
+  name: "Dynamic Assistant",
+  model: ({ requestContext }) => {
+    const provider = requestContext.get("provider-id");
+    const model = requestContext.get("model-id");
     return \`\${provider}/\${model}\`;
   },
 });
@@ -743,9 +788,11 @@ This enables powerful patterns:
 
 Different model providers expose their own configuration options. With OpenAI, you might adjust the \`reasoningEffort\`. With Anthropic, you might tune \`cacheControl\`. Mastra lets you set these specific \`providerOptions\` either at the agent level or per message.
 
-\`\`\`typescript showLineNumbers
+\`\`\`typescript title="src/mastra/agents/planner-agent.ts"
 // Agent level (apply to all future messages)
 const planner = new Agent({
+  id: "planner",
+  name: "Planner",
   instructions: {
     role: "system",
     content: "You are a helpful assistant.",
@@ -756,7 +803,7 @@ const planner = new Agent({
   model: "openai/o3-pro",
 });
 
-const lowEffort = 
+const lowEffort =
   await planner.generate("Plan a simple 3 item dinner menu");
 
 // Message level (apply only to this message)
@@ -775,10 +822,10 @@ const highEffort = await planner.generate([
 
 If you need to specify custom headers, such as an organization ID or other provider-specific fields, use this syntax.
 
-
-\`\`\`typescript showLineNumbers
+\`\`\`typescript title="src/mastra/agents/custom-agent.ts"
 const agent = new Agent({
-  name: "custom-agent",
+  id: "custom-agent",
+  name: "Custom Agent",
   model: {
     id: "openai/gpt-4-turbo",
     apiKey: process.env.OPENAI_API_KEY,
@@ -788,20 +835,23 @@ const agent = new Agent({
   }
 });
 \`\`\`
-<Callout type="info">
+
+:::info
+
 Configuration differs by provider. See the provider pages in the left navigation for details on custom headers.
-</Callout>
+
+:::
 
 ## Model fallbacks
 
 Relying on a single model creates a single point of failure for your application. Model fallbacks provide automatic failover between models and providers. If the primary model becomes unavailable, requests are retried against the next configured fallback until one succeeds.
 
-
-\`\`\`typescript showLineNumbers
-import { Agent } from '@mastra/core';
+\`\`\`typescript title="src/mastra/agents/resilient-assistant-agent.ts"
+import { Agent } from '@mastra/core/agent';
 
 const agent = new Agent({
-  name: 'resilient-assistant',
+  id: 'resilient-assistant',
+  name: 'Resilient Assistant',
   instructions: 'You are a helpful assistant.',
   model: [
     {
@@ -819,25 +869,67 @@ const agent = new Agent({
   ],
 });
 \`\`\`
+
 Mastra tries your primary model first. If it encounters a 500 error, rate limit, or timeout, it automatically switches to your first fallback. If that fails too, it moves to the next. Each model gets its own retry count before moving on.
 
 Your users never experience the disruption - the response comes back with the same format, just from a different model. The error context is preserved as the system moves through your fallback chain, ensuring clean error propagation while maintaining streaming compatibility.
+
+## Use local models with Mastra
+
+Mastra also supports local models like \`gpt-oss\`, \`Qwen3\`, \`DeepSeek\` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).
+
+For a custom provider the \`id\` (\`$\{providerId\}/$\{modelId\}\`) is required but it will only be used for display purposes. The \`modelId\` needs to be the actual model you want to use. An example would be: \`custom/my-qwen3-model\`.
+
+For the \`url\` it's **important** that you use the base URL of the OpenAI-compatible endpoint with Mastra's \`model\` setting and not the individual chat endpoints.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "custom/my-qwen3-model",
+    url: "http://your-custom-openai-compatible-endpoint.com/v1"
+  }
+})
+\`\`\`
+
+### Example: LMStudio
+
+After starting the LMStudio server, the local server is available at \`http://localhost:1234\` and it provides endpoints like \`/v1/models\`, \`/v1/chat/completions\`, etc. The \`url\` will be \`http://localhost:1234/v1\`. For the \`id\` you can use (\`lmstudio/$\{modelId\}\`) which will be displayed in the LMStudio interface.
+
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: {
+    id: "lmstudio/qwen/qwen3-30b-a3b-2507",
+    url: "http://localhost:1234/v1"
+  }
+})
+\`\`\`
 
 ## Use AI SDK with Mastra
 
 Mastra supports AI SDK provider modules, should you need to use them directly.
 
-
-\`\`\`typescript showLineNumbers
+\`\`\`typescript title="src/mastra/agents/my-agent.ts"
 import { groq } from '@ai-sdk/groq';
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  name: "my-agent",
+  id: "my-agent",
+  name: "My Agent",
   model: groq('gemma2-9b-it')
 })
 \`\`\`
-You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/scorers/overview).`;
+
+You can use an AI SDK model (e.g. \`groq('gemma2-9b-it')\`) anywhere that accepts a \`"provider/model"\` string, including within model router fallbacks and [scorers](/docs/evals/overview).`;
 }
 
 function generateGatewaysIndexPage(grouped: GroupedProviders): string {
@@ -845,10 +937,7 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
   const hasNetlify = gatewaysList.includes('netlify');
-  const logoImport = hasNetlify
-    ? '\
-import { NetlifyLogo } from "@/components/logos/NetlifyLogo";'
-    : '';
+  const logoImport = hasNetlify ? 'import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
 
   return `---
 title: "Gateways"
@@ -857,29 +946,47 @@ description: "Access AI models through gateway providers with caching, rate limi
 
 ${getGeneratedComment()}
 
-import { CardGrid, CardGridItem } from "@/components/cards/card-grid";${logoImport}
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";${logoImport}
 
 # Gateway Providers
 
 Gateway providers aggregate multiple model providers and add features like caching, rate limiting, analytics, and automatic failover. Use gateways when you need observability, cost management, or simplified multi-provider access.
 
+## Custom Gateways
+
+Create custom gateways for private LLM deployments or specialized provider integrations. See [Custom Gateways](/models/gateways/custom-gateways) for implementation details.
+
+## Built-in Gateways
+
 <CardGrid>
 ${gatewaysList
   .map(g => {
+    // Custom descriptions for manually documented gateways
+    if (MANUALLY_DOCUMENTED_GATEWAYS.includes(g)) {
+      if (g === 'azure-openai') {
+        return `    <CardGridItem
+      title="Azure OpenAI"
+      description="Use your private Azure OpenAI deployments with associated deployment names"
+      href="/models/gateways/${g}"
+      logo="${getLogoUrl(g)}"
+    />`;
+      }
+    }
+
     if (g === 'netlify') {
       return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
-      href="./gateways/${g}"
+      href="/models/gateways/${g}"
       logo={<NetlifyLogo />}
     />`;
     }
     return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
-      href="./gateways/${g}"
+      href="/models/gateways/${g}"
       logo="${getLogoUrl(g)}"
-      
+
     />`;
   })
   .join(
@@ -899,7 +1006,7 @@ description: "Direct access to AI model providers."
 
 ${getGeneratedComment()}
 
-import { CardGrid, CardGridItem } from "@/components/cards/card-grid";
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
 
 # Model Providers
 
@@ -911,7 +1018,7 @@ ${allProviders
     p => `    <CardGridItem
       title="${p.name.replace(/&/g, '&amp;')}"
       description="${p.models.length} models"
-      href="./providers/${p.id}"
+      href="/models/providers/${p.id}"
       logo="${getLogoUrl(p.id)}"
     />`,
   )
@@ -922,13 +1029,21 @@ ${allProviders
 </CardGrid>`;
 }
 
-function generateProvidersMeta(grouped: GroupedProviders, aiSdkProviders: ModelsDevProvider[] = []): string {
+function generateProvidersSidebarItems(grouped: GroupedProviders, aiSdkProviders: ModelsDevProvider[] = []): any[] {
   // Keep popular providers in their original order
-  const popularProviders = grouped.popular.map(p => ({ id: p.id, name: p.name }));
+  const popularProviders = grouped.popular.map(p => ({
+    type: 'doc',
+    id: `providers/${p.id}`,
+    label: p.name,
+  }));
 
   // Combine "other" model router providers with AI SDK providers and sort alphabetically
   const otherProviders = [
-    ...grouped.other.map(p => ({ id: p.id, name: p.name })),
+    ...grouped.other.map(p => ({
+      type: 'doc',
+      id: `providers/${p.id}`,
+      label: p.name,
+    })),
     ...aiSdkProviders.map(p => {
       let displayName = p.name;
       if (p.id === 'google-vertex') {
@@ -936,35 +1051,15 @@ function generateProvidersMeta(grouped: GroupedProviders, aiSdkProviders: Models
       } else if (p.id === 'google-vertex-anthropic') {
         displayName = 'Vertex AI (Anthropic)';
       }
-      return { id: p.id, name: displayName };
+      return {
+        type: 'doc',
+        id: `providers/${p.id}`,
+        label: displayName,
+      };
     }),
-  ].sort((a, b) => a.name.localeCompare(b.name));
+  ].sort((a, b) => a.label.localeCompare(b.label));
 
-  // Build the meta object with index first, then popular providers, then other providers alphabetically
-  const metaEntries = ['  index: "Overview"'];
-
-  // Add popular providers first (in their original order)
-  for (const provider of popularProviders) {
-    const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
-    metaEntries.push(`  ${key}: "${provider.name}"`);
-  }
-
-  // Add other providers alphabetically
-  for (const provider of otherProviders) {
-    // Quote keys that contain dashes or other special characters
-    const key = provider.id.includes('-') ? `"${provider.id}"` : provider.id;
-    metaEntries.push(`  ${key}: "${provider.name}"`);
-  }
-
-  return `const meta = {
-${metaEntries.join(
-  ',\
-',
-)},
-};
-
-export default meta;
-`;
+  return [{ type: 'doc', id: 'providers/index', label: 'Providers' }, ...popularProviders, ...otherProviders];
 }
 
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
@@ -989,41 +1084,73 @@ ${getGeneratedComment()}
 
 ${provider.name} is available through the AI SDK. Install the provider package to use their models with Mastra.${aiSdkDocsText}
 
-To use this provider with Mastra agents, see the [Agent Overview documentation](/en/docs/agents/overview).
+To use this provider with Mastra agents, see the [Agent Overview documentation](/docs/agents/overview).
 
 ## Installation
 
-\`\`\`bash npm2yarn copy
+\`\`\`bash npm2yarn
 npm install ${packageName}
 \`\`\`
 `;
 }
 
-function generateGatewaysMeta(grouped: GroupedProviders): string {
+function generateGatewaysSidebarItems(grouped: GroupedProviders): any[] {
   // Sort gateways alphabetically
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  // Build the meta object with index first, then all gateways in alphabetical order
-  const metaEntries = ['  index: \"Overview\"'];
+  const items = [
+    { type: 'doc', id: 'gateways/index', label: 'Gateways' },
+    { type: 'doc', id: 'gateways/custom-gateways', label: 'Custom Gateways' },
+  ];
 
   for (const gatewayId of gatewaysList) {
     const providers = grouped.gateways.get(gatewayId);
-    if (providers && providers.length > 0) {
+    // Include manually documented gateways even if they have no providers
+    const isManuallyDocumented = MANUALLY_DOCUMENTED_GATEWAYS.includes(gatewayId);
+    if ((providers && providers.length > 0) || isManuallyDocumented) {
       const name = formatProviderName(gatewayId);
-      // Quote keys that contain dashes or other special characters
-      const key = gatewayId.includes('-') ? `\"${gatewayId}\"` : gatewayId;
-      metaEntries.push(`  ${key}: \"${name}\"`);
+      items.push({
+        type: 'doc',
+        id: `gateways/${gatewayId}`,
+        label: name,
+      });
     }
   }
 
-  return `const meta = {
-${metaEntries.join(
-  ',\
-',
-)},
+  return items;
+}
+
+function generateSidebarsFile(grouped: GroupedProviders, aiSdkProviders: ModelsDevProvider[] = []): string {
+  const gatewaysItems = generateGatewaysSidebarItems(grouped);
+  const providersItems = generateProvidersSidebarItems(grouped, aiSdkProviders);
+
+  return `/**
+ * Sidebar for Models
+ */
+
+// @ts-check
+
+/** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
+const sidebars = {
+  modelsSidebar: [
+    "index",
+    "embeddings",
+    {
+      type: "category",
+      label: "Gateways",
+      collapsed: false,
+      items: ${JSON.stringify(gatewaysItems, null, 6).replace(/^/gm, '      ').trim()},
+    },
+    {
+      type: "category",
+      label: "Providers",
+      collapsed: false,
+      items: ${JSON.stringify(providersItems, null, 6).replace(/^/gm, '      ').trim()},
+    },
+  ],
 };
 
-export default meta;
+export default sidebars;
 `;
 }
 
@@ -1062,11 +1189,6 @@ async function generateDocs() {
   await fs.writeFile(path.join(gatewaysDir, 'index.mdx'), gatewaysIndexContent);
   console.info('✅ Generated gateways/index.mdx');
 
-  // Generate gateways _meta.ts
-  const gatewaysMetaContent = generateGatewaysMeta(grouped);
-  await fs.writeFile(path.join(gatewaysDir, '_meta.ts'), gatewaysMetaContent);
-  console.info('✅ Generated gateways/_meta.ts');
-
   // Generate AI SDK provider documentation
   console.info(
     '\
@@ -1087,7 +1209,7 @@ async function generateDocs() {
   aiSdkProviders.push({
     id: 'ollama',
     name: 'Ollama',
-    npm: 'ollama-ai-provider',
+    npm: 'ollama-ai-provider-v2',
     models: {},
   });
 
@@ -1100,11 +1222,13 @@ async function generateDocs() {
 
   // Generate individual provider pages (parallelized)
   await Promise.all(
-    [...grouped.popular, ...grouped.other].map(async provider => {
-      const content = await generateProviderPage(provider, providerRegistry);
-      await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
-      console.info(`✅ Generated providers/${provider.id}.mdx`);
-    }),
+    [...grouped.popular, ...grouped.other]
+      .filter(provider => !MANUALLY_DOCUMENTED_PROVIDERS.includes(provider.id))
+      .map(async provider => {
+        const content = await generateProviderPage(provider, providerRegistry);
+        await fs.writeFile(path.join(providersDir, `${provider.id}.mdx`), content);
+        console.info(`✅ Generated providers/${provider.id}.mdx`);
+      }),
   );
 
   // Generate individual AI SDK provider pages (parallelized, only if they have AI SDK docs)
@@ -1124,26 +1248,28 @@ async function generateDocs() {
 
   const aiSdkProvidersWithDocs = aiSdkProviderResults.filter((p): p is ModelsDevProvider => p !== null);
 
-  // Generate providers _meta.ts (including AI SDK providers with docs)
-  const providersMetaContent = generateProvidersMeta(grouped, aiSdkProvidersWithDocs);
-  await fs.writeFile(path.join(providersDir, '_meta.ts'), providersMetaContent);
-  console.info('✅ Generated providers/_meta.ts');
-
   // Generate individual gateway pages (parallelized)
   await Promise.all(
-    Array.from(grouped.gateways.entries()).map(async ([gatewayName, providers]) => {
-      const content = generateGatewayPage(gatewayName, providers, providerRegistry);
-      await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
-      console.info(`✅ Generated gateways/${gatewayName}.mdx`);
-    }),
+    Array.from(grouped.gateways.entries())
+      .filter(([gatewayName]) => !MANUALLY_DOCUMENTED_GATEWAYS.includes(gatewayName))
+      .map(async ([gatewayName, providers]) => {
+        const content = generateGatewayPage(gatewayName, providers, providerRegistry);
+        await fs.writeFile(path.join(gatewaysDir, `${gatewayName}.mdx`), content);
+        console.info(`✅ Generated gateways/${gatewayName}.mdx`);
+      }),
   );
+
+  // Generate sidebars.js (including AI SDK providers with docs)
+  const sidebarsContent = generateSidebarsFile(grouped, aiSdkProvidersWithDocs);
+  await fs.writeFile(path.join(docsDir, 'sidebars.js'), sidebarsContent);
+  console.info('✅ Generated models/sidebars.js');
 
   console.info(`
 📚 Documentation generated successfully!
    - ${grouped.popular.length + grouped.other.length + aiSdkProviders.length} provider pages + 1 overview
    - ${grouped.gateways.size} gateway pages + 1 overview
    - 1 main index page
-   
+
    Total: ${grouped.popular.length + grouped.other.length + aiSdkProviders.length + grouped.gateways.size + 3} pages generated
   `);
 }
@@ -1162,5 +1288,5 @@ export {
   generateProviderPage,
   generateGatewayPage,
   generateIndexPage,
-  generateProvidersMeta,
+  generateSidebarsFile,
 };

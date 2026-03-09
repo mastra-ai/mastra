@@ -1,52 +1,51 @@
-import { randomUUID } from 'crypto';
-import { readFile } from 'fs/promises';
+import { readFile } from 'node:fs/promises';
 import * as https from 'node:https';
-import { join } from 'path/posix';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { Telemetry } from '@mastra/core/telemetry';
 import { Tool } from '@mastra/core/tools';
+import { MastraServer } from '@mastra/hono';
+import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
-import { describeRoute, openAPISpecs } from 'hono-openapi';
-import { getAgentCardByIdHandler, getAgentExecutionHandler } from './handlers/a2a';
-import { authenticationMiddleware, authorizationMiddleware } from './handlers/auth';
+import { describeRoute } from 'hono-openapi';
+import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
+import { healthHandler } from './handlers/health';
+import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
 import { rootHandler } from './handlers/root';
-import { agentBuilderRouter } from './handlers/routes/agent-builder/router';
-import { getModelProvidersHandler } from './handlers/routes/agents/handlers';
-import { agentsRouterDev, agentsRouter } from './handlers/routes/agents/router';
-import { logsRouter } from './handlers/routes/logs/router';
-import { mcpRouter } from './handlers/routes/mcp/router';
-import { memoryRoutes } from './handlers/routes/memory/router';
-import { observabilityRouter } from './handlers/routes/observability/router';
-import { scoresRouter } from './handlers/routes/scores/router';
-import { telemetryRouter } from './handlers/routes/telemetry/router';
-import { toolsRouter } from './handlers/routes/tools/router';
-import { vectorRouter } from './handlers/routes/vector/router';
-import { workflowsRouter } from './handlers/routes/workflows/router';
 import type { ServerBundleOptions } from './types';
-import { html } from './welcome.js';
+import { html } from './welcome';
 
-type Bindings = {};
+// Get studio path from env or default to ./studio relative to cwd
+const getStudioPath = () => {
+  if (process.env.MASTRA_STUDIO_PATH) {
+    return process.env.MASTRA_STUDIO_PATH;
+  }
 
-type Variables = {
-  mastra: Mastra;
-  runtimeContext: RuntimeContext;
+  let __dirname: string = '.';
+  if (import.meta.url) {
+    const __filename = fileURLToPath(import.meta.url);
+    __dirname = dirname(__filename);
+  }
+
+  const studioPath = process.env.MASTRA_STUDIO_PATH || join(__dirname, 'studio');
+  return studioPath;
+};
+
+// Use adapter type definitions
+type Bindings = HonoBindings;
+
+type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
-  tools: Record<string, Tool>;
-  taskStore: InMemoryTaskStore;
-  playground: boolean;
-  isDev: boolean;
-  customRouteAuthConfig?: Map<string, boolean>;
 };
 
 export function getToolExports(tools: Record<string, Function>[]) {
@@ -76,17 +75,43 @@ export async function createHonoServer(
     tools: {},
   },
 ) {
+  // Register bundled tools with Mastra so they can be used by stored agents
+  // This bridges the gap between tools discovered by the CLI bundler and the Mastra instance
+  if (options.tools) {
+    for (const [key, tool] of Object.entries(options.tools)) {
+      try {
+        mastra.addTool(tool as any, key);
+      } catch {
+        // Tool may already be registered (e.g., if defined in Mastra config), ignore
+      }
+    }
+  }
+
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
+  // Pre-process routes: bake hono-openapi describeRoute into route middleware
+  // so the adapter handles it as normal middleware without needing to know about hono-openapi
+  const processedRoutes = routes?.map(route => {
+    if ('openapi' in route && route.openapi) {
+      const existingMiddleware = route.middleware
+        ? Array.isArray(route.middleware)
+          ? route.middleware
+          : [route.middleware]
+        : [];
+      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+    }
+    return route;
+  });
+
   // Store custom route auth configurations
   const customRouteAuthConfig = new Map<string, boolean>();
 
-  if (routes) {
-    for (const route of routes) {
+  if (processedRoutes) {
+    for (const route of processedRoutes) {
       // By default, routes require authentication unless explicitly set to false
       const requiresAuth = route.requiresAuth !== false;
       const routeKey = `${route.method}:${route.path}`;
@@ -94,90 +119,36 @@ export async function createHonoServer(
     }
   }
 
-  // Middleware
-  app.use('*', async function setTelemetryInfo(c, next) {
-    const requestId = c.req.header('x-request-id') ?? randomUUID();
-    const span = Telemetry.getActiveSpan();
-    if (span) {
-      span.setAttribute('http.request_id', requestId);
-      span.updateName(`${c.req.method} ${c.req.path}`);
-
-      const newCtx = Telemetry.setBaggage({
-        'http.request_id': { value: requestId },
-      });
-
-      await new Promise(resolve => {
-        Telemetry.withContext(newCtx, async () => {
-          await next();
-          resolve(true);
-        });
-      });
-    } else {
-      await next();
+  // Set up error handling - use custom onError handler if provided, otherwise use default
+  const customOnError = server?.onError;
+  app.onError((err, c) => {
+    if (customOnError) {
+      return customOnError(err, c);
     }
+    return errorHandler(err, c, options.isDev);
   });
 
-  app.onError((err, c) => errorHandler(err, c, options.isDev));
+  // Define body limit options
+  const bodyLimitOptions = {
+    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
+    onError: () => ({ error: 'Request body too large' }),
+  };
 
-  // Configure hono context
-  // Configure hono context
-  app.use('*', async function setContext(c, next) {
-    // Parse runtime context from request body and add to context
-    let runtimeContext = new RuntimeContext();
-    // Parse runtime context from request body and add to context
-    if (c.req.method === 'POST' || c.req.method === 'PUT') {
-      const contentType = c.req.header('content-type');
-      if (contentType?.includes('application/json')) {
-        try {
-          const clonedReq = c.req.raw.clone();
-          const body = (await clonedReq.json()) as { runtimeContext?: Record<string, any> };
-          if (body.runtimeContext) {
-            runtimeContext = new RuntimeContext(Object.entries(body.runtimeContext));
-          }
-        } catch {
-          // Body parsing failed, continue without body
-        }
-      }
-    }
-
-    // Parse runtime context from query params and add to context
-    if (c.req.method === 'GET') {
-      try {
-        const encodedRuntimeContext = c.req.query('runtimeContext');
-        if (encodedRuntimeContext) {
-          let parsedRuntimeContext: Record<string, any> | undefined;
-          // Try JSON first
-          try {
-            parsedRuntimeContext = JSON.parse(encodedRuntimeContext);
-          } catch {
-            // Fallback to base64(JSON)
-            try {
-              const json = Buffer.from(encodedRuntimeContext, 'base64').toString('utf-8');
-              parsedRuntimeContext = JSON.parse(json);
-            } catch {
-              // ignore if still invalid
-            }
-          }
-
-          if (parsedRuntimeContext && typeof parsedRuntimeContext === 'object') {
-            runtimeContext = new RuntimeContext([...runtimeContext.entries(), ...Object.entries(parsedRuntimeContext)]);
-          }
-        }
-      } catch {
-        // ignore query parsing errors
-      }
-    }
-
-    // Add relevant contexts to hono context
-    c.set('runtimeContext', runtimeContext);
-    c.set('mastra', mastra);
-    c.set('tools', options.tools);
-    c.set('taskStore', a2aTaskStore);
-    c.set('playground', options.playground === true);
-    c.set('isDev', options.isDev === true);
-    c.set('customRouteAuthConfig', customRouteAuthConfig);
-    return next();
+  // Create server adapter with all configuration
+  const honoServerAdapter = new MastraServer({
+    app,
+    mastra,
+    tools: options.tools,
+    taskStore: a2aTaskStore,
+    bodyLimitOptions,
+    openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
+    customRouteAuthConfig,
+    customApiRoutes: processedRoutes,
   });
+
+  // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
+  // Cast needed due to Hono type variance - safe because registerContextMiddleware is generic
+  honoServerAdapter.registerContextMiddleware();
 
   // Apply custom server middleware from Mastra instance
   const serverMiddleware = mastra.getServerMiddleware?.();
@@ -192,10 +163,27 @@ export async function createHonoServer(
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
+    // Check if auth is configured - if so, we need credentials for cookie-based sessions
+    const hasAuth = !!server?.auth;
+
+    // When auth + credentials are enabled, origin cannot be '*'.
+    // Use user-configured cors.origin if provided; otherwise fall back to
+    // reflecting the request origin (required for dev/Studio but users should
+    // set an explicit origin in production).
+    let corsOrigin: string | string[] | ((origin: string) => string | undefined | null);
+    if (server?.cors && typeof server.cors === 'object' && 'origin' in server.cors && server.cors.origin) {
+      corsOrigin = server.cors.origin as string | string[] | ((origin: string) => string | undefined | null);
+    } else if (hasAuth) {
+      corsOrigin = (origin: string) => origin || undefined;
+    } else {
+      corsOrigin = '*';
+    }
+
     const corsConfig = {
-      origin: '*',
+      origin: corsOrigin,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      credentials: false,
+      // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
+      credentials: hasAuth ? true : false,
       maxAge: 3600,
       ...server?.cors,
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
@@ -204,14 +192,43 @@ export async function createHonoServer(
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
-  // Run AUTH middlewares after CORS middleware
-  app.use('*', authenticationMiddleware);
-  app.use('*', authorizationMiddleware);
+  // Health check endpoint (before auth middleware so it's publicly accessible)
+  app.get(
+    '/health',
+    describeRoute({
+      description: 'Health check endpoint',
+      tags: ['system'],
+      responses: {
+        200: {
+          description: 'Service is healthy',
+        },
+      },
+    }),
+    healthHandler,
+  );
 
-  const bodyLimitOptions = {
-    maxSize: server?.bodySizeLimit ?? 4.5 * 1024 * 1024, // 4.5 MB,
-    onError: (c: Context) => c.json({ error: 'Request body too large' }, 413),
-  };
+  if (options?.isDev || server?.build?.swaggerUI) {
+    app.get(
+      '/api',
+      describeRoute({
+        description: 'API Welcome Page',
+        tags: ['system'],
+        responses: {
+          200: {
+            description: 'Success',
+          },
+        },
+      }),
+      rootHandler,
+    );
+  }
+
+  // Validate EE license before starting (checks RBAC config vs license)
+  await honoServerAdapter.validateEELicense();
+
+  // Register auth middleware (authentication and authorization)
+  // This is handled by the server adapter now
+  honoServerAdapter.registerAuthMiddleware();
 
   if (server?.middleware) {
     const normalizedMiddlewares = Array.isArray(server.middleware) ? server.middleware : [server.middleware];
@@ -231,267 +248,55 @@ export async function createHonoServer(
     }
   }
 
-  if (routes) {
-    for (const route of routes) {
-      const middlewares: MiddlewareHandler[] = [];
-
-      if (route.middleware) {
-        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
-      }
-      if (route.openapi) {
-        middlewares.push(describeRoute(route.openapi));
-      }
-
-      const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
-
-      if (route.method === 'GET') {
-        app.get(route.path, ...middlewares, handler);
-      } else if (route.method === 'POST') {
-        app.post(route.path, ...middlewares, handler);
-      } else if (route.method === 'PUT') {
-        app.put(route.path, ...middlewares, handler);
-      } else if (route.method === 'DELETE') {
-        app.delete(route.path, ...middlewares, handler);
-      } else if (route.method === 'PATCH') {
-        app.patch(route.path, ...middlewares, handler);
-      } else if (route.method === 'ALL') {
-        app.all(route.path, ...middlewares, handler);
-      }
-    }
-  }
+  // Register custom API routes via the adapter (auth + middleware handled uniformly)
+  await honoServerAdapter.registerCustomApiRoutes();
 
   if (server?.build?.apiReqLogs) {
     app.use(logger());
   }
 
-  /**
-   * A2A
-   */
-
-  app.get(
-    '/.well-known/:agentId/agent-card.json',
-    describeRoute({
-      description: 'Get agent configuration',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      responses: {
-        200: {
-          description: 'Agent configuration',
-        },
-      },
-    }),
-    getAgentCardByIdHandler,
-  );
-
-  app.post(
-    '/a2a/:agentId',
-    describeRoute({
-      description: 'Execute agent via A2A protocol',
-      tags: ['agents'],
-      parameters: [
-        {
-          name: 'agentId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string' },
-        },
-      ],
-      requestBody: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: {
-              type: 'object',
-              properties: {
-                method: {
-                  type: 'string',
-                  enum: ['message/send', 'message/stream', 'tasks/get', 'tasks/cancel'],
-                  description: 'The A2A protocol method to execute',
-                },
-                params: {
-                  type: 'object',
-                  oneOf: [
-                    {
-                      // MessageSendParams
-                      type: 'object',
-                      properties: {
-                        id: {
-                          type: 'string',
-                          description: 'Unique identifier for the task being initiated or continued',
-                        },
-                        sessionId: {
-                          type: 'string',
-                          description: 'Optional identifier for the session this task belongs to',
-                        },
-                        message: {
-                          type: 'object',
-                          description: 'The message content to send to the agent for processing',
-                        },
-                        pushNotification: {
-                          type: 'object',
-                          nullable: true,
-                          description:
-                            'Optional pushNotification information for receiving notifications about this task',
-                        },
-                        historyLength: {
-                          type: 'integer',
-                          nullable: true,
-                          description:
-                            'Optional parameter to specify how much message history to include in the response',
-                        },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata associated with sending this message',
-                        },
-                      },
-                      required: ['id', 'message'],
-                    },
-                    {
-                      // TaskQueryParams
-                      type: 'object',
-                      properties: {
-                        id: { type: 'string', description: 'The unique identifier of the task' },
-                        historyLength: {
-                          type: 'integer',
-                          nullable: true,
-                          description: 'Optional history length to retrieve for the task',
-                        },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata to include with the operation',
-                        },
-                      },
-                      required: ['id'],
-                    },
-                    {
-                      // TaskIdParams
-                      type: 'object',
-                      properties: {
-                        id: { type: 'string', description: 'The unique identifier of the task' },
-                        metadata: {
-                          type: 'object',
-                          nullable: true,
-                          description: 'Optional metadata to include with the operation',
-                        },
-                      },
-                      required: ['id'],
-                    },
-                  ],
-                },
-              },
-              required: ['method', 'params'],
-            },
-          },
-        },
-      },
-      responses: {
-        200: {
-          description: 'A2A response',
-        },
-        400: {
-          description: 'Missing or invalid request parameters',
-        },
-        404: {
-          description: 'Agent not found',
-        },
-      },
-    }),
-    getAgentExecutionHandler,
-  );
-
-  // API routes
-  app.get(
-    '/api',
-    describeRoute({
-      description: 'Get API status',
-      tags: ['system'],
-      responses: {
-        200: {
-          description: 'Success',
-        },
-      },
-    }),
-    rootHandler,
-  );
-
-  // Providers route
-  app.get(
-    '/api/model-providers',
-    describeRoute({
-      description: 'Get all model providers with available keys',
-      tags: ['agents'],
-      responses: {
-        200: {
-          description: 'All model providers with available keys',
-        },
-      },
-    }),
-    getModelProvidersHandler,
-  );
-
-  // Agents routes
-  app.route('/api/agents', agentsRouter(bodyLimitOptions));
-
-  if (options.isDev) {
-    app.route('/api/agents', agentsRouterDev(bodyLimitOptions));
-  }
-
-  // MCP server routes
-  app.route('/api/mcp', mcpRouter(bodyLimitOptions));
-  // Network Memory routes
-  app.route('/api/memory', memoryRoutes(bodyLimitOptions));
-  // Telemetry routes
-  app.route('/api/telemetry', telemetryRouter());
-  // Observability routes
-  app.route('/api/observability', observabilityRouter());
-  // Legacy Workflow routes
-  app.route('/api/workflows', workflowsRouter(bodyLimitOptions));
-  // Log routes
-  app.route('/api/logs', logsRouter());
-  // Scores routes
-  app.route('/api/scores', scoresRouter(bodyLimitOptions));
-  // Agent builder routes
-  app.route('/api/agent-builder', agentBuilderRouter(bodyLimitOptions));
-  // Tool routes
-  app.route('/api/tools', toolsRouter(bodyLimitOptions, options.tools));
-  // Vector routes
-  app.route('/api/vector', vectorRouter(bodyLimitOptions));
-
-  if (options?.isDev || server?.build?.openAPIDocs || server?.build?.swaggerUI) {
-    app.get(
-      '/openapi.json',
-      openAPISpecs(app, {
-        includeEmptyPaths: true,
-        documentation: {
-          info: { title: 'Mastra API', version: '1.0.0', description: 'Mastra API' },
-        },
-      }),
-    );
-  }
+  // Register adapter routes (adapter was created earlier with configuration)
+  // Cast needed due to Hono type variance - safe because registerRoutes is generic
+  await honoServerAdapter.registerRoutes();
 
   if (options?.isDev || server?.build?.swaggerUI) {
+    // Warn if Swagger UI is enabled but OpenAPI docs are not in production
+    if (!options?.isDev && server?.build?.swaggerUI && !server?.build?.openAPIDocs) {
+      const logger = mastra.getLogger();
+      logger.warn(
+        'Swagger UI is enabled but OpenAPI documentation is disabled. ' +
+          'The Swagger UI will not function properly without the OpenAPI endpoint. ' +
+          'Please enable openAPIDocs in your server.build configuration:\n' +
+          '  server: { build: { swaggerUI: true, openAPIDocs: true } }',
+      );
+    }
+
     app.get(
       '/swagger-ui',
       describeRoute({
         hide: true,
       }),
-      swaggerUI({ url: '/openapi.json' }),
+      swaggerUI({ url: '/api/openapi.json' }),
     );
   }
 
-  if (options?.playground) {
+  if (options?.isDev) {
+    app.post(
+      '/__restart-active-workflow-runs',
+      describeRoute({
+        hide: true,
+      }),
+      restartAllActiveWorkflowRunsHandler,
+    );
+  }
+
+  const serverOptions = mastra.getServer();
+  const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+
+  if (options?.studio) {
     // SSE endpoint for refresh notifications
     app.get(
-      '/refresh-events',
+      `${studioBasePath}/refresh-events`,
       describeRoute({
         hide: true,
       }),
@@ -500,7 +305,7 @@ export async function createHonoServer(
 
     // Trigger refresh for all clients
     app.post(
-      '/__refresh',
+      `${studioBasePath}/__refresh`,
       describeRoute({
         hide: true,
       }),
@@ -509,7 +314,7 @@ export async function createHonoServer(
 
     // Check hot reload status
     app.get(
-      '/__hot-reload-status',
+      `${studioBasePath}/__hot-reload-status`,
       describeRoute({
         hide: true,
       }),
@@ -520,61 +325,104 @@ export async function createHonoServer(
         });
       },
     );
-    // Playground routes - these should come after API routes
-    // Serve assets with specific MIME types
-    app.use('/assets/*', async (c, next) => {
-      const path = c.req.path;
-      if (path.endsWith('.js')) {
-        c.header('Content-Type', 'application/javascript');
-      } else if (path.endsWith('.css')) {
-        c.header('Content-Type', 'text/css');
-      }
-      await next();
-    });
 
-    // Serve static assets from playground directory
+    // Studio routes - these should come after API routes
+    // Serve static assets from studio directory
+    // Note: Vite builds with base: './' so all asset URLs are relative
+    // The <base href> tag in index.html handles path resolution for the SPA
+    const studioPath = getStudioPath();
     app.use(
-      '/assets/*',
+      `${studioBasePath}/assets/*`,
       serveStatic({
-        root: './playground/assets',
+        root: join(studioPath, 'assets'),
+        rewriteRequestPath: path => {
+          // Remove the basePath AND /assets prefix to get the actual file path
+          // Example: /custom-path/assets/style.css -> /style.css -> ./studio/assets/style.css
+          let rewritten = path;
+          if (studioBasePath && rewritten.startsWith(studioBasePath)) {
+            rewritten = rewritten.slice(studioBasePath.length);
+          }
+          // Remove the /assets prefix since root is already './studio/assets'
+          if (rewritten.startsWith('/assets')) {
+            rewritten = rewritten.slice('/assets'.length);
+          }
+          return rewritten;
+        },
       }),
     );
   }
 
   // Dynamic HTML handler - this must come before static file serving
   app.get('*', async (c, next) => {
+    const requestPath = c.req.path;
+
     // Skip if it's an API route
     if (
-      c.req.path.startsWith('/api/') ||
-      c.req.path.startsWith('/swagger-ui') ||
-      c.req.path.startsWith('/openapi.json')
+      requestPath === '/api' ||
+      requestPath.startsWith('/api/') ||
+      requestPath.startsWith('/swagger-ui') ||
+      requestPath.startsWith('/openapi.json')
     ) {
       return await next();
     }
 
     // Skip if it's an asset file (has extension other than .html)
-    const path = c.req.path;
-    if (path.includes('.') && !path.endsWith('.html')) {
+    if (requestPath.includes('.') && !requestPath.endsWith('.html')) {
       return await next();
     }
 
-    if (options?.playground) {
+    // Only serve studio for routes matching the configured base path
+    const isStudioRoute =
+      studioBasePath === '' || requestPath === studioBasePath || requestPath.startsWith(`${studioBasePath}/`);
+    if (options?.studio && isStudioRoute) {
       // For HTML routes, serve index.html with dynamic replacements
-      let indexHtml = await readFile(join(process.cwd(), './playground/index.html'), 'utf-8');
-      indexHtml = indexHtml.replace(
-        `'%%MASTRA_TELEMETRY_DISABLED%%'`,
-        `${Boolean(process.env.MASTRA_TELEMETRY_DISABLED)}`,
-      );
+      const studioPath = getStudioPath();
+      let indexHtml = await readFile(join(studioPath, 'index.html'), 'utf-8');
 
-      // Inject the server port information
-      const serverOptions = mastra.getServer();
+      // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
+      const key =
+        serverOptions?.https?.key ??
+        (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
+      const cert =
+        serverOptions?.https?.cert ??
+        (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
+      const protocol = key && cert ? 'https' : 'http';
 
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
+      const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
+      const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+      const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
+
+      // Helper function to escape JSON for embedding in HTML/JavaScript
+      const escapeForHtml = (json: string): string => {
+        return json
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'")
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+          .replace(/</g, '\\u003c')
+          .replace(/>/g, '\\u003e')
+          .replace(/\u2028/g, '\\u2028')
+          .replace(/\u2029/g, '\\u2029');
+      };
+
+      const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
+
+      indexHtml = injectStudioHtmlConfig(indexHtml, {
+        host: `'${host}'`,
+        port: `'${port}'`,
+        protocol: `'${protocol}'`,
+        apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
+        basePath: studioBasePath,
+        hideCloudCta: `'${hideCloudCta}'`,
+        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        experimentalFeatures: `'${experimentalFeatures}'`,
+        telemetryDisabled: `''`,
+        requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        autoDetectUrl: `'${autoDetectUrl}'`,
+      });
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
@@ -582,12 +430,21 @@ export async function createHonoServer(
     return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
   });
 
-  if (options?.playground) {
-    // Serve extra static files from playground directory (this comes after HTML handler)
+  if (options?.studio) {
+    // Serve extra static files from studio directory (this comes after HTML handler)
+    const studioRootPath = getStudioPath();
+    const studioPath = studioBasePath ? `${studioBasePath}/*` : '*';
     app.use(
-      '*',
+      studioPath,
       serveStatic({
-        root: './playground',
+        root: studioRootPath,
+        rewriteRequestPath: path => {
+          // Remove the basePath prefix if present
+          if (studioBasePath && path.startsWith(studioBasePath)) {
+            return path.slice(studioBasePath.length);
+          }
+          return path;
+        },
       }),
     );
   }
@@ -628,10 +485,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     },
     () => {
       const logger = mastra.getLogger();
-      logger.info(` Mastra API running on port ${protocol}://${host}:${port}/api`);
-      if (options?.playground) {
-        const playgroundUrl = `${protocol}://${host}:${port}`;
-        logger.info(`👨‍💻 Playground available at ${playgroundUrl}`);
+      logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
+      if (options?.studio) {
+        const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
+        const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
+        logger.info(`👨‍💻 Studio available at ${studioUrl}`);
       }
 
       if (process.send) {

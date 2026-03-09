@@ -4,25 +4,25 @@ import { useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
 import { Icon } from '@/ds/icons';
 import { GripVertical } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
+import { Switch } from '@/ds/components/Switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 
 type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
 
 export interface AgentMetadataModelListProps {
   modelList: AgentMetadataModelListType;
-  modelProviders: string[];
   updateModelInModelList: AgentMetadataModelListItemProps['updateModelInModelList'];
   reorderModelList: (params: ReorderModelListParams) => void;
 }
 
 export const AgentMetadataModelList = ({
   modelList,
-  modelProviders,
   updateModelInModelList,
   reorderModelList,
 }: AgentMetadataModelListProps) => {
   const [modelConfigs, setModelConfigs] = useState(() => modelList);
   const hasMultipleModels = modelConfigs.length > 1;
+  const enabledCount = modelConfigs.filter(m => m.enabled !== false).length;
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) {
@@ -68,10 +68,10 @@ export const AgentMetadataModelList = ({
                   <div ref={provided.innerRef} {...provided.draggableProps} style={provided.draggableProps.style}>
                     <AgentMetadataModelListItem
                       modelConfig={modelConfig}
-                      modelProviders={modelProviders}
                       updateModelInModelList={updateModel}
                       showDragHandle={hasMultipleModels}
                       dragHandleProps={provided.dragHandleProps}
+                      isLastEnabled={modelConfig.enabled !== false && enabledCount === 1}
                     />
                   </div>
                 )}
@@ -87,26 +87,26 @@ export const AgentMetadataModelList = ({
 
 interface AgentMetadataModelListItemProps {
   modelConfig: AgentMetadataModelListType[number];
-  modelProviders: string[];
   updateModelInModelList: (params: UpdateModelInModelListParams) => Promise<{ message: string }>;
   showDragHandle: boolean;
   dragHandleProps?: any;
+  isLastEnabled: boolean;
 }
 
 const AgentMetadataModelListItem = ({
   modelConfig,
-  modelProviders,
   updateModelInModelList,
   showDragHandle,
   dragHandleProps,
+  isLastEnabled,
 }: AgentMetadataModelListItemProps) => {
   const [enabled, setEnabled] = useState(() => modelConfig.enabled);
 
   return (
-    <div className="rounded-lg bg-background hover:bg-muted/50 transition-colors">
+    <div className="rounded-lg bg-surface1 hover:bg-surface4/50 transition-colors">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
-          <div {...dragHandleProps} className="text-icon3 cursor-grab active:cursor-grabbing flex-shrink-0">
+          <div {...dragHandleProps} className="text-neutral3 cursor-grab active:cursor-grabbing flex-shrink-0">
             <Icon>
               <GripVertical />
             </Icon>
@@ -117,18 +117,32 @@ const AgentMetadataModelListItem = ({
             defaultProvider={modelConfig.model.provider}
             defaultModel={modelConfig.model.modelId}
             updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
-            modelProviders={modelProviders}
             autoSave={true}
           />
         </div>
-        <Switch
-          checked={enabled}
-          onCheckedChange={checked => {
-            setEnabled(checked);
-            updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
-          }}
-          className="flex-shrink-0"
-        />
+        {isLastEnabled ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex-shrink-0">
+                  <Switch checked={enabled} disabled className="pointer-events-none" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>At least one model must be enabled</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <Switch
+            checked={enabled}
+            onCheckedChange={checked => {
+              setEnabled(checked);
+              updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+            }}
+            className="flex-shrink-0"
+          />
+        )}
       </div>
     </div>
   );

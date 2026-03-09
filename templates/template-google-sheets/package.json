@@ -4,7 +4,6 @@
   "description": "Google Sheets integration template using Mastra's AI agents. Enables intelligent sheet manipulation, and seamless integration between Google Sheets and AI-powered business logic for spreadsheet automation and analysis.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "mastra dev",
     "build": "mastra build",
     "start": "mastra start"
@@ -14,26 +13,24 @@
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^1.2.12",
-    "@composio/core": "^0.1.55",
-    "@composio/mastra": "^0.1.56",
-    "@mastra/core": "^0.21.1",
-    "@mastra/fastembed": "^0.10.5",
-    "@mastra/libsql": "^0.15.2",
-    "@mastra/loggers": "^0.10.16",
-    "@mastra/mcp": "^0.13.5",
-    "@mastra/memory": "^0.15.7",
-    "@openrouter/ai-sdk-provider": "^0.7.5",
-    "hono": "^4.9.7",
-    "zod": "^3.25.76"
+    "@composio/core": "^0.6.3",
+    "@composio/mastra": "^0.6.3",
+    "@mastra/core": "latest",
+    "@mastra/fastembed": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "hono": "^4.12.2",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
-    "mastra": "^0.17.0",
-    "prettier": "^3.6.2",
-    "typescript": "^5.9.2"
+    "@types/node": "^24.10.9",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
   }
 }

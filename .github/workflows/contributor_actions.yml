@@ -3,7 +3,7 @@ name: Contributor actions
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
-    branches: [main]
+    branches: [main, 0.x]
 
 jobs:
   contributor-actions:
@@ -20,13 +20,10 @@ jobs:
           - description: 'Combined store Tests (vector+storage)'
           - description: 'Memory Tests'
           - description: 'RAG Tests'
-          - description: 'Tool Builder Tests'
-          - description: 'Auth Package Tests'
-          - description: 'Deployer Package Tests'
-          - description: 'Server Package Tests'
+
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup custom action
         uses: ./.github/workflows/shared-actions/set-pr-status
         with:

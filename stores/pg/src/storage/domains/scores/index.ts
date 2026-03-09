@@ -1,53 +1,166 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { safelyParseJSON, ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsPG } from '../operations';
-import { getTableName } from '../utils';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import {
+  calculatePagination,
+  createStorageErrorId,
+  normalizePerPage,
+  ScoresStorage,
+  TABLE_SCORERS,
+  TABLE_SCHEMAS,
+  transformScoreRow as coreTransformScoreRow,
+} from '@mastra/core/storage';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
+import type { PgDomainConfig } from '../../db';
 
+function getSchemaName(schema?: string) {
+  return schema ? `"${schema}"` : '"public"';
+}
+
+function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+  const quotedIndexName = `"${indexName}"`;
+  return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
+}
+
+/**
+ * PostgreSQL-specific score row transformation.
+ * Uses Z-suffix timestamps (createdAtZ, updatedAtZ) when available.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  return {
-    ...row,
-    input: safelyParseJSON(row.input),
-    scorer: safelyParseJSON(row.scorer),
-    preprocessStepResult: safelyParseJSON(row.preprocessStepResult),
-    analyzeStepResult: safelyParseJSON(row.analyzeStepResult),
-    metadata: safelyParseJSON(row.metadata),
-    output: safelyParseJSON(row.output),
-    additionalContext: safelyParseJSON(row.additionalContext),
-    runtimeContext: safelyParseJSON(row.runtimeContext),
-    entity: safelyParseJSON(row.entity),
-    createdAt: row.createdAtZ || row.createdAt,
-    updatedAt: row.updatedAtZ || row.updatedAt,
-  } as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    preferredTimestampFields: {
+      createdAt: 'createdAtZ',
+      updatedAt: 'updatedAtZ',
+    },
+  });
 }
 
 export class ScoresPG extends ScoresStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema?: string;
+  #db: PgDB;
+  #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema?: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_SCORERS] as const;
+
+  constructor(config: PgDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (ScoresPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    // Add columns for backwards compatibility (v0.x to v1 migration)
+    await this.#db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['spanId', 'requestContext'],
+    });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the scores domain tables.
+   * @param schemaPrefix - Prefix for index names (e.g. "my_schema_" or "")
+   */
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
+    return [
+      {
+        name: `${schemaPrefix}mastra_scores_trace_id_span_id_created_at_idx`,
+        table: TABLE_SCORERS,
+        columns: ['traceId', 'spanId', 'createdAt DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Returns all DDL statements for this domain: table and indexes.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    // Table
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_SCORERS,
+        schema: TABLE_SCHEMAS[TABLE_SCORERS],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
+    // Indexes
+    for (const idx of ScoresPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  /**
+   * Returns default index definitions for this instance's schema.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return ScoresPG.getDefaultIndexDefs(schemaPrefix);
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const result = await this.client.oneOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE id = $1`,
+      const result = await this.#db.client.oneOrNone<ScoreRowData>(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE id = $1`,
         [id],
       );
 
@@ -55,7 +168,7 @@ export class ScoresPG extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -64,7 +177,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -76,7 +189,7 @@ export class ScoresPG extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const conditions: string[] = [`"scorerId" = $1`];
       const queryParams: any[] = [scorerId];
@@ -99,40 +212,45 @@ export class ScoresPG extends ScoresStorage {
 
       const whereClause = conditions.join(' AND ');
 
-      const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause}`,
+      const total = await this.#db.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause}`,
         queryParams,
       );
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
-
-      const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
-        [...queryParams, pagination.perPage, pagination.page * pagination.perPage],
+      const limitValue = perPageInput === false ? Number(total?.count) : perPage;
+      const end = perPageInput === false ? Number(total?.count) : start + perPage;
+      const result = await this.#db.client.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...queryParams, limitValue, start],
       );
 
       return {
         pagination: {
           total: Number(total?.count) || 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < Number(total?.count),
         },
         scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -141,22 +259,22 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('PG', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {
-            scorer: score.scorer.name,
-            entityId: score.entityId,
-            entityType: score.entityType,
-            traceId: score.traceId || '',
-            spanId: score.spanId || '',
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
           },
         },
         error,
@@ -164,8 +282,8 @@ export class ScoresPG extends ScoresStorage {
     }
 
     try {
-      // Generate ID like other storage implementations
       const id = crypto.randomUUID();
+      const now = new Date();
 
       const {
         scorer,
@@ -175,12 +293,12 @@ export class ScoresPG extends ScoresStorage {
         input,
         output,
         additionalContext,
-        runtimeContext,
+        requestContext,
         entity,
         ...rest
       } = parsedScore;
 
-      await this.operations.insert({
+      await this.#db.insert({
         tableName: TABLE_SCORERS,
         record: {
           id,
@@ -192,19 +310,18 @@ export class ScoresPG extends ScoresStorage {
           analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
           metadata: metadata ? JSON.stringify(metadata) : null,
           additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
-          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
+          requestContext: requestContext ? JSON.stringify(requestContext) : null,
           entity: entity ? JSON.stringify(entity) : null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('PG', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -213,47 +330,54 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
-      const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1`,
+      const total = await this.#db.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "runId" = $1`,
         [runId],
       );
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
 
-      const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
-        [runId, pagination.perPage, pagination.page * pagination.perPage],
+      const limitValue = perPageInput === false ? Number(total?.count) : perPage;
+      const end = perPageInput === false ? Number(total?.count) : start + perPage;
+
+      const result = await this.#db.client.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
+        [runId, limitValue, start],
       );
       return {
         pagination: {
           total: Number(total?.count) || 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < Number(total?.count),
         },
         scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -262,7 +386,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -270,42 +394,48 @@ export class ScoresPG extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
-      const total = await this.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2`,
+      const total = await this.#db.client.oneOrNone<{ count: string }>(
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "entityId" = $1 AND "entityType" = $2`,
         [entityId, entityType],
       );
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       if (total?.count === '0' || !total?.count) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
 
-      const result = await this.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
-        [entityId, entityType, pagination.perPage, pagination.page * pagination.perPage],
+      const limitValue = perPageInput === false ? Number(total?.count) : perPage;
+      const end = perPageInput === false ? Number(total?.count) : start + perPage;
+
+      const result = await this.#db.client.manyOrNone<ScoreRowData>(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
+        [entityId, entityType, limitValue, start],
       );
       return {
         pagination: {
           total: Number(total?.count) || 0,
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total?.count) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < Number(total?.count),
         },
         scores: result.map(transformScoreRow),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -314,7 +444,7 @@ export class ScoresPG extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -322,37 +452,41 @@ export class ScoresPG extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
-      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: this.schema });
-      const countSQLResult = await this.client.oneOrNone<{ count: string }>(
+      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) });
+      const countSQLResult = await this.#db.client.oneOrNone<{ count: string }>(
         `SELECT COUNT(*) as count FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2`,
         [traceId, spanId],
       );
 
       const total = Number(countSQLResult?.count ?? 0);
-
-      const result = await this.client.manyOrNone<ScoreRowData>(
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+      const result = await this.#db.client.manyOrNone<ScoreRowData>(
         `SELECT * FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
-        [traceId, spanId, pagination.perPage + 1, pagination.page * pagination.perPage],
+        [traceId, spanId, limitValue, start],
       );
 
-      const hasMore = result.length > pagination.perPage;
-      const scores = result.slice(0, pagination.perPage).map(row => transformScoreRow(row)) ?? [];
+      const hasMore = end < total;
+      const scores = result.map(row => transformScoreRow(row)) ?? [];
 
       return {
         scores,
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore,
         },
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('PG', 'GET_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

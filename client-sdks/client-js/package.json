@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "0.16.4",
+  "version": "1.7.3",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -35,35 +35,38 @@
   "license": "Apache-2.0",
   "scripts": {
     "lint": "eslint .",
-    "build": "tsup --config tsup.config.ts",
-    "dev": "pnpm build --watch",
+    "build:lib": "tsup --config tsup.config.ts",
+    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "dev": "pnpm build:lib --watch",
     "test": "vitest",
     "test:unit": "vitest run"
   },
   "dependencies": {
-    "@ai-sdk/ui-utils": "^1.2.11",
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
-    "json-schema": "^0.4.0",
-    "rxjs": "7.8.1",
-    "zod-to-json-schema": "^3.24.6"
+    "@mastra/schema-compat": "workspace:*",
+    "json-schema": "^0.4.0"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@babel/preset-env": "^7.28.3",
-    "@babel/preset-typescript": "^7.27.1",
+    "@internal/ai-sdk-v4": "workspace:*",
+    "@internal/ai-sdk-v5": "workspace:*",
+    "@ai-sdk/ui-utils": "^1.2.11",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@tsconfig/recommended": "^1.0.10",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "^20.19.0",
-    "zod": "^3.25.76",
-    "ai": "^4.3.19",
+    "@types/node": "22.19.13",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
-    "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "^3.25.76"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   }
 }

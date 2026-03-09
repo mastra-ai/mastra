@@ -4,7 +4,7 @@ A simple example showing how to chunk html using Mastra.
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 
 ## Getting Started

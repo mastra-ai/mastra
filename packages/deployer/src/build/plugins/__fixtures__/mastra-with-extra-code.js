@@ -1,10 +1,10 @@
 import { openai } from '@ai-sdk/openai';
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
+import { testDeployer } from '@mastra/deployer/test';
 import { PgVector } from '@mastra/pg';
 import { createVectorQueryTool, MDocument } from '@mastra/rag';
 import { embedMany } from 'ai';
-import { testDeployer } from '@mastra/deployer/test';
 
 function getDeployer() {
   return testDeployer;
@@ -17,6 +17,7 @@ const vectorQueryTool = createVectorQueryTool({
 });
 
 export const ragAgent = new Agent({
+  id: 'rag-agent',
   name: 'RAG Agent',
   instructions: `You are a helpful assistant`,
   model: openai('gpt-4o-mini'),
@@ -61,7 +62,7 @@ The agricultural sector must continue to innovate and adapt to ensure food secur
 
 const chunks = await doc.chunk({
   strategy: 'recursive',
-  size: 512,
+  maxSize: 512,
   overlap: 50,
   separator: '\n',
 });

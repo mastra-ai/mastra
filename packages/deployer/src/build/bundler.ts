@@ -1,22 +1,26 @@
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import alias from '@rollup/plugin-alias';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import nodeResolve from '@rollup/plugin-node-resolve';
-import esmShim from '@rollup/plugin-esm-shim';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { rollup, type InputOptions, type OutputOptions, type Plugin } from 'rollup';
+import { rollup } from 'rollup';
+import type { InputOptions, OutputOptions, Plugin } from 'rollup';
+import type { analyzeBundle } from './analyze';
 import { esbuild } from './plugins/esbuild';
-import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import { analyzeBundle } from './analyze';
+import { esmShim } from './plugins/esm-shim';
+import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
+import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
-import { join } from 'node:path';
-import { slash } from './utils';
+import { getNodeResolveOptions, slash } from './utils';
+import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
   entryFile: string,
   analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>,
-  platform: 'node' | 'browser',
+  platform: BundlerPlatform,
   env: Record<string, string> = { 'process.env.NODE_ENV': JSON.stringify('production') },
   {
     sourcemap = false,
@@ -24,39 +28,20 @@ export async function getInputOptions(
     projectRoot,
     workspaceRoot = undefined,
     enableEsmShim = true,
+    externalsPreset = false,
   }: {
     sourcemap?: boolean;
     isDev?: boolean;
     workspaceRoot?: string;
     projectRoot: string;
     enableEsmShim?: boolean;
+    externalsPreset?: boolean;
   },
 ): Promise<InputOptions> {
-  let nodeResolvePlugin =
-    platform === 'node'
-      ? nodeResolve({
-          preferBuiltins: true,
-          exportConditions: ['node'],
-        })
-      : nodeResolve({
-          preferBuiltins: false,
-          browser: true,
-        });
+  const nodeResolvePlugin = nodeResolve(getNodeResolveOptions(platform));
 
-  const externalsCopy = new Set<string>();
-  // make all nested imports external from the same package
-  for (const external of analyzedBundleInfo.externalDependencies) {
-    if (external.startsWith('@')) {
-      const [scope, name] = external.split('/', 3);
-      externalsCopy.add(`${scope}/${name}`);
-      externalsCopy.add(`${scope}/${name}/*`);
-    } else {
-      externalsCopy.add(external);
-      externalsCopy.add(`${external}/*`);
-    }
-  }
-
-  const externals = Array.from(externalsCopy);
+  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
+  const externals = externalsPreset ? [] : Array.from(externalsCopy);
 
   const normalizedEntryFile = slash(entryFile);
   return {
@@ -65,6 +50,7 @@ export async function getInputOptions(
     preserveSymlinks: true,
     external: externals,
     plugins: [
+      subpathExternalsResolver(externals),
       {
         name: 'alias-optimized-deps',
         resolveId(id: string) {
@@ -129,23 +115,25 @@ export async function getInputOptions(
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
       }),
-      commonjs({
-        extensions: ['.js', '.ts'],
-        transformMixedEsModules: true,
-        esmExternals(id) {
-          return externals.includes(id);
-        },
-      }),
+      externalsPreset
+        ? null
+        : commonjs({
+            extensions: ['.js', '.ts'],
+            transformMixedEsModules: true,
+            esmExternals(id) {
+              return externals.includes(id);
+            },
+          }),
       enableEsmShim ? esmShim() : undefined,
-      nodeResolvePlugin,
+      externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
       // for debugging
       // {
       //   name: 'logger',
-      //   //@ts-ignore
+      //   //@ts-expect-error
       //   resolveId(id, ...args) {
       //     console.log({ id, args });
       //   },
-      //   // @ts-ignore
+      //   // @ts-expect-error
       // transform(code, id) {
       //   if (code.includes('class Duplexify ')) {
       //     console.log({ duplex: id });

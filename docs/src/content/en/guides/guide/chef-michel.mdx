@@ -1,10 +1,11 @@
 ---
-title: "Building an AI Chef Assistant | Mastra Agent Guides"
+title: "Guide: Building an AI Chef Assistant"
 description: Guide on creating a Chef Assistant agent in Mastra to help users cook meals with available ingredients.
 ---
 
-import { Steps } from "nextra/components";
-import YouTube from "@/components/youtube";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+import YouTube from "@site/src/components/YouTube-player";
 
 # Building an AI Chef Assistant
 
@@ -16,238 +17,226 @@ You'll learn how to create the agent and register it with Mastra. Next, you'll i
 
 ## Prerequisites
 
-- Node.js `v20.0` or later installed
+- Node.js `v22.13.0` or later installed
 - An API key from a supported [Model Provider](/models)
-- An existing Mastra project (Follow the [installation guide](/docs/getting-started/installation) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
 
 ## Creating the Agent
 
 To create an agent in Mastra use the `Agent` class to define it and then register it with Mastra.
 
 <Steps>
+  <StepItem>
+    Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
 
-### Define the Agent
+    ```ts title="src/mastra/agents/chefAgent.ts"
+    import { Agent } from '@mastra/core/agent'
 
-Create a new file `src/mastra/agents/chefAgent.ts` and define your agent:
+    export const chefAgent = new Agent({
+      id: 'chef-agent',
+      name: 'chef-agent',
+      instructions:
+        'You are Michel, a practical and experienced home chef' +
+        'You help people cook with whatever ingredients they have available.',
+      model: 'openai/gpt-5.1',
+    })
+    ```
+  </StepItem>
 
-```ts copy filename="src/mastra/agents/chefAgent.ts"
-import { openai } from "@ai-sdk/openai";
-import { Agent } from "@mastra/core/agent";
+  <StepItem>
+    In your `src/mastra/index.ts` file, register the agent:
 
-export const chefAgent = new Agent({
-  name: "chef-agent",
-  instructions:
-    "You are Michel, a practical and experienced home chef" +
-    "You help people cook with whatever ingredients they have available.",
-  model: openai("gpt-4o-mini"),
-});
-```
+    ```ts title="src/mastra/index.ts" {2, 5}
+    import { Mastra } from '@mastra/core'
+    import { chefAgent } from './agents/chefAgent'
 
-### Register the Agent with Mastra
-
-In your `src/mastra/index.ts` file, register the agent:
-
-```ts copy filename="src/mastra/index.ts" {2, 5}
-import { Mastra } from "@mastra/core";
-import { chefAgent } from "./agents/chefAgent";
-
-export const mastra = new Mastra({
-  agents: { chefAgent },
-});
-```
-
-</Steps >
+    export const mastra = new Mastra({
+      agents: { chefAgent },
+    })
+    ```
+  </StepItem>
+</Steps>
 
 ## Interacting with the Agent
 
 Depending on your requirements you can interact and get responses from the agent in different formats. In the following steps you'll learn how to generate, stream, and get structured output.
 
 <Steps>
+  <StepItem>
+    Create a new file `src/index.ts` and add a `main()` function to it. Inside, craft a query to ask the agent and log its response.
 
-### Generating Text Responses
+    ```ts title="src/index.ts"
+    import { chefAgent } from './mastra/agents/chefAgent'
 
-Create a new file `src/index.ts` and add a `main()` function to it. Inside, craft a query to ask the agent and log its response.
+    async function main() {
+      const query =
+        'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?'
+      console.log(`Query: ${query}`)
 
-```ts copy filename="src/index.ts"
-import { chefAgent } from "./mastra/agents/chefAgent";
+      const response = await chefAgent.generate([{ role: 'user', content: query }])
+      console.log('\n👨‍🍳 Chef Michel:', response.text)
+    }
 
-async function main() {
-  const query =
-    "In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?";
-  console.log(`Query: ${query}`);
+    main()
+    ```
 
-  const response = await chefAgent.generate([{ role: "user", content: query }]);
-  console.log("\n👨‍🍳 Chef Michel:", response.text);
-}
+    Afterwards, run the script:
 
-main();
-```
+    ```bash
+    npx bun src/index.ts
+    ```
 
-Afterwards, run the script:
+    You should get an output similar to this:
 
-```bash copy
-npx bun src/index.ts
-```
+    ```
+    Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
 
-You should get an output similar to this:
+    👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
+    ```
+  </StepItem>
 
-```
-Query: In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?
+  <StepItem>
+    In the previous example you might have waited a bit for the response without any sign of progress. To show the agent's output as it creates it you should instead stream its response to the terminal.
 
-👨‍🍳 Chef Michel: You can make a delicious pasta al pomodoro! Here's how...
-```
+    ```ts title="src/index.ts"
+    import { chefAgent } from './mastra/agents/chefAgent'
 
-### Streaming Responses
+    async function main() {
+      const query =
+        "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder."
+      console.log(`Query: ${query}`)
 
-In the previous example you might have waited a bit for the response without any sign of progress. To show the agent's output as it creates it you should instead stream its response to the terminal.
+      const stream = await chefAgent.stream([{ role: 'user', content: query }])
 
-```ts copy filename="src/index.ts"
-import { chefAgent } from "./mastra/agents/chefAgent";
+      console.log('\n Chef Michel: ')
 
-async function main() {
-  const query =
-    "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.";
-  console.log(`Query: ${query}`);
+      for await (const chunk of stream.textStream) {
+        process.stdout.write(chunk)
+      }
 
-  const stream = await chefAgent.stream([{ role: "user", content: query }]);
+      console.log('\n\n✅ Recipe complete!')
+    }
 
-  console.log("\n Chef Michel: ");
+    main()
+    ```
 
-  for await (const chunk of stream.textStream) {
-    process.stdout.write(chunk);
-  }
+    Afterwards, run the script again:
 
-  console.log("\n\n✅ Recipe complete!");
-}
+    ```bash
+    npx bun src/index.ts
+    ```
 
-main();
-```
+    You should get an output similar to the one below. This time though you can read it line by line instead of one large block.
 
-Afterwards, run the script again:
+    ```
+    Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
 
-```bash copy
-npx bun src/index.ts
-```
+    👨‍🍳 Chef Michel:
+    Great! You can make a comforting chicken curry...
 
-You should get an output similar to the one below. This time though you can read it line by line instead of one large block.
+    ✅ Recipe complete!
+    ```
+  </StepItem>
 
-```
-Query: Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder.
+  <StepItem>
+    Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](/docs/agents/overview#structured-output).
 
-👨‍🍳 Chef Michel:
-Great! You can make a comforting chicken curry...
+    Change your `src/index.ts` to the following:
 
-✅ Recipe complete!
-```
+    ```ts title="src/index.ts"
+    import { chefAgent } from './mastra/agents/chefAgent'
+    import { z } from 'zod'
 
-### Generating a Recipe with Structured Data
+    async function main() {
+      const query = 'I want to make lasagna, can you generate a lasagna recipe for me?'
+      console.log(`Query: ${query}`)
 
-Instead of showing the agent's response to a human you might want to pass it along to another part of your code. For these instances your agent should return [structured output](../../docs/agents/overview.mdx#4-structured-output).
+      // Define the Zod schema
+      const schema = z.object({
+        ingredients: z.array(
+          z.object({
+            name: z.string(),
+            amount: z.string(),
+          }),
+        ),
+        steps: z.array(z.string()),
+      })
 
-Change your `src/index.ts` to the following:
+      const response = await chefAgent.generate([{ role: 'user', content: query }], {
+        structuredOutput: {
+          schema,
+        },
+      })
+      console.log('\n👨‍🍳 Chef Michel:', response.object)
+    }
 
-```ts copy filename="src/index.ts"
-import { chefAgent } from "./mastra/agents/chefAgent";
-import { z } from "zod";
+    main()
+    ```
 
-async function main() {
-  const query =
-    "I want to make lasagna, can you generate a lasagna recipe for me?";
-  console.log(`Query: ${query}`);
+    After running the script again you should get an output similar to this:
 
-  // Define the Zod schema
-  const schema = z.object({
-    ingredients: z.array(
-      z.object({
-        name: z.string(),
-        amount: z.string(),
-      }),
-    ),
-    steps: z.array(z.string()),
-  });
+    ```
+    Query: I want to make lasagna, can you generate a lasagna recipe for me?
 
-  const response = await chefAgent.generate(
-    [{ role: "user", content: query }],
-    { 
-      structuredOutput: {
-        schema
-      },
-    },
-  );
-  console.log("\n👨‍🍳 Chef Michel:", response.object);
-}
-
-main();
-```
-
-After running the script again you should get an output similar to this:
-
-```
-Query: I want to make lasagna, can you generate a lasagna recipe for me?
-
-👨‍🍳 Chef Michel: {
-  ingredients: [
-    { name: "Lasagna noodles", amount: "12 sheets" },
-    { name: "Ground beef", amount: "1 pound" },
-    // ...
-  ],
-  steps: [
-    "Preheat oven to 375°F (190°C).",
-    "Cook the lasagna noodles according to package instructions.",
-    // ...
-  ]
-}
-```
-
-</Steps >
+    👨‍🍳 Chef Michel: {
+      ingredients: [
+        { name: "Lasagna noodles", amount: "12 sheets" },
+        { name: "Ground beef", amount: "1 pound" },
+      ],
+      steps: [
+        "Preheat oven to 375°F (190°C).",
+        "Cook the lasagna noodles according to package instructions.",
+      ]
+    }
+    ```
+  </StepItem>
+</Steps>
 
 ## Running the Agent Server
 
 Learn how to interact with your agent through Mastra's API.
 
 <Steps>
+  <StepItem>
+    You can run your agent as a service using the `mastra dev` command:
 
-### Using `mastra dev`
+    ```bash
+    mastra dev
+    ```
 
-You can run your agent as a service using the `mastra dev` command:
+    This will start a server exposing endpoints to interact with your registered agents. Within [Studio](/docs/getting-started/studio) you can test your agent through a UI.
+  </StepItem>
 
-```bash copy
-mastra dev
-```
+  <StepItem>
+    By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant agent will be available at:
 
-This will start a server exposing endpoints to interact with your registered agents. Within the [playground](../../docs/server-db/local-dev-playground.mdx) you can test your agent through a UI.
+    ```
+    POST http://localhost:4111/api/agents/chefAgent/generate
+    ```
+  </StepItem>
 
-### Accessing the Chef Assistant API
+  <StepItem>
+    You can interact with the agent using `curl` from the command line:
 
-By default, `mastra dev` runs on `http://localhost:4111`. Your Chef Assistant agent will be available at:
+    ```bash
+    curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
+      -H "Content-Type: application/json" \
+      -d '{
+        "messages": [
+          {
+            "role": "user",
+            "content": "I have eggs, flour, and milk. What can I make?"
+          }
+        ]
+      }'
+    ```
 
-```
-POST http://localhost:4111/api/agents/chefAgent/generate
-```
+    **Sample Response:**
 
-### Interacting with the Agent via `curl`
-
-You can interact with the agent using `curl` from the command line:
-
-```bash copy
-curl -X POST http://localhost:4111/api/agents/chefAgent/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {
-        "role": "user",
-        "content": "I have eggs, flour, and milk. What can I make?"
-      }
-    ]
-  }'
-```
-
-**Sample Response:**
-
-```json
-{
-  "text": "You can make delicious pancakes! Here's a simple recipe..."
-}
-```
-
+    ```json
+    {
+      "text": "You can make delicious pancakes! Here's a simple recipe..."
+    }
+    ```
+  </StepItem>
 </Steps>

@@ -1,12 +1,13 @@
-import { Thread } from '@/components/assistant-ui/thread';
+import { Thread } from '@/lib/ai-ui/thread';
 
 import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
 import { ChatProps } from '@/types';
 import { useAgentSettings } from '../context/agent-context';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { MastraUIMessage } from '@mastra/react';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { toAISdkV4Messages, toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
 export const AgentChat = ({
   agentId,
@@ -17,18 +18,20 @@ export const AgentChat = ({
   modelVersion,
   modelList,
   messageId,
-}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string }) => {
+  isNewThread,
+}: Omit<ChatProps, 'initialMessages' | 'initialLegacyMessages'> & { messageId?: string; isNewThread?: boolean }) => {
   const { settings } = useAgentSettings();
-  const { runtimeContext } = usePlaygroundStore();
-  const { data: messages, isLoading: isMessagesLoading } = useAgentMessages({
+  const requestContext = useMergedRequestContext();
+
+  const { data, isLoading: isMessagesLoading } = useAgentMessages({
     agentId: agentId,
-    threadId: threadId ?? '',
+    threadId: isNewThread ? undefined : threadId!, // Prevent fetching when thread is new
     memory: memory ?? false,
   });
 
   // Handle scrolling to message after navigation
   useEffect(() => {
-    if (messageId && messages && !isMessagesLoading) {
+    if (messageId && data && !isMessagesLoading) {
       // Small delay to ensure DOM is ready
       setTimeout(() => {
         const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
@@ -41,11 +44,16 @@ export const AgentChat = ({
         }
       }, 100);
     }
-  }, [messageId, messages, isMessagesLoading]);
+  }, [messageId, data, isMessagesLoading]);
 
-  if (isMessagesLoading) {
-    return null;
-  }
+  // Stable empty array per thread: stays the same reference across re-renders
+  // (preventing useChat from wiping streamed messages), but changes when threadId
+  // changes (allowing useChat to reset when switching threads).
+  const emptyMessages = useMemo(() => [] as never[], [threadId]);
+
+  const messages = data?.messages ?? emptyMessages;
+  const v5Messages = useMemo(() => toAISdkV5Messages(messages) as MastraUIMessage[], [messages]);
+  const v4Messages = useMemo(() => toAISdkV4Messages(messages), [messages]);
 
   return (
     <MastraRuntimeProvider
@@ -53,12 +61,12 @@ export const AgentChat = ({
       agentName={agentName}
       modelVersion={modelVersion}
       threadId={threadId}
-      initialMessages={(messages?.uiMessages || []) as MastraUIMessage[]}
-      initialLegacyMessages={messages?.legacyMessages || []}
+      initialMessages={v5Messages}
+      initialLegacyMessages={v4Messages}
       memory={memory}
       refreshThreadList={refreshThreadList}
       settings={settings}
-      runtimeContext={runtimeContext}
+      requestContext={requestContext}
     >
       <Thread agentName={agentName ?? ''} hasMemory={memory} agentId={agentId} hasModelList={Boolean(modelList)} />
     </MastraRuntimeProvider>

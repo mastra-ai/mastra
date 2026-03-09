@@ -1,0 +1,7 @@
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - '6006:6006' # Phoenix UI and OTLP receiver
+      - '4317:4317' # Optional: gRPC OTLP receiver
+    restart: unless-stopped

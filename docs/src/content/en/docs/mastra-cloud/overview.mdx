@@ -1,71 +1,30 @@
 ---
-title: Mastra Cloud
+title: "Mastra Cloud | Mastra Cloud"
 description: Deployment and monitoring service for Mastra applications
 ---
 
-import { MastraCloudCallout } from '@/components/mastra-cloud-callout'
-import { FileTree } from "nextra/components";
-
 # Mastra Cloud
 
-[Mastra Cloud](https://mastra.ai/cloud) is a platform for deploying, managing, monitoring, and debugging Mastra applications. When you [deploy](/docs/mastra-cloud/setting-up) your application, Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
+[Mastra Cloud](https://cloud.mastra.ai) is a platform for deploying, managing, and monitoring Mastra applications. [Import your project](/docs/mastra-cloud/setup) to get started.
 
-<MastraCloudCallout />
+## Studio
 
-## Platform features
+Run [Studio](/docs/mastra-cloud/studio) in the cloud and share access with your team via a link. Team members can test agents and workflows, tweak system prompts, and give feedback without running the project locally.
 
-Deploy and manage your applications with automated builds, organized projects, and no additional configuration.
+## Deploy
 
-![Platform features](/image/mastra-cloud/mastra-cloud-platform-features.jpg)
+Enable [deployments](/docs/mastra-cloud/deployment) and Mastra Cloud hosts your server for you. Connect your GitHub repository for automatic deployments whenever you push to your configured branch. Mastra Cloud exposes your agents, tools, and workflows as REST API endpoints.
 
-Key features:
+Once deployed, the project dashboard gives you visibility into:
 
-Mastra Cloud supports zero-config deployment, continuous integration with GitHub, and atomic deployments that package agents, tools, and workflows together.
+- Deployment status and history
+- Build logs and configuration
+- Environment variables and settings
 
-## Project Dashboard
+## Observability
 
-Monitor and debug your applications with detailed output logs, deployment state, and interactive tools.
+[Observability](/docs/mastra-cloud/observability) provides insight into how your agents and workflows behave in production. View detailed traces of agent runs, workflow executions, and logs to debug issues and understand performance.
 
-![Project dashboard](/image/mastra-cloud/mastra-cloud-project-dashboard.jpg)
-
-Key features:
-
-The Project Dashboard gives you an overview of your application's status and deployments, with access to logs and a built-in playground for testing agents and workflows.
-
-## Project structure
-
-Use a standard Mastra project structure for proper detection and deployment.
-
-<FileTree>
-  <FileTree.Folder name="src" defaultOpen>
-    <FileTree.Folder name="mastra" defaultOpen>
-      <FileTree.Folder name="agents" defaultOpen>
-        <FileTree.File name="agent-name.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="tools" defaultOpen>
-        <FileTree.File name="tool-name.ts" />
-      </FileTree.Folder>
-      <FileTree.Folder name="workflows" defaultOpen>
-        <FileTree.File name="workflow-name.ts" />
-      </FileTree.Folder>
-      <FileTree.File name="index.ts" />
-    </FileTree.Folder>
-  </FileTree.Folder>
-  <FileTree.File name="package.json" />
-</FileTree>
-
-Mastra Cloud scans your repository for:
-
-- **Agents**: Defined using: `new Agent({...})`
-- **Tools**: Defined using: `createTool({...})`
-- **Workflows**: Defined using: `createWorkflow({...})`
-- **Steps**: Defined using: `createStep({...})`
-- **Environment Variables**: API keys and configuration variables
-
-## Technical implementation
-
-Mastra Cloud is purpose-built for Mastra agents, tools, and workflows. It handles long-running requests, records detailed traces for every execution, and includes built-in support for evals.
-
-## Next steps
-
-- [Setting Up and Deploying](/docs/mastra-cloud/setting-up)
+:::info
+You don’t need to deploy to Mastra Cloud to use Observability. You can send traces to Mastra from any environment
+:::

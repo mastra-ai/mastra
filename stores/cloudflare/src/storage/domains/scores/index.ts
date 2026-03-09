@@ -1,37 +1,45 @@
 import { ErrorDomain, ErrorCategory, MastraError } from '@mastra/core/error';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { ScoreRowData, ScoringSource, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { ScoresStorage, TABLE_SCORERS, safelyParseJSON } from '@mastra/core/storage';
-import type { StoragePagination, PaginationInfo } from '@mastra/core/storage';
-import type { StoreOperationsCloudflare } from '../operations';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import {
+  createStorageErrorId,
+  ScoresStorage,
+  TABLE_SCORERS,
+  calculatePagination,
+  normalizePerPage,
+  transformScoreRow as coreTransformScoreRow,
+} from '@mastra/core/storage';
+import type { StoragePagination } from '@mastra/core/storage';
+import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
+import type { CloudflareDomainConfig } from '../../types';
 
+/**
+ * Cloudflare KV-specific score row transformation.
+ * Uses default options (no timestamp conversion).
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  const deserialized: Record<string, any> = { ...row };
-
-  deserialized.input = safelyParseJSON(row.input);
-  deserialized.output = safelyParseJSON(row.output);
-  deserialized.scorer = safelyParseJSON(row.scorer);
-  deserialized.preprocessStepResult = safelyParseJSON(row.preprocessStepResult);
-  deserialized.analyzeStepResult = safelyParseJSON(row.analyzeStepResult);
-  deserialized.metadata = safelyParseJSON(row.metadata);
-  deserialized.additionalContext = safelyParseJSON(row.additionalContext);
-  deserialized.runtimeContext = safelyParseJSON(row.runtimeContext);
-  deserialized.entity = safelyParseJSON(row.entity);
-
-  return deserialized as ScoreRowData;
+  return coreTransformScoreRow(row);
 }
 
 export class ScoresStorageCloudflare extends ScoresStorage {
-  private operations: StoreOperationsCloudflare;
+  #db: CloudflareKVDB;
 
-  constructor({ operations }: { operations: StoreOperationsCloudflare }) {
+  constructor(config: CloudflareDomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
+  }
+
+  async init(): Promise<void> {
+    // Cloudflare KV is schemaless, no table creation needed
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
-      const score = await this.operations.getKV(TABLE_SCORERS, id);
+      const score = await this.#db.getKV(TABLE_SCORERS, id);
       if (!score) {
         return null;
       }
@@ -39,38 +47,44 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get score by id: ${id}`,
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return null;
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    let parsedScore: ValidatedSaveScorePayload;
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    let parsedScore: SaveScorePayload;
     try {
       parsedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SAVE_SCORE_FAILED_INVALID_SCORE_PAYLOAD',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
-          details: { scoreId: score.id },
+          details: {
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
     }
 
-    try {
-      const id = crypto.randomUUID();
+    const id = crypto.randomUUID();
 
+    try {
       // Serialize all object values to JSON strings
       const serializedRecord: Record<string, any> = {};
       for (const [key, value] of Object.entries(parsedScore)) {
@@ -85,35 +99,35 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         }
       }
 
+      const now = new Date();
       serializedRecord.id = id;
-      serializedRecord.createdAt = new Date().toISOString();
-      serializedRecord.updatedAt = new Date().toISOString();
+      serializedRecord.createdAt = now.toISOString();
+      serializedRecord.updatedAt = now.toISOString();
 
-      await this.operations.putKV({
+      await this.#db.putKV({
         tableName: TABLE_SCORERS,
         key: id,
         value: serializedRecord,
       });
 
-      const scoreFromDb = await this.getScoreById({ id: score.id });
-      return { score: scoreFromDb! };
+      return { score: { ...parsedScore, id, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to save score: ${score.id}`,
+          details: { id },
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       throw mastraError;
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     entityId,
     entityType,
@@ -125,13 +139,13 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     entityType?: string;
     source?: ScoringSource;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
 
         if (entityId && score.entityId !== entityId) {
           continue;
@@ -155,16 +169,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -172,7 +189,7 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by scorer id: ${scorerId}`,
@@ -185,19 +202,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
         if (score && score.runId === runId) {
           scores.push(transformScoreRow(score));
         }
@@ -210,16 +227,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -227,20 +247,20 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by run id: ${runId}`,
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -248,13 +268,13 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
         if (score && score.entityId === entityId && score.entityType === entityType) {
           scores.push(transformScoreRow(score));
         }
@@ -267,16 +287,19 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
@@ -284,20 +307,20 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by entity id: ${entityId}, type: ${entityType}`,
         },
         error,
       );
-      this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
       return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -305,13 +328,13 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
-      const keys = await this.operations.listKV(TABLE_SCORERS);
+      const keys = await this.#db.listKV(TABLE_SCORERS);
       const scores: ScoreRowData[] = [];
 
       for (const { name: key } of keys) {
-        const score = await this.operations.getKV(TABLE_SCORERS, key);
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
         if (score && score.traceId === traceId && score.spanId === spanId) {
           scores.push(transformScoreRow(score));
         }
@@ -324,30 +347,36 @@ export class ScoresStorageCloudflare extends ScoresStorage {
         return dateB - dateA;
       });
 
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
       const total = scores.length;
-      const start = pagination.page * pagination.perPage;
-      const end = start + pagination.perPage;
+      const end = perPageInput === false ? scores.length : start + perPage;
       const pagedScores = scores.slice(start, end);
 
       return {
         pagination: {
           total,
-          page: pagination.page,
-          perPage: pagination.perPage,
+          page,
+          perPage: perPageForResponse,
           hasMore: end < total,
         },
         scores: pagedScores,
       };
     } catch (error) {
-      throw new MastraError(
+      const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_SCORES_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Failed to get scores by span: traceId=${traceId}, spanId=${spanId}`,
         },
         error,
       );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
     }
   }
 }

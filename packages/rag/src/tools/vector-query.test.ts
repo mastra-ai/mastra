@@ -1,4 +1,4 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { rerank } from '../rerank';
 import { vectorQuerySearch } from '../utils';
@@ -173,7 +173,7 @@ describe('createVectorQueryTool', () => {
 
   describe('execute function', () => {
     it('should not process filter when enableFilter is false', async () => {
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
 
       // Create tool with enableFilter set to false
       const tool = createVectorQueryTool({
@@ -184,14 +184,16 @@ describe('createVectorQueryTool', () => {
       });
 
       // Execute with no filter
-      await tool.execute?.({
-        context: {
+      await tool.execute?.(
+        {
           queryText: 'test query',
           topK: 5,
         },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       // Check that vectorQuerySearch was called with undefined queryFilter
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -202,7 +204,7 @@ describe('createVectorQueryTool', () => {
     });
 
     it('should process filter when enableFilter is true and filter is provided', async () => {
-      const runtimeContext = new RuntimeContext();
+      const requestContext = new RequestContext();
       // Create tool with enableFilter set to true
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -214,15 +216,17 @@ describe('createVectorQueryTool', () => {
       const filterJson = '{"field": "value"}';
 
       // Execute with filter
-      await tool.execute?.({
-        context: {
+      await tool.execute?.(
+        {
           queryText: 'test query',
           topK: 5,
           filter: filterJson,
         },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       // Check that vectorQuerySearch was called with the parsed filter
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -232,8 +236,8 @@ describe('createVectorQueryTool', () => {
       );
     });
 
-    it('should handle string filters correctly', async () => {
-      const runtimeContext = new RuntimeContext();
+    it('should return empty results for invalid JSON string filters', async () => {
+      const requestContext = new RequestContext();
       // Create tool with enableFilter set to true
       const tool = createVectorQueryTool({
         vectorStoreName: 'testStore',
@@ -244,26 +248,24 @@ describe('createVectorQueryTool', () => {
 
       const stringFilter = 'string-filter';
 
-      // Execute with string filter
-      await tool.execute?.({
-        context: {
+      // Execute with string filter - invalid JSON is logged and returns empty results
+      const result = await tool.execute?.(
+        {
           queryText: 'test query',
           topK: 5,
           filter: stringFilter,
         },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
-
-      // Since this is not a valid filter, it should be ignored
-      expect(vectorQuerySearch).toHaveBeenCalledWith(
-        expect.objectContaining({
-          queryFilter: undefined,
-        }),
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
       );
+
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
     });
 
-    it('Returns early when no Mastra server or vector store is provided', async () => {
+    it('returns empty results when no Mastra server or vector store is provided', async () => {
       const tool = createVectorQueryTool({
         id: 'test',
         model: mockModel,
@@ -271,12 +273,18 @@ describe('createVectorQueryTool', () => {
         vectorStoreName: 'testStore',
       });
 
-      const runtimeContext = new RuntimeContext();
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        runtimeContext,
-      });
+      const requestContext = new RequestContext();
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          requestContext,
+        },
+      );
 
+      // Returns empty results for graceful degradation
       expect(result).toEqual({ relevantContext: [], sources: [] });
       expect(vectorQuerySearch).not.toHaveBeenCalled();
     });
@@ -293,11 +301,16 @@ describe('createVectorQueryTool', () => {
         vectorStore: testStore as any,
       });
 
-      const runtimeContext = new RuntimeContext();
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        runtimeContext,
-      });
+      const requestContext = new RequestContext();
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          requestContext,
+        },
+      );
 
       expect(result.relevantContext[0]).toEqual({ text: 'foo' });
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -327,12 +340,17 @@ describe('createVectorQueryTool', () => {
         vectorStore: thirdStore as any,
       });
 
-      const runtimeContext = new RuntimeContext();
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+      const requestContext = new RequestContext();
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       expect(result.relevantContext[0]).toEqual({ text: 'foo' });
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -351,26 +369,31 @@ describe('createVectorQueryTool', () => {
     });
   });
 
-  describe('runtimeContext', () => {
-    it('calls vectorQuerySearch with runtimeContext params', async () => {
+  describe('requestContext', () => {
+    it('calls vectorQuerySearch with requestContext params', async () => {
       const tool = createVectorQueryTool({
         id: 'test',
         model: mockModel,
         indexName: 'testIndex',
         vectorStoreName: 'testStore',
       });
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('indexName', 'anotherIndex');
-      runtimeContext.set('vectorStoreName', 'anotherStore');
-      runtimeContext.set('topK', 3);
-      runtimeContext.set('filter', { foo: 'bar' });
-      runtimeContext.set('includeVectors', true);
-      runtimeContext.set('includeSources', false);
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 6 },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+      const requestContext = new RequestContext();
+      requestContext.set('indexName', 'anotherIndex');
+      requestContext.set('vectorStoreName', 'anotherStore');
+      requestContext.set('topK', 3);
+      requestContext.set('filter', { foo: 'bar' });
+      requestContext.set('includeVectors', true);
+      requestContext.set('includeSources', false);
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 6,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
       expect(result.relevantContext.length).toBeGreaterThan(0);
       expect(result.sources).toEqual([]); // includeSources false
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -388,17 +411,17 @@ describe('createVectorQueryTool', () => {
       );
     });
 
-    it('handles reranker from runtimeContext', async () => {
+    it('handles reranker from requestContext', async () => {
       const tool = createVectorQueryTool({
         id: 'test',
         model: mockModel,
         indexName: 'testIndex',
         vectorStoreName: 'testStore',
       });
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('indexName', 'testIndex');
-      runtimeContext.set('vectorStoreName', 'testStore');
-      runtimeContext.set('reranker', { model: 'reranker-model', options: { topK: 1 } });
+      const requestContext = new RequestContext();
+      requestContext.set('indexName', 'testIndex');
+      requestContext.set('vectorStoreName', 'testStore');
+      requestContext.set('reranker', { model: 'reranker-model', options: { topK: 1 } });
       // Mock rerank
       vi.mocked(rerank).mockResolvedValue([
         {
@@ -407,12 +430,199 @@ describe('createVectorQueryTool', () => {
           details: { semantic: 1, vector: 1, position: 1 },
         },
       ]);
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 1 },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 1,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
       expect(result.relevantContext[0]).toEqual({ text: 'bar' });
+    });
+  });
+
+  describe('dynamic vectorStore (multi-tenant schema support)', () => {
+    it('should support vectorStore as a function that receives requestContext', async () => {
+      // Simulate multi-tenant setup where each tenant has a different schema
+      const tenantAVectorStore = { id: 'tenant-a-store' } as any;
+      const tenantBVectorStore = { id: 'tenant-b-store' } as any;
+
+      const vectorStoreResolver = vi.fn(({ requestContext }: { requestContext?: RequestContext }) => {
+        const schemaId = requestContext?.get('schemaId');
+        return schemaId === 'tenant-a' ? tenantAVectorStore : tenantBVectorStore;
+      });
+
+      const tool = createVectorQueryTool({
+        indexName: 'tenant_embeddings',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      // Test with tenant A context
+      const tenantAContext = new RequestContext();
+      tenantAContext.set('schemaId', 'tenant-a');
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: tenantAContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ requestContext: tenantAContext }));
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: tenantAVectorStore,
+        }),
+      );
+
+      vi.clearAllMocks();
+
+      // Test with tenant B context
+      const tenantBContext = new RequestContext();
+      tenantBContext.set('schemaId', 'tenant-b');
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: tenantBContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ requestContext: tenantBContext }));
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: tenantBVectorStore,
+        }),
+      );
+    });
+
+    it('should support async vectorStore resolver function', async () => {
+      const asyncVectorStore = { id: 'async-resolved-store' } as any;
+
+      const asyncVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          // Simulate async operation (e.g., fetching from DB or initializing per-tenant store)
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return asyncVectorStore;
+        },
+      );
+
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: asyncVectorStore,
+        }),
+      );
+    });
+
+    it('should return empty results when async vectorStore resolver throws', async () => {
+      const asyncVectorStoreResolver = vi.fn(async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        throw new Error('Failed to initialize vector store for tenant');
+      });
+
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      // Error is logged and returns empty results for graceful degradation
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
+    });
+
+    it('should pass mastra instance to vectorStore resolver function', async () => {
+      const vectorStoreResolver = vi.fn(({ mastra: _mastra }: { mastra?: any }) => {
+        // Use mastra to get a custom vector store
+        return { id: 'mastra-resolved-store' } as any;
+      });
+
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { mastra: mockMastra as any, requestContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ mastra: mockMastra }));
+    });
+
+    it('should still support static vectorStore (existing behavior)', async () => {
+      const staticVectorStore = { id: 'static-store' } as any;
+
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: staticVectorStore,
+      });
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: new RequestContext() });
+
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: staticVectorStore,
+        }),
+      );
+    });
+
+    it('should return empty results when vectorStore resolver returns undefined', async () => {
+      const vectorStoreResolver = vi.fn(({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+        // Simulate a resolver that can't find a store for the given context
+        return undefined;
+      });
+
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('schemaId', 'unknown-tenant');
+
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      // Returns empty results for graceful degradation
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(vectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
+    });
+
+    it('should return empty results when async vectorStore resolver returns undefined', async () => {
+      const asyncVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return undefined;
+        },
+      );
+
+      const tool = createVectorQueryTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      // Returns empty results for graceful degradation
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
     });
   });
 
@@ -425,11 +635,16 @@ describe('createVectorQueryTool', () => {
         providerOptions: { google: { outputDimensionality: 1536 } },
       });
 
-      await tool.execute({
-        context: { queryText: 'foo', topK: 10 },
-        mastra: mockMastra as any,
-        runtimeContext: new RuntimeContext(),
-      });
+      await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 10,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext: new RequestContext(),
+        },
+      );
 
       expect(vectorQuerySearch).toHaveBeenCalledWith({
         indexName: 'testIndex',
@@ -444,7 +659,7 @@ describe('createVectorQueryTool', () => {
       });
     });
 
-    it('should allow providerOptions override via runtimeContext', async () => {
+    it('should allow providerOptions override via requestContext', async () => {
       const tool = createVectorQueryTool({
         indexName: 'testIndex',
         model: mockModel,
@@ -452,14 +667,19 @@ describe('createVectorQueryTool', () => {
         providerOptions: { google: { outputDimensionality: 1536 } },
       });
 
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('providerOptions', { google: { outputDimensionality: 768 } });
+      const requestContext = new RequestContext();
+      requestContext.set('providerOptions', { google: { outputDimensionality: 768 } });
 
-      await tool.execute({
-        context: { queryText: 'foo', topK: 10 },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+      await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 10,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
 
       expect(vectorQuerySearch).toHaveBeenCalledWith({
         indexName: 'testIndex',

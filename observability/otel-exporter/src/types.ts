@@ -2,7 +2,8 @@
  * OtelExporter Types
  */
 
-import type { AnyExportedAISpan } from '@mastra/core/ai-tracing';
+import type { AnyExportedSpan } from '@mastra/core/observability';
+import type { BaseExporterConfig } from '@mastra/observability';
 import type { DetectedResourceAttributes } from '@opentelemetry/resources';
 import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
 
@@ -37,7 +38,6 @@ export interface TraceloopConfig {
 
 export interface LaminarConfig {
   apiKey?: string; // Required at runtime (LMNR_PROJECT_API_KEY)
-  teamId?: string; // Optional, for backwards compatibility
   endpoint?: string;
 }
 
@@ -56,7 +56,7 @@ export type ProviderConfig =
   | { laminar: LaminarConfig }
   | { custom: CustomConfig };
 
-export interface OtelExporterConfig {
+export interface OtelExporterConfig extends BaseExporterConfig {
   // Provider configuration
   provider?: ProviderConfig;
 
@@ -75,7 +75,7 @@ export interface OtelExporterConfig {
 }
 
 export interface SpanData {
-  span: AnyExportedAISpan;
+  span: AnyExportedSpan;
   isComplete: boolean;
 }
 

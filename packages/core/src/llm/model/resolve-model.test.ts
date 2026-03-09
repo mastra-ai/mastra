@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { describe, it, expect } from 'vitest';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
+import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
 
@@ -21,7 +22,10 @@ describe('resolveModelConfig', () => {
   it('should return a LanguageModel instance as-is', async () => {
     const model = openai('gpt-4o');
     const result = await resolveModelConfig(model);
-    expect(result).toBe(model);
+    expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+    expect(result.modelId).toBe('gpt-4o');
+    expect(result.provider).toBe('openai.responses');
+    expect(result.specificationVersion).toBe('v2');
   });
 
   it('should resolve a dynamic function returning a string', async () => {
@@ -44,18 +48,21 @@ describe('resolveModelConfig', () => {
     const model = openai('gpt-4o');
     const dynamicFn = () => model;
     const result = await resolveModelConfig(dynamicFn);
-    expect(result).toBe(model);
+    expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+    expect(result.modelId).toBe('gpt-4o');
+    expect(result.provider).toBe('openai.responses');
+    expect(result.specificationVersion).toBe('v2');
   });
 
-  it('should pass runtimeContext to dynamic function', async () => {
-    const runtimeContext = new RuntimeContext();
-    runtimeContext.set('preferredModel', 'anthropic/claude-3-opus');
+  it('should pass requestContext to dynamic function', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('preferredModel', 'anthropic/claude-3-opus');
 
-    const dynamicFn = ({ runtimeContext: ctx }) => {
+    const dynamicFn = ({ requestContext: ctx }) => {
       return ctx.get('preferredModel');
     };
 
-    const result = await resolveModelConfig(dynamicFn, runtimeContext);
+    const result = await resolveModelConfig(dynamicFn, requestContext);
     expect(result).toBeInstanceOf(ModelRouterLanguageModel);
     expect(result.modelId).toBe(`claude-3-opus`);
     expect(result.provider).toBe(`anthropic`);
@@ -63,6 +70,48 @@ describe('resolveModelConfig', () => {
 
   it('should throw error for invalid config', async () => {
     await expect(resolveModelConfig({} as any)).rejects.toThrow('Invalid model configuration');
+  });
+
+  describe('unknown specificationVersion handling', () => {
+    it('should wrap a model with unknown specificationVersion as AISDKV5LanguageModel when it has doStream/doGenerate', async () => {
+      const model = {
+        specificationVersion: 'v4',
+        provider: 'ollama.responses',
+        modelId: 'llama3.2',
+        supportedUrls: {},
+        doGenerate: async () => ({}),
+        doStream: async () => ({}),
+      };
+      const result = await resolveModelConfig(model as any);
+      expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result.specificationVersion).toBe('v2');
+      expect(result.modelId).toBe('llama3.2');
+      expect(result.provider).toBe('ollama.responses');
+    });
+
+    it('should pass through a model with unknown specificationVersion when it lacks doStream/doGenerate', async () => {
+      const model = {
+        specificationVersion: 'v4',
+        provider: 'test',
+        modelId: 'test-model',
+      };
+      const result = await resolveModelConfig(model as any);
+      expect(result).not.toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result).toBe(model);
+    });
+
+    it('should still wrap v1 models as legacy (no AISDKV5LanguageModel wrapping)', async () => {
+      const model = {
+        specificationVersion: 'v1',
+        provider: 'test',
+        modelId: 'test-model',
+        doGenerate: async () => ({}),
+        doStream: async () => ({}),
+      };
+      const result = await resolveModelConfig(model as any);
+      expect(result).not.toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result).toBe(model);
+    });
   });
 
   describe('custom OpenAI-compatible config objects', () => {
@@ -172,19 +221,19 @@ describe('resolveModelConfig', () => {
         expect(result.provider).toBe('dynamic-provider');
       });
 
-      it('should resolve a custom config selected from runtime context', async () => {
-        const runtimeContext = new RuntimeContext();
-        runtimeContext.set('customEndpoint', 'https://api.mycompany.com/v1/chat/completions');
-        runtimeContext.set('customApiKey', 'context-api-key');
+      it('should resolve a custom config selected from request context', async () => {
+        const requestContext = new RequestContext();
+        requestContext.set('customEndpoint', 'https://api.mycompany.com/v1/chat/completions');
+        requestContext.set('customApiKey', 'context-api-key');
 
-        const dynamicFn = ({ runtimeContext: ctx }) => ({
+        const dynamicFn = ({ requestContext: ctx }) => ({
           providerId: 'context-provider',
           modelId: 'context-model',
           url: ctx.get('customEndpoint'),
           apiKey: ctx.get('customApiKey'),
         });
 
-        const result = await resolveModelConfig(dynamicFn, runtimeContext);
+        const result = await resolveModelConfig(dynamicFn, requestContext);
         expect(result).toBeInstanceOf(ModelRouterLanguageModel);
         expect(result.modelId).toBe('context-model');
         expect(result.provider).toBe('context-provider');

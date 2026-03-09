@@ -6,15 +6,14 @@ import type {
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   ModelMessage,
   UIMessage,
-} from 'ai-v5';
+} from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent';
-import type { TracingContext } from '../../ai-tracing';
 import type { LoopOptions } from '../../loop/types';
-import type { OutputProcessor } from '../../processors';
-import type { RuntimeContext } from '../../runtime-context';
-import type { OutputSchema } from '../../stream/base/schema';
+import type { ObservabilityContext } from '../../observability';
+import type { OutputProcessorOrWorkflow } from '../../processors';
+import type { RequestContext } from '../../request-context';
 import type { inferOutput } from './shared.types';
 
 export type OriginalStreamTextOptions<
@@ -34,13 +33,16 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
   event: Parameters<OriginalStreamTextOnStepFinishCallback<Tools>>[0] & { runId: string },
 ) => Promise<void> | void;
 
-export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT extends OutputSchema = undefined> = {
+export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
+  methodType: ModelMethodType;
   messages?: UIMessage[] | ModelMessage[];
-  outputProcessors?: OutputProcessor[];
-  runtimeContext: RuntimeContext;
-  tracingContext: TracingContext;
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  requestContext: RequestContext;
   resourceId?: string;
   threadId?: string;
   returnScorerData?: boolean;
   messageList: MessageList;
-} & Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+} & ObservabilityContext &
+  Omit<LoopOptions<TOOLS, OUTPUT>, 'models' | 'messageList'>;
+
+export type ModelMethodType = 'generate' | 'stream';

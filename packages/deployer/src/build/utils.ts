@@ -1,8 +1,56 @@
-import { execSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
-import { basename, join, relative } from 'path';
-import { getPackageInfo } from 'local-pkg';
-import { pathToFileURL } from 'url';
+import { execSync } from 'node:child_process';
+import { existsSync, mkdirSync } from 'node:fs';
+import { builtinModules } from 'node:module';
+import { basename, join, relative } from 'node:path';
+import type { RollupNodeResolveOptions } from '@rollup/plugin-node-resolve';
+
+/** The detected JavaScript runtime environment */
+export type RuntimePlatform = 'node' | 'bun';
+
+/**
+ * The esbuild/bundler platform setting.
+ * - 'node': Assumes Node.js environment, externalizes built-in modules
+ * - 'browser': Assumes browser environment, polyfills Node APIs
+ * - 'neutral': Runtime-agnostic, preserves all globals as-is (used for Bun)
+ */
+export type BundlerPlatform = 'node' | 'browser' | 'neutral';
+
+/**
+ * Get nodeResolve plugin options based on the target platform.
+ *
+ * For 'browser' platform (e.g., Cloudflare Workers), uses browser-compatible
+ * export conditions so packages like the Cloudflare SDK resolve to their
+ * web runtime instead of Node.js-specific code.
+ *
+ * For 'node' and 'neutral' (Bun) platforms, uses Node.js module resolution.
+ */
+export function getNodeResolveOptions(platform: BundlerPlatform): RollupNodeResolveOptions {
+  if (platform === 'browser') {
+    return {
+      preferBuiltins: false,
+      browser: true,
+      exportConditions: ['browser', 'worker', 'default'],
+    };
+  }
+  return {
+    preferBuiltins: true,
+    exportConditions: ['node'],
+  };
+}
+
+/**
+ * Detect the current JavaScript runtime environment.
+ *
+ * This is used by the bundler to determine the appropriate esbuild platform
+ * setting. When running under Bun, we need to use 'neutral' platform to
+ * preserve Bun-specific globals (like Bun.s3).
+ */
+export function detectRuntime(): RuntimePlatform {
+  if (process.versions?.bun) {
+    return 'bun';
+  }
+  return 'node';
+}
 
 export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
   const dirPath = join(dir, '.mastra');
@@ -11,6 +59,14 @@ export function upsertMastraDir({ dir = process.cwd() }: { dir?: string }) {
     mkdirSync(dirPath, { recursive: true });
     execSync(`echo ".mastra" >> .gitignore`);
   }
+}
+
+export function isDependencyPartOfPackage(dep: string, packageName: string) {
+  if (dep === packageName) {
+    return true;
+  }
+
+  return dep.startsWith(`${packageName}/`);
 }
 
 /**
@@ -24,33 +80,6 @@ export function getPackageName(id: string) {
   }
 
   return parts[0];
-}
-
-/**
- * Get package root path
- */
-export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  let rootPath: string | null;
-
-  try {
-    let options: { paths?: string[] } | undefined = undefined;
-    if (parentPath) {
-      if (!parentPath.startsWith('file://')) {
-        parentPath = pathToFileURL(parentPath).href;
-      }
-
-      options = {
-        paths: [parentPath],
-      };
-    }
-
-    const pkg = await getPackageInfo(packageName, options);
-    rootPath = pkg?.rootPath ?? null;
-  } catch (e) {
-    rootPath = null;
-  }
-
-  return rootPath;
 }
 
 /**
@@ -141,4 +170,107 @@ export function findNativePackageModule(moduleIds: string[]): string | undefined
 
     return true;
   });
+}
+
+/**
+ * Ensures that server.studioBase is normalized:
+ * - Adds leading slash if missing (e.g., 'admin' → '/admin')
+ * - Removes trailing slashes (e.g., '/admin/' → '/admin')
+ * - Normalizes multiple slashes to single slash (e.g., '//api' → '/api')
+ * - Returns empty string for root paths ('/' or '')
+ *
+ * @param studioBase - The studioBase path to normalize
+ * @returns Normalized studioBase path string
+ * @throws Error if path contains invalid characters ('..', '?', '#')
+ */
+export function normalizeStudioBase(studioBase: string): string {
+  studioBase = studioBase.trim();
+
+  // Validate: no path traversal, no query params, no special chars
+  if (studioBase.includes('..') || studioBase.includes('?') || studioBase.includes('#')) {
+    throw new Error(`Invalid base path: "${studioBase}". Base path cannot contain '..', '?', or '#'`);
+  }
+
+  // Normalize multiple slashes to single slash
+  studioBase = studioBase.replace(/\/+/g, '/');
+
+  // Handle default value cases
+  if (studioBase === '/' || studioBase === '') {
+    return '';
+  }
+
+  // Remove trailing slash
+  if (studioBase.endsWith('/')) {
+    studioBase = studioBase.slice(0, -1);
+  }
+
+  // Add leading slash if missing
+  if (!studioBase.startsWith('/')) {
+    studioBase = `/${studioBase}`;
+  }
+
+  return studioBase;
+}
+
+/**
+ * Configuration values for Studio's index.html placeholder injection.
+ *
+ * Each value is the **exact JavaScript expression** that replaces the
+ * corresponding `'%%PLACEHOLDER%%'` token (including surrounding quotes).
+ *
+ * For literal strings pass `"'value'"` (quoted).
+ * For runtime expressions pass the raw JS, e.g. `"window.location.hostname"`.
+ */
+export interface StudioInjectionConfig {
+  host: string;
+  port: string;
+  protocol: string;
+  apiPrefix: string;
+  basePath: string;
+  hideCloudCta: string;
+  cloudApiEndpoint: string;
+  experimentalFeatures: string;
+  telemetryDisabled: string;
+  requestContextPresets: string;
+  autoDetectUrl?: string;
+}
+
+/**
+ * Replace all `%%MASTRA_*%%` placeholders in the Studio `index.html` with the
+ * supplied configuration values.
+ *
+ * The `<base href>` tag and the `window.MASTRA_STUDIO_BASE_PATH` assignment
+ * use `basePath` as a plain string (no surrounding quotes), while all other
+ * placeholders replace `'%%TOKEN%%'` (with surrounding single-quotes in the
+ * source HTML) with the provided expression verbatim.
+ */
+export function injectStudioHtmlConfig(html: string, config: StudioInjectionConfig): string {
+  html = html.replace(`'%%MASTRA_SERVER_HOST%%'`, config.host);
+  html = html.replace(`'%%MASTRA_SERVER_PORT%%'`, config.port);
+  html = html.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, config.protocol);
+  html = html.replace(`'%%MASTRA_API_PREFIX%%'`, config.apiPrefix);
+  html = html.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, config.hideCloudCta);
+  html = html.replace(`'%%MASTRA_CLOUD_API_ENDPOINT%%'`, config.cloudApiEndpoint);
+  html = html.replace(`'%%MASTRA_EXPERIMENTAL_FEATURES%%'`, config.experimentalFeatures);
+  html = html.replace(`'%%MASTRA_TELEMETRY_DISABLED%%'`, config.telemetryDisabled);
+  html = html.replace(`'%%MASTRA_REQUEST_CONTEXT_PRESETS%%'`, config.requestContextPresets);
+  if (config.autoDetectUrl) {
+    html = html.replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
+  }
+  html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', config.basePath);
+
+  return html;
+}
+
+/**
+ * Check if a module is a Node.js builtin module
+ * @param specifier - Module specifier
+ * @returns True if it's a builtin module
+ */
+export function isBuiltinModule(specifier: string): boolean {
+  return (
+    builtinModules.includes(specifier) ||
+    specifier.startsWith('node:') ||
+    builtinModules.includes(specifier.replace(/^node:/, ''))
+  );
 }

@@ -5,6 +5,7 @@ import { LibSQLStore } from '@mastra/libsql';
 
 // Create LibSQL storage for persistent per-resource working memory
 const storage = new LibSQLStore({
+  id: 'memory-demo-storage',
   url: 'file:./memory-demo.db',
 });
 
@@ -14,7 +15,7 @@ export const memory = new Memory({
     lastMessages: 5,
     workingMemory: {
       enabled: true,
-      scope: 'resource', // 🆕 NEW: Per-resource working memory!
+      scope: 'resource', // Default: Per-resource working memory persists across all threads
       template: `# User Profile
 - **Name**: 
 - **Location**: 
@@ -28,6 +29,7 @@ export const memory = new Memory({
 });
 
 export const assistantAgent = new Agent({
+  id: 'personal-assistant',
   name: 'Personal Assistant',
   instructions: `You are a helpful personal assistant with persistent memory across ALL conversations.
 

@@ -5,13 +5,7 @@ import { copy } from 'fs-extra';
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: [
-    'src/index.ts',
-    'src/analytics/index.ts',
-    'src/commands/create/create.ts',
-    'src/commands/dev/telemetry-loader.ts',
-    'src/commands/dev/telemetry-resolver.ts',
-  ],
+  entry: ['src/index.ts', 'src/analytics/index.ts', 'src/commands/create/create.ts'],
   treeshake: true,
   format: ['esm'],
   publicDir: './src/public',
@@ -19,9 +13,9 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   onSuccess: async () => {
-    const playgroundPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
+    const studioPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
 
-    await copy(join(playgroundPath, 'dist'), 'dist/playground');
+    await copy(join(studioPath, 'dist'), join('dist', 'studio'));
     await generateTypes(process.cwd());
   },
 });

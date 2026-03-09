@@ -1,5 +1,5 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import stripJsonComments from 'strip-json-comments';
 import { logger } from '../../../utils/logger.js';
 import type { LintContext, LintRule } from './types.js';

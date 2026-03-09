@@ -1,26 +1,41 @@
-import { createHash } from 'crypto';
-import type { WritableStream } from 'stream/web';
-import type { CoreMessage } from 'ai';
-import jsonSchemaToZod from 'json-schema-to-zod';
+import { createHash } from 'node:crypto';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
+import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
-import type { TracingContext, TracingPolicy } from './ai-tracing';
-import type { MastraLanguageModel } from './llm/model/shared.types';
+import { ErrorCategory, ErrorDomain, MastraError } from './error';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from './llm/model/shared.types';
 import type { IMastraLogger } from './logger';
 import type { Mastra } from './mastra';
 import type { AiMessageType, MastraMemory } from './memory';
-import type { RuntimeContext } from './runtime-context';
-import type { ChunkType } from './stream/types';
+import type { ObservabilityContext, TracingPolicy } from './observability';
+import type { RequestContext } from './request-context';
 import type { CoreTool, VercelTool, VercelToolV5 } from './tools';
+import { Tool } from './tools/tool';
 import { CoreToolBuilder } from './tools/tool-builder/builder';
 import type { ToolToConvert } from './tools/tool-builder/builder';
 import { isVercelTool } from './tools/toolchecks';
+import type { OutputWriter } from './workflows/types';
+import type { Workspace } from './workspace/workspace';
+
+// Re-export Zod utilities for external use (isZodType is defined locally below)
+export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-utils';
 
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * Deep merges two objects, recursively merging nested objects and arrays
+ * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Deep merges two objects, recursively merging nested plain objects.
+ * Arrays, functions, and other non-plain objects are replaced (not merged).
  */
 export function deepMerge<T extends object = object>(target: T, source: Partial<T>): T {
   const output = { ...target };
@@ -28,24 +43,60 @@ export function deepMerge<T extends object = object>(target: T, source: Partial<
   if (!source) return output;
 
   Object.keys(source).forEach(key => {
-    const targetValue = output[key as keyof T];
-    const sourceValue = source[key as keyof T];
+    const targetValue = (output as Record<string, unknown>)[key];
+    const sourceValue = (source as Record<string, unknown>)[key];
 
-    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
-      (output as any)[key] = sourceValue;
-    } else if (
-      sourceValue instanceof Object &&
-      targetValue instanceof Object &&
-      !Array.isArray(sourceValue) &&
-      !Array.isArray(targetValue)
-    ) {
-      (output as any)[key] = deepMerge(targetValue, sourceValue as T);
+    // Only deep merge if both values are plain objects
+    if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
+      (output as Record<string, unknown>)[key] = deepMerge(targetValue, sourceValue);
     } else if (sourceValue !== undefined) {
-      (output as any)[key] = sourceValue;
+      // For arrays, functions, primitives, and other non-plain objects: replace
+      (output as Record<string, unknown>)[key] = sourceValue;
     }
   });
 
   return output;
+}
+
+/**
+ * Deep equality comparison for comparing two values.
+ * Handles primitives, arrays, objects, and Date instances.
+ */
+export function deepEqual(a: unknown, b: unknown): boolean {
+  // Handle identical references and primitives
+  if (a === b) return true;
+
+  // Handle null/undefined
+  if (a == null || b == null) return a === b;
+
+  // Handle different types
+  if (typeof a !== typeof b) return false;
+
+  // Handle arrays
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    return a.every((item, index) => deepEqual(item, b[index]));
+  }
+
+  // Handle dates (must check before generic objects since Date is also an object)
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+
+  // Handle objects (after Date check to avoid treating Dates as plain objects)
+  if (typeof a === 'object' && typeof b === 'object') {
+    const aObj = a as Record<string, unknown>;
+    const bObj = b as Record<string, unknown>;
+    const aKeys = Object.keys(aObj);
+    const bKeys = Object.keys(bObj);
+
+    if (aKeys.length !== bKeys.length) return false;
+
+    // Verify that bObj has the same keys as aObj before comparing values
+    return aKeys.every(key => Object.prototype.hasOwnProperty.call(bObj, key) && deepEqual(aObj[key], bObj[key]));
+  }
+
+  return false;
 }
 
 export function generateEmptyFromSchema(schema: string) {
@@ -216,7 +267,7 @@ export function resolveSerializedZodOutput(schema: string): z.ZodType {
   return Function('z', `"use strict";return (${schema});`)(z);
 }
 
-export interface ToolOptions {
+export interface ToolOptions extends Partial<ObservabilityContext> {
   name: string;
   runId?: string;
   threadId?: string;
@@ -224,15 +275,26 @@ export interface ToolOptions {
   logger?: IMastraLogger;
   description?: string;
   mastra?: (Mastra & MastraPrimitives) | MastraPrimitives;
-  runtimeContext: RuntimeContext;
-  /** Build-time tracing context (fallback for Legacy methods that can't pass runtime context) */
-  tracingContext?: TracingContext;
+  requestContext: RequestContext;
   tracingPolicy?: TracingPolicy;
   memory?: MastraMemory;
   agentName?: string;
-  model?: MastraLanguageModel;
-  writableStream?: WritableStream<ChunkType>;
+  model?: MastraLanguageModel | MastraLegacyLanguageModel;
+  /**
+   * Optional async writer used to stream tool output chunks back to the caller. Tools should treat this as fire-and-forget I/O.
+   */
+  outputWriter?: OutputWriter;
   requireApproval?: boolean;
+  // Workflow-specific properties
+  workflow?: any;
+  workflowId?: string;
+  state?: any;
+  setState?: (state: any) => void;
+  /**
+   * Workspace available for tool execution. When provided, tools can access
+   * workspace.filesystem and workspace.sandbox for file operations and command execution.
+   */
+  workspace?: Workspace;
 }
 
 /**
@@ -291,6 +353,19 @@ export function ensureToolProperties(tools: ToolsInput): ToolsInput {
   const toolsWithProperties = Object.keys(tools).reduce<ToolsInput>((acc, key) => {
     const tool = tools?.[key];
     if (tool) {
+      // Check if the tool is a plain function (not a Tool instance or Vercel tool)
+      // This catches the common mistake of passing a tool factory function instead of the tool itself
+      // We need to cast to unknown first since ToolsInput doesn't include functions in its type,
+      // but users can still pass functions at runtime which causes silent failures
+      if (typeof tool === 'function' && !((tool as unknown) instanceof Tool) && !isVercelTool(tool)) {
+        throw new MastraError({
+          id: 'TOOL_INVALID_FORMAT',
+          domain: ErrorDomain.TOOL,
+          category: ErrorCategory.USER,
+          text: `Tool "${key}" is not a valid tool format. Tools must be created using createTool() or be a valid Vercel AI SDK tool. Received a function.`,
+        });
+      }
+
       if (isVercelTool(tool)) {
         acc[key] = setVercelToolProperties(tool) as VercelTool;
       } else {
@@ -328,16 +403,18 @@ export function makeCoreTool(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): CoreTool {
-  return new CoreToolBuilder({ originalTool, options, logType }).build();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).build();
 }
 
 export function makeCoreToolV5(
   originalTool: ToolToConvert,
   options: ToolOptions,
   logType?: 'tool' | 'toolset' | 'client-tool',
+  autoResumeSuspendedTools?: boolean,
 ): VercelToolV5 {
-  return new CoreToolBuilder({ originalTool, options, logType }).buildV5();
+  return new CoreToolBuilder({ originalTool, options, logType, autoResumeSuspendedTools }).buildV5();
 }
 
 /**
@@ -365,19 +442,14 @@ export function createMastraProxy({ mastra, logger }: { mastra: Mastra; logger: 
         return Reflect.apply(target.getLogger, target, []);
       }
 
-      if (prop === 'telemetry') {
-        logger.warn(`Please use 'getTelemetry' instead, telemetry is deprecated`);
-        return Reflect.apply(target.getTelemetry, target, []);
-      }
-
       if (prop === 'storage') {
         logger.warn(`Please use 'getStorage' instead, storage is deprecated`);
         return Reflect.get(target, 'storage');
       }
 
       if (prop === 'agents') {
-        logger.warn(`Please use 'getAgents' instead, agents is deprecated`);
-        return Reflect.apply(target.getAgents, target, []);
+        logger.warn(`Please use 'listAgents' instead, agents is deprecated`);
+        return Reflect.apply(target.listAgents, target, []);
       }
 
       if (prop === 'tts') {
@@ -573,3 +645,76 @@ export async function fetchWithRetry(
 
   throw lastError || new Error('Request failed after multiple retry attempts');
 }
+
+/**
+ * Removes specific keys from an object.
+ * @param obj - The original object
+ * @param keysToOmit - Keys to exclude from the returned object
+ * @returns A new object with the specified keys removed
+ */
+export function omitKeys<T extends Record<string, any>>(obj: T, keysToOmit: string[]): Partial<T> {
+  return Object.fromEntries(Object.entries(obj).filter(([key]) => !keysToOmit.includes(key))) as Partial<T>;
+}
+
+/**
+ * Selectively extracts specific fields from an object using dot notation.
+ * Does not error if fields don't exist - simply omits them from the result.
+ * @param obj - The source object to extract fields from
+ * @param fields - Array of field paths (supports dot notation like 'output.text')
+ * @returns New object containing only the specified fields
+ */
+export function selectFields(obj: any, fields: string[]): any {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  const result: any = {};
+
+  for (const field of fields) {
+    const value = getNestedValue(obj, field);
+    if (value !== undefined) {
+      setNestedValue(result, field, value);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Gets a nested value from an object using dot notation
+ * @param obj - Source object
+ * @param path - Dot notation path (e.g., 'output.text')
+ * @returns The value at the path, or undefined if not found
+ */
+export function getNestedValue(obj: any, path: string): any {
+  return path.split('.').reduce((current, key) => {
+    return current && typeof current === 'object' ? current[key] : undefined;
+  }, obj);
+}
+
+/**
+ * Sets a nested value in an object using dot notation
+ * @param obj - Target object
+ * @param path - Dot notation path (e.g., 'output.text')
+ * @param value - Value to set
+ */
+export function setNestedValue(obj: any, path: string, value: any): void {
+  const keys = path.split('.');
+  const lastKey = keys.pop();
+  if (!lastKey) {
+    return;
+  }
+
+  const target = keys.reduce((current, key) => {
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {};
+    }
+    return current[key];
+  }, obj);
+
+  target[lastKey] = value;
+}
+
+export const removeUndefinedValues = (obj: Record<string, any>) => {
+  return Object.fromEntries(Object.entries(obj).filter(([_, value]) => value !== undefined));
+};

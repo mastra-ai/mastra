@@ -1,61 +1,108 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { MastraMessageContentV2, MastraMessageV2 } from '@mastra/core/agent';
-import type { MastraMessageV1, StorageThreadType } from '@mastra/core/memory';
-import type { ScoreRowData, ScoringSource } from '@mastra/core/scores';
-import { MastraStorage } from '@mastra/core/storage';
-import type {
-  EvalRow,
-  PaginationArgs,
-  PaginationInfo,
-  StorageColumn,
-  StoragePagination,
-  StorageGetMessagesArg,
-  StorageResourceType,
-  TABLE_NAMES,
-  WorkflowRun,
-  WorkflowRuns,
-  StorageGetTracesArg,
-  StorageDomains,
-  ThreadSortOptions,
-  AISpanRecord,
-  AITraceRecord,
-  AITracesPaginatedArg,
-} from '@mastra/core/storage';
+import type { StorageDomains } from '@mastra/core/storage';
+import { MastraCompositeStore } from '@mastra/core/storage';
 
-import type { Trace } from '@mastra/core/telemetry';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { LegacyEvalsLibSQL } from './domains/legacy-evals';
+import { AgentsLibSQL } from './domains/agents';
+import { BlobsLibSQL } from './domains/blobs';
+import { DatasetsLibSQL } from './domains/datasets';
+import { ExperimentsLibSQL } from './domains/experiments';
+import { MCPClientsLibSQL } from './domains/mcp-clients';
+import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
 import { ObservabilityLibSQL } from './domains/observability';
-import { StoreOperationsLibSQL } from './domains/operations';
+import { PromptBlocksLibSQL } from './domains/prompt-blocks';
+import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
-import { TracesLibSQL } from './domains/traces';
+import { SkillsLibSQL } from './domains/skills';
 import { WorkflowsLibSQL } from './domains/workflows';
+import { WorkspacesLibSQL } from './domains/workspaces';
+
+// Export domain classes for direct use with MastraStorage composition
+export {
+  AgentsLibSQL,
+  BlobsLibSQL,
+  DatasetsLibSQL,
+  ExperimentsLibSQL,
+  MCPClientsLibSQL,
+  MCPServersLibSQL,
+  MemoryLibSQL,
+  ObservabilityLibSQL,
+  PromptBlocksLibSQL,
+  ScorerDefinitionsLibSQL,
+  ScoresLibSQL,
+  SkillsLibSQL,
+  WorkflowsLibSQL,
+  WorkspacesLibSQL,
+};
+export type { LibSQLDomainConfig } from './db';
+
+/**
+ * Base configuration options shared across LibSQL configurations
+ */
+export type LibSQLBaseConfig = {
+  id: string;
+  /**
+   * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
+   * @default 5
+   */
+  maxRetries?: number;
+  /**
+   * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
+   * The backoff time will double with each retry (exponential backoff).
+   * @default 100
+   */
+  initialBackoffMs?: number;
+  /**
+   * When true, automatic initialization (table creation/migrations) is disabled.
+   * This is useful for CI/CD pipelines where you want to:
+   * 1. Run migrations explicitly during deployment (not at runtime)
+   * 2. Use different credentials for schema changes vs runtime operations
+   *
+   * When disableInit is true:
+   * - The storage will not automatically create/alter tables on first use
+   * - You must call `storage.init()` explicitly in your CI/CD scripts
+   *
+   * @example
+   * // In CI/CD script:
+   * const storage = new LibSQLStore({ ...config, disableInit: false });
+   * await storage.init(); // Explicitly run migrations
+   *
+   * // In runtime application:
+   * const storage = new LibSQLStore({ ...config, disableInit: true });
+   * // No auto-init, tables must already exist
+   */
+  disableInit?: boolean;
+};
 
 export type LibSQLConfig =
-  | {
+  | (LibSQLBaseConfig & {
       url: string;
       authToken?: string;
-      /**
-       * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
-       * @default 5
-       */
-      maxRetries?: number;
-      /**
-       * Initial backoff time in milliseconds for retrying write operations on SQLITE_BUSY.
-       * The backoff time will double with each retry (exponential backoff).
-       * @default 100
-       */
-      initialBackoffMs?: number;
-    }
-  | {
+    })
+  | (LibSQLBaseConfig & {
       client: Client;
-      maxRetries?: number;
-      initialBackoffMs?: number;
-    };
+    });
 
-export class LibSQLStore extends MastraStorage {
+/**
+ * LibSQL/Turso storage adapter for Mastra.
+ *
+ * Access domain-specific storage via `getStore()`:
+ *
+ * @example
+ * ```typescript
+ * const storage = new LibSQLStore({ id: 'my-store', url: 'file:./dev.db' });
+ *
+ * // Access memory domain
+ * const memory = await storage.getStore('memory');
+ * await memory?.saveThread({ thread });
+ *
+ * // Access workflows domain
+ * const workflows = await storage.getStore('workflows');
+ * await workflows?.persistWorkflowSnapshot({ workflowName, runId, snapshot });
+ * ```
+ */
+export class LibSQLStore extends MastraCompositeStore {
   private client: Client;
   private readonly maxRetries: number;
   private readonly initialBackoffMs: number;
@@ -63,7 +110,10 @@ export class LibSQLStore extends MastraStorage {
   stores: StorageDomains;
 
   constructor(config: LibSQLConfig) {
-    super({ name: `LibSQLStore` });
+    if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
+      throw new Error('LibSQLStore: id must be provided and cannot be empty.');
+    }
+    super({ id: config.id, name: `LibSQLStore`, disableInit: config.disableInit });
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;
@@ -94,420 +144,43 @@ export class LibSQLStore extends MastraStorage {
       this.client = config.client;
     }
 
-    const operations = new StoreOperationsLibSQL({
+    const domainConfig = {
       client: this.client,
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
-    });
+    };
 
-    const scores = new ScoresLibSQL({ client: this.client, operations });
-    const traces = new TracesLibSQL({ client: this.client, operations });
-    const workflows = new WorkflowsLibSQL({ client: this.client, operations });
-    const memory = new MemoryLibSQL({ client: this.client, operations });
-    const legacyEvals = new LegacyEvalsLibSQL({ client: this.client });
-    const observability = new ObservabilityLibSQL({ operations });
+    const scores = new ScoresLibSQL(domainConfig);
+    const workflows = new WorkflowsLibSQL(domainConfig);
+    const memory = new MemoryLibSQL(domainConfig);
+    const observability = new ObservabilityLibSQL(domainConfig);
+    const agents = new AgentsLibSQL(domainConfig);
+    const datasets = new DatasetsLibSQL(domainConfig);
+    const experiments = new ExperimentsLibSQL(domainConfig);
+    const promptBlocks = new PromptBlocksLibSQL(domainConfig);
+    const scorerDefinitions = new ScorerDefinitionsLibSQL(domainConfig);
+    const mcpClients = new MCPClientsLibSQL(domainConfig);
+    const mcpServers = new MCPServersLibSQL(domainConfig);
+    const workspaces = new WorkspacesLibSQL(domainConfig);
+    const skills = new SkillsLibSQL(domainConfig);
+    const blobs = new BlobsLibSQL(domainConfig);
 
     this.stores = {
-      operations,
       scores,
-      traces,
       workflows,
       memory,
-      legacyEvals,
       observability,
+      agents,
+      datasets,
+      experiments,
+      promptBlocks,
+      scorerDefinitions,
+      mcpClients,
+      mcpServers,
+      workspaces,
+      skills,
+      blobs,
     };
-  }
-
-  public get supports() {
-    return {
-      selectByIncludeResourceScope: true,
-      resourceWorkingMemory: true,
-      hasColumn: true,
-      createTable: true,
-      deleteMessages: true,
-      aiTracing: true,
-      getScoresBySpan: true,
-    };
-  }
-
-  async createTable({
-    tableName,
-    schema,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-  }): Promise<void> {
-    await this.stores.operations.createTable({ tableName, schema });
-  }
-
-  /**
-   * Alters table schema to add columns if they don't exist
-   * @param tableName Name of the table
-   * @param schema Schema of the table
-   * @param ifNotExists Array of column names to add if they don't exist
-   */
-  async alterTable({
-    tableName,
-    schema,
-    ifNotExists,
-  }: {
-    tableName: TABLE_NAMES;
-    schema: Record<string, StorageColumn>;
-    ifNotExists: string[];
-  }): Promise<void> {
-    await this.stores.operations.alterTable({ tableName, schema, ifNotExists });
-  }
-
-  async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.clearTable({ tableName });
-  }
-
-  async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
-    await this.stores.operations.dropTable({ tableName });
-  }
-
-  public insert(args: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
-    return this.stores.operations.insert(args);
-  }
-
-  public batchInsert(args: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
-    return this.stores.operations.batchInsert(args);
-  }
-
-  async load<R>({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, string> }): Promise<R | null> {
-    return this.stores.operations.load({ tableName, keys });
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.stores.memory.getThreadById({ threadId });
-  }
-
-  /**
-   * @deprecated use getThreadsByResourceIdPaginated instead for paginated results.
-   */
-  public async getThreadsByResourceId(args: { resourceId: string } & ThreadSortOptions): Promise<StorageThreadType[]> {
-    return this.stores.memory.getThreadsByResourceId(args);
-  }
-
-  public async getThreadsByResourceIdPaginated(
-    args: {
-      resourceId: string;
-      page: number;
-      perPage: number;
-    } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    return this.stores.memory.getThreadsByResourceIdPaginated(args);
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
-    return this.stores.memory.saveThread({ thread });
-  }
-
-  async updateThread({
-    id,
-    title,
-    metadata,
-  }: {
-    id: string;
-    title: string;
-    metadata: Record<string, unknown>;
-  }): Promise<StorageThreadType> {
-    return this.stores.memory.updateThread({ id, title, metadata });
-  }
-
-  async deleteThread({ threadId }: { threadId: string }): Promise<void> {
-    return this.stores.memory.deleteThread({ threadId });
-  }
-
-  /**
-   * @deprecated use getMessagesPaginated instead for paginated results.
-   */
-  public async getMessages(args: StorageGetMessagesArg & { format?: 'v1' }): Promise<MastraMessageV1[]>;
-  public async getMessages(args: StorageGetMessagesArg & { format: 'v2' }): Promise<MastraMessageV2[]>;
-  public async getMessages({
-    threadId,
-    selectBy,
-    format,
-  }: StorageGetMessagesArg & {
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessages({ threadId, selectBy, format });
-  }
-
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format: 'v1' }): Promise<MastraMessageV1[]>;
-  async getMessagesById({ messageIds, format }: { messageIds: string[]; format?: 'v2' }): Promise<MastraMessageV2[]>;
-  async getMessagesById({
-    messageIds,
-    format,
-  }: {
-    messageIds: string[];
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    return this.stores.memory.getMessagesById({ messageIds, format });
-  }
-
-  public async getMessagesPaginated(
-    args: StorageGetMessagesArg & {
-      format?: 'v1' | 'v2';
-    },
-  ): Promise<PaginationInfo & { messages: MastraMessageV1[] | MastraMessageV2[] }> {
-    return this.stores.memory.getMessagesPaginated(args);
-  }
-
-  async saveMessages(args: { messages: MastraMessageV1[]; format?: undefined | 'v1' }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: { messages: MastraMessageV2[]; format: 'v2' }): Promise<MastraMessageV2[]>;
-  async saveMessages(
-    args: { messages: MastraMessageV1[]; format?: undefined | 'v1' } | { messages: MastraMessageV2[]; format: 'v2' },
-  ): Promise<MastraMessageV2[] | MastraMessageV1[]> {
-    return this.stores.memory.saveMessages(args);
-  }
-
-  async updateMessages({
-    messages,
-  }: {
-    messages: (Partial<Omit<MastraMessageV2, 'createdAt'>> & {
-      id: string;
-      content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
-    })[];
-  }): Promise<MastraMessageV2[]> {
-    return this.stores.memory.updateMessages({ messages });
-  }
-
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    return this.stores.memory.deleteMessages(messageIds);
-  }
-
-  /** @deprecated use getEvals instead */
-  async getEvalsByAgentName(agentName: string, type?: 'test' | 'live'): Promise<EvalRow[]> {
-    return this.stores.legacyEvals.getEvalsByAgentName(agentName, type);
-  }
-
-  async getEvals(
-    options: {
-      agentName?: string;
-      type?: 'test' | 'live';
-    } & PaginationArgs = {},
-  ): Promise<PaginationInfo & { evals: EvalRow[] }> {
-    return this.stores.legacyEvals.getEvals(options);
-  }
-
-  async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.stores.scores.getScoreById({ id });
-  }
-
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    return this.stores.scores.saveScore(score);
-  }
-
-  async getScoresByScorerId({
-    scorerId,
-    entityId,
-    entityType,
-    source,
-    pagination,
-  }: {
-    scorerId: string;
-    entityId?: string;
-    entityType?: string;
-    source?: ScoringSource;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByScorerId({ scorerId, entityId, entityType, source, pagination });
-  }
-
-  async getScoresByRunId({
-    runId,
-    pagination,
-  }: {
-    runId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByRunId({ runId, pagination });
-  }
-
-  async getScoresByEntityId({
-    entityId,
-    entityType,
-    pagination,
-  }: {
-    pagination: StoragePagination;
-    entityId: string;
-    entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresByEntityId({ entityId, entityType, pagination });
-  }
-
-  /**
-   * TRACES
-   */
-
-  /**
-   * @deprecated use getTracesPaginated instead.
-   */
-  async getTraces(args: StorageGetTracesArg): Promise<Trace[]> {
-    return this.stores.traces.getTraces(args);
-  }
-
-  async getTracesPaginated(args: StorageGetTracesArg): Promise<PaginationInfo & { traces: Trace[] }> {
-    return this.stores.traces.getTracesPaginated(args);
-  }
-
-  async batchTraceInsert(args: { records: Record<string, any>[] }): Promise<void> {
-    return this.stores.traces.batchTraceInsert(args);
-  }
-
-  /**
-   * WORKFLOWS
-   */
-
-  async updateWorkflowResults({
-    workflowName,
-    runId,
-    stepId,
-    result,
-    runtimeContext,
-  }: {
-    workflowName: string;
-    runId: string;
-    stepId: string;
-    result: StepResult<any, any, any, any>;
-    runtimeContext: Record<string, any>;
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    return this.stores.workflows.updateWorkflowResults({ workflowName, runId, stepId, result, runtimeContext });
-  }
-
-  async updateWorkflowState({
-    workflowName,
-    runId,
-    opts,
-  }: {
-    workflowName: string;
-    runId: string;
-    opts: {
-      status: string;
-      result?: StepResult<any, any, any, any>;
-      error?: string;
-      suspendedPaths?: Record<string, number[]>;
-      waitingPaths?: Record<string, number[]>;
-    };
-  }): Promise<WorkflowRunState | undefined> {
-    return this.stores.workflows.updateWorkflowState({ workflowName, runId, opts });
-  }
-
-  async persistWorkflowSnapshot({
-    workflowName,
-    runId,
-    resourceId,
-    snapshot,
-  }: {
-    workflowName: string;
-    runId: string;
-    resourceId?: string;
-    snapshot: WorkflowRunState;
-  }): Promise<void> {
-    return this.stores.workflows.persistWorkflowSnapshot({ workflowName, runId, resourceId, snapshot });
-  }
-
-  async loadWorkflowSnapshot({
-    workflowName,
-    runId,
-  }: {
-    workflowName: string;
-    runId: string;
-  }): Promise<WorkflowRunState | null> {
-    return this.stores.workflows.loadWorkflowSnapshot({ workflowName, runId });
-  }
-
-  async getWorkflowRuns({
-    workflowName,
-    fromDate,
-    toDate,
-    limit,
-    offset,
-    resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
-    return this.stores.workflows.getWorkflowRuns({ workflowName, fromDate, toDate, limit, offset, resourceId });
-  }
-
-  async getWorkflowRunById({
-    runId,
-    workflowName,
-  }: {
-    runId: string;
-    workflowName?: string;
-  }): Promise<WorkflowRun | null> {
-    return this.stores.workflows.getWorkflowRunById({ runId, workflowName });
-  }
-
-  async getResourceById({ resourceId }: { resourceId: string }): Promise<StorageResourceType | null> {
-    return this.stores.memory.getResourceById({ resourceId });
-  }
-
-  async saveResource({ resource }: { resource: StorageResourceType }): Promise<StorageResourceType> {
-    return this.stores.memory.saveResource({ resource });
-  }
-
-  async updateResource({
-    resourceId,
-    workingMemory,
-    metadata,
-  }: {
-    resourceId: string;
-    workingMemory?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<StorageResourceType> {
-    return this.stores.memory.updateResource({ resourceId, workingMemory, metadata });
-  }
-
-  async createAISpan(span: AISpanRecord): Promise<void> {
-    return this.stores.observability!.createAISpan(span);
-  }
-
-  async updateAISpan(params: {
-    spanId: string;
-    traceId: string;
-    updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>>;
-  }): Promise<void> {
-    return this.stores.observability!.updateAISpan(params);
-  }
-
-  async getAITrace(traceId: string): Promise<AITraceRecord | null> {
-    return this.stores.observability!.getAITrace(traceId);
-  }
-
-  async getAITracesPaginated(
-    args: AITracesPaginatedArg,
-  ): Promise<{ pagination: PaginationInfo; spans: AISpanRecord[] }> {
-    return this.stores.observability!.getAITracesPaginated(args);
-  }
-
-  async getScoresBySpan({
-    traceId,
-    spanId,
-    pagination,
-  }: {
-    traceId: string;
-    spanId: string;
-    pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    return this.stores.scores.getScoresBySpan({ traceId, spanId, pagination });
-  }
-
-  async batchCreateAISpans(args: { records: AISpanRecord[] }): Promise<void> {
-    return this.stores.observability!.batchCreateAISpans(args);
-  }
-
-  async batchUpdateAISpans(args: {
-    records: { traceId: string; spanId: string; updates: Partial<Omit<AISpanRecord, 'spanId' | 'traceId'>> }[];
-  }): Promise<void> {
-    return this.stores.observability!.batchUpdateAISpans(args);
   }
 }
 

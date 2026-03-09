@@ -1,22 +1,125 @@
-import type { TracingOptions } from '@mastra/core/ai-tracing';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
+import type { Mastra } from '@mastra/core/mastra';
+import type { TracingOptions } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import { toAISdkFormat } from './to-ai-sdk-format';
+import { toAISdkV5Stream } from './convert-streams';
 
-type WorkflowRouteBody = {
+export type WorkflowStreamHandlerParams = {
+  runId?: string;
+  resourceId?: string;
   inputData?: Record<string, any>;
-  runtimeContext?: RuntimeContext;
+  initialState?: Record<string, any>;
+  resumeData?: Record<string, any>;
+  requestContext?: RequestContext;
   tracingOptions?: TracingOptions;
+  step?: string;
 };
 
-export type WorkflowRouteOptions =
-  | { path: `${string}:workflowId${string}`; workflow?: never }
-  | { path: string; workflow: string };
+export type WorkflowStreamHandlerOptions = {
+  mastra: Mastra;
+  workflowId: string;
+  params: WorkflowStreamHandlerParams;
+  includeTextStreamParts?: boolean;
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+};
 
+/**
+ * Framework-agnostic handler for streaming workflow execution in AI SDK-compatible format.
+ * Use this function directly when you need to handle workflow streaming outside of Hono or Mastra's own apiRoutes feature.
+ *
+ * @example
+ * ```ts
+ * // Next.js App Router
+ * import { handleWorkflowStream } from '@mastra/ai-sdk';
+ * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+ * import { mastra } from '@/src/mastra';
+ *
+ * export async function POST(req: Request) {
+ *   const params = await req.json();
+ *   const stream = await handleWorkflowStream({
+ *     mastra,
+ *     workflowId: 'weatherWorkflow',
+ *     params,
+ *   });
+ *   return createUIMessageStreamResponse({ stream });
+ * }
+ * ```
+ */
+export async function handleWorkflowStream<UI_MESSAGE extends UIMessage>({
+  mastra,
+  workflowId,
+  params,
+  includeTextStreamParts = true,
+  sendReasoning = false,
+  sendSources = false,
+}: WorkflowStreamHandlerOptions): Promise<ReadableStream<InferUIMessageChunk<UI_MESSAGE>>> {
+  const { runId, resourceId, inputData, initialState, resumeData, requestContext, ...rest } = params;
+
+  const workflowObj = mastra.getWorkflowById(workflowId);
+  if (!workflowObj) {
+    throw new Error(`Workflow ${workflowId} not found`);
+  }
+
+  const run = await workflowObj.createRun({ runId, resourceId, ...rest });
+
+  const stream = resumeData
+    ? run.resumeStream({ resumeData, ...rest, requestContext })
+    : run.stream({ inputData, initialState, ...rest, requestContext });
+
+  return createUIMessageStream<UI_MESSAGE>({
+    execute: async ({ writer }) => {
+      for await (const part of toAISdkV5Stream(stream, {
+        from: 'workflow',
+        includeTextStreamParts,
+        sendReasoning,
+        sendSources,
+      })) {
+        writer.write(part as InferUIMessageChunk<UI_MESSAGE>);
+      }
+    },
+  });
+}
+
+export type WorkflowRouteOptions = {
+  sendReasoning?: boolean;
+  sendSources?: boolean;
+} & (
+  | { path: `${string}:workflowId${string}`; workflow?: never; includeTextStreamParts?: boolean }
+  | { path: string; workflow: string; includeTextStreamParts?: boolean }
+);
+
+/**
+ * Creates a workflow route handler for streaming workflow execution using the AI SDK format.
+ *
+ * This function registers an HTTP POST endpoint that accepts input data, executes a workflow, and streams the response back to the client in AI SDK-compatible format.
+ *
+ * @param {WorkflowRouteOptions} options - Configuration options for the workflow route
+ * @param {string} [options.path='/api/workflows/:workflowId/stream'] - The route path. Include `:workflowId` for dynamic routing
+ * @param {string} [options.workflow] - Fixed workflow ID when not using dynamic routing
+ * @param {boolean} [options.includeTextStreamParts=true] - Whether to include text stream parts in the output
+ *
+ * @example
+ * // Dynamic workflow routing
+ * workflowRoute({
+ *   path: '/api/workflows/:workflowId/stream',
+ * });
+ *
+ * @example
+ * // Fixed workflow with custom path
+ * workflowRoute({
+ *   path: '/api/data-pipeline/stream',
+ *   workflow: 'data-processing-workflow',
+ * });
+ */
 export function workflowRoute({
   path = '/api/workflows/:workflowId/stream',
   workflow,
+  includeTextStreamParts = true,
+  sendReasoning = false,
+  sendSources = false,
 }: WorkflowRouteOptions): ReturnType<typeof registerApiRoute> {
   if (!workflow && !path.includes('/:workflowId')) {
     throw new Error('Path must include :workflowId to route to the correct workflow or pass the workflow explicitly');
@@ -44,9 +147,13 @@ export function workflowRoute({
             schema: {
               type: 'object',
               properties: {
+                runId: { type: 'string' },
+                resourceId: { type: 'string' },
                 inputData: { type: 'object', additionalProperties: true },
-                runtimeContext: { type: 'object', additionalProperties: true },
+                resumeData: { type: 'object', additionalProperties: true },
+                requestContext: { type: 'object', additionalProperties: true },
                 tracingOptions: { type: 'object', additionalProperties: true },
+                step: { type: 'string' },
               },
             },
           },
@@ -64,8 +171,9 @@ export function workflowRoute({
       },
     },
     handler: async c => {
-      const { inputData, ...rest } = (await c.req.json()) as WorkflowRouteBody;
+      const params = (await c.req.json()) as WorkflowStreamHandlerParams;
       const mastra = c.get('mastra');
+      const contextRequestContext = (c as any).get('requestContext') as RequestContext | undefined;
 
       let workflowToUse: string | undefined = workflow;
       if (!workflow) {
@@ -84,20 +192,24 @@ export function workflowRoute({
         throw new Error('Workflow ID is required');
       }
 
-      const workflowObj = mastra.getWorkflow(workflowToUse);
-      if (!workflowObj) {
-        throw new Error(`Workflow ${workflowToUse} not found`);
+      if (contextRequestContext && params.requestContext) {
+        mastra
+          .getLogger()
+          ?.warn(
+            `"requestContext" from the request body will be ignored because "requestContext" is already set in the route options.`,
+          );
       }
 
-      const run = await workflowObj.createRunAsync();
-      const stream = run.streamVNext({ inputData, ...rest });
-
-      const uiMessageStream = createUIMessageStream({
-        execute: async ({ writer }) => {
-          for await (const part of toAISdkFormat(stream, { from: 'workflow' })) {
-            writer.write(part);
-          }
+      const uiMessageStream = await handleWorkflowStream({
+        mastra,
+        workflowId: workflowToUse,
+        params: {
+          ...params,
+          requestContext: contextRequestContext || params.requestContext,
         },
+        includeTextStreamParts,
+        sendReasoning,
+        sendSources,
       });
 
       return createUIMessageStreamResponse({ stream: uiMessageStream });

@@ -2,11 +2,11 @@
 // IMPORTANT: These tests require Docker Engine to be running.
 // The tests will automatically start and configure the required Couchbase container.
 
-import { execSync } from 'child_process';
-import { randomUUID } from 'crypto';
-import axios from 'axios';
+import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+
 import type { Cluster, Bucket, Scope, Collection } from 'couchbase';
-import { connect } from 'couchbase';
+import { connect, QueryScanConsistency, ServiceType, PingState } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { CouchbaseVector, DISTANCE_MAPPING } from './index';
 
@@ -48,9 +48,21 @@ async function setupCluster() {
     console.error('Error creating bucket:', error.message);
     // Decide if you want to re-throw or handle specific errors here
   }
+}
 
-  // Wait for cluster to be fully available after potential operations
-  await new Promise(resolve => setTimeout(resolve, 10000));
+async function waitForFtsReady(bucket: Bucket): Promise<void> {
+  const maxAttempts = 30;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const report = await bucket.ping({ serviceTypes: [ServiceType.Search] });
+    const endpoints = report.services[ServiceType.Search] ?? [];
+    if (endpoints.length > 0 && endpoints.every(ep => ep.state === PingState.Ok)) {
+      console.log(`FTS service ready after ${attempt + 1} attempt(s)`);
+      return;
+    }
+    console.log(`Attempt ${attempt + 1}/${maxAttempts}: FTS service not ready`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  throw new Error(`FTS service not ready after ${maxAttempts} attempts`);
 }
 
 async function checkBucketHealth(
@@ -69,15 +81,13 @@ async function checkBucketHealth(
 
   while (attempt < maxAttempts) {
     try {
-      const response = await axios.get(url, {
-        auth: {
-          username,
-          password,
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`,
         },
-        validateStatus: () => true, // Don't throw on any status code
       });
 
-      const responseData = response.data;
+      const responseData = await response.json();
       if (
         response.status === 200 &&
         responseData.nodes &&
@@ -87,14 +97,14 @@ async function checkBucketHealth(
         return;
       } else {
         console.log(`Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed`);
-        await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+        await new Promise(resolve => setTimeout(resolve, 1000));
         attempt++;
       }
     } catch (error) {
       console.log(
         `Attempt ${attempt + 1}/${maxAttempts}: Bucket '${bucketName}' health check failed with error: ${error.message}`,
       );
-      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+      await new Promise(resolve => setTimeout(resolve, 1000));
       attempt++;
     }
   }
@@ -143,6 +153,10 @@ describe('Integration Testing CouchbaseVector', async () => {
         }
         bucket = cluster.bucket(test_bucketName);
 
+        // Wait for FTS to be fully ready via the SDK's built-in ping.
+        // Replaces the original 10s fixed sleep in setupCluster.
+        await waitForFtsReady(bucket);
+
         // If scope or collection are not there, then create it
         const all_scopes = await bucket.collections().getAllScopes();
         const scope_info = all_scopes.find(scope => scope.name === test_scopeName);
@@ -158,8 +172,20 @@ describe('Integration Testing CouchbaseVector', async () => {
           }
           collection = scope.collection(test_collectionName);
         }
+
+        // Initialize the CouchbaseVector client after cluster setup
+        couchbase_client = new CouchbaseVector({
+          connectionString,
+          username,
+          password,
+          bucketName: test_bucketName,
+          scopeName: test_scopeName,
+          collectionName: test_collectionName,
+          id: 'couchbase-integration-test',
+        });
       } catch (error) {
         console.error('Failed to start Couchbase container:', error);
+        throw error; // Re-throw to fail the tests properly
       }
     },
     5 * 60 * 1000,
@@ -173,14 +199,6 @@ describe('Integration Testing CouchbaseVector', async () => {
 
   describe('Connection', () => {
     it('should connect to couchbase', async () => {
-      couchbase_client = new CouchbaseVector({
-        connectionString,
-        username,
-        password,
-        bucketName: test_bucketName,
-        scopeName: test_scopeName,
-        collectionName: test_collectionName,
-      });
       expect(couchbase_client).toBeDefined();
       const collection = await couchbase_client.getCollection();
       expect(collection).toBeDefined();
@@ -190,7 +208,7 @@ describe('Integration Testing CouchbaseVector', async () => {
   describe('Index Operations', () => {
     it('should create index', async () => {
       await couchbase_client.createIndex({ indexName: test_indexName, dimension, metric: 'euclidean' });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       const index_definition = await scope.searchIndexes().getIndex(test_indexName);
       expect(index_definition).toBeDefined();
@@ -219,7 +237,7 @@ describe('Integration Testing CouchbaseVector', async () => {
 
     it('should delete index', async () => {
       await couchbase_client.deleteIndex({ indexName: test_indexName });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
       await expect(scope.searchIndexes().getIndex(test_indexName)).rejects.toThrowError();
     }, 50000);
   });
@@ -241,13 +259,30 @@ describe('Integration Testing CouchbaseVector', async () => {
     let testVectorIds: string[] = ['test_id_1', 'test_id_2', 'test_id_3'];
 
     beforeAll(async () => {
+      // Clean up any existing documents in the collection from previous runs
+      try {
+        const queryResult = await cluster.query(
+          `SELECT META().id FROM \`${test_bucketName}\`.\`${test_scopeName}\`.\`${test_collectionName}\``,
+          { scanConsistency: QueryScanConsistency.RequestPlus },
+        );
+        for (const row of queryResult.rows) {
+          try {
+            await collection.remove(row.id);
+          } catch {
+            // Ignore errors for non-existent documents
+          }
+        }
+      } catch {
+        // Ignore if query fails (e.g., if collection is empty)
+      }
+
       await couchbase_client.createIndex({ indexName: test_indexName, dimension, metric: 'euclidean' });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }, 50000);
 
     afterAll(async () => {
       await couchbase_client.deleteIndex({ indexName: test_indexName });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }, 50000);
 
     it('should upsert vectors with metadata', async () => {
@@ -258,7 +293,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         metadata: testMetadata,
         ids: testVectorIds,
       });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Verify vectors were stored correctly by retrieving them directly through the collection
       for (let i = 0; i < 3; i++) {
@@ -343,7 +378,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         metadata: testMetadata,
         ids: testVectorIds,
       });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Verify the IDs match what we requested
       expect(vectorIds).toEqual(testVectorIds);
@@ -612,10 +647,8 @@ describe('Integration Testing CouchbaseVector', async () => {
     beforeAll(async () => {
       const indexes = await couchbase_client.listIndexes();
       if (indexes.length > 0) {
-        for (const index of indexes) {
-          await couchbase_client.deleteIndex({ indexName: index });
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        }
+        await Promise.all(indexes.map(index => couchbase_client.deleteIndex({ indexName: index })));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }, 50000);
 
@@ -631,7 +664,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         indexName: testIndexName,
         dimension: testDimension,
       });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Check internal property
       expect((couchbase_client as any).vector_dimension).toBe(testDimension);
@@ -654,7 +687,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         ],
         metadata: [{}, {}],
       });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Verify vectors were inserted with correct dimensions
       for (const id of vectorIds) {
@@ -677,7 +710,7 @@ describe('Integration Testing CouchbaseVector', async () => {
 
       // Delete the index
       await couchbase_client.deleteIndex({ indexName: testIndexName });
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Verify dimension is reset
       expect((couchbase_client as any).vector_dimension).toBeNull();
@@ -691,10 +724,8 @@ describe('Integration Testing CouchbaseVector', async () => {
     beforeAll(async () => {
       const indexes = await couchbase_client.listIndexes();
       if (indexes.length > 0) {
-        for (const index of indexes) {
-          await couchbase_client.deleteIndex({ indexName: index });
-          await new Promise(resolve => setTimeout(resolve, 5000));
-        }
+        await Promise.all(indexes.map(index => couchbase_client.deleteIndex({ indexName: index })));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }, 50000);
 
@@ -712,7 +743,7 @@ describe('Integration Testing CouchbaseVector', async () => {
           dimension: dimension,
           metric: mastraMetric,
         });
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
         // Verify through the Couchbase API
         const indexDef = await scope.searchIndexes().getIndex(testIndexName);
         const similarityParam =
@@ -726,7 +757,7 @@ describe('Integration Testing CouchbaseVector', async () => {
 
         // Clean up
         await couchbase_client.deleteIndex({ indexName: testIndexName });
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }, 50000);
   });

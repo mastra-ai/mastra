@@ -1,4 +1,4 @@
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type {
   CreateIndexParams,
   GetVectorIndexResponse,
@@ -7,7 +7,7 @@ import type {
   ClientOptions,
   UpsertVectorParams,
 } from '../types';
-import { runtimeContextQueryString } from '../utils';
+import { requestContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
 
@@ -22,12 +22,12 @@ export class Vector extends BaseResource {
   /**
    * Retrieves details about a specific vector index
    * @param indexName - Name of the index to get details for
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing vector index details
    */
-  details(indexName: string, runtimeContext?: RuntimeContext | Record<string, any>): Promise<GetVectorIndexResponse> {
+  details(indexName: string, requestContext?: RequestContext | Record<string, any>): Promise<GetVectorIndexResponse> {
     return this.request(
-      `/api/vector/${this.vectorName}/indexes/${indexName}${runtimeContextQueryString(runtimeContext)}`,
+      `/vector/${encodeURIComponent(this.vectorName)}/indexes/${encodeURIComponent(indexName)}${requestContextQueryString(requestContext)}`,
     );
   }
 
@@ -37,18 +37,20 @@ export class Vector extends BaseResource {
    * @returns Promise indicating deletion success
    */
   delete(indexName: string): Promise<{ success: boolean }> {
-    return this.request(`/api/vector/${this.vectorName}/indexes/${indexName}`, {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/indexes/${encodeURIComponent(indexName)}`, {
       method: 'DELETE',
     });
   }
 
   /**
    * Retrieves a list of all available indexes
-   * @param runtimeContext - Optional runtime context to pass as query parameter
+   * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing array of index names
    */
-  getIndexes(runtimeContext?: RuntimeContext | Record<string, any>): Promise<{ indexes: string[] }> {
-    return this.request(`/api/vector/${this.vectorName}/indexes${runtimeContextQueryString(runtimeContext)}`);
+  getIndexes(requestContext?: RequestContext | Record<string, any>): Promise<{ indexes: string[] }> {
+    return this.request(
+      `/vector/${encodeURIComponent(this.vectorName)}/indexes${requestContextQueryString(requestContext)}`,
+    );
   }
 
   /**
@@ -57,7 +59,7 @@ export class Vector extends BaseResource {
    * @returns Promise indicating creation success
    */
   createIndex(params: CreateIndexParams): Promise<{ success: boolean }> {
-    return this.request(`/api/vector/${this.vectorName}/create-index`, {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/create-index`, {
       method: 'POST',
       body: params,
     });
@@ -69,7 +71,7 @@ export class Vector extends BaseResource {
    * @returns Promise containing array of vector IDs
    */
   upsert(params: UpsertVectorParams): Promise<string[]> {
-    return this.request(`/api/vector/${this.vectorName}/upsert`, {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/upsert`, {
       method: 'POST',
       body: params,
     });
@@ -81,7 +83,7 @@ export class Vector extends BaseResource {
    * @returns Promise containing query results
    */
   query(params: QueryVectorParams): Promise<QueryVectorResponse> {
-    return this.request(`/api/vector/${this.vectorName}/query`, {
+    return this.request(`/vector/${encodeURIComponent(this.vectorName)}/query`, {
       method: 'POST',
       body: params,
     });

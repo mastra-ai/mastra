@@ -4,7 +4,7 @@
 
 ## Related Issue(s)
 
-<!-- Link to the issue(s) this PR addresses, using hashtag notation: #123 -->
+<!-- Link to the issue(s) this PR addresses, using hashtag notation: Fixes #123 -->
 
 ## Type of Change
 
@@ -20,3 +20,4 @@
 
 - [ ] I have made corresponding changes to the documentation (if applicable)
 - [ ] I have added tests that prove my fix is effective or that my feature works
+- [ ] I have addressed all Coderabbit comments on this PR

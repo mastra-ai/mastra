@@ -1,8 +1,8 @@
 import { openai } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { simulateReadableStream } from 'ai';
-import { MockLanguageModelV1 } from 'ai/test';
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { simulateReadableStream } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
@@ -15,6 +15,7 @@ function modelListTests(version: 'v1' | 'v2') {
     () => {
       it('should take and return model list', async () => {
         const agent = new Agent({
+          id: 'test-agent',
           name: 'test',
           instructions: 'test agent instructions',
           model: [
@@ -45,7 +46,8 @@ function modelListTests(version: 'v1' | 'v2') {
 
       it('should reorder model list', async () => {
         const agent = new Agent({
-          name: 'test',
+          id: 'test-agent',
+          name: 'Test Agent',
           instructions: 'test agent instructions',
           model: [
             {
@@ -83,9 +85,51 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(model1.modelId).toBe('gpt-4o-mini');
       });
 
+      it('should keep unlisted models at the end when reordering with a partial list', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: [
+            {
+              model: openai('gpt-4o'),
+            },
+            {
+              model: openai('gpt-4o-mini'),
+            },
+            {
+              model: openai('gpt-4.1'),
+            },
+          ],
+        });
+
+        const modelList = await agent.getModelList();
+        if (!modelList) {
+          expect.fail('Model list should exist');
+        }
+
+        // Reorder with only 2 of 3 models — gpt-4.1 first, then gpt-4o
+        // gpt-4o-mini is NOT in the list and should stay at the end
+        agent.reorderModels([modelList[2]!.id, modelList[0]!.id]);
+
+        const reorderedModelList = await agent.getModelList();
+        if (!reorderedModelList) {
+          expect.fail('Reordered model list should exist');
+        }
+
+        expect(reorderedModelList.length).toBe(3);
+        const model0 = reorderedModelList[0]?.model as LanguageModelV2;
+        const model1 = reorderedModelList[1]?.model as LanguageModelV2;
+        const model2 = reorderedModelList[2]?.model as LanguageModelV2;
+        expect(model0.modelId).toBe('gpt-4.1');
+        expect(model1.modelId).toBe('gpt-4o');
+        expect(model2.modelId).toBe('gpt-4o-mini');
+      });
+
       it(`should update model list`, async () => {
         const agent = new Agent({
-          name: 'test',
+          id: 'test-agent',
+          name: 'Test Agent',
           instructions: 'test agent instructions',
           model: [
             {
@@ -164,11 +208,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -196,7 +240,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -260,11 +305,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -292,7 +337,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -361,11 +407,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -409,7 +455,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -483,11 +530,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -531,7 +578,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'update-model-agent',
+          name: 'Test Model List Agent',
           instructions: 'test agent',
           model: [
             {
@@ -607,11 +655,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -656,11 +704,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', Second' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', Second' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -688,7 +736,8 @@ function modelListTests(version: 'v1' | 'v2') {
         });
 
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'test-model-list-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [
             {
@@ -765,11 +814,11 @@ function modelListTests(version: 'v1' | 'v2') {
                   modelId: 'mock-model-id',
                   timestamp: new Date(0),
                 },
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello' },
-                { type: 'text-delta', id: '1', delta: ', ' },
-                { type: 'text-delta', id: '1', delta: 'Premium Title' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+                { type: 'text-delta', id: 'text-1', delta: ', ' },
+                { type: 'text-delta', id: 'text-1', delta: 'Premium Title' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -780,7 +829,8 @@ function modelListTests(version: 'v1' | 'v2') {
           },
         });
         const agent = new Agent({
-          name: 'update-model-agent',
+          id: 'test-model-list-agent',
+          name: 'Update Model Agent',
           instructions: 'test agent',
           model: [{ model: v2Model }, { model: v1Model }],
         });
@@ -789,35 +839,35 @@ function modelListTests(version: 'v1' | 'v2') {
           await agent.getLLM();
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.generate('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.stream('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.generate('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
 
         try {
           await agent.stream('Hello');
           expect.fail('Expected getLLM() to throw an error');
         } catch (err) {
-          expect(err.message).toContain('Only v2 models are allowed when an array of models is provided');
+          expect(err.message).toContain('Only v2/v3 models are allowed when an array of models is provided');
         }
       });
     },

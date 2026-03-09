@@ -11,7 +11,7 @@ A Next.js application that gets a random image from [Unsplash](https://unsplash.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - Anthropic API Key
 - Unsplash Access Key
@@ -47,7 +47,7 @@ NEXT_PUBLIC_UNSPLASH_ACCESS_KEY=your_unsplash_access_key
 # Required for AI processing
 ANTHROPIC_API_KEY=your_anthropic_key
 
-# Required for evalutating the llm prompt
+# Required for evaluating the llm prompt
 BRAINTRUST_API_KEY=your_braintrust_key
 ```
 

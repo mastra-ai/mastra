@@ -1,26 +1,29 @@
 import { GetWorkflowResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
-import { ScrollableContainer } from '@/components/scrollable-container';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { columns } from './columns';
 import { WorkflowTableData } from './types';
 import { WorkflowCoinIcon, WorkflowIcon } from '@/ds/icons';
 import { useLinkComponent } from '@/lib/framework';
-import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export interface WorkflowTableProps {
   workflows: Record<string, GetWorkflowResponse>;
   isLoading: boolean;
+  error?: Error | null;
 }
 
-export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
+export function WorkflowTable({ workflows, isLoading, error }: WorkflowTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const workflowData: WorkflowTableData[] = useMemo(() => {
@@ -36,20 +39,43 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
     return _workflowsData;
   }, [workflows]);
 
+  const filteredData = useMemo(
+    () => workflowData.filter(workflow => workflow.name.toLowerCase().includes(search.toLowerCase())),
+    [workflowData, search],
+  );
+
+  const { activeIndex } = useTableKeyboardNavigation({
+    itemCount: filteredData.length,
+    global: true,
+    onSelect: index => {
+      const workflow = filteredData[index];
+      if (workflow) {
+        navigate(paths.workflowLink(workflow.id));
+      }
+    },
+  });
+
   const table = useReactTable({
-    data: workflowData,
+    data: filteredData,
     columns: columns as ColumnDef<WorkflowTableData>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows.concat();
+  const rows = table.getRowModel().rows;
 
-  if (rows.length === 0 && !isLoading) {
-    return <EmptyWorkflowsTable />;
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="workflows" />
+      </div>
+    );
   }
 
-  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
+  if (workflowData.length === 0 && !isLoading) {
+    return <EmptyWorkflowsTable />;
+  }
 
   return (
     <div>
@@ -70,8 +96,12 @@ export function WorkflowTable({ workflows, isLoading }: WorkflowTableProps) {
               ))}
             </Thead>
             <Tbody>
-              {filteredRows.map(row => (
-                <Row key={row.id} onClick={() => navigate(paths.workflowLink(row.original.id))}>
+              {rows.map((row, index) => (
+                <Row
+                  key={row.id}
+                  isActive={index === activeIndex}
+                  onClick={() => navigate(paths.workflowLink(row.original.id))}
+                >
                   {row.getVisibleCells().map(cell => (
                     <React.Fragment key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

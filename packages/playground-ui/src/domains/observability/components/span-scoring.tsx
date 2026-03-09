@@ -1,18 +1,29 @@
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { Button } from '@/components/ui/elements/buttons';
+import { Button } from '@/ds/components/Button/Button';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
-import { Notification, SelectField, TextAndIcon } from '@/components/ui/elements';
+import { Notification } from '@/ds/components/Notification';
+import { SelectField } from '@/ds/components/FormFields';
+import { TextAndIcon } from '@/ds/components/Text';
 import { useEffect, useState } from 'react';
+import { type GetScorerResponse } from '@mastra/client-js';
 
 export interface SpanScoringProps {
   traceId?: string;
   spanId?: string;
   entityType?: string;
+  isTopLevelSpan?: boolean;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 }
 
-export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) => {
-  const { data: scorers = {}, isLoading } = useScorers();
+export const SpanScoring = ({
+  traceId,
+  spanId,
+  entityType,
+  isTopLevelSpan,
+  scorers,
+  isLoadingScorers,
+}: SpanScoringProps) => {
   const [selectedScorer, setSelectedScorer] = useState<string | null>(null);
   const { mutate: triggerScorer, isPending, isSuccess } = useTriggerScorer();
   const [notificationIsVisible, setNotificationIsVisible] = useState(false);
@@ -23,7 +34,7 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
     }
   }, [isSuccess]);
 
-  let scorerList = Object.entries(scorers)
+  let scorerList = Object.entries(scorers || {})
     .map(([key, scorer]) => ({
       id: key,
       name: scorer.scorer.config.name,
@@ -34,11 +45,11 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
     .filter(scorer => scorer.isRegistered);
 
   // Filter out Scorers with type agent if we are not scoring on a top level agent generated span
-  if (entityType !== 'Agent' || spanId) {
+  if (entityType !== 'Agent' || !isTopLevelSpan) {
     scorerList = scorerList.filter(scorer => scorer.type !== 'agent');
   }
 
-  const isWaiting = isPending || isLoading;
+  const isWaiting = isPending || isLoadingScorers;
 
   const handleStartScoring = () => {
     if (selectedScorer) {
@@ -58,21 +69,40 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
 
   const selectedScorerDescription = scorerList.find(s => s.name === selectedScorer)?.description || '';
 
+  if (scorers === undefined && !isLoadingScorers) {
+    return (
+      <Notification isVisible={true} autoDismiss={false} type="error">
+        <InfoIcon /> Failed to load scorers.
+      </Notification>
+    );
+  }
+
+  if (scorerList.length === 0) {
+    return (
+      <Notification isVisible={true} dismissible={false}>
+        <InfoIcon /> No eligible scorers have been defined to run.
+      </Notification>
+    );
+  }
+
   return (
     <div>
-      <div className="grid grid-cols-[3fr_1fr] gap-[1rem] items-start">
-        <div className="grid gap-[0.5rem]">
+      <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
+        <div className="grid gap-2">
           <SelectField
             name={'select-scorer'}
             placeholder="Select a scorer..."
-            options={scorerList.map(scorer => ({ label: scorer.name, value: scorer.name }))}
+            options={scorerList.map(scorer => ({
+              label: scorer.name || scorer.id,
+              value: scorer.id || scorer.name || '',
+            }))}
             onValueChange={handleScorerChange}
             value={selectedScorer || ''}
             className="min-w-[20rem]"
             disabled={isWaiting}
           />
           {selectedScorerDescription && (
-            <TextAndIcon className="text-icon3">
+            <TextAndIcon className="text-neutral3">
               <InfoIcon /> {selectedScorerDescription}
             </TextAndIcon>
           )}
@@ -83,7 +113,7 @@ export const SpanScoring = ({ traceId, spanId, entityType }: SpanScoringProps) =
         </Button>
       </div>
 
-      <Notification isVisible={notificationIsVisible} className="mt-[1rem]">
+      <Notification isVisible={notificationIsVisible} className="mt-4">
         <InfoIcon /> Scorer triggered! When finished successfully, it will appear in the list below. It could take a
         moment.
       </Notification>

@@ -1,6 +1,5 @@
-import type { WritableStream } from 'stream/web';
 import type { ToolsInput } from '@mastra/core/agent';
-import { RuntimeContext as RuntimeContextClass } from '@mastra/core/runtime-context';
+import { RequestContext as RequestContextClass } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
 import { z } from 'zod';
@@ -17,15 +16,13 @@ class TestAgent extends Agent {
 
   public async processStreamResponse(
     params: StreamParams<any>,
-    writable: WritableStream<Uint8Array>,
+    controller: ReadableStreamDefaultController<Uint8Array>,
   ): Promise<Response> {
     this.lastProcessedParams = params;
-    const writer = writable.getWriter();
     const encoder = new TextEncoder();
-    // Write SSE-formatted data with valid JSON so that processMastraStream can parse it and invoke onChunk
-    void writer.write(encoder.encode('data: "test"\n\n')).then(() => {
-      return writer.close();
-    });
+    // Enqueue SSE-formatted data with valid JSON so that processMastraStream can parse it and invoke onChunk
+    controller.enqueue(encoder.encode('data: "test"\n\n'));
+    controller.close();
     return new Response(null, {
       status: 200,
       headers: { 'content-type': 'text/event-stream' },
@@ -58,70 +55,35 @@ describe('Agent.stream', () => {
       age: z.number(),
     });
     const jsonSchema = zodToJsonSchema(outputSchema);
-    const params: StreamParams<typeof outputSchema> = {
-      messages: [] as any,
+    const params: Omit<StreamParams<z.infer<typeof outputSchema>>, 'messages'> = {
       structuredOutput: { schema: outputSchema },
     };
-    await agent.stream(params);
+    await agent.stream([], params);
     expect(agent.lastProcessedParams?.structuredOutput).toEqual({ schema: jsonSchema });
   });
 
-  it('should transform params.output using zodToJsonSchema when provided', async () => {
-    // Arrange: Create a sample Zod schema and params
-    const outputSchema = z.object({
-      name: z.string(),
-      age: z.number(),
-    });
-
-    const params: StreamParams<typeof outputSchema> = {
-      messages: [] as any,
-      output: outputSchema,
-    };
-
-    // Act: Call stream with the params
-    await agent.stream(params);
-
-    // Assert: Verify output schema transformation
-    const expectedSchema = zodToJsonSchema(outputSchema);
-    expect(agent.lastProcessedParams?.output).toEqual(expectedSchema);
-  });
-
-  it('should set processedParams.output to undefined when params.output is not provided', async () => {
-    // Arrange: Create params without output schema
-    const params: StreamParams<undefined> = {
-      messages: [] as any,
-    };
-
-    // Act: Call stream with the params
-    await agent.stream(params);
-
-    // Assert: Verify output is undefined
-    expect(agent.lastProcessedParams?.output).toBeUndefined();
-  });
-
-  it('should process runtimeContext through parseClientRuntimeContext', async () => {
-    // Arrange: Create a RuntimeContext-like instance with test data
+  it('should process requestContext through parseClientRequestContext', async () => {
+    // Arrange: Create a RequestContext-like instance with test data
     const contextData = new Map([
       ['env', 'test'],
       ['userId', '123'],
     ]);
 
-    const runtimeContext: any = {
+    const requestContext: any = {
       entries: () => contextData,
     };
-    // Ensure instanceof RuntimeContext succeeds so parseClientRuntimeContext converts it
-    Object.setPrototypeOf(runtimeContext, RuntimeContextClass.prototype);
+    // Ensure instanceof RequestContext succeeds so parseClientRequestContext converts it
+    Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
 
-    const params: StreamParams<undefined> = {
-      messages: [] as any,
-      runtimeContext,
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
+      requestContext,
     };
 
     // Act: Call stream with the params
-    await agent.stream(params);
+    await agent.stream([], params);
 
-    // Assert: Verify runtimeContext was converted to plain object
-    expect(agent.lastProcessedParams?.runtimeContext).toEqual({
+    // Assert: Verify requestContext was converted to plain object
+    expect(agent.lastProcessedParams?.requestContext).toEqual({
       env: 'test',
       userId: '123',
     });
@@ -145,13 +107,12 @@ describe('Agent.stream', () => {
       },
     };
 
-    const params: StreamParams<undefined> = {
-      messages: [] as any,
+    const params: Omit<StreamParams<undefined>, 'messages'> = {
       clientTools,
     };
 
     // Act: Call stream with the params
-    await agent.stream(params);
+    await agent.stream([], params);
 
     // Assert: Verify schemas were converted while preserving other properties
     expect(agent.lastProcessedParams?.clientTools).toEqual({
@@ -165,13 +126,8 @@ describe('Agent.stream', () => {
   });
 
   it('should return a Response object with processDataStream method', async () => {
-    // Arrange: Create minimal params
-    const params: StreamParams<undefined> = {
-      messages: [],
-    };
-
     // Act: Call stream
-    const response = await agent.stream(params);
+    const response = await agent.stream([]);
 
     // Assert: Verify response structure
     expect(response).toBeInstanceOf(Response);
@@ -183,12 +139,10 @@ describe('Agent.stream', () => {
   it('should invoke onChunk callback when processing stream data', async () => {
     // Arrange: Create callback and params
     const onChunk = vi.fn();
-    const params: StreamParams<undefined> = {
-      messages: [],
-    };
+    const params: Omit<StreamParams<undefined>, 'messages'> = {};
 
     // Act: Process the stream
-    const response = await agent.stream(params);
+    const response = await agent.stream([], params);
     await response.processDataStream({ onChunk });
 
     // Assert: Verify callback execution
@@ -197,6 +151,152 @@ describe('Agent.stream', () => {
     expect(firstCall[0]).toBeDefined();
     expect(typeof firstCall[0]).toBe('string');
     expect(firstCall[0]).toBe('test');
+  });
+});
+
+describe('Agent.network', () => {
+  let agent: Agent;
+  const mockFetch = global.fetch as ReturnType<typeof vi.fn>;
+
+  const mockClientOptions: ClientOptions = {
+    baseUrl: 'https://test.com',
+    headers: {
+      Authorization: 'Bearer test-key',
+    },
+    retries: 0,
+  };
+
+  const mockStreamResponse = (sseData: string = '"test"') => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
+        controller.close();
+      },
+    });
+    mockFetch.mockResolvedValueOnce(
+      new Response(stream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      }),
+    );
+  };
+
+  const getRequestBody = () => {
+    const call = mockFetch.mock.calls[0];
+    return JSON.parse(call[1].body);
+  };
+
+  beforeEach(() => {
+    agent = new Agent(mockClientOptions, 'test-agent');
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('should convert structuredOutput.schema from Zod to JSON Schema and preserve sibling fields', async () => {
+    mockStreamResponse();
+    const outputSchema = z.object({
+      name: z.string(),
+      age: z.number(),
+    });
+    const jsonSchema = zodToJsonSchema(outputSchema);
+
+    await agent.network([], {
+      structuredOutput: {
+        schema: outputSchema,
+        instructions: 'Return structured data',
+      },
+    });
+
+    const body = getRequestBody();
+    expect(body.structuredOutput.schema).toEqual(jsonSchema);
+    expect(body.structuredOutput.instructions).toBe('Return structured data');
+  });
+
+  it('should pass through pre-converted JSON Schema unchanged', async () => {
+    mockStreamResponse();
+    const preConverted = {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      required: ['name'],
+      additionalProperties: false,
+    };
+
+    await agent.network([], {
+      structuredOutput: { schema: preConverted as any },
+    });
+
+    const body = getRequestBody();
+    expect(body.structuredOutput.schema).toEqual(preConverted);
+  });
+
+  it('should process requestContext through parseClientRequestContext', async () => {
+    mockStreamResponse();
+    const contextData = new Map([
+      ['env', 'test'],
+      ['userId', '123'],
+    ]);
+
+    const requestContext: any = {
+      entries: () => contextData,
+    };
+    Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
+
+    await agent.network([], { requestContext });
+
+    const body = getRequestBody();
+    expect(body.requestContext).toEqual({
+      env: 'test',
+      userId: '123',
+    });
+  });
+
+  it('should process both structuredOutput and requestContext together', async () => {
+    mockStreamResponse();
+    const outputSchema = z.object({ result: z.string() });
+    const contextData = new Map([['key', 'value']]);
+    const requestContext: any = { entries: () => contextData };
+    Object.setPrototypeOf(requestContext, RequestContextClass.prototype);
+
+    await agent.network([{ role: 'user', content: 'test' }], {
+      structuredOutput: { schema: outputSchema },
+      requestContext,
+      maxSteps: 3,
+    });
+
+    const body = getRequestBody();
+    expect(body.structuredOutput.schema).toEqual(zodToJsonSchema(outputSchema));
+    expect(body.requestContext).toEqual({ key: 'value' });
+    expect(body.maxSteps).toBe(3);
+    expect(body.messages).toEqual([{ role: 'user', content: 'test' }]);
+  });
+
+  it('should send POST to /agents/:agentId/network', async () => {
+    mockStreamResponse();
+    await agent.network([], {});
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://test.com/api/agents/test-agent/network',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+        }),
+      }),
+    );
+  });
+
+  it('should invoke onChunk callback when processing stream data', async () => {
+    mockStreamResponse(JSON.stringify({ type: 'text', text: 'hello' }));
+    const onChunk = vi.fn();
+
+    const response = await agent.network([], {});
+    await response.processDataStream({ onChunk });
+
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledWith({ type: 'text', text: 'hello' });
   });
 });
 
@@ -432,7 +532,7 @@ describe('Agent Client Methods', () => {
       agent2: { name: 'Agent 2', model: 'gpt-3.5' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents();
+    const result = await client.listAgents();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/agents`,
@@ -442,20 +542,20 @@ describe('Agent Client Methods', () => {
     );
   });
 
-  it('should get all agents with runtimeContext', async () => {
+  it('should get all agents with requestContext', async () => {
     const mockResponse = {
       agent1: { name: 'Agent 1', model: 'gpt-4' },
       agent2: { name: 'Agent 2', model: 'gpt-3.5' },
     };
-    const runtimeContext = { userId: '123', sessionId: 'abc' };
-    const expectedBase64 = btoa(JSON.stringify(runtimeContext));
+    const requestContext = { userId: '123', sessionId: 'abc' };
+    const expectedBase64 = btoa(JSON.stringify(requestContext));
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getAgents(runtimeContext);
+    const result = await client.listAgents(requestContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/agents?runtimeContext=${expectedEncodedBase64}`,
+      `${clientOptions.baseUrl}/api/agents?requestContext=${expectedEncodedBase64}`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),
@@ -493,9 +593,11 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       finishReason: 'tool-calls',
       toolCalls: [
         {
-          toolName: 'clientTool',
-          args: { test: 'args' },
-          toolCallId: 'tool-1',
+          payload: {
+            toolName: 'clientTool',
+            args: { test: 'args' },
+            toolCallId: 'tool-1',
+          },
         },
       ],
       response: {
@@ -528,8 +630,10 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
+    // Pass threadId via memory to indicate server-side memory is active
     await agent.generate(initialMessage, {
       clientTools: { clientTool },
+      memory: { thread: 'test-thread-123' }, // Server has memory - avoids duplicate messages
     });
 
     // Check that the second request was called with the correct messages
@@ -542,7 +646,7 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
     // This prevents duplicate user messages from being stored
     const userMessages = messagesInSecondCall.filter(msg => msg.role === 'user');
 
-    // Should be no user messages in the second call
+    // Should be no user messages in the second call (server has memory via threadId)
     expect(userMessages).toHaveLength(0);
 
     // Should have assistant message with tool call and tool result
@@ -572,9 +676,11 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
         finishReason: 'tool-calls',
         toolCalls: [
           {
-            toolName: 'clientTool',
-            args: { iteration: i + 1 },
-            toolCallId: `tool-${i + 1}`,
+            payload: {
+              toolName: 'clientTool',
+              args: { iteration: i + 1 },
+              toolCallId: `tool-${i + 1}`,
+            },
           },
         ],
         response: {
@@ -608,21 +714,23 @@ describe('Agent - Storage Duplicate Messages Issue', () => {
       },
     });
 
+    // Pass threadId via memory to indicate server-side memory is active
     await agent.generate(initialMessage, {
       clientTools: { clientTool },
+      memory: { thread: 'test-thread-123' }, // Server has memory - avoids duplicate messages
     });
 
     // The agent should have made 5 requests total (1 initial + 4 tool calls)
     expect(mockRequest).toHaveBeenCalledTimes(5);
 
-    // Check each recursive call to ensure no user messages are being re-sent
+    // Check each recursive call to ensure no user messages are being re-sent (server has memory via threadId)
     for (let i = 1; i < 5; i++) {
       const callArgs = mockRequest.mock.calls[i][1];
       const messagesInCall = callArgs.body.messages;
 
       const userMessages = messagesInCall.filter(msg => msg.role === 'user');
 
-      // No user messages should be in any of the recursive calls
+      // No user messages should be in any of the recursive calls (server has memory)
       expect(userMessages).toHaveLength(0);
 
       // Each recursive call should only contain the latest assistant response and tool result

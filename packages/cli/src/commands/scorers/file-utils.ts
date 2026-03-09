@@ -1,5 +1,5 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 import * as p from '@clack/prompts';
 
 const DEFAULT_SCORERS_DIR = 'src/mastra/scorers';

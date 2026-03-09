@@ -6,7 +6,8 @@ import { calculatorTool } from '@/tools/calculator-tool';
 import { helloWorldTool } from '@inner/hello-world';
 
 export const innerAgent = new Agent({
-  name: 'inner-agent',
+  id: 'inner-agent',
+  name: 'Inner Agent',
   instructions: 'You are a helpful assistant.',
   model: openai('gpt-4o'),
   tools: { helloWorldTool, lodashTool, toolUsingNativeBindings, toolWithNativeBindingPackageDep, calculatorTool },

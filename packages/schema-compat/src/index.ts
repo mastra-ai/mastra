@@ -29,7 +29,7 @@ export { SchemaCompatLayer as SchemaCompatLayerV4 } from './schema-compatibility
 export { SchemaCompatLayer } from './schema-compatibility';
 
 // Utility functions
-export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod } from './utils';
+export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod, isZodType } from './utils';
 
 // Provider compatibility implementations
 export { AnthropicSchemaCompatLayer } from './provider-compats/anthropic';
@@ -38,3 +38,6 @@ export { GoogleSchemaCompatLayer } from './provider-compats/google';
 export { MetaSchemaCompatLayer } from './provider-compats/meta';
 export { OpenAISchemaCompatLayer } from './provider-compats/openai';
 export { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reasoning';
+
+export { type ModelInformation } from './types';
+export { type JSONSchema7, type Schema, jsonSchema } from './json-schema';

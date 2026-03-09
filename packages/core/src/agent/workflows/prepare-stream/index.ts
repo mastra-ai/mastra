@@ -1,82 +1,78 @@
 import { z } from 'zod';
-import { InternalSpans } from '../../../ai-tracing';
-import type { AISpan, AISpanType } from '../../../ai-tracing';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
-import type { RuntimeContext } from '../../../runtime-context';
-import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
+import type { Span, SpanType } from '../../../observability';
+import { InternalSpans } from '../../../observability';
+import type { RequestContext } from '../../../request-context';
+import { MastraModelOutput } from '../../../stream';
 import { createWorkflow } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
+import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
-interface CreatePrepareStreamWorkflowOptions<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
-> {
+interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
-  options: InnerAgentExecutionOptions<OUTPUT, FORMAT>;
+  options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
   resourceId?: string;
   runId: string;
-  runtimeContext: RuntimeContext;
-  agentAISpan: AISpan<AISpanType.AGENT_RUN>;
-  methodType: 'generate' | 'stream' | 'generateLegacy' | 'streamLegacy';
-  /**
-   * @deprecated When using format: 'aisdk', use the `@mastra/ai-sdk` package instead. See https://mastra.ai/en/docs/frameworks/agentic-uis/ai-sdk#streaming
-   */
-  format?: FORMAT;
+  requestContext: RequestContext;
+  agentSpan: Span<SpanType.AGENT_RUN>;
+  methodType: AgentMethodType;
   instructions: SystemMessage;
   memoryConfig?: MemoryConfig;
   memory?: MastraMemory;
-  saveQueueManager: SaveQueueManager;
   returnScorerData?: boolean;
+  saveQueueManager?: SaveQueueManager;
   requireToolApproval?: boolean;
+  toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  agentName?: string;
   toolCallId?: string;
+  workspace?: Workspace;
 }
 
-export function createPrepareStreamWorkflow<
-  OUTPUT extends OutputSchema | undefined = undefined,
-  FORMAT extends 'aisdk' | 'mastra' | undefined = undefined,
->({
+export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
   resourceId,
   runId,
-  runtimeContext,
-  agentAISpan,
+  requestContext,
+  agentSpan,
   methodType,
-  format,
   instructions,
   memoryConfig,
   memory,
-  saveQueueManager,
   returnScorerData,
+  saveQueueManager,
   requireToolApproval,
+  toolCallConcurrency,
   resumeContext,
   agentId,
+  agentName,
   toolCallId,
-}: CreatePrepareStreamWorkflowOptions<OUTPUT, FORMAT>) {
+  workspace,
+}: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
     threadFromArgs,
     resourceId,
     runId,
-    runtimeContext,
-    agentAISpan,
+    requestContext,
+    agentSpan,
     methodType,
     memory,
   });
@@ -87,10 +83,8 @@ export function createPrepareStreamWorkflow<
     threadFromArgs,
     resourceId,
     runId,
-    runtimeContext,
-    agentAISpan,
+    requestContext,
     methodType,
-    format,
     instructions,
     memoryConfig,
     memory,
@@ -100,11 +94,19 @@ export function createPrepareStreamWorkflow<
     capabilities,
     runId,
     returnScorerData,
-    format,
     requireToolApproval,
+    toolCallConcurrency,
     resumeContext,
     agentId,
+    agentName,
     toolCallId,
+    methodType,
+    saveQueueManager,
+    memoryConfig,
+    memory,
+    resourceId,
+    autoResumeSuspendedTools: options.autoResumeSuspendedTools,
+    workspace,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -112,27 +114,24 @@ export function createPrepareStreamWorkflow<
     options,
     resourceId,
     runId,
-    runtimeContext,
+    requestContext,
     memory,
     memoryConfig,
-    saveQueueManager,
-    agentAISpan,
-    instructions,
+    agentSpan,
     agentId,
+    methodType,
   });
 
   return createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
-    outputSchema: z.union([
-      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
-      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
-    ]),
+    outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
     steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
       },
+      validateInputs: false,
     },
   })
     .parallel([prepareToolsStep, prepareMemoryStep])

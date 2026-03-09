@@ -1,6 +1,4 @@
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'path';
-import { copy } from 'fs-extra';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -48,19 +46,28 @@ vi.mock('./utils/constants.js', () => ({
 const mockWritePackageJson = vi.fn();
 const mockBundle = vi.fn();
 
+const mockPrepare = vi.fn();
+
 vi.mock('@mastra/deployer', () => {
   class MockDeployer {
+    outputDir = 'output';
     constructor() {}
     _bundle = mockBundle;
     writePackageJson = mockWritePackageJson;
+    prepare = mockPrepare;
+
+    getAllToolPaths = () => ['/test/project/src/mastra/tools'];
+  }
+
+  // Use a class for FileService constructor (Vitest v4 requirement)
+  class MockFileService {
+    getFirstExistingFile = vi.fn();
+    getFirstExistingFileOrUndefined = vi.fn();
   }
 
   return {
     Deployer: MockDeployer,
-    FileService: vi.fn().mockImplementation(() => ({
-      getFirstExistingFile: vi.fn(),
-      getFirstExistingFileOrUndefined: vi.fn(),
-    })),
+    FileService: MockFileService,
   };
 });
 
@@ -72,6 +79,7 @@ describe('CloudDeployer', () => {
     vi.clearAllMocks();
     mockBundle.mockResolvedValue(undefined);
     mockWritePackageJson.mockResolvedValue(undefined);
+    mockPrepare.mockResolvedValue(undefined);
 
     // Mock process.chdir
     originalChdir = process.chdir;
@@ -79,10 +87,9 @@ describe('CloudDeployer', () => {
 
     deployer = new CloudDeployer();
 
-    // @ts-ignore - accessing protected method for testing
+    // @ts-expect-error - accessing protected method for testing
     deployer._bundle = mockBundle;
 
-    vi.mocked(copy).mockResolvedValue(undefined);
     vi.mocked(installDeps).mockResolvedValue(undefined);
     vi.mocked(getMastraEntryFile).mockReturnValue('/test/src/mastra/index.ts');
     vi.mocked(getAuthEntrypoint).mockReturnValue('// auth entrypoint code');
@@ -101,24 +108,35 @@ describe('CloudDeployer', () => {
     it('should create an instance of CloudDeployer', () => {
       expect(deployer).toBeInstanceOf(CloudDeployer);
     });
+
+    it('should default studio to false when not provided', () => {
+      const d = new CloudDeployer();
+      // @ts-expect-error - accessing private property for testing
+      expect(d.studio).toBe(false);
+    });
+
+    it('should default studio to false when empty options provided', () => {
+      const d = new CloudDeployer({});
+      // @ts-expect-error - accessing private property for testing
+      expect(d.studio).toBe(false);
+    });
+
+    it('should set studio to true when provided', () => {
+      const d = new CloudDeployer({ studio: true });
+      // @ts-expect-error - accessing private property for testing
+      expect(d.studio).toBe(true);
+    });
+
+    it('should set studio to false when explicitly provided', () => {
+      const d = new CloudDeployer({ studio: false });
+      // @ts-expect-error - accessing private property for testing
+      expect(d.studio).toBe(false);
+    });
   });
 
   describe('deploy', () => {
     it('should be implemented but do nothing', async () => {
       await expect(deployer.deploy('/output')).resolves.toBeUndefined();
-    });
-  });
-
-  describe('writeInstrumentationFile', () => {
-    it('should copy instrumentation template to output directory', async () => {
-      const outputDirectory = '/test/output';
-      await deployer.writeInstrumentationFile(outputDirectory);
-
-      const __dirname = dirname(fileURLToPath(import.meta.url));
-      expect(copy).toHaveBeenCalledWith(
-        join(__dirname, '../templates', 'instrumentation-template.js'),
-        join(outputDirectory, 'instrumentation.mjs'),
-      );
     });
   });
 
@@ -164,7 +182,7 @@ describe('CloudDeployer', () => {
       const outputDirectory = '/test/output';
       const rootDir = '/test/root';
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       await deployer.installDependencies(outputDirectory, rootDir);
 
       expect(installDeps).toHaveBeenCalledWith({
@@ -176,7 +194,7 @@ describe('CloudDeployer', () => {
     it('should use process.cwd() as default rootDir', async () => {
       const outputDirectory = '/test/output';
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       await deployer.installDependencies(outputDirectory);
 
       expect(installDeps).toHaveBeenCalledWith({
@@ -230,7 +248,7 @@ describe('CloudDeployer', () => {
 
   describe('getEntry', () => {
     it('should generate correct server entry code', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check for essential imports
@@ -249,23 +267,19 @@ describe('CloudDeployer', () => {
       expect(entry).toContain('process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
-      // Check for telemetry/logging setup
+      // Check for logging setup
       expect(entry).toContain('new PinoLogger');
       expect(entry).toContain('mastra.setLogger');
 
       // Check for storage initialization
-      expect(entry).toContain('mastra.storage.init()');
+      expect(entry).toContain('!userStorage.disableInit');
+      expect(entry).toContain('userStorage.init()');
       expect(entry).toContain('new LibSQLStore');
       expect(entry).toContain('new LibSQLVector');
-
-      // Check for hooks registration
-      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
-      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
-
-      // Check for server creation
-      expect(entry).toContain(
-        'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
-      );
+      // Check for server creation (default: studio disabled)
+      expect(entry).toContain('studio: false');
+      expect(entry).toContain('swaggerUI: false');
+      expect(entry).toContain('tools: getToolExports(tools)');
 
       // Check for metadata
       expect(entry).toContain(`teamId: "${TEAM_ID}"`);
@@ -277,13 +291,30 @@ describe('CloudDeployer', () => {
     });
 
     it('should include readiness logs', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('Server starting');
       expect(entry).toContain('Server started');
       expect(entry).toContain('Runner Initialized');
       expect(entry).toContain('type: "READINESS"');
+    });
+
+    it('should include studio: true when studio is enabled', () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+      // @ts-expect-error - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('studio: true');
+      expect(entry).toContain('swaggerUI: false');
+    });
+
+    it('should include studio: false when studio is disabled', () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+      // @ts-expect-error - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('studio: false');
     });
   });
 
@@ -304,16 +335,8 @@ describe('CloudDeployer', () => {
 
       vi.mocked(installDeps).mockRejectedValue(new Error('Install failed'));
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       await expect(deployer.installDependencies(outputDirectory)).rejects.toThrow('Install failed');
-    });
-
-    it('should handle copy error in writeInstrumentationFile', async () => {
-      const outputDirectory = '/test/output';
-
-      vi.mocked(copy).mockRejectedValue(new Error('Copy failed'));
-
-      await expect(deployer.writeInstrumentationFile(outputDirectory)).rejects.toThrow('Copy failed');
     });
   });
 
@@ -332,14 +355,10 @@ describe('CloudDeployer', () => {
       // Write package.json
       await deployer.writePackageJson(outputDirectory, dependencies);
 
-      // Write instrumentation
-      await deployer.writeInstrumentationFile(outputDirectory);
-
       // Verify calls
       expect(getMastraEntryFile).toHaveBeenCalled();
       expect(mockBundle).toHaveBeenCalled();
       expect(writePackageJsonSpy).toHaveBeenCalled();
-      expect(copy).toHaveBeenCalled();
     });
 
     it('should handle different process.cwd scenarios', async () => {

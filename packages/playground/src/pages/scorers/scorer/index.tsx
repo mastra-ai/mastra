@@ -1,14 +1,14 @@
+import type { ClientScoreRowData } from '@mastra/client-js';
+import type { ScoreRowData } from '@mastra/core/evals';
 import {
   Breadcrumb,
   Crumb,
   ScoresList,
-  scoresListColumns,
   Header,
   MainContentLayout,
   PageHeader,
   ScoresTools,
   ScoreDialog,
-  type ScoreEntityOption as EntityOptions,
   KeyValueList,
   useScorer,
   useScoresByScorerId,
@@ -16,23 +16,23 @@ import {
   HeaderAction,
   Button,
   DocsIcon,
-  EntryListSkeleton,
   getToNextEntryFn,
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
+  ScorerCombobox,
+  toast,
+  Spinner,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import type { ScoreEntityOption as EntityOptions } from '@mastra/playground-ui';
+import { GaugeIcon, PencilIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router';
-import { Skeleton } from '@/components/ui/skeleton';
-import { GaugeIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
-export interface ScorerProps {
-  computeTraceLink: (traceId: string) => string;
-}
-
-export default function Scorer({ computeTraceLink }: ScorerProps) {
+export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>();
@@ -45,9 +45,9 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     type: 'ALL' as const,
   });
 
-  const { scorer, isLoading: isScorerLoading } = useScorer(scorerId!);
-  const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+  const { scorer, isLoading: isScorerLoading, error: scorerError } = useScorer(scorerId!);
+  const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { data: workflows, isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
   const {
     data: scoresData,
     isLoading: isLoadingScores,
@@ -59,45 +59,97 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     entityType: selectedEntityOption?.type === 'ALL' ? undefined : selectedEntityOption?.type,
   });
 
-  const agentOptions: EntityOptions[] =
-    scorer?.agentNames?.map(agentName => {
-      return { value: agentName, label: agentName, type: 'AGENT' as const };
-    }) || [];
+  const agentOptions: EntityOptions[] = useMemo(
+    () =>
+      scorer?.agentIds
+        ?.filter(agentId => agents[agentId])
+        .map(agentId => {
+          return { value: agentId, label: agents[agentId].name, type: 'AGENT' as const };
+        }) || [],
+    [scorer?.agentIds, agents],
+  );
 
-  const workflowOptions: EntityOptions[] =
-    scorer?.workflowIds?.map(workflowId => {
-      return { value: workflowId, label: workflowId, type: 'WORKFLOW' as const };
-    }) || [];
+  const workflowOptions: EntityOptions[] = useMemo(
+    () =>
+      scorer?.workflowIds?.map(workflowId => {
+        return { value: workflowId, label: workflowId, type: 'WORKFLOW' as const };
+      }) || [],
+    [scorer?.workflowIds],
+  );
 
-  const entityOptions: EntityOptions[] = [
-    { value: 'all', label: 'All', type: 'ALL' as const },
-    ...agentOptions,
-    ...workflowOptions,
-  ];
+  const entityOptions: EntityOptions[] = useMemo(
+    () => [{ value: 'all', label: 'All', type: 'ALL' as const }, ...agentOptions, ...workflowOptions],
+    [agentOptions, workflowOptions],
+  );
+
+  // Sync URL entity to state
+  const entityName = searchParams.get('entity');
+  const matchedEntityOption = entityOptions.find(option => option.value === entityName);
+  if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
+    setSelectedEntityOption(matchedEntityOption);
+  }
 
   useEffect(() => {
-    if (entityOptions) {
-      const entityName = searchParams.get('entity');
-      const entityOption = entityOptions.find(option => option.value === entityName);
-      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
-        setSelectedEntityOption(entityOption);
-      }
+    if (scorerError) {
+      const errorMessage = scorerError instanceof Error ? scorerError.message : 'Failed to load scorer';
+      toast.error(`Error loading scorer: ${errorMessage}`);
     }
-  }, [searchParams, selectedEntityOption, entityOptions]);
+  }, [scorerError]);
+
+  useEffect(() => {
+    if (agentsError) {
+      const errorMessage = agentsError instanceof Error ? agentsError.message : 'Failed to load agents';
+      toast.error(`Error loading agents: ${errorMessage}`);
+    }
+  }, [agentsError]);
+
+  useEffect(() => {
+    if (workflowsError) {
+      const errorMessage = workflowsError instanceof Error ? workflowsError.message : 'Failed to load workflows';
+      toast.error(`Error loading workflows: ${errorMessage}`);
+    }
+  }, [workflowsError]);
+
+  // 403 check - permission denied for scorers
+  if (scorerError && is403ForbiddenError(scorerError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/scorers`}>
+              <Icon>
+                <GaugeIcon />
+              </Icon>
+              Scorers
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {scorerId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="scorers" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
+  if (isScorerLoading || scorerError || agentsError || workflowsError) return null;
 
   const scorerAgents =
-    scorer?.agentIds.map(agentId => {
+    scorer?.agentIds?.map(agentId => {
       return {
         name: agentId,
-        id: Object.entries(agents).find(([_, value]) => value.name === agentId)?.[0],
+        id: Object.entries(agents).find(([, value]) => value.name === agentId)?.[0],
       };
     }) || [];
 
   const scorerWorkflows =
-    scorer?.workflowIds.map(workflowId => {
+    scorer?.workflowIds?.map(workflowId => {
       return {
         name: workflowId,
-        id: Object.entries(workflows || {}).find(([_, value]) => value.name === workflowId)?.[0],
+        id: Object.entries(workflows || {}).find(([, value]) => value.name === workflowId)?.[0],
       };
     }) || [];
 
@@ -119,7 +171,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
   ];
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    option?.value && setSearchParams({ entity: option?.value });
+    if (option?.value) setSearchParams({ entity: option.value });
   };
 
   const scores = scoresData?.scores || [];
@@ -144,14 +196,21 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
               </Icon>
               Scorers
             </Crumb>
-
-            <Crumb as={Link} to={`/scorers/${scorerId}`} isCurrent>
-              {isScorerLoading ? <Skeleton className="w-20 h-4" /> : scorer?.scorer.config.name || 'Not found'}
+            <Crumb as="span" to="" isCurrent>
+              <ScorerCombobox value={scorerId} variant="ghost" />
             </Crumb>
           </Breadcrumb>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/scorers/overview" target="_blank">
+            {scorer?.scorer?.source === 'stored' && (
+              <Button variant="light" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
+                <Icon>
+                  <PencilIcon />
+                </Icon>
+                Edit
+              </Button>
+            )}
+            <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank">
               <Icon>
                 <DocsIcon />
               </Icon>
@@ -161,7 +220,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] w-full px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
+          <div className={cn('max-w-[100rem] w-full px-12 mx-auto grid content-start gap-8 h-full')}>
             <PageHeader
               title={scorer?.scorer?.config?.name || 'loading'}
               description={scorer?.scorer?.config?.description || 'loading'}
@@ -179,12 +238,19 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
             />
 
             {isLoadingScores ? (
-              <EntryListSkeleton columns={scoresListColumns} />
+              <div className="h-full w-full flex items-center justify-center">
+                <Spinner />
+              </div>
             ) : (
               <ScoresList
                 scores={scores}
                 selectedScoreId={selectedScoreId}
-                pagination={pagination}
+                pagination={{
+                  total: pagination?.total || 0,
+                  hasMore: pagination?.hasMore || false,
+                  perPage: pagination?.perPage || 0,
+                  page: pagination?.page || 0,
+                }}
                 onScoreClick={handleScoreClick}
                 onPageChange={setScoresPage}
                 errorMsg={scoresError?.message}
@@ -195,7 +261,7 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
       </MainContentLayout>
       <ScoreDialog
         scorerName={scorer?.scorer?.config?.name}
-        score={scores.find(s => s.id === selectedScoreId)}
+        score={mapScore(scores.find(s => s.id === selectedScoreId))}
         isOpen={dialogIsOpen}
         onClose={() => setDialogIsOpen(false)}
         onNext={toNextScore}
@@ -205,3 +271,12 @@ export default function Scorer({ computeTraceLink }: ScorerProps) {
     </>
   );
 }
+
+const mapScore = (score?: ClientScoreRowData): ScoreRowData | undefined => {
+  if (!score) return undefined;
+  return {
+    ...score,
+    createdAt: new Date(score.createdAt),
+    updatedAt: new Date(score.updatedAt),
+  };
+};

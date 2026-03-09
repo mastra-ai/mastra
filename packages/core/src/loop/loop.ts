@@ -1,32 +1,29 @@
-import { generateId } from 'ai-v5';
-import type { ToolSet } from 'ai-v5';
+import { generateId } from '@internal/ai-sdk-v5';
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { ConsoleLogger } from '../logger';
+import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
-import type { OutputSchema } from '../stream/base/schema';
-import { getRootSpan } from './telemetry';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
 
-export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined>({
+export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   models,
   logger,
   runId,
   idGenerator,
-  telemetry_settings,
   messageList,
   includeRawChunks,
   modelSettings,
   tools,
   _internal,
-  mode = 'stream',
   outputProcessors,
   returnScorerData,
-  llmAISpan,
   requireToolApproval,
   agentId,
+  toolCallConcurrency,
   ...rest
 }: LoopOptions<Tools, OUTPUT>) {
   let loggerToUse =
@@ -51,46 +48,30 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   let runIdToUse = runId;
 
   if (!runIdToUse) {
-    runIdToUse = idGenerator?.() || crypto.randomUUID();
+    runIdToUse =
+      idGenerator?.({
+        idType: 'run',
+        source: 'agent',
+        entityId: agentId,
+        threadId: _internal?.threadId,
+        resourceId: _internal?.resourceId,
+      }) || crypto.randomUUID();
   }
 
   const internalToUse: StreamInternal = {
     now: _internal?.now || (() => Date.now()),
     generateId: _internal?.generateId || (() => generateId()),
     currentDate: _internal?.currentDate || (() => new Date()),
+    saveQueueManager: _internal?.saveQueueManager,
+    memoryConfig: _internal?.memoryConfig,
+    threadId: _internal?.threadId,
+    resourceId: _internal?.resourceId,
+    memory: _internal?.memory,
+    threadExists: _internal?.threadExists,
+    transportRef: _internal?.transportRef ?? {},
   };
 
   let startTimestamp = internalToUse.now?.();
-
-  const { rootSpan } = getRootSpan({
-    operationId: mode === 'stream' ? `mastra.stream` : `mastra.generate`,
-    model: {
-      modelId: firstModel.model.modelId,
-      provider: firstModel.model.provider,
-    },
-    modelSettings,
-    headers: modelSettings?.headers ?? rest.headers,
-    telemetry_settings,
-  });
-
-  rootSpan.setAttributes({
-    ...(telemetry_settings?.recordOutputs !== false
-      ? {
-          'stream.prompt.messages': JSON.stringify(messageList.get.input.aiV5.model()),
-        }
-      : {}),
-  });
-
-  const { rootSpan: modelStreamSpan } = getRootSpan({
-    operationId: `mastra.${mode}.aisdk.doStream`,
-    model: {
-      modelId: firstModel.model.modelId,
-      provider: firstModel.model.provider,
-    },
-    modelSettings,
-    headers: modelSettings?.headers ?? rest.headers,
-    telemetry_settings,
-  });
 
   const messageId = rest.experimental_generateMessageId?.() || internalToUse.generateId?.();
 
@@ -102,9 +83,9 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     modelOutput?.deserializeState(state);
   };
 
-  // Create processor states map that will be shared across all LLM execution steps
-  const processorStates =
-    outputProcessors && outputProcessors.length > 0 ? new Map<string, ProcessorState<OUTPUT>>() : undefined;
+  // Use the passed-in processorStates map if available, otherwise create a new one.
+  // This map persists across loop iterations and is shared by all processor methods.
+  const processorStates = rest.processorStates ?? new Map<string, ProcessorState>();
 
   const workflowLoopProps: LoopRun<Tools, OUTPUT> = {
     resumeContext,
@@ -116,14 +97,12 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     includeRawChunks: !!includeRawChunks,
     _internal: internalToUse,
     tools,
-    modelStreamSpan,
-    telemetry_settings,
     modelSettings,
     outputProcessors,
-    llmAISpan,
     messageId: messageId!,
     agentId,
     requireToolApproval,
+    toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,
       deserialize: deserializeStreamState,
@@ -146,8 +125,11 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
   }
   const baseStream = workflowLoopStream(workflowLoopProps);
 
-  // Apply chunk tracing transform to track LLM_STEP and LLM_CHUNK spans
+  // Apply chunk tracing transform to track MODEL_STEP and MODEL_CHUNK spans
   const stream = rest.modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
+
+  // Build observability context from modelSpanTracker if tracing context is available
+  const observabilityContext = createObservabilityContext(rest.modelSpanTracker?.getTracingContext());
 
   modelOutput = new MastraModelOutput({
     model: {
@@ -160,8 +142,6 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
     messageId: messageId!,
     options: {
       runId: runIdToUse!,
-      telemetry_settings,
-      rootSpan,
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
@@ -169,7 +149,10 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchem
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
-      tracingContext: { currentSpan: llmAISpan },
+      ...observabilityContext,
+      requestContext: rest.requestContext,
+      processorStates,
+      transportRef: internalToUse.transportRef,
     },
     initialState: initialStreamState,
   });

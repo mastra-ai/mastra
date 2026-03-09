@@ -1,13 +1,15 @@
-import { injectJsonInstructionIntoMessages, isAbortError } from '@ai-sdk/provider-utils-v5';
-import type { LanguageModelV2, LanguageModelV2Prompt, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
-import type { CallSettings, TelemetrySettings, ToolChoice, ToolSet } from 'ai-v5';
-// import pRetry from 'p-retry';
+import { injectJsonInstructionIntoMessages } from '@ai-sdk/provider-utils-v5';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import { APICallError } from '@internal/ai-sdk-v5';
+import type { IdGenerator, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent/types';
+import type { ModelMethodType } from '../../../llm/model/model.loop.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
+import type { LoopOptions } from '../../../loop/types';
 import { getResponseFormat } from '../../base/schema';
-import type { OutputSchema } from '../../base/schema';
 import type { LanguageModelV2StreamResult, OnResult } from '../../types';
 import { prepareToolsAndToolChoice } from './compat';
+import type { ModelSpecVersion } from './compat';
 import { AISDKV5InputStream } from './input';
 
 function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
@@ -18,26 +20,19 @@ function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K
   return newObj;
 }
 
-type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
+type ExecutionProps<OUTPUT = undefined> = {
   runId: string;
-  model: LanguageModelV2;
-  providerOptions?: SharedV2ProviderOptions;
+  model: MastraLanguageModel;
+  providerOptions?: SharedProviderOptions;
   inputMessages: LanguageModelV2Prompt;
   tools?: ToolSet;
   toolChoice?: ToolChoice<ToolSet>;
+  activeTools?: string[];
   options?: {
-    activeTools?: string[];
     abortSignal?: AbortSignal;
   };
-  modelStreamSpan: Span;
-  telemetry_settings?: TelemetrySettings;
   includeRawChunks?: boolean;
-  modelSettings?: Omit<CallSettings, 'abortSignal'> & {
-    /**
-     * @deprecated Use top-level `abortSignal` instead.
-     */
-    abortSignal?: AbortSignal;
-  };
+  modelSettings?: LoopOptions['modelSettings'];
   onResult: OnResult;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /**
@@ -46,53 +41,44 @@ type ExecutionProps<OUTPUT extends OutputSchema = undefined> = {
   */
   headers?: Record<string, string | undefined>;
   shouldThrowError?: boolean;
+  methodType: ModelMethodType;
+  generateId?: IdGenerator;
 };
 
-let hasLoggedModelSettingsAbortSignalDeprecation = false;
-
-export function execute<OUTPUT extends OutputSchema = undefined>({
+export function execute<OUTPUT = undefined>({
   runId,
   model,
   providerOptions,
   inputMessages,
   tools,
   toolChoice,
+  activeTools,
   options,
   onResult,
-  modelStreamSpan,
-  telemetry_settings,
   includeRawChunks,
   modelSettings,
   structuredOutput,
   headers,
   shouldThrowError,
+  methodType,
+  generateId,
 }: ExecutionProps<OUTPUT>) {
-  // Deprecation warning for modelSettings.abortSignal
-  if (modelSettings?.abortSignal && !hasLoggedModelSettingsAbortSignalDeprecation) {
-    console.warn(
-      '[Deprecation Warning] Using `modelSettings.abortSignal` is deprecated. ' +
-        'Please use top-level `abortSignal` instead. ' +
-        'The `modelSettings.abortSignal` option will be removed in a future version.',
-    );
-    hasLoggedModelSettingsAbortSignalDeprecation = true;
-  }
-
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
     name: model.modelId,
+    generateId,
   });
+
+  // Determine target version based on model's specificationVersion
+  // V3 models (AI SDK v6) need 'provider' type, V2 models need 'provider-defined'
+  const targetVersion: ModelSpecVersion = model.specificationVersion === 'v3' ? 'v3' : 'v2';
 
   const toolsAndToolChoice = prepareToolsAndToolChoice({
     tools,
     toolChoice,
-    activeTools: options?.activeTools,
+    activeTools,
+    targetVersion,
   });
-
-  if (modelStreamSpan && toolsAndToolChoice?.tools?.length && telemetry_settings?.recordOutputs !== false) {
-    modelStreamSpan.setAttributes({
-      'stream.prompt.tools': toolsAndToolChoice?.tools?.map(tool => JSON.stringify(tool)),
-    });
-  }
 
   const structuredOutputMode = structuredOutput?.schema
     ? structuredOutput?.model
@@ -129,7 +115,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const providerOptionsToUse =
+  const providerOptionsToUse: SharedProviderOptions | undefined =
     model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection
       ? {
           ...(providerOptions ?? {}),
@@ -145,13 +131,17 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
     onResult,
     createStream: async () => {
       try {
-        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers', 'abortSignal']);
-        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
+        const filteredModelSettings = omit(modelSettings || {}, ['maxRetries', 'headers']);
+        const abortSignal = options?.abortSignal;
 
         const pRetry = await import('p-retry');
         return await pRetry.default(
           async () => {
-            const streamResult = await model.doStream({
+            const fn = (methodType === 'stream' ? model.doStream : model.doGenerate).bind(model);
+
+            // Cast needed: V2 and V3 call options are structurally compatible but typed differently
+            // (e.g., tool types differ: V2 uses 'provider-defined', V3 uses 'provider')
+            const streamResult = await (fn as Function)({
               ...toolsAndToolChoice,
               prompt,
               providerOptions: providerOptionsToUse,
@@ -171,15 +161,15 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
           {
             retries: modelSettings?.maxRetries ?? 2,
             signal: abortSignal,
+            shouldRetry(context) {
+              if (APICallError.isInstance(context.error)) {
+                return context.error.isRetryable;
+              }
+              return true;
+            },
           },
         );
       } catch (error) {
-        console.error('Error creating stream', error);
-        const abortSignal = options?.abortSignal || modelSettings?.abortSignal;
-        if (isAbortError(error) && abortSignal?.aborted) {
-          console.error('Abort error', error);
-        }
-
         if (shouldThrowError) {
           throw error;
         }
@@ -189,10 +179,7 @@ export function execute<OUTPUT extends OutputSchema = undefined>({
             start: async controller => {
               controller.enqueue({
                 type: 'error',
-                error: {
-                  message: error instanceof Error ? error.message : JSON.stringify(error),
-                  stack: error instanceof Error ? error.stack : undefined,
-                },
+                error,
               });
               controller.close();
             },

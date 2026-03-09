@@ -1,9 +1,11 @@
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
   ElicitRequest,
   ElicitResult,
+  ProgressNotification,
   Prompt,
   Resource,
   ResourceTemplate,
@@ -53,10 +55,11 @@ export interface MCPClientOptions {
  * });
  *
  * const agent = new Agent({
+ *   id: 'multi-tool-agent',
  *   name: 'Multi-tool Agent',
  *   instructions: 'You have access to multiple tools.',
  *   model: 'openai/gpt-4o',
- *   tools: await mcp.getTools(),
+ *   tools: await mcp.listTools(),
  * });
  * ```
  */
@@ -137,6 +140,50 @@ To fix this you have three different options:
     this.addToInstanceCache();
     return this;
   }
+
+  /**
+   * Provides access to progress-related operations for tracking long-running operations.
+   *
+   * Progress tracking allows MCP servers to send updates about the status of ongoing operations,
+   * providing real-time feedback to users about task completion and current state.
+   *
+   * @example
+   * ```typescript
+   * // Set up handler for progress updates from a server
+   * await mcp.progress.onUpdate('serverName', (params) => {
+   *   console.log(`Progress: ${params.progress}%`);
+   *   console.log(`Status: ${params.message}`);
+   *
+   *   if (params.total) {
+   *     console.log(`Completed ${params.progress} of ${params.total} items`);
+   *   }
+   * });
+   * ```
+   */
+  public get progress() {
+    this.addToInstanceCache();
+    return {
+      onUpdate: async (serverName: string, handler: (params: ProgressNotification['params']) => void) => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          return internalClient.progress.onUpdate(handler);
+        } catch (err) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_UPDATE_PROGRESS_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            err,
+          );
+        }
+      },
+    };
+  }
+
   /**
    * Provides access to elicitation-related operations for interactive user input collection.
    *
@@ -661,7 +708,7 @@ To fix this you have three different options:
         mcpClientInstances.delete(this.id);
 
         // Disconnect all clients in the cache
-        await Promise.all(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
+        await Promise.allSettled(Array.from(this.mcpClientsById.values()).map(client => client.disconnect()));
         this.mcpClientsById.clear();
       } finally {
         this.disconnectPromise = null;
@@ -677,38 +724,46 @@ To fix this you have three different options:
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.
    * This method is intended to be passed directly to an Agent definition.
    *
-   * @returns Object mapping namespaced tool names to tool implementations
-   * @throws {MastraError} If retrieving tools fails
+   * @returns Object mapping namespaced tool names to tool implementations.
+   * Errors for individual servers are logged but don't throw - failed servers are skipped.
    *
    * @example
    * ```typescript
    * const agent = new Agent({
+   *   id: 'multi-tool-agent',
    *   name: 'Multi-tool Agent',
    *   instructions: 'You have access to weather and stock tools.',
    *   model: 'openai/gpt-4',
-   *   tools: await mcp.getTools(), // weather_getWeather, stockPrice_getPrice
+   *   tools: await mcp.listTools(), // weather_getWeather, stockPrice_getPrice
    * });
    * ```
    */
-  public async getTools() {
+  public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
     this.addToInstanceCache();
-    const connectedTools: Record<string, any> = {}; // <- any because we don't have proper tool schemas
+    const connectedTools: Record<string, Tool<any, any, any, any>> = {};
 
-    try {
-      await this.eachClientTools(async ({ serverName, tools }) => {
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      try {
+        const client = await this.getConnectedClientForServer(serverName);
+        const tools = await client.tools();
         for (const [toolName, toolConfig] of Object.entries(tools)) {
-          connectedTools[`${serverName}_${toolName}`] = toolConfig; // namespace tool to prevent tool name conflicts between servers
+          connectedTools[`${serverName}_${toolName}`] = toolConfig;
         }
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MCP_CLIENT_GET_TOOLS_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_CLIENT_GET_TOOLS_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              serverName,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Failed to list tools from server:', { error: mastraError.toString() });
+      }
     }
 
     return connectedTools;
@@ -717,54 +772,55 @@ To fix this you have three different options:
   /**
    * Returns toolsets organized by server name for dynamic tool injection.
    *
-   * Unlike getTools(), this returns tools grouped by server without namespacing.
+   * Unlike listTools(), this returns tools grouped by server without namespacing.
    * This is intended to be passed dynamically to the generate() or stream() method.
    *
-   * @returns Object mapping server names to their tool collections
-   * @throws {MastraError} If retrieving toolsets fails
+   * @returns Object mapping server names to their tool collections.
+   * Errors for individual servers are logged but don't throw - failed servers are skipped.
    *
    * @example
    * ```typescript
    * const agent = new Agent({
+   *   id: 'dynamic-agent',
    *   name: 'Dynamic Agent',
    *   instructions: 'You can use tools dynamically.',
    *   model: 'openai/gpt-4',
    * });
    *
    * const response = await agent.stream(prompt, {
-   *   toolsets: await mcp.getToolsets(), // { weather: {...}, stockPrice: {...} }
+   *   toolsets: await mcp.listToolsets(), // { weather: {...}, stockPrice: {...} }
    * });
    * ```
    */
-  public async getToolsets() {
+  public async listToolsets(): Promise<Record<string, Record<string, Tool<any, any, any, any>>>> {
     this.addToInstanceCache();
-    const connectedToolsets: Record<string, Record<string, any>> = {}; // <- any because we don't have proper tool schemas
+    const connectedToolsets: Record<string, Record<string, Tool<any, any, any, any>>> = {};
 
-    try {
-      await this.eachClientTools(async ({ serverName, tools }) => {
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      try {
+        const client = await this.getConnectedClientForServer(serverName);
+        const tools = await client.tools();
         if (tools) {
           connectedToolsets[serverName] = tools;
         }
-      });
-    } catch (error) {
-      throw new MastraError(
-        {
-          id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-        },
-        error,
-      );
+      } catch (error) {
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_CLIENT_GET_TOOLSETS_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              serverName,
+            },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        this.logger.error('Failed to list toolsets from server:', { error: mastraError.toString() });
+      }
     }
 
     return connectedToolsets;
-  }
-
-  /**
-   * @deprecated all resource actions have been moved to the this.resources object. Use this.resources.list() instead.
-   */
-  public async getResources() {
-    return this.resources.list();
   }
 
   /**
@@ -855,71 +911,5 @@ To fix this you have three different options:
       throw new Error(`Server configuration not found for name: ${serverName}`);
     }
     return this.getConnectedClient(serverName, serverConfig);
-  }
-
-  private async eachClientTools(
-    cb: (args: {
-      serverName: string;
-      tools: Record<string, any>; // <- any because we don't have proper tool schemas
-      client: InstanceType<typeof InternalMastraMCPClient>;
-    }) => Promise<void>,
-  ) {
-    await Promise.all(
-      Object.entries(this.serverConfigs).map(async ([serverName, serverConfig]) => {
-        const client = await this.getConnectedClient(serverName, serverConfig);
-        const tools = await client.tools();
-        await cb({ serverName, tools, client });
-      }),
-    );
-  }
-}
-
-/**
- * @deprecated MCPConfigurationOptions is deprecated and will be removed in a future release. Use {@link MCPClientOptions} instead.
- *
- * This interface has been renamed to MCPClientOptions. The API is identical.
- */
-export interface MCPConfigurationOptions {
-  /** @deprecated Use MCPClientOptions.id instead */
-  id?: string;
-  /** @deprecated Use MCPClientOptions.servers instead */
-  servers: Record<string, MastraMCPServerDefinition>;
-  /** @deprecated Use MCPClientOptions.timeout instead */
-  timeout?: number;
-}
-
-/**
- * @deprecated MCPConfiguration is deprecated and will be removed in a future release. Use {@link MCPClient} instead.
- *
- * This class has been renamed to MCPClient. The API is identical but the class name changed
- * for clarity and consistency.
- *
- * @example
- * ```typescript
- * // Old way (deprecated)
- * const config = new MCPConfiguration({
- *   servers: { myServer: { command: 'npx', args: ['tsx', 'server.ts'] } }
- * });
- *
- * // New way (recommended)
- * const client = new MCPClient({
- *   servers: { myServer: { command: 'npx', args: ['tsx', 'server.ts'] } }
- * });
- * ```
- */
-export class MCPConfiguration extends MCPClient {
-  /**
-   * @deprecated Use MCPClient constructor instead
-   */
-  constructor(args: MCPClientOptions) {
-    super(args);
-    throw new MastraError(
-      {
-        id: 'MCP_CLIENT_CONFIGURATION_DEPRECATED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        text: '[DEPRECATION] MCPConfiguration has been renamed to MCPClient and MCPConfiguration is deprecated. The API is identical but the MCPConfiguration export will be removed in the future. Update your imports now to prevent future errors.',
-      },
-    );
   }
 }

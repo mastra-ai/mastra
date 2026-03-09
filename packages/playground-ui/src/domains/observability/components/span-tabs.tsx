@@ -1,4 +1,4 @@
-import { Tabs } from '@/components/ui/elements/tabs';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import {
   KeyValueList,
   KeyValueListItemData,
@@ -8,22 +8,26 @@ import {
   SpanScoreList,
   useLinkComponent,
 } from '@/index';
-import { TraceSpanUsage } from './trace-span-usage';
+import { TraceSpanUsage, type TokenUsage } from './trace-span-usage';
 import { SpanDetails } from './span-details';
 import { CircleGaugeIcon } from 'lucide-react';
-import { GetScoresResponse } from '@mastra/client-js';
-import { AISpanRecord } from '@mastra/core';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { GetScorerResponse } from '@mastra/client-js';
+import { SpanRecord } from '@mastra/core/storage';
+import { EntityType } from '@mastra/core/observability';
 
 type SpanTabsProps = {
-  trace?: AISpanRecord;
-  span?: AISpanRecord;
-  spanScoresData?: GetScoresResponse | null;
+  trace?: SpanRecord;
+  span?: SpanRecord;
+  spanScoresData?: ListScoresResponse | null;
   onSpanScoresPageChange?: (page: number) => void;
   isLoadingSpanScoresData?: boolean;
   spanInfo?: KeyValueListItemData[];
   defaultActiveTab?: string;
   initialScoreId?: string;
   computeTraceLink: (traceId: string, spanId?: string) => string;
+  scorers?: Record<string, GetScorerResponse>;
+  isLoadingScorers?: boolean;
 };
 
 export function SpanTabs({
@@ -36,32 +40,32 @@ export function SpanTabs({
   defaultActiveTab = 'details',
   initialScoreId,
   computeTraceLink,
+  scorers,
+  isLoadingScorers,
 }: SpanTabsProps) {
   const { Link } = useLinkComponent();
 
   let entityType;
-  if (span?.attributes?.agentId) {
+  if (span?.attributes?.agentId || span?.entityType === EntityType.AGENT) {
     entityType = 'Agent';
-  } else if (span?.attributes?.workflowId) {
+  } else if (span?.attributes?.workflowId || span?.entityType === EntityType.WORKFLOW_RUN) {
     entityType = 'Workflow';
   }
 
   return (
     <Tabs defaultTab={defaultActiveTab}>
-      <Tabs.List>
-        <Tabs.Tab value="details">Details</Tabs.Tab>
-        <Tabs.Tab value="scores">
-          Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}
-        </Tabs.Tab>
-      </Tabs.List>
-      <Tabs.Content value="details">
+      <TabList>
+        <Tab value="details">Details</Tab>
+        <Tab value="scores">Scoring {spanScoresData?.pagination && `(${spanScoresData.pagination.total || 0})`}</Tab>
+      </TabList>
+      <TabContent value="details">
         <Sections>
-          {span?.attributes?.usage && <TraceSpanUsage spanUsage={span.attributes.usage} />}
+          {span?.attributes?.usage ? <TraceSpanUsage spanUsage={span.attributes.usage as TokenUsage} /> : null}
           <KeyValueList data={spanInfo} LinkComponent={Link} />
           <SpanDetails span={span} />
         </Sections>
-      </Tabs.Content>
-      <Tabs.Content value="scores">
+      </TabContent>
+      <TabContent value="scores">
         <Sections>
           <Section>
             <Section.Header>
@@ -69,7 +73,14 @@ export function SpanTabs({
                 <CircleGaugeIcon /> Scoring
               </Section.Heading>
             </Section.Header>
-            <SpanScoring traceId={trace?.traceId} spanId={span?.spanId} entityType={entityType} />
+            <SpanScoring
+              traceId={trace?.traceId}
+              isTopLevelSpan={!Boolean(span?.parentSpanId)}
+              spanId={span?.spanId}
+              entityType={entityType}
+              scorers={scorers}
+              isLoadingScorers={isLoadingScorers}
+            />
           </Section>
           <Section>
             <Section.Header>
@@ -88,7 +99,7 @@ export function SpanTabs({
             />
           </Section>
         </Sections>
-      </Tabs.Content>
+      </TabContent>
     </Tabs>
   );
 }

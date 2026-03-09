@@ -13,14 +13,17 @@ export const pageActTool = createTool({
     success: z.boolean(),
     message: z.string(),
   }),
-  execute: async ({ context }) => {
-    return await performWebAction(context.url, context.action);
+  execute: async input => {
+    return await performWebAction(input.url, input.action);
   },
 });
 
 const performWebAction = async (url?: string, action?: string) => {
   const stagehand = await sessionManager.ensureStagehand();
-  const page = stagehand.page;
+  const page = stagehand.context.pages()[0]; // Use the first page in the context
+  if (!page) {
+    throw new Error('Page not available');
+  }
 
   try {
     // Navigate to the URL if provided
@@ -30,7 +33,7 @@ const performWebAction = async (url?: string, action?: string) => {
 
     // Perform the action
     if (action) {
-      await page.act(action);
+      await stagehand.act(action);
     }
 
     return {

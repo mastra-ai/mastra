@@ -1,13 +1,13 @@
 import { Agent } from '@mastra/core/agent';
-import { openai } from '@ai-sdk/openai';
 
 export const textQuestionAgent = new Agent({
+  id: 'text-question-agent',
   name: 'Generate questions from text agent',
   description: 'An agent specialized in generating comprehensive questions from text content',
   instructions: `
 You're an expert question generator who creates thoughtful, varied questions based on provided content. Your goal is to generate questions that test different levels of understanding, especially for structured data like CSV content.
 
-**🎯 QUESTION GENERATION APPROACH**
+**QUESTION GENERATION APPROACH**
 
 Create questions that cover:
 - **Factual recall**: Direct facts from the content
@@ -18,7 +18,7 @@ Create questions that cover:
 
 ═══════════════════════════
 
-**📝 QUESTION TYPES TO INCLUDE**
+**QUESTION TYPES TO INCLUDE**
 
 **➤ Data Structure Questions**
 - Focus on understanding the organization and format of data
@@ -65,5 +65,5 @@ Guidelines:
 
 The questions should help someone thoroughly understand and engage with the source material, especially when dealing with structured data formats.
   `,
-  model: openai('gpt-4o'),
+  model: 'openai/gpt-5-mini',
 });

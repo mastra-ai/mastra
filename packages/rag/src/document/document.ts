@@ -1,4 +1,10 @@
-import { TitleExtractor, SummaryExtractor, QuestionsAnsweredExtractor, KeywordExtractor } from './extractors';
+import {
+  TitleExtractor,
+  SummaryExtractor,
+  QuestionsAnsweredExtractor,
+  KeywordExtractor,
+  SchemaExtractor,
+} from './extractors';
 import type { BaseNode } from './schema';
 import { Document as Chunk, NodeRelationship, ObjectType } from './schema';
 
@@ -38,8 +44,12 @@ export class MDocument {
     this.type = type;
   }
 
-  async extractMetadata({ title, summary, questions, keywords }: ExtractParams): Promise<MDocument> {
+  async extractMetadata({ title, summary, questions, keywords, schema }: ExtractParams): Promise<MDocument> {
     const transformations = [];
+
+    if (schema) {
+      transformations.push(new SchemaExtractor(schema));
+    }
 
     if (typeof summary !== 'undefined') {
       transformations.push(new SummaryExtractor(typeof summary === 'boolean' ? {} : summary));
@@ -207,7 +217,20 @@ export class MDocument {
     if (options?.headers?.length) {
       const rt = new HTMLHeaderTransformer(options as HTMLChunkOptions & { headers: [string, string][] });
 
-      const textSplit = rt.transformDocuments(this.chunks);
+      let textSplit = rt.transformDocuments(this.chunks);
+
+      // Apply size-based splitting if maxSize is specified
+      if (options?.maxSize) {
+        const textSplitter = new RecursiveCharacterTransformer({
+          maxSize: options.maxSize,
+          overlap: options.overlap,
+          separatorPosition: options.separatorPosition,
+          addStartIndex: options.addStartIndex,
+          stripWhitespace: options.stripWhitespace,
+        });
+        textSplit = textSplitter.splitDocuments(textSplit);
+      }
+
       this.chunks = textSplit;
       return;
     }
@@ -215,7 +238,20 @@ export class MDocument {
     if (options?.sections?.length) {
       const rt = new HTMLSectionTransformer(options as HTMLChunkOptions & { sections: [string, string][] });
 
-      const textSplit = rt.transformDocuments(this.chunks);
+      let textSplit = rt.transformDocuments(this.chunks);
+
+      // Apply size-based splitting if maxSize is specified
+      if (options?.maxSize) {
+        const textSplitter = new RecursiveCharacterTransformer({
+          maxSize: options.maxSize,
+          overlap: options.overlap,
+          separatorPosition: options.separatorPosition,
+          addStartIndex: options.addStartIndex,
+          stripWhitespace: options.stripWhitespace,
+        });
+        textSplit = textSplitter.splitDocuments(textSplit);
+      }
+
       this.chunks = textSplit;
       return;
     }
@@ -284,7 +320,7 @@ export class MDocument {
       sentenceEnders: options?.sentenceEnders,
       fallbackToWords: options?.fallbackToWords,
       fallbackToCharacters: options?.fallbackToCharacters,
-      keepSeparator: options?.keepSeparator,
+      separatorPosition: options?.separatorPosition,
       lengthFunction: options?.lengthFunction,
       addStartIndex: options?.addStartIndex,
       stripWhitespace: options?.stripWhitespace,

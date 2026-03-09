@@ -24,7 +24,8 @@ interface TemplateDatabase {
 async function generateTemplate(question: LongMemEvalQuestion): Promise<string> {
   // Create a simple agent for template generation
   const agent = new Agent({
-    name: 'template-generator',
+    id: 'template-generator',
+    name: 'Template Generator',
     instructions: `You are an expert at designing working memory templates for AI assistants.
 
 Given a question and answer from a conversation history benchmark, generate a working memory instruction that would help an AI assistant extract and save the specific information needed to answer the question correctly.

@@ -1,14 +1,16 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
-import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { WorkflowTrigger, WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 
-import { WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { WorkflowRunContext, WorkflowRunStreamResult } from '../context/workflow-run-context';
+import { useContext } from 'react';
 
-export interface WorkflowRunDetailProps
-  extends Omit<WorkflowTriggerProps, 'paramsRunId' | 'workflowId' | 'observeWorkflowStream'> {
+export interface WorkflowRunDetailProps extends Omit<
+  WorkflowTriggerProps,
+  'paramsRunId' | 'workflowId' | 'observeWorkflowStream'
+> {
   workflowId: string;
   runId?: string;
   observeWorkflowStream?: ({
@@ -28,9 +30,9 @@ export const WorkflowRunDetail = ({
   observeWorkflowStream,
   ...triggerProps
 }: WorkflowRunDetailProps) => {
-  const { isLoading, data: runs } = useWorkflowRuns(workflowId);
+  const { runSnapshot, isLoadingRunExecutionResult } = useContext(WorkflowRunContext);
 
-  if (isLoading) {
+  if (isLoadingRunExecutionResult) {
     return (
       <div className="p-4">
         <Skeleton className="h-[600px]" />
@@ -38,23 +40,17 @@ export const WorkflowRunDetail = ({
     );
   }
 
-  const actualRuns = runs?.runs || [];
-
-  if (actualRuns.length === 0) {
+  if (!runSnapshot || !runId) {
     return (
       <div className="p-4">
-        <Txt variant="ui-md" className="text-icon6 text-center">
+        <Txt variant="ui-md" className="text-neutral6 text-center">
           No previous run
         </Txt>
       </div>
     );
   }
 
-  const run = actualRuns.find(run => run.runId === runId);
-  const runSnapshot = run?.snapshot;
-
-  const runResult =
-    runSnapshot && typeof runSnapshot === 'object' ? convertWorkflowRunStateToStreamResult(runSnapshot) : null;
+  const runResult = convertWorkflowRunStateToStreamResult(runSnapshot);
   const runStatus = runResult?.status;
 
   if (runId) {

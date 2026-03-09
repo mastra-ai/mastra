@@ -1,0 +1,230 @@
+/**
+ * OpenTelemetry Tracing Exporter for Mastra
+ */
+
+import type {
+  TracingEvent,
+  AnyExportedSpan,
+  InitExporterOptions,
+  ObservabilityInstanceConfig,
+} from '@mastra/core/observability';
+import { TracingEventType } from '@mastra/core/observability';
+import { BaseExporter } from '@mastra/observability';
+import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+
+import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import type { SpanExporter } from '@opentelemetry/sdk-trace-base';
+
+import { loadExporter } from './loadExporter.js';
+import { resolveProviderConfig } from './provider-configs.js';
+import { SpanConverter } from './span-converter.js';
+import type { OtelExporterConfig } from './types.js';
+
+export class OtelExporter extends BaseExporter {
+  private config: OtelExporterConfig;
+  private observabilityConfig?: ObservabilityInstanceConfig;
+  private spanConverter?: SpanConverter;
+  private processor?: BatchSpanProcessor;
+  private exporter?: SpanExporter;
+  private isSetup: boolean = false;
+
+  name = 'opentelemetry';
+
+  constructor(config: OtelExporterConfig) {
+    super(config);
+
+    this.config = config;
+
+    // Set up OpenTelemetry diagnostics if debug mode
+    if (config.logLevel === 'debug') {
+      diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+    }
+  }
+
+  /**
+   * Initialize with tracing configuration
+   */
+  init(options: InitExporterOptions) {
+    this.observabilityConfig = options.config;
+  }
+
+  private async setupExporter() {
+    // already setup or exporter already set
+    if (this.isSetup || this.exporter) return;
+
+    // Provider configuration is required
+    if (!this.config.provider) {
+      this.setDisabled(
+        '[OtelExporter] Provider configuration is required. Use the "custom" provider for generic endpoints.',
+      );
+      this.isSetup = true;
+      return;
+    }
+
+    // Resolve provider configuration
+    const resolved = resolveProviderConfig(this.config.provider);
+    if (!resolved) {
+      // Configuration validation failed, disable tracing
+      this.setDisabled('[OtelExporter] Provider configuration validation failed.');
+      this.isSetup = true;
+      return;
+    }
+
+    // user provided an instantiated SpanExporter, use it
+    if (this.config.exporter) {
+      this.exporter = this.config.exporter;
+      return;
+    }
+
+    const endpoint = resolved.endpoint;
+    const headers = resolved.headers;
+    const protocol = resolved.protocol;
+
+    // Load and create the appropriate exporter based on protocol
+    const providerName = Object.keys(this.config.provider)[0];
+    const ExporterClass = await loadExporter(protocol, providerName);
+
+    if (!ExporterClass) {
+      // Exporter not available, disable tracing
+      this.setDisabled(`[OtelExporter] Exporter not available for protocol: ${protocol}`);
+      this.isSetup = true;
+      return;
+    }
+
+    try {
+      if (protocol === 'zipkin') {
+        this.exporter = new ExporterClass({
+          url: endpoint,
+          headers,
+        });
+      } else if (protocol === 'grpc') {
+        // gRPC uses Metadata object instead of headers
+        // Dynamically import @grpc/grpc-js to create metadata
+        let metadata: any;
+        try {
+          const grpcModule = await import('@grpc/grpc-js');
+          metadata = new grpcModule.Metadata();
+          Object.entries(headers).forEach(([key, value]) => {
+            metadata.set(key, value);
+          });
+        } catch (grpcError) {
+          this.setDisabled(
+            `[OtelExporter] Failed to load gRPC metadata. Install required packages:\n` +
+              `  npm install @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js`,
+          );
+          this.logger.error('[OtelExporter] gRPC error details:', grpcError);
+          this.isSetup = true;
+          return;
+        }
+
+        this.exporter = new ExporterClass({
+          url: endpoint,
+          metadata,
+          timeoutMillis: this.config.timeout,
+        });
+      } else {
+        // HTTP/JSON and HTTP/Protobuf use headers
+        this.exporter = new ExporterClass({
+          url: endpoint,
+          headers,
+          timeoutMillis: this.config.timeout,
+        });
+      }
+    } catch (error) {
+      this.setDisabled('[OtelExporter] Failed to create exporter.');
+      this.logger.error('[OtelExporter] Exporter creation error details:', error);
+      this.isSetup = true;
+      return;
+    }
+  }
+
+  private async setupProcessor() {
+    if (this.processor || this.isSetup) return;
+
+    this.spanConverter = new SpanConverter({
+      packageName: '@mastra/otel-exporter',
+      serviceName: this.observabilityConfig?.serviceName,
+      config: this.config,
+      format: 'GenAI_v1_38_0',
+    });
+
+    // Always use BatchSpanProcessor for production
+    // It queues spans and exports them in batches for better performance
+    this.processor = new BatchSpanProcessor(this.exporter!, {
+      maxExportBatchSize: this.config.batchSize || 512, // Default batch size
+      maxQueueSize: 2048, // Maximum spans to queue
+      scheduledDelayMillis: 5000, // Export every 5 seconds
+      exportTimeoutMillis: this.config.timeout || 30000, // Export timeout
+    });
+
+    this.logger.debug(
+      `[OtelExporter] Using BatchSpanProcessor (batch size: ${this.config.batchSize || 512}, delay: 5s)`,
+    );
+  }
+
+  private async setup() {
+    if (this.isSetup) return;
+    await this.setupExporter();
+    await this.setupProcessor();
+    this.isSetup = true;
+  }
+
+  protected async _exportTracingEvent(event: TracingEvent): Promise<void> {
+    // Only process SPAN_ENDED events for OTEL
+    // OTEL expects complete spans with start and end times
+    if (event.type !== TracingEventType.SPAN_ENDED) {
+      return;
+    }
+
+    const span = event.exportedSpan;
+    await this.exportSpan(span);
+  }
+
+  private async exportSpan(span: AnyExportedSpan): Promise<void> {
+    // Ensure exporter is set up
+    if (!this.isSetup) {
+      await this.setup();
+    }
+
+    // Skip if disabled
+    if (this.isDisabled || !this.processor) {
+      return;
+    }
+
+    try {
+      // Convert the span to OTEL format
+      const otelSpan = await this.spanConverter!.convertSpan(span);
+
+      // Export the span immediately through the processor
+      // The processor will handle batching if configured
+      await new Promise<void>(resolve => {
+        this.processor!.onEnd(otelSpan);
+        resolve();
+      });
+
+      this.logger.debug(
+        `[OtelExporter] Exported span ${span.id} (trace: ${span.traceId}, parent: ${span.parentSpanId || 'none'}, type: ${span.type})`,
+      );
+    } catch (error) {
+      this.logger.error(`[OtelExporter] Failed to export span ${span.id}:`, error);
+    }
+  }
+
+  /**
+   * Force flush any buffered spans without shutting down the exporter.
+   * Delegates to the BatchSpanProcessor's forceFlush() method.
+   */
+  async flush(): Promise<void> {
+    if (this.processor) {
+      await this.processor.forceFlush();
+      this.logger.debug('[OtelExporter] Flushed pending spans');
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    // Shutdown the processor to flush any remaining spans
+    if (this.processor) {
+      await this.processor.shutdown();
+    }
+  }
+}

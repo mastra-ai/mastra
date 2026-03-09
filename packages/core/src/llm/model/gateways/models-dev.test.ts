@@ -48,8 +48,8 @@ describe('ModelsDevGateway', () => {
           'llama3.1-8b': { name: 'Llama 3.1 8B' },
         },
         env: ['CEREBRAS_API_KEY'],
-        // No API URL in the mock, should use override
-        npm: '@ai-sdk/openai-compatible',
+        // No API URL - uses native @ai-sdk/cerebras package
+        npm: '@ai-sdk/cerebras',
       },
       'fireworks-ai': {
         id: 'fireworks-ai',
@@ -93,13 +93,13 @@ describe('ModelsDevGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      // cerebras and fireworks-ai use @ai-sdk/openai-compatible
+      // cerebras uses native SDK, fireworks-ai uses @ai-sdk/openai-compatible
       expect(providers.cerebras).toBeDefined();
       expect(providers['fireworks-ai']).toBeDefined(); // Provider IDs keep hyphens
-      expect(providers.cerebras.url).toBe('https://api.cerebras.ai/v1');
+      expect(providers.cerebras.url).toBeUndefined(); // No URL needed - uses native @ai-sdk/cerebras
     });
 
-    it('should apply OPENAI_COMPATIBLE_OVERRIDES', async () => {
+    it('should apply PROVIDER_OVERRIDES', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockApiResponse,
@@ -125,6 +125,58 @@ describe('ModelsDevGateway', () => {
       expect(providers['fireworks-ai'].name).toBe('Fireworks AI');
       // But env var should use underscores
       expect(providers['fireworks-ai'].apiKeyEnvVar).toBe('FIREWORKS_API_KEY');
+    });
+
+    it('should filter out deprecated models', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          groq: {
+            id: 'groq',
+            name: 'Groq',
+            models: {
+              'llama-3.1-8b': { name: 'Llama 3.1 8B' },
+              'deepseek-r1-distill-llama-70b': {
+                name: 'DeepSeek R1 Distill LLaMA 70B',
+                status: 'deprecated',
+              },
+            },
+            env: ['GROQ_API_KEY'],
+            api: 'https://api.groq.com/openai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.groq).toBeDefined();
+      expect(providers.groq.models).toEqual(['llama-3.1-8b']);
+      expect(providers.groq.models).not.toContain('deepseek-r1-distill-llama-70b');
+    });
+
+    it('should return empty models array when all models are deprecated', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          groq: {
+            id: 'groq',
+            name: 'Groq',
+            models: {
+              'model-1': { name: 'Model 1', status: 'deprecated' },
+              'model-2': { name: 'Model 2', status: 'deprecated' },
+            },
+            env: ['GROQ_API_KEY'],
+            api: 'https://api.groq.com/openai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.groq).toBeDefined();
+      expect(providers.groq.models).toEqual([]);
     });
 
     it('should extract model IDs from each provider', async () => {
@@ -161,7 +213,7 @@ describe('ModelsDevGateway', () => {
       expect(providers.unknown_provider).toBeUndefined();
     });
 
-    it('should ensure URLs end with ', async () => {
+    it('should ensure URLs do not end with /chat/completions', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockApiResponse,
@@ -237,17 +289,17 @@ describe('ModelsDevGateway', () => {
       expect(url).toBe('https://api.groq.com/openai/v1');
     });
 
-    it('should correctly identify all major OpenAI-compatible providers', async () => {
+    it('should correctly identify all major providers', async () => {
       const majorProviders = {
         openai: { npm: '@ai-sdk/openai', api: 'https://api.openai.com/v1' },
         anthropic: { npm: '@ai-sdk/anthropic', api: 'https://api.anthropic.com/v1' },
         groq: { npm: '@ai-sdk/openai-compatible', api: 'https://api.groq.com/openai/v1' },
-        cerebras: { npm: '@ai-sdk/openai-compatible' },
+        cerebras: { npm: '@ai-sdk/cerebras' },
         xai: { npm: '@ai-sdk/openai-compatible' },
         mistral: { npm: '@ai-sdk/mistral', api: 'https://api.mistral.ai/v1' },
         google: { npm: '@ai-sdk/google' },
-        togetherai: { npm: '@ai-sdk/openai-compatible', api: 'https://api.together.xyz/v1' },
-        deepinfra: { npm: '@ai-sdk/openai-compatible', api: 'https://api.deepinfra.com/v1/openai' },
+        togetherai: { npm: '@ai-sdk/togetherai' },
+        deepinfra: { npm: '@ai-sdk/deepinfra' },
         perplexity: { npm: '@ai-sdk/openai-compatible', api: 'https://api.perplexity.ai' },
       };
 

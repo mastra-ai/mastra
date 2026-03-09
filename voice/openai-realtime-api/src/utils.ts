@@ -1,4 +1,4 @@
-import { Readable } from 'stream';
+import { Readable } from 'node:stream';
 import type { ToolsInput } from '@mastra/core/agent';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 

@@ -1,7 +1,7 @@
+import type { TemplateInstallationRequest } from '@mastra/client-js';
+import { RequestContext } from '@mastra/core/request-context';
+import { useMastraClient } from '@mastra/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { TemplateInstallationRequest } from '@mastra/client-js';
-import { RuntimeContext } from '@mastra/core/runtime-context';
-import { client } from '@/lib/client';
 import { useState } from 'react';
 
 export interface Template {
@@ -160,29 +160,29 @@ export const useTemplateRepoEnvVars = ({ repo, owner, branch }: { repo: string; 
 };
 
 export const useAgentBuilderWorkflow = () => {
+  const client = useMastraClient();
   return useQuery({
     queryKey: ['agent-builder-workflow'],
     queryFn: async () => {
-      const template = client.getAgentBuilderAction('merge-template');
-      return await template.details();
+      return await client.getAgentBuilderAction('merge-template').details();
     },
   });
 };
 
 export const useCreateTemplateInstallRun = () => {
+  const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId?: string }) => {
-      const template = client.getAgentBuilderAction('merge-template');
-      return await template.createRunAsync({ runId });
+      return await client.getAgentBuilderAction('merge-template').createRun({ runId });
     },
   });
 };
 
 export const useGetTemplateInstallRun = () => {
+  const client = useMastraClient();
   return useMutation({
     mutationFn: async ({ runId }: { runId: string }) => {
-      const template = client.getAgentBuilderAction('merge-template');
-      return await template.runById(runId);
+      return await client.getAgentBuilderAction('merge-template').runById(runId);
     },
   });
 };
@@ -216,7 +216,8 @@ const processTemplateInstallRecord = (
   }
 
   // Handle different event types
-  if (record.type === 'start') {
+  // Support both legacy ('start') and VNext ('workflow-start') formats
+  if (record.type === 'start' || record.type === 'workflow-start') {
     // Pre-populate all workflow steps from workflowInfo if available
     const initialSteps: any = {};
     if (workflowInfo?.allSteps) {
@@ -229,9 +230,11 @@ const processTemplateInstallRecord = (
       });
     }
 
+    const runId = record.runId || record.payload?.runId;
+
     newState = {
       ...newState,
-      runId: record.payload.runId,
+      runId,
       eventTimestamp: new Date().toISOString(),
       status: 'running',
       phase: 'initializing',
@@ -245,7 +248,8 @@ const processTemplateInstallRecord = (
     };
   }
 
-  if (record.type === 'step-start') {
+  // Support both legacy ('step-start') and VNext ('workflow-step-start') formats
+  if (record.type === 'step-start' || record.type === 'workflow-step-start') {
     const stepId = record.payload.id;
     newState = {
       ...newState,
@@ -274,7 +278,8 @@ const processTemplateInstallRecord = (
     };
   }
 
-  if (record.type === 'step-result') {
+  // Support both legacy ('step-result') and VNext ('workflow-step-result') formats
+  if (record.type === 'step-result' || record.type === 'workflow-step-result') {
     const stepId = record.payload.id;
     const status = record.payload.status;
     const hasError = record.payload.error;
@@ -329,7 +334,8 @@ const processTemplateInstallRecord = (
     }
   }
 
-  if (record.type === 'step-finish') {
+  // Support both legacy ('step-finish') and VNext ('workflow-step-finish') formats
+  if (record.type === 'step-finish' || record.type === 'workflow-step-finish') {
     newState = {
       ...newState,
       payload: {
@@ -339,7 +345,8 @@ const processTemplateInstallRecord = (
     };
   }
 
-  if (record.type === 'finish') {
+  // Support both legacy ('finish') and VNext ('workflow-finish') formats
+  if (record.type === 'finish' || record.type === 'workflow-finish') {
     // Don't override error states - if we're already in error phase, stay there
     if (newState.phase === 'error' || newState.status === 'failed') {
       newState = {
@@ -399,138 +406,6 @@ const saveTemplateStateToLocalStorage = (runId: string, state: any) => {
   } catch (error) {
     console.warn('Failed to save template state to localStorage:', error);
   }
-};
-
-const restoreTemplateStateFromLocalStorage = (runId: string) => {
-  try {
-    const key = `template-install-${runId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      const { state, timestamp } = JSON.parse(saved);
-      const age = Date.now() - timestamp;
-      const maxAge = 60 * 60 * 1000; // 1 hour
-      // Only restore if saved within last hour (prevent stale data)
-      if (age < maxAge) {
-        return state;
-      } else {
-        localStorage.removeItem(key);
-      }
-    }
-  } catch (error) {
-    console.warn('Failed to restore template state from localStorage:', error);
-  }
-  return null;
-};
-
-export const useWatchTemplateInstall = (workflowInfo?: any) => {
-  const [streamResult, setStreamResult] = useState<any>({});
-
-  // Use debouncing like workflows (prevents excessive re-renders)
-  // Process each record immediately - no debouncing for watch events
-  // (Watch events are already discrete and we can't afford to lose step completion events)
-  const processTemplateRecord = (record: { type: string; payload: any; runId?: string; eventTimestamp?: string }) => {
-    setStreamResult((currentState: any) => {
-      const { newState } = processTemplateInstallRecord(record, currentState, workflowInfo);
-
-      // Save to localStorage for refresh recovery
-      if (record.runId) {
-        saveTemplateStateToLocalStorage(record.runId, newState);
-      }
-
-      return newState;
-    });
-  };
-
-  const initializeState = async (runId: string) => {
-    // 1. Instantly restore from localStorage for immediate UI
-    const cachedState = restoreTemplateStateFromLocalStorage(runId);
-    if (cachedState) {
-      setStreamResult(cachedState);
-    } else {
-      // Fallback: Initialize with pending steps
-      setStreamResult({
-        runId,
-        eventTimestamp: new Date().toISOString(),
-        phase: 'running',
-        payload: {
-          workflowState: {
-            steps: workflowInfo?.allSteps
-              ? Object.keys(workflowInfo.allSteps).reduce((acc, stepId) => {
-                  acc[stepId] = {
-                    id: stepId,
-                    description: workflowInfo.allSteps[stepId].description,
-                    status: 'pending',
-                  };
-                  return acc;
-                }, {} as any)
-              : {},
-          },
-          currentStep: null,
-        },
-      });
-    }
-  };
-
-  const watchInstall = useMutation({
-    mutationFn: async ({ runId }: { runId: string }) => {
-      const maxRetries = 3;
-      const retryDelay = 2000; // 2 seconds
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          // Initialize state with hybrid approach
-          await initializeState(runId);
-
-          const template = client.getAgentBuilderAction('merge-template');
-
-          // Use correct callback API (fix the TypeScript issue when possible)
-          await template.watch(
-            { runId, eventType: 'watch-v2' },
-            (record: { type: string; payload: any; runId?: string; eventTimestamp?: string }) => {
-              try {
-                processTemplateRecord(record);
-              } catch (err) {
-                console.error('💥 [watchInstall] Error processing template record:', err);
-                // Set minimal error state if processing fails (graceful degradation)
-                setStreamResult((prev: any) => ({ ...prev, error: err }));
-              }
-            },
-          );
-
-          // If we get here, the watch completed successfully
-          return;
-        } catch (error: any) {
-          console.error(`💥 [watchInstall] Attempt ${attempt} failed:`, error);
-          const isNetworkError =
-            error?.message?.includes('Failed to fetch') ||
-            error?.message?.includes('NetworkError') ||
-            error?.message?.includes('network error') ||
-            error?.message?.includes('fetch') ||
-            error?.code === 'NETWORK_ERROR' ||
-            error?.name === 'TypeError';
-
-          console.warn(`Watch attempt ${attempt}/${maxRetries} failed:`, error);
-
-          if (isNetworkError && attempt < maxRetries) {
-            console.log(
-              `🔄 Watch network error detected (likely hot reload), retrying in ${retryDelay}ms... (attempt ${attempt + 1}/${maxRetries})`,
-            );
-            await new Promise(resolve => setTimeout(resolve, retryDelay));
-            continue; // Retry
-          }
-
-          // If it's not a network error or we've exhausted retries, throw
-          console.error('❌ [watchInstall] Non-network error or max retries reached, throwing:', error);
-          throw error;
-        }
-      }
-    },
-  });
-
-  return {
-    watchInstall,
-    streamResult,
-  };
 };
 
 // Shared helper for processing template installation streams (streamlined)
@@ -599,6 +474,7 @@ const useTemplateStreamProcessor = (workflowInfo?: any, runId?: string) => {
 };
 
 export const useStreamTemplateInstall = (workflowInfo?: any) => {
+  const client = useMastraClient();
   const { streamResult, isStreaming, processStream } = useTemplateStreamProcessor(workflowInfo);
 
   const streamInstall = useMutation({
@@ -616,9 +492,9 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const template = client.getAgentBuilderAction('merge-template');
-          const runtimeContext = new RuntimeContext();
-          runtimeContext.set('selectedModel', selectedModel);
-          const stream = await template.stream({ inputData, runtimeContext }, runId);
+          const requestContext = new RequestContext();
+          requestContext.set('selectedModel', selectedModel);
+          const stream = await template.stream({ inputData, requestContext }, runId);
           await processStream(stream, runId);
 
           // If we get here, the stream completed successfully
@@ -655,6 +531,66 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
 
   return {
     streamInstall,
+    streamResult,
+    isStreaming,
+  };
+};
+
+/**
+ * Hook for observing template installation with full replay capability.
+ * Uses observeStream() which replays cached execution from beginning, then continues live.
+ */
+export const useObserveStreamTemplateInstall = (workflowInfo?: any) => {
+  const client = useMastraClient();
+  const { streamResult, isStreaming, processStream } = useTemplateStreamProcessor(workflowInfo);
+
+  const observeInstall = useMutation({
+    mutationFn: async ({ runId }: { runId: string }) => {
+      const maxRetries = 3;
+      const retryDelay = 2000; // 2 seconds
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          // Initialize state - but observeStream will replay full history
+          // so we don't need to rely on localStorage as fallback
+          const template = client.getAgentBuilderAction('merge-template');
+
+          // Use observeStream to get full replay + live updates
+          const stream = await template.observeStream({ runId });
+          await processStream(stream, runId);
+
+          // If we get here, the observe stream completed successfully
+          return;
+        } catch (error: any) {
+          console.error(`💥 [observeInstall] Attempt ${attempt} failed:`, error);
+          const isNetworkError =
+            error?.message?.includes('Failed to fetch') ||
+            error?.message?.includes('NetworkError') ||
+            error?.message?.includes('network error') ||
+            error?.message?.includes('fetch') ||
+            error?.code === 'NETWORK_ERROR' ||
+            error?.name === 'TypeError';
+
+          console.warn(`ObserveStream attempt ${attempt}/${maxRetries} failed:`, error);
+
+          if (isNetworkError && attempt < maxRetries) {
+            console.info(
+              `🔄 ObserveStream network error detected (likely hot reload), retrying in ${retryDelay}ms... (attempt ${attempt + 1}/${maxRetries})`,
+            );
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            continue; // Retry
+          }
+
+          // If it's not a network error or we've exhausted retries, throw
+          console.error('❌ [observeInstall] Non-network error or max retries reached, throwing:', error);
+          throw error;
+        }
+      }
+    },
+  });
+
+  return {
+    observeInstall,
     streamResult,
     isStreaming,
   };

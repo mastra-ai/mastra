@@ -3,7 +3,7 @@ import { getServersFromRegistry } from '../../fetch-servers';
 import { processMcpRunServers } from '../../processors/mcprun';
 import type { ServerEntry } from '../../types';
 
-describe('MCP Run processor', () => {
+describe.skip('MCP Run processor', () => {
   it('should process MCP Run server data correctly', async () => {
     // Use our getServersFromRegistry function to fetch data
     const result = await getServersFromRegistry('mcprun');

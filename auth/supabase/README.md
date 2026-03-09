@@ -2,6 +2,12 @@
 
 A Supabase authentication integration for Mastra, providing seamless authentication and authorization capabilities using Supabase's authentication system.
 
+## Requirements
+
+- Node.js 22.13.0 or later
+- Supabase project with authentication enabled
+- Supabase URL and anonymous key
+
 ## Installation
 
 ```bash
@@ -15,14 +21,14 @@ pnpm add @mastra/auth-supabase
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthSupabase } from '@mastra/auth-supabase';
 
 // Initialize with environment variables
-const auth = new MastraAuthSupabase();
+const supabaseAuth = new MastraAuthSupabase();
 
 // Or initialize with explicit configuration
-const auth = new MastraAuthSupabase({
+const supabaseAuth = new MastraAuthSupabase({
   url: 'your-supabase-url',
   anonKey: 'your-supabase-anon-key',
 });
@@ -31,7 +37,7 @@ const auth = new MastraAuthSupabase({
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth,
+    auth: supabaseAuth,
   },
 });
 ```
@@ -68,9 +74,3 @@ Authenticates a user token and returns the user information if valid.
 ### `authorizeUser(user: User)`
 
 Checks if a user has the required permissions (currently checks for admin status).
-
-## Requirements
-
-- Node.js 16 or higher
-- Supabase project with authentication enabled
-- Supabase URL and anonymous key

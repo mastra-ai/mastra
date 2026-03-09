@@ -1,5 +1,5 @@
-import { Agent } from '@mastra/core/agent';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import { Agent, isSupportedLanguageModel } from '@mastra/core/agent';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
 import { PromptTemplate, defaultQuestionExtractPrompt } from '../prompts';
 import type { QuestionExtractPrompt } from '../prompts';
 import type { BaseNode } from '../schema';
@@ -19,7 +19,7 @@ type ExtractQuestion = {
  * Extract questions from a list of nodes.
  */
 export class QuestionsAnsweredExtractor extends BaseExtractor {
-  llm: MastraLanguageModel;
+  llm: MastraLanguageModel | MastraLegacyLanguageModel;
   questions: number = 5;
   promptTemplate: QuestionExtractPrompt;
   embeddingOnly: boolean = false;
@@ -71,6 +71,7 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
     });
 
     const miniAgent = new Agent({
+      id: 'question-extractor',
       model: this.llm,
       name: 'question-extractor',
       instructions:
@@ -78,8 +79,8 @@ export class QuestionsAnsweredExtractor extends BaseExtractor {
     });
 
     let questionsText = '';
-    if (this.llm.specificationVersion === 'v2') {
-      const result = await miniAgent.generate([{ role: 'user', content: prompt }], { format: 'mastra' });
+    if (isSupportedLanguageModel(this.llm)) {
+      const result = await miniAgent.generate([{ role: 'user', content: prompt }]);
       questionsText = result.text;
     } else {
       const result = await miniAgent.generateLegacy([{ role: 'user', content: prompt }]);

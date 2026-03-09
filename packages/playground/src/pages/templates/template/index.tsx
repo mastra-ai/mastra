@@ -1,13 +1,4 @@
-import {
-  useTemplateRepo,
-  useTemplateRepoEnvVars,
-  useStreamTemplateInstall,
-  useCreateTemplateInstallRun,
-  useAgentBuilderWorkflow,
-  useGetTemplateInstallRun,
-  useWatchTemplateInstall,
-} from '@/hooks/use-templates';
-import { cn } from '@/lib/utils';
+import { version } from '@mastra/core/package.json';
 import {
   Breadcrumb,
   Crumb,
@@ -22,9 +13,19 @@ import {
   TemplateFailure,
   Icon,
 } from '@mastra/playground-ui';
-import { Link, useParams, useSearchParams } from 'react-router';
-import { useEffect, useState } from 'react';
 import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
+import {
+  useTemplateRepo,
+  useTemplateRepoEnvVars,
+  useStreamTemplateInstall,
+  useCreateTemplateInstallRun,
+  useAgentBuilderWorkflow,
+  useGetTemplateInstallRun,
+  useObserveStreamTemplateInstall,
+} from '@/hooks/use-templates';
+import { cn } from '@/lib/utils';
 
 export default function Template() {
   const { templateSlug } = useParams()! as { templateSlug: string };
@@ -46,28 +47,32 @@ export default function Template() {
     owner: 'mastra-ai',
   });
 
+  const isBeta = version?.includes('beta') ?? false;
+  const branch = isBeta ? 'beta' : 'main';
+
   const { data: templateEnvVars, isLoading: isLoadingEnvVars } = useTemplateRepoEnvVars({
     repo: template?.githubUrl ? new URL(template.githubUrl).pathname.split('/')[2] : `template-${templateSlug}`,
     owner: 'mastra-ai',
-    branch: selectedProvider,
+    branch,
   });
 
   // Fetch agent builder workflow info for step pre-population
-  const { data: workflowInfo } = useAgentBuilderWorkflow();
-  const { mutateAsync: createTemplateInstallRun } = useCreateTemplateInstallRun();
+  const { data: workflowInfo, isLoading: isLoadingWorkflow } = useAgentBuilderWorkflow();
+  const { mutateAsync: createTemplateInstallRun, isPending: isCreatingRun } = useCreateTemplateInstallRun();
   const { mutateAsync: getTemplateInstallRun } = useGetTemplateInstallRun();
   const { streamInstall, streamResult, isStreaming } = useStreamTemplateInstall(workflowInfo);
-  const { watchInstall, streamResult: watchStreamResult } = useWatchTemplateInstall(workflowInfo);
-
-  // Get watching state from the mutation
-  const isWatching = watchInstall.isPending;
+  const {
+    observeInstall,
+    streamResult: observeStreamResult,
+    isStreaming: isObserving,
+  } = useObserveStreamTemplateInstall(workflowInfo);
 
   // Check for completed runs after hot reload recovery
   useEffect(() => {
     const runId = searchParams.get('runId');
 
-    if (runId && !success && !failure && !isStreaming && !isWatching) {
-      console.log('🔄 Checking completed run after hot reload:', { runId });
+    if (runId && !success && !failure && !isStreaming && !isObserving) {
+      console.info('🔄 Checking completed run after hot reload:', { runId });
 
       setCurrentRunId(runId);
 
@@ -99,7 +104,7 @@ export default function Template() {
           setFailure('Failed to retrieve installation status after reload');
         });
     }
-  }, [searchParams, success, failure, isStreaming, isWatching, getTemplateInstallRun]);
+  }, [searchParams, success, failure, isStreaming, isObserving, getTemplateInstallRun]);
 
   // Auto-resume watching from URL parameters
   useEffect(() => {
@@ -113,7 +118,7 @@ export default function Template() {
       shouldResume === 'true' &&
       savedProvider &&
       !isStreaming &&
-      !isWatching &&
+      !isObserving &&
       !hasAutoResumed &&
       !isFreshInstall &&
       workflowInfo
@@ -128,7 +133,8 @@ export default function Template() {
             const snapshot = runData.snapshot;
 
             if (snapshot?.status === 'running') {
-              return watchInstall.mutateAsync({ runId });
+              // Use observeStream for better recovery - replays full execution from cache
+              return observeInstall.mutateAsync({ runId });
             }
           })
           .then(() => {
@@ -158,12 +164,12 @@ export default function Template() {
     searchParams,
     templateSlug,
     isStreaming,
-    isWatching,
+    isObserving,
     hasAutoResumed,
     isFreshInstall,
     workflowInfo,
     getTemplateInstallRun,
-    watchInstall,
+    observeInstall,
     setSearchParams,
   ]);
 
@@ -228,14 +234,15 @@ export default function Template() {
     }
   }, [templateEnvVars]);
 
-  // Monitor for workflow errors
+  // Monitor for workflow errors — only react to phase/error changes, not full object identity
   useEffect(() => {
-    const result = streamResult || watchStreamResult;
+    const result = streamResult || observeStreamResult;
 
     if (result?.phase === 'error' && result?.error) {
       setFailure(result.error);
     }
-  }, [streamResult?.phase, streamResult?.error, watchStreamResult?.phase, watchStreamResult?.error]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamResult?.phase, streamResult?.error, observeStreamResult?.phase, observeStreamResult?.error]);
 
   const handleProviderChange = (value: string) => {
     setSelectedProvider(value);
@@ -271,7 +278,7 @@ export default function Template() {
         const repo = template.githubUrl || `https://github.com/mastra-ai/template-${template.slug}`;
         const templateParams = {
           repo,
-          ref: selectedProvider || 'main',
+          ref: branch,
           slug: template.slug,
           variables: variables as Record<string, string>,
         };
@@ -339,8 +346,8 @@ export default function Template() {
           </Crumb>
         </Breadcrumb>
       </Header>
-      <div className={cn('w-full lg:px-[3rem] h-full overflow-y-scroll')}>
-        <div className="p-[1.5rem] w-full max-w-[80rem] mx-auto grid gap-y-[1rem]">
+      <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
+        <div className="p-6 w-full max-w-[80rem] mx-auto grid gap-y-4">
           <TemplateInfo
             isLoading={isLoadingTemplate}
             title={template?.title}
@@ -352,10 +359,10 @@ export default function Template() {
           />
           {template && (
             <>
-              {(isStreaming || isWatching) && (
+              {(isStreaming || isObserving) && (
                 <TemplateInstallation
                   name={template.title}
-                  streamResult={isWatching ? watchStreamResult : streamResult}
+                  streamResult={isObserving ? observeStreamResult : streamResult}
                   runId={currentRunId}
                   workflowInfo={workflowInfo}
                 />
@@ -371,12 +378,12 @@ export default function Template() {
                   validationErrors={
                     completedRunValidationErrors.length > 0
                       ? completedRunValidationErrors
-                      : streamResult?.validationResults?.errors || watchStreamResult?.validationResults?.errors
+                      : streamResult?.validationResults?.errors || observeStreamResult?.validationResults?.errors
                   }
                 />
               )}
 
-              {!isStreaming && !isWatching && !success && !failure && (
+              {!isStreaming && !isObserving && !success && !failure && (
                 <TemplateForm
                   providerOptions={providerOptions}
                   selectedProvider={selectedProvider}
@@ -387,7 +394,8 @@ export default function Template() {
                   setErrors={setErrors}
                   handleInstallTemplate={handleInstallTemplate}
                   handleVariableChange={handleVariableChange}
-                  isLoadingEnvVars={isLoadingEnvVars}
+                  isLoadingEnvVars={isLoadingEnvVars || isLoadingWorkflow}
+                  isInstalling={isCreatingRun}
                   defaultModelProvider={selectedModelProvider}
                   defaultModelId={selectedModelId}
                   onModelUpdate={handleModelUpdate}

@@ -1,15 +1,9 @@
-import type { LLMGenerationAttributes } from '@mastra/core/ai-tracing';
+import type { UsageStats } from '@mastra/core/observability';
+
 /**
  * BraintrustUsageMetrics
  *
  * Canonical metric keys expected by Braintrust for LLM usage accounting.
- * These map various provider/SDK-specific usage fields to a common schema.
- * - prompt_tokens: input-side tokens (aka inputTokens/promptTokens)
- * - completion_tokens: output-side tokens (aka outputTokens/completionTokens)
- * - tokens: total tokens (provided or derived)
- * - completion_reasoning_tokens: reasoning tokens, when available
- * - prompt_cached_tokens: tokens served from cache (provider-specific)
- * - prompt_cache_creation_tokens: tokens used to create cache (provider-specific)
  */
 export interface BraintrustUsageMetrics {
   prompt_tokens?: number;
@@ -18,35 +12,37 @@ export interface BraintrustUsageMetrics {
   completion_reasoning_tokens?: number;
   prompt_cached_tokens?: number;
   prompt_cache_creation_tokens?: number;
-  [key: string]: number | undefined;
 }
 
-export function normalizeUsageMetrics(llmAttr: LLMGenerationAttributes): BraintrustUsageMetrics {
+/**
+ * Formats UsageStats to Braintrust's expected metric format.
+ */
+export function formatUsageMetrics(usage?: UsageStats): BraintrustUsageMetrics {
   const metrics: BraintrustUsageMetrics = {};
 
-  if (llmAttr.usage?.inputTokens !== undefined) {
-    metrics.prompt_tokens = llmAttr.usage?.inputTokens;
-  } else if (llmAttr.usage?.promptTokens !== undefined) {
-    metrics.prompt_tokens = llmAttr.usage?.promptTokens;
+  if (usage?.inputTokens !== undefined) {
+    metrics.prompt_tokens = usage.inputTokens;
   }
 
-  if (llmAttr.usage?.outputTokens !== undefined) {
-    metrics.completion_tokens = llmAttr.usage?.outputTokens;
-  } else if (llmAttr.usage?.completionTokens !== undefined) {
-    metrics.completion_tokens = llmAttr.usage?.completionTokens;
+  if (usage?.outputTokens !== undefined) {
+    metrics.completion_tokens = usage.outputTokens;
   }
 
-  if (llmAttr.usage?.totalTokens !== undefined) {
-    metrics.tokens = llmAttr.usage?.totalTokens;
+  // Compute total if we have both
+  if (metrics.prompt_tokens !== undefined && metrics.completion_tokens !== undefined) {
+    metrics.tokens = metrics.prompt_tokens + metrics.completion_tokens;
   }
-  if (llmAttr.usage?.reasoningTokens !== undefined) {
-    metrics.completion_reasoning_tokens = llmAttr.usage?.reasoningTokens;
+
+  if (usage?.outputDetails?.reasoning !== undefined) {
+    metrics.completion_reasoning_tokens = usage.outputDetails.reasoning;
   }
-  if (llmAttr.usage?.promptCacheHitTokens !== undefined) {
-    metrics.prompt_cached_tokens = llmAttr.usage?.promptCacheHitTokens;
+
+  if (usage?.inputDetails?.cacheRead !== undefined) {
+    metrics.prompt_cached_tokens = usage.inputDetails.cacheRead;
   }
-  if (llmAttr.usage?.promptCacheMissTokens !== undefined) {
-    metrics.prompt_cache_creation_tokens = llmAttr.usage?.promptCacheMissTokens;
+
+  if (usage?.inputDetails?.cacheWrite !== undefined) {
+    metrics.prompt_cache_creation_tokens = usage.inputDetails.cacheWrite;
   }
 
   return metrics;

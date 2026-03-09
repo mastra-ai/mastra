@@ -7,28 +7,19 @@ import { WorkflowConditionNode } from './workflow-condition-node';
 import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
-import { useEffect, useState } from 'react';
-import Spinner from '@/components/ui/spinner';
+import { useEffect, useMemo, useState } from 'react';
+import { Spinner } from '@/ds/components/Spinner';
 import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 import { useCurrentRun } from '../context/use-current-run';
-import { WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];
   open: boolean;
   workflowName: string;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
 }
 
-export function WorkflowNestedGraph({
-  stepGraph,
-  open,
-  workflowName,
-  onShowTrace,
-  onSendEvent,
-}: WorkflowNestedGraphProps) {
+export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowNestedGraphProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges({
     stepGraph,
   });
@@ -37,25 +28,34 @@ export function WorkflowNestedGraph({
   const [edges] = useEdgesState(initialEdges);
   const { steps } = useCurrentRun();
 
+  const stepsFlow = useMemo(() => {
+    return initialEdges.reduce(
+      (acc, edge) => {
+        if (edge.data) {
+          const stepId = edge.data.nextStepId as string;
+          const prevStepId = edge.data.previousStepId as string;
+
+          return {
+            ...acc,
+            [stepId]: [...new Set([...(acc[stepId] || []), prevStepId])],
+          };
+        }
+
+        return acc;
+      },
+      {} as Record<string, string[]>,
+    );
+  }, [initialEdges]);
+
   const nodeTypes = {
     'default-node': (props: NodeProps<DefaultNode>) => (
-      <WorkflowDefaultNode
-        parentWorkflowName={workflowName}
-        onShowTrace={onShowTrace}
-        onSendEvent={onSendEvent}
-        {...props}
-      />
+      <WorkflowDefaultNode parentWorkflowName={workflowName} {...props} stepsFlow={stepsFlow} />
     ),
     'condition-node': WorkflowConditionNode,
     'after-node': WorkflowAfterNode,
     'loop-result-node': WorkflowLoopResultNode,
     'nested-node': (props: NodeProps<NestedNode>) => (
-      <WorkflowNestedNode
-        parentWorkflowName={workflowName}
-        onShowTrace={onShowTrace}
-        onSendEvent={onSendEvent}
-        {...props}
-      />
+      <WorkflowNestedNode parentWorkflowName={workflowName} {...props} stepsFlow={stepsFlow} />
     ),
   };
 

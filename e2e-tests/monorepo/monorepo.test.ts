@@ -1,7 +1,7 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, rm, readFile } from 'fs/promises';
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
@@ -48,6 +48,14 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-test-${pkgManager}-`));
       process.env.npm_config_registry = registry;
       await setupMonorepo(fixturePath, pkgManager);
+
+      // fix temporary 0.x patch for copilotkit
+      const corePath = join(fixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+      await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+      await writeFile(
+        join(corePath, 'runtime-context', 'index.js'),
+        `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+      );
     },
     10 * 60 * 1000,
   );
@@ -111,7 +119,12 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
-          reject(new Error('failed to start dev: ' + data?.toString()));
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            // Ignore punycode warning
+            return;
+          }
+          reject(new Error('failed to start dev: ' + errMsg));
         });
         proc!.stdout?.on('data', data => {
           process.stdout.write(data?.toString());
@@ -161,7 +174,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       await new Promise<void>((resolve, reject) => {
         proc!.stderr?.on('data', data => {
-          reject(new Error('failed to start: ' + data?.toString()));
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            // Ignore punycode warning
+            return;
+          }
+
+          reject(new Error('failed to start: ' + errMsg));
         });
         proc!.stdout?.on('data', data => {
           console.log(data?.toString());
@@ -179,6 +198,16 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const hasMappedPkg = content.includes('@/agents');
 
       expect(hasMappedPkg).toBeFalsy();
+    });
+
+    it('should resolve workspace package tsconfig paths', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      // Verify that the path alias ~/utils is resolved and not present in the bundled output
+      const hasWorkspaceMappedPath = content.includes('~/utils');
+
+      expect(hasWorkspaceMappedPath).toBeFalsy();
     });
 
     afterAll(async () => {
@@ -258,5 +287,50 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+  });
+
+  describe.sequential('build without externals', () => {
+    let originalConfig: string;
+    const mastraConfigPath = () => join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+
+    beforeAll(async () => {
+      // Read and backup the original config
+      originalConfig = await readFile(mastraConfigPath(), 'utf-8');
+
+      // Remove the bundler.externals config to test automatic version resolution
+      const modifiedConfig = originalConfig.replace(/,?\s*bundler:\s*\{\s*externals:\s*\[[^\]]*\],?\s*\}/m, '');
+      await writeFile(mastraConfigPath(), modifiedConfig);
+
+      // Run build with modified config (no bundler.externals)
+      await runBuild(fixturePath);
+    }, timeout);
+
+    afterAll(async () => {
+      // Restore original config
+      await writeFile(mastraConfigPath(), originalConfig);
+    });
+
+    it('should resolve dependency versions correctly (not "latest")', async () => {
+      const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');
+      const content = await readFile(packageJsonPath, 'utf-8');
+      const packageJson = JSON.parse(content);
+
+      const dependencies = packageJson.dependencies || {};
+
+      // Check that no dependencies have 'latest' as version
+      const latestDeps = Object.entries(dependencies).filter(([, version]) => version === 'latest');
+      expect(latestDeps).toEqual([]);
+
+      // Verify specific packages have proper semver versions (not 'latest')
+      // These are packages that should be resolved from the monorepo or deployer
+      const packagesToCheck = ['hono', 'lodash', 'date-fns', 'zod'];
+      for (const pkg of packagesToCheck) {
+        if (dependencies[pkg]) {
+          expect(dependencies[pkg]).not.toBe('latest');
+          // Should be a semver version (starts with a digit or ^, ~, etc.)
+          expect(dependencies[pkg]).toMatch(/^[\d^~>=<]/);
+        }
+      }
+    });
   });
 });

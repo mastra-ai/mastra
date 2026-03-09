@@ -1,6 +1,5 @@
-import EventEmitter from 'events';
 import type { StepFlowEntry, WorkflowRunState } from '../..';
-import { RuntimeContext } from '../../../di';
+import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
 import { getStep } from './utils';
@@ -42,7 +41,8 @@ export async function processWorkflowWaitForEvent(
       stepResults: currentState?.context,
       prevResult,
       activeSteps: [],
-      runtimeContext: currentState?.runtimeContext,
+      requestContext: currentState?.requestContext,
+      perStep: workflowData.perStep,
     },
   });
 }
@@ -55,10 +55,12 @@ export async function processWorkflowSleep(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -85,13 +87,15 @@ export async function processWorkflowSleep(
     },
   });
 
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+
   const duration = await stepExecutor.resolveSleep({
     workflowId,
     step,
     runId,
     stepResults,
-    emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -134,12 +138,14 @@ export async function processWorkflowSleep(
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
           resumeSteps,
+          timeTravel,
           stepResults,
           prevResult,
           resumeData,
           parentWorkflow,
           activeSteps,
-          runtimeContext,
+          requestContext,
+          perStep,
         },
       });
     },
@@ -155,10 +161,12 @@ export async function processWorkflowSleepUntil(
     stepResults,
     activeSteps,
     resumeSteps,
+    timeTravel,
     prevResult,
     resumeData,
     parentWorkflow,
-    runtimeContext,
+    requestContext,
+    perStep,
   }: ProcessorArgs,
   {
     pubsub,
@@ -171,13 +179,16 @@ export async function processWorkflowSleepUntil(
   },
 ) {
   const startedAt = Date.now();
+
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+
   const duration = await stepExecutor.resolveSleepUntil({
     workflowId,
     step,
     runId,
     stepResults,
-    emitter: new EventEmitter() as any, // TODO
-    runtimeContext: new RuntimeContext(), // TODO
+    requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -234,12 +245,14 @@ export async function processWorkflowSleepUntil(
           runId,
           executionPath: executionPath.slice(0, -1).concat([executionPath[executionPath.length - 1]! + 1]),
           resumeSteps,
+          timeTravel,
           stepResults,
           prevResult,
           resumeData,
           parentWorkflow,
           activeSteps,
-          runtimeContext,
+          requestContext,
+          perStep,
         },
       });
     },

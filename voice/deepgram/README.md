@@ -1,6 +1,6 @@
 # @mastra/voice-deepgram
 
-Deepgram voice integration for Mastra, providing both Text-to-Speech (TTS) and Speech-to-Text (STT) capabilities using Deepgram's advanced AI models.
+Deepgram voice integration for Mastra, providing both Text-to-Speech (TTS) and Speech-to-Text (STT) using Deepgram's Aura (TTS) and Nova (STT) families.
 
 ## Installation
 
@@ -24,14 +24,14 @@ import { DeepgramVoice } from '@mastra/voice-deepgram';
 // Create voice with both speech and listening capabilities
 const voice = new DeepgramVoice({
   speechModel: {
-    name: 'aura-asteria-en', // Default voice
+    name: 'aura', // TTS family
     apiKey: 'your-api-key', // Optional, can use DEEPGRAM_API_KEY env var
   },
   listeningModel: {
-    name: 'nova', // Optional, specify a listening model
+    name: 'nova', // STT family
     apiKey: 'your-api-key', // Optional, can use DEEPGRAM_API_KEY env var
   },
-  speaker: 'aura-athena-en', // Optional, specify a speaker voice
+  speaker: 'asteria-en', // default voiceId (see voice.ts)
 });
 
 // List available voices
@@ -39,12 +39,15 @@ const voices = await voice.getSpeakers();
 
 // Generate speech
 const audioStream = await voice.speak('Hello from Mastra!', {
-  speaker: 'aura-athena-en', // Optional: override default speaker
-  speed: 1.0, // Optional: adjust speech speed
+  speaker: 'hera-en', // override speaker voice
 });
 
 // Convert speech to text
-const text = await voice.listen(audioStream);
+const result = await voice.listen(audioStream, {
+  diarize: true,
+  diarize_speaker_count: 2,
+});
+console.log(result.transcript);
 ```
 
 ## Features

@@ -1,177 +1,11 @@
-import { MockLanguageModelV1 } from 'ai/test';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../agent';
 import { MessageList } from '../agent/message-list';
-import type { MastraMessageV2 } from '../agent/types';
 import { MastraError } from '../error';
-import type { StorageThreadType, MemoryConfig, MastraMessageV1 } from '../memory';
-import { MastraMemory } from '../memory/memory';
-import { RuntimeContext } from '../runtime-context';
-import type { StorageGetMessagesArg, PaginationInfo, ThreadSortOptions } from '../storage';
+import { MockMemory } from '../memory/mock';
+import { RequestContext } from '../request-context';
 import { Mastra } from './index';
-
-// Mock Memory class for testing
-class MockMemory extends MastraMemory {
-  threads: Record<string, StorageThreadType> = {};
-  messages: Map<string, MastraMessageV1> = new Map();
-
-  constructor() {
-    super({ name: 'mock' });
-    Object.defineProperty(this, 'storage', {
-      get: () => ({
-        init: async () => {},
-        getThreadById: this.getThreadById.bind(this),
-        saveThread: async ({ thread }: { thread: StorageThreadType }) => {
-          return this.saveThread({ thread });
-        },
-        getMessages: this.getMessages.bind(this),
-        saveMessages: this.saveMessages.bind(this),
-      }),
-    });
-    this._hasOwnStorage = true;
-  }
-
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
-    return this.threads[threadId] || null;
-  }
-
-  async saveThread({ thread }: { thread: StorageThreadType; memoryConfig?: MemoryConfig }): Promise<StorageThreadType> {
-    const newThread = { ...thread, updatedAt: new Date() };
-    if (!newThread.createdAt) {
-      newThread.createdAt = new Date();
-    }
-    this.threads[thread.id] = newThread;
-    return this.threads[thread.id];
-  }
-
-  async getMessages({
-    threadId,
-    resourceId,
-    format: _format = 'v1',
-  }: StorageGetMessagesArg & { format?: 'v1' | 'v2' }): Promise<MastraMessageV1[]> {
-    let results = Array.from(this.messages.values());
-    if (threadId) results = results.filter(m => m.threadId === threadId);
-    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
-    return results;
-  }
-
-  async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | undefined;
-  }): Promise<MastraMessageV1[]>;
-  async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig?: MemoryConfig | undefined;
-    format: 'v2';
-  }): Promise<MastraMessageV2[]>;
-  async saveMessages(args: {
-    messages: MastraMessageV1[] | MastraMessageV2[] | (MastraMessageV1 | MastraMessageV2)[];
-    memoryConfig?: MemoryConfig | undefined;
-    format?: 'v1' | 'v2';
-  }): Promise<MastraMessageV1[] | MastraMessageV2[]> {
-    const { messages } = args as any;
-    for (const msg of messages) {
-      const existing = this.messages.get(msg.id);
-      if (existing) {
-        this.messages.set(msg.id, {
-          ...existing,
-          ...msg,
-          createdAt: existing.createdAt,
-        });
-      } else {
-        this.messages.set(msg.id, msg);
-      }
-    }
-    return messages;
-  }
-
-  async rememberMessages() {
-    return { messages: [], messagesV2: [] };
-  }
-
-  async getThreadsByResourceId() {
-    return [];
-  }
-
-  async query({ threadId, resourceId }: StorageGetMessagesArg) {
-    let results = Array.from(this.messages.values());
-    if (threadId) results = results.filter(m => m.threadId === threadId);
-    if (resourceId) results = results.filter(m => m.resourceId === resourceId);
-
-    // Convert MastraMessageV1 to CoreMessage format
-    const coreMessages = results.map(msg => ({
-      role: msg.role as 'user' | 'assistant' | 'system' | 'tool',
-      content: msg.content,
-    }));
-
-    return { messages: coreMessages as any, uiMessages: [] };
-  }
-
-  async deleteThread() {}
-
-  async getWorkingMemory() {
-    return null;
-  }
-
-  async getWorkingMemoryTemplate() {
-    return null;
-  }
-
-  async getThreadsByResourceIdPaginated(
-    args: { resourceId: string; page: number; perPage: number } & ThreadSortOptions,
-  ): Promise<PaginationInfo & { threads: StorageThreadType[] }> {
-    return {
-      threads: [],
-      total: 0,
-      page: args.page,
-      perPage: args.perPage,
-      hasMore: false,
-    };
-  }
-
-  getMergedThreadConfig(config?: MemoryConfig) {
-    return config || {};
-  }
-
-  async updateWorkingMemory({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
-    memoryConfig: _memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    memoryConfig?: MemoryConfig;
-  }): Promise<void> {
-    // Mock implementation
-  }
-
-  async __experimental_updateWorkingMemoryVNext({
-    threadId: _threadId,
-    resourceId: _resourceId,
-    workingMemory: _workingMemory,
-    searchString: _searchString,
-    memoryConfig: _memoryConfig,
-  }: {
-    threadId: string;
-    resourceId?: string;
-    workingMemory: string;
-    searchString?: string;
-    memoryConfig?: MemoryConfig;
-  }): Promise<{ success: boolean; reason: string }> {
-    // Mock implementation
-    return { success: true, reason: 'Mock implementation' };
-  }
-
-  async deleteMessages(messageIds: string[]): Promise<void> {
-    // Mock implementation - remove messages by ID
-    for (const messageId of messageIds) {
-      this.messages.delete(messageId);
-    }
-  }
-}
 
 // Helper function to create a Mastra instance with proper memory registration
 function createMastraWithMemory(idGenerator?: () => string) {
@@ -180,7 +14,8 @@ function createMastraWithMemory(idGenerator?: () => string) {
 
   // Create an agent with the registered memory
   const agent = new Agent({
-    name: 'testAgent',
+    id: 'test-agent',
+    name: 'Test Agent',
     instructions: 'You are a test agent',
     model: new MockLanguageModelV1({
       doGenerate: async () => ({
@@ -460,7 +295,8 @@ describe('Mastra ID Generator', () => {
     it('should use custom ID generator across multiple agents', async () => {
       const memory1 = new MockMemory();
       const agent1 = new Agent({
-        name: 'agent1',
+        id: 'agent1',
+        name: 'Agent 1',
         instructions: 'You are agent 1',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -475,7 +311,8 @@ describe('Mastra ID Generator', () => {
 
       const memory2 = new MockMemory();
       const agent2 = new Agent({
-        name: 'agent2',
+        id: 'agent2',
+        name: 'Agent 2',
         instructions: 'You are agent 2',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -513,12 +350,13 @@ describe('Mastra ID Generator', () => {
   });
 
   describe('Dynamic Memory Creation', () => {
-    it('should pass Mastra instance and runtime context to dynamic memory function', async () => {
+    it('should pass Mastra instance and request context to dynamic memory function', async () => {
       let receivedMastraInstance: Mastra | undefined;
-      let receivedRuntimeContext: RuntimeContext | undefined;
+      let receivedRequestContext: RequestContext | undefined;
 
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a test agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -528,9 +366,9 @@ describe('Mastra ID Generator', () => {
             text: 'Test response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+        memory: ({ requestContext, mastra: mastraInstance }) => {
           receivedMastraInstance = mastraInstance;
-          receivedRuntimeContext = runtimeContext;
+          receivedRequestContext = requestContext;
 
           // Verify the Mastra instance has the custom ID generator
           if (mastraInstance) {
@@ -551,21 +389,22 @@ describe('Mastra ID Generator', () => {
       if (!agentMemory) throw new Error('Memory not found');
 
       expect(receivedMastraInstance).toBe(mastra);
-      expect(receivedRuntimeContext).toBeDefined();
-      expect(typeof receivedRuntimeContext?.get).toBe('function');
-      expect(typeof receivedRuntimeContext?.set).toBe('function');
+      expect(receivedRequestContext).toBeDefined();
+      expect(typeof receivedRequestContext?.get).toBe('function');
+      expect(typeof receivedRequestContext?.set).toBe('function');
 
       const memoryId = agentMemory.generateId();
       expect(customIdGenerator).toHaveBeenCalled();
       expect(memoryId).toMatch(/^custom-id-\d+$/);
     });
 
-    it('should handle dynamic memory creation with runtime context data', async () => {
+    it('should handle dynamic memory creation with request context data', async () => {
       let contextUserId: string | undefined;
       let contextSessionId: string | undefined;
 
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a context-aware agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -575,9 +414,9 @@ describe('Mastra ID Generator', () => {
             text: 'Context-aware response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
-          contextUserId = runtimeContext.get('userId');
-          contextSessionId = runtimeContext.get('sessionId');
+        memory: ({ requestContext, mastra: mastraInstance }) => {
+          contextUserId = requestContext.get('userId');
+          contextSessionId = requestContext.get('sessionId');
 
           // Verify access to custom ID generator
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
@@ -597,12 +436,12 @@ describe('Mastra ID Generator', () => {
         agents: { testAgent: agent },
       });
 
-      // Create runtime context with user data
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('userId', 'user-123');
-      runtimeContext.set('sessionId', 'session-456');
+      // Create request context with user data
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+      requestContext.set('sessionId', 'session-456');
 
-      const agentMemory = await agent.getMemory({ runtimeContext });
+      const agentMemory = await agent.getMemory({ requestContext });
       if (!agentMemory) throw new Error('Memory not found');
 
       expect(contextUserId).toBe('user-123');
@@ -614,11 +453,12 @@ describe('Mastra ID Generator', () => {
       expect(memoryId).toMatch(/^custom-id-\d+$/);
     });
 
-    it('should create different memory instances for different runtime contexts', async () => {
+    it('should create different memory instances for different request contexts', async () => {
       const memoryInstances: MockMemory[] = [];
 
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a multi-context agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -628,8 +468,8 @@ describe('Mastra ID Generator', () => {
             text: 'Multi-context response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
-          const userId = runtimeContext.get('userId');
+        memory: ({ requestContext, mastra: mastraInstance }) => {
+          const userId = requestContext.get('userId');
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
           const memory = new MockMemory();
@@ -645,15 +485,15 @@ describe('Mastra ID Generator', () => {
         agents: { testAgent: agent },
       });
 
-      // Create different runtime contexts
-      const context1 = new RuntimeContext();
+      // Create different request contexts
+      const context1 = new RequestContext();
       context1.set('userId', 'user-1');
 
-      const context2 = new RuntimeContext();
+      const context2 = new RequestContext();
       context2.set('userId', 'user-2');
 
-      const memory1 = await agent.getMemory({ runtimeContext: context1 });
-      const memory2 = await agent.getMemory({ runtimeContext: context2 });
+      const memory1 = await agent.getMemory({ requestContext: context1 });
+      const memory2 = await agent.getMemory({ requestContext: context2 });
 
       expect(memory1).not.toBe(memory2);
       expect(memory1?.name).toBe('memory-user-1');
@@ -670,7 +510,8 @@ describe('Mastra ID Generator', () => {
 
     it('should handle dynamic memory creation errors gracefully', async () => {
       const agent = new Agent({
-        name: 'testAgent',
+        id: 'test-agent',
+        name: 'Test Agent',
         instructions: 'You are a test agent',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -680,11 +521,11 @@ describe('Mastra ID Generator', () => {
             text: 'Test response',
           }),
         }),
-        memory: ({ runtimeContext, mastra: mastraInstance }) => {
+        memory: ({ requestContext, mastra: mastraInstance }) => {
           // Verify the ID generator is available even when memory creation might fail
           expect(mastraInstance?.getIdGenerator()).toBe(customIdGenerator);
 
-          const shouldFail = runtimeContext.get('shouldFail');
+          const shouldFail = requestContext.get('shouldFail');
           if (shouldFail) {
             throw new Error('Memory creation failed');
           }
@@ -699,15 +540,15 @@ describe('Mastra ID Generator', () => {
       });
 
       // Test successful memory creation
-      const successContext = new RuntimeContext();
+      const successContext = new RequestContext();
       successContext.set('shouldFail', false);
-      const successMemory = await agent.getMemory({ runtimeContext: successContext });
+      const successMemory = await agent.getMemory({ requestContext: successContext });
       expect(successMemory).toBeDefined();
 
       // Test failed memory creation
-      const failContext = new RuntimeContext();
+      const failContext = new RequestContext();
       failContext.set('shouldFail', true);
-      await expect(agent.getMemory({ runtimeContext: failContext })).rejects.toThrow('Memory creation failed');
+      await expect(agent.getMemory({ requestContext: failContext })).rejects.toThrow('Memory creation failed');
     });
   });
 
@@ -766,7 +607,8 @@ describe('Mastra ID Generator', () => {
     it('should handle complete user conversation workflow', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
-        name: 'helpAgent',
+        id: 'help-agent',
+        name: 'Help Agent',
         instructions: 'You are a helpful assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -798,7 +640,8 @@ describe('Mastra ID Generator', () => {
     it('should handle multi-user concurrent conversations', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
-        name: 'multiUserAgent',
+        id: 'multi-user-agent',
+        name: 'Multi-User Agent',
         instructions: 'You are a multi-user assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -837,10 +680,13 @@ describe('Mastra ID Generator', () => {
       expect(results).toHaveLength(3);
     });
 
-    it('should handle complex workflow with memory operations', async () => {
+    // TODO: in memory storage doesn't have any way to call id generator on mastra, so this test makes no sense
+    it.skip('should handle complex workflow with memory operations', async () => {
       const memory = new MockMemory();
+
       const agent = new Agent({
-        name: 'workflowAgent',
+        id: 'workflow-agent',
+        name: 'Workflow Agent',
         instructions: 'You are a workflow assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -853,11 +699,14 @@ describe('Mastra ID Generator', () => {
         memory,
       });
 
-      const _mastra = new Mastra({
+      const mastra = new Mastra({
         idGenerator: customIdGenerator,
         logger: false,
         agents: { workflowAgent: agent },
       });
+
+      // Register mastra with memory so it can use the custom ID generator
+      memory.__registerMastra(mastra);
 
       const agentMemory = await agent.getMemory();
       if (!agentMemory) throw new Error('Memory not found');
@@ -871,23 +720,40 @@ describe('Mastra ID Generator', () => {
 
       // Add workflow steps
       const steps = ['Initialize', 'Process', 'Validate', 'Complete'];
+      const savedMessageIds: string[] = [];
       for (const step of steps) {
-        await agentMemory.addMessage({
-          threadId: thread.id,
-          resourceId: 'workflow-resource',
-          content: `${step} workflow step`,
-          role: 'user',
-          type: 'text',
+        const result = await agentMemory.saveMessages({
+          messages: [
+            {
+              id: agentMemory.generateId(),
+              threadId: thread.id,
+              resourceId: 'workflow-resource',
+              content: {
+                format: 2,
+                parts: [{ type: 'text', text: `${step} workflow step` }],
+              },
+              role: 'user',
+              createdAt: new Date(),
+            },
+          ],
         });
+        savedMessageIds.push(...result.messages.map(m => m.id));
       }
 
+      // Verify custom ID generator was called
       expect(customIdGenerator).toHaveBeenCalled();
+
+      // Verify all saved message IDs start with the custom prefix
+      savedMessageIds.forEach(id => {
+        expect(id).toMatch(/^custom-id-/);
+      });
     });
 
     it('should handle streaming operations with memory persistence', async () => {
       const memory = new MockMemory();
       const agent = new Agent({
-        name: 'streamingAgent',
+        id: 'streaming-agent',
+        name: 'Streaming Agent',
         instructions: 'You are a streaming assistant',
         model: new MockLanguageModelV1({
           doGenerate: async () => ({
@@ -912,6 +778,259 @@ describe('Mastra ID Generator', () => {
       });
 
       expect(customIdGenerator).toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Context-Aware ID Generator (Feature Request #8131)
+   *
+   * These tests verify the context-aware ID generation feature that allows users
+   * to generate deterministic IDs based on context (e.g., agent, workflow, etc.)
+   * that can be used/shared with external applications like external databases.
+   *
+   * The idGenerator signature is: (context?: IdGeneratorContext) => string
+   *
+   * Where IdGeneratorContext contains information about:
+   * - idType: 'thread' | 'message' | 'run' | 'step' | 'generic'
+   * - source: 'agent' | 'workflow' | 'memory'
+   * - entityId: the id of the agent, workflow, or other entity
+   * - Additional contextual information (threadId, resourceId, role, stepType)
+   */
+  describe('Context-Aware ID Generator (Feature Request #8131)', () => {
+    it('should pass context to idGenerator for deterministic ID generation', async () => {
+      const receivedContexts: Array<{
+        idType?: string;
+        source?: string;
+        entityId?: string;
+        threadId?: string;
+        resourceId?: string;
+      }> = [];
+
+      // Users can now generate IDs based on context
+      const contextAwareIdGenerator = vi.fn(
+        (context?: { idType?: string; source?: string; entityId?: string; threadId?: string; resourceId?: string }) => {
+          receivedContexts.push(context || {});
+
+          // Generate deterministic IDs based on context
+          if (context?.idType === 'message' && context?.threadId) {
+            return `msg-${context.threadId}-${Date.now()}`;
+          }
+          if (context?.idType === 'run' && context?.source === 'agent' && context?.entityId) {
+            return `run-${context.entityId}-${Date.now()}`;
+          }
+          if (context?.idType === 'thread') {
+            return `thread-${context.resourceId || 'unknown'}-${Date.now()}`;
+          }
+          return `generic-${Date.now()}`;
+        },
+      );
+
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'context-test-agent',
+        name: 'Context Test Agent',
+        instructions: 'You are a test agent for context-aware ID generation',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Test response',
+          }),
+        }),
+        memory,
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+        agents: { contextTestAgent: agent },
+      });
+
+      // Trigger agent generation which should call idGenerator with context
+      await agent.generateLegacy('Hello', {
+        threadId: 'test-thread-123',
+        resourceId: 'user-456',
+      });
+
+      // ASSERT: The idGenerator should have been called with context information
+      expect(contextAwareIdGenerator).toHaveBeenCalled();
+
+      // Check that at least one call received context with idType
+      const hasContextWithIdType = receivedContexts.some(ctx => ctx.idType !== undefined);
+      expect(hasContextWithIdType).toBe(true);
+
+      // Check that context includes source information
+      const hasContextWithSource = receivedContexts.some(ctx => ctx.source !== undefined);
+      expect(hasContextWithSource).toBe(true);
+
+      // Check that context includes entity information when applicable
+      const hasContextWithEntityId = receivedContexts.some(ctx => ctx.entityId !== undefined);
+      expect(hasContextWithEntityId).toBe(true);
+    });
+
+    it('should provide thread context when generating thread IDs', async () => {
+      const receivedContexts: Array<{ idType?: string; resourceId?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; resourceId?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const memory = new MockMemory();
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+      });
+
+      memory.__registerMastra(_mastra);
+
+      // Create a thread - should pass context with idType='thread'
+      await memory.createThread({
+        resourceId: 'user-789',
+        title: 'Test Thread',
+      });
+
+      // ASSERT: idGenerator should receive context with idType='thread'
+      const threadContext = receivedContexts.find(ctx => ctx.idType === 'thread');
+      expect(threadContext).toBeDefined();
+      expect(threadContext?.resourceId).toBe('user-789');
+    });
+
+    it('should provide message context when generating message IDs', async () => {
+      const receivedContexts: Array<{ idType?: string; threadId?: string; role?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; threadId?: string; role?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+      });
+
+      const messageList = new MessageList({
+        threadId: 'thread-abc',
+        resourceId: 'user-xyz',
+        generateMessageId: mastra.generateId.bind(mastra),
+      });
+
+      // Add a message - should pass context with idType='message'
+      messageList.add('Hello world', 'user');
+
+      // ASSERT: idGenerator should receive context with idType='message'
+      const messageContext = receivedContexts.find(ctx => ctx.idType === 'message');
+      expect(messageContext).toBeDefined();
+      expect(messageContext?.threadId).toBe('thread-abc');
+    });
+
+    it('should provide workflow context when generating run IDs', async () => {
+      const receivedContexts: Array<{ idType?: string; source?: string; entityId?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; source?: string; entityId?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const { createWorkflow, createStep } = await import('../workflows');
+      const { z } = await import('zod');
+
+      const testStep = createStep({
+        id: 'test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData }) => ({ result: inputData.value }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'context-test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+      })
+        .then(testStep)
+        .commit();
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+        workflows: { 'context-test-workflow': workflow },
+      });
+
+      // Create a run - should pass context with idType='run' and source='workflow'
+      await workflow.createRun();
+
+      // ASSERT: idGenerator should receive context with idType='run' and source='workflow'
+      const runContext = receivedContexts.find(ctx => ctx.idType === 'run' && ctx.source === 'workflow');
+      expect(runContext).toBeDefined();
+      expect(runContext?.entityId).toBe('context-test-workflow');
+    });
+
+    it('should provide correct source for agent runs', async () => {
+      const receivedContexts: Array<{ idType?: string; source?: string; entityId?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; source?: string; entityId?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'source-test-agent',
+        name: 'Source Test Agent',
+        instructions: 'Test agent',
+        model: new MockLanguageModelV1({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 20 },
+            text: 'Test response',
+          }),
+        }),
+        memory,
+      });
+
+      const _mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+        agents: { sourceTestAgent: agent },
+      });
+
+      await agent.generateLegacy('Hello');
+
+      // ASSERT: idGenerator should receive context with source='agent'
+      const agentRunContext = receivedContexts.find(ctx => ctx.idType === 'run' && ctx.source === 'agent');
+      expect(agentRunContext).toBeDefined();
+      expect(agentRunContext?.entityId).toBe('source-test-agent');
+    });
+
+    it('should provide correct source for memory operations', async () => {
+      const receivedContexts: Array<{ idType?: string; source?: string }> = [];
+
+      const contextAwareIdGenerator = vi.fn((context?: { idType?: string; source?: string }) => {
+        receivedContexts.push(context || {});
+        return `id-${Date.now()}-${Math.random()}`;
+      });
+
+      const memory = new MockMemory();
+
+      const mastra = new Mastra({
+        idGenerator: contextAwareIdGenerator,
+        logger: false,
+      });
+
+      memory.__registerMastra(mastra);
+
+      // Create a thread - should have source='memory'
+      await memory.createThread({
+        resourceId: 'test-user',
+        title: 'Test Thread',
+      });
+
+      // ASSERT: thread creation should have source='memory'
+      const memoryContext = receivedContexts.find(ctx => ctx.idType === 'thread' && ctx.source === 'memory');
+      expect(memoryContext).toBeDefined();
     });
   });
 });

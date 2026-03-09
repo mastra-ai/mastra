@@ -1,9 +1,14 @@
-import { existsSync } from 'fs';
-import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join, dirname, resolve, extname, basename } from 'path';
+import { existsSync } from 'node:fs';
+import { mkdtemp, copyFile, readFile, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, dirname, resolve, extname, basename } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import { Agent, tryGenerateWithJsonFallback, tryStreamWithJsonFallback } from '@mastra/core/agent';
+import {
+  Agent,
+  tryGenerateWithJsonFallback,
+  tryStreamWithJsonFallback,
+  isSupportedLanguageModel,
+} from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { z } from 'zod';
@@ -47,6 +52,8 @@ import {
   mergeEnvFiles,
   resolveModel,
 } from '../../utils';
+
+type AgentBuilderInputSchemaType = z.infer<typeof AgentBuilderInputSchema>;
 
 // Step 1: Clone template to temp directory
 const cloneTemplateStep = createStep({
@@ -159,18 +166,19 @@ const discoverUnitsStep = createStep({
   description: 'Discover template units by analyzing the templates directory structure',
   inputSchema: CloneTemplateResultSchema,
   outputSchema: DiscoveryResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     const { templateDir } = inputData;
-    const targetPath = resolveTargetPath(inputData, runtimeContext);
+    const targetPath = resolveTargetPath(inputData, requestContext);
 
     const tools = await AgentBuilderDefaults.DEFAULT_TOOLS(templateDir);
 
     console.info('targetPath', targetPath);
 
-    const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+    const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
 
     try {
       const agent = new Agent({
+        id: 'mastra-project-discoverer',
         model,
         instructions: `You are an expert at analyzing Mastra projects.
 
@@ -210,7 +218,8 @@ Return the actual exported names of the units, as well as the file names.`,
         },
       });
 
-      const isV2 = model.specificationVersion === 'v2';
+      const resolvedModel = await agent.getModel();
+      const isSupported = isSupportedLanguageModel(resolvedModel);
 
       const prompt = `Analyze the Mastra project directory structure at "${templateDir}".
 
@@ -232,7 +241,7 @@ Return the actual exported names of the units, as well as the file names.`,
         other: z.array(z.object({ name: z.string(), file: z.string() })).optional(),
       });
 
-      const result = isV2
+      const result = isSupported
         ? await tryGenerateWithJsonFallback(agent, prompt, {
             structuredOutput: {
               schema: output,
@@ -337,8 +346,8 @@ const prepareBranchStep = createStep({
   description: 'Create or switch to integration branch before modifications',
   inputSchema: PrepareBranchInputSchema,
   outputSchema: PrepareBranchResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
-    const targetPath = resolveTargetPath(inputData, runtimeContext);
+  execute: async ({ inputData, requestContext }) => {
+    const targetPath = resolveTargetPath(inputData, requestContext);
 
     try {
       const branchName = `feat/install-template-${inputData.slug}`;
@@ -365,10 +374,10 @@ const packageMergeStep = createStep({
   description: 'Merge template package.json dependencies into target project',
   inputSchema: PackageMergeInputSchema,
   outputSchema: PackageMergeResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     console.info('Package merge step starting...');
     const { slug, packageInfo } = inputData;
-    const targetPath = resolveTargetPath(inputData, runtimeContext);
+    const targetPath = resolveTargetPath(inputData, requestContext);
 
     try {
       const targetPkgPath = join(targetPath, 'package.json');
@@ -463,9 +472,9 @@ const installStep = createStep({
   description: 'Install packages based on merged package.json',
   inputSchema: InstallInputSchema,
   outputSchema: InstallResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     console.info('Running install step...');
-    const targetPath = resolveTargetPath(inputData, runtimeContext);
+    const targetPath = resolveTargetPath(inputData, requestContext);
 
     try {
       // Run install using swpm (no specific packages)
@@ -500,10 +509,10 @@ const programmaticFileCopyStep = createStep({
   description: 'Programmatically copy template files to target project based on ordered units',
   inputSchema: FileCopyInputSchema,
   outputSchema: FileCopyResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     console.info('Programmatic file copy step starting...');
     const { orderedUnits, templateDir, commitSha, slug } = inputData;
-    const targetPath = resolveTargetPath(inputData, runtimeContext);
+    const targetPath = resolveTargetPath(inputData, requestContext);
 
     try {
       const copiedFiles: Array<{
@@ -554,27 +563,31 @@ const programmaticFileCopyStep = createStep({
         const baseName = basename(name, extname(name));
         const ext = extname(name);
 
+        // Helper: split a name into words by hyphens, underscores, or camelCase boundaries
+        const toWords = (s: string): string[] => {
+          return (
+            s
+              .replace(/[-_]/g, ' ')
+              // split "HTTPServer" -> "HTTP Server"
+              .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+              .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+              .split(/\s+/)
+              .filter(Boolean)
+              .map(w => w.toLowerCase())
+          );
+        };
+
+        const words = toWords(baseName);
+
         switch (convention) {
           case 'camelCase':
-            return (
-              baseName
-                .replace(/[-_]/g, '')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? p1.toLowerCase() : p1)) + ext
-            );
+            return words.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('') + ext;
           case 'snake_case':
-            return (
-              baseName
-                .replace(/[-]/g, '_')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '_') + p1.toLowerCase()) + ext
-            );
+            return words.join('_') + ext;
           case 'kebab-case':
-            return (
-              baseName
-                .replace(/[_]/g, '-')
-                .replace(/([A-Z])/g, (match, p1, offset) => (offset === 0 ? '' : '-') + p1.toLowerCase()) + ext
-            );
+            return words.join('-') + ext;
           case 'PascalCase':
-            return baseName.replace(/[-_]/g, '').replace(/^[a-z]/, match => match.toUpperCase()) + ext;
+            return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('') + ext;
           default:
             return name;
         }
@@ -950,12 +963,12 @@ const intelligentMergeStep = createStep({
   description: 'Use AgentBuilder to intelligently merge template files',
   inputSchema: IntelligentMergeInputSchema,
   outputSchema: IntelligentMergeResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     console.info('Intelligent merge step starting...');
     const { conflicts, copiedFiles, commitSha, slug, templateDir, branchName } = inputData;
-    const targetPath = resolveTargetPath(inputData, runtimeContext);
+    const targetPath = resolveTargetPath(inputData, requestContext);
     try {
-      const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
 
       // Create copyFile tool for edge cases
       const copyFileTool = createTool({
@@ -969,11 +982,11 @@ const intelligentMergeStep = createStep({
         outputSchema: z.object({
           success: z.boolean(),
           message: z.string(),
-          error: z.string().optional(),
+          errorMessage: z.string().optional(),
         }),
-        execute: async ({ context }) => {
+        execute: async input => {
           try {
-            const { sourcePath, destinationPath } = context;
+            const { sourcePath, destinationPath } = input;
 
             // Use templateDir directly from input
             const resolvedSourcePath = resolve(templateDir, sourcePath);
@@ -988,11 +1001,11 @@ const intelligentMergeStep = createStep({
               success: true,
               message: `Successfully copied file from ${sourcePath} to ${destinationPath}`,
             };
-          } catch (error) {
+          } catch (err) {
             return {
               success: false,
-              message: `Failed to copy file: ${error instanceof Error ? error.message : String(error)}`,
-              error: error instanceof Error ? error.message : String(error),
+              message: `Failed to copy file: ${err instanceof Error ? err.message : String(err)}`,
+              errorMessage: err instanceof Error ? err.message : String(err),
             };
           }
         },
@@ -1162,8 +1175,9 @@ Start by listing your tasks and work through them systematically!
 `;
 
       // Process tasks systematically
-      const isV2 = model.specificationVersion === 'v2';
-      const result = isV2 ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
+      const resolvedModel = await agentBuilder.getModel();
+      const isSupported = isSupportedLanguageModel(resolvedModel);
+      const result = isSupported ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{
@@ -1264,10 +1278,10 @@ const validationAndFixStep = createStep({
   description: 'Validate the merged template code and fix any issues using a specialized agent',
   inputSchema: ValidationFixInputSchema,
   outputSchema: ValidationFixResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     console.info('Validation and fix step starting...');
     const { commitSha, slug, orderedUnits, templateDir, copiedFiles, conflictsResolved, maxIterations = 5 } = inputData;
-    const targetPath = resolveTargetPath(inputData, runtimeContext);
+    const targetPath = resolveTargetPath(inputData, requestContext);
 
     // Skip validation if no changes were made
     const hasChanges = copiedFiles.length > 0 || (conflictsResolved && conflictsResolved.length > 0);
@@ -1292,12 +1306,13 @@ const validationAndFixStep = createStep({
     let currentIteration = 1; // Declare at function scope for error handling
 
     try {
-      const model = await resolveModel({ runtimeContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
+      const model = await resolveModel({ requestContext, projectPath: targetPath, defaultModel: openai('gpt-4.1') });
 
-      const allTools = await AgentBuilderDefaults.getToolsForMode(targetPath, 'template');
+      const allTools = await AgentBuilderDefaults.listToolsForMode(targetPath, 'template');
 
       const validationAgent = new Agent({
-        name: 'code-validator-fixer',
+        id: 'code-validator-fixer',
+        name: 'Code Validator Fixer',
         description: 'Specialized agent for validating and fixing template integration issues',
         instructions: `You are a code validation and fixing specialist. Your job is to:
 
@@ -1437,9 +1452,10 @@ Start by running validateCode with all validation types to get a complete pictur
 
 Previous iterations may have fixed some issues, so start by re-running validateCode to see the current state, then fix any remaining issues.`;
 
-        const isV2 = model.specificationVersion === 'v2';
+        const resolvedModel = await validationAgent.getModel();
+        const isSupported = isSupportedLanguageModel(resolvedModel);
         const output = z.object({ success: z.boolean() });
-        const result = isV2
+        const result = isSupported
           ? await tryStreamWithJsonFallback(validationAgent, iterationPrompt, {
               structuredOutput: {
                 schema: output,
@@ -1604,7 +1620,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .then(orderUnitsStep)
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
@@ -1615,7 +1631,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const cloneResult = getStepResult(cloneTemplateStep);
     const packageResult = getStepResult(analyzePackageStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       commitSha: cloneResult.commitSha,
       slug: cloneResult.slug,
@@ -1625,7 +1641,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   })
   .then(packageMergeStep)
   .map(async ({ getInitData }) => {
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
     return {
       targetPath: initData.targetPath,
     };
@@ -1635,7 +1651,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const cloneResult = getStepResult(cloneTemplateStep);
     const orderResult = getStepResult(orderUnitsStep);
     const installResult = getStepResult(installStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     if (shouldAbortWorkflow(installResult)) {
       throw new Error(`Failure in install step: ${installResult.error || 'Install failed'}`);
@@ -1653,7 +1669,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
   .map(async ({ getStepResult, getInitData }) => {
     const copyResult = getStepResult(programmaticFileCopyStep);
     const cloneResult = getStepResult(cloneTemplateStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     return {
       conflicts: copyResult.conflicts,
@@ -1670,7 +1686,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
     const orderResult = getStepResult(orderUnitsStep);
     const copyResult = getStepResult(programmaticFileCopyStep);
     const mergeResult = getStepResult(intelligentMergeStep);
-    const initData = getInitData();
+    const initData = getInitData<AgentBuilderInputSchemaType>();
 
     return {
       commitSha: cloneResult.commitSha,
@@ -1779,7 +1795,7 @@ export const agentBuilderTemplateWorkflow = createWorkflow({
 // Helper to merge a template by slug
 export async function mergeTemplateBySlug(slug: string, targetPath?: string) {
   const template = await getMastraTemplate(slug);
-  const run = await agentBuilderTemplateWorkflow.createRunAsync();
+  const run = await agentBuilderTemplateWorkflow.createRun();
   return await run.start({
     inputData: {
       repo: template.githubUrl,

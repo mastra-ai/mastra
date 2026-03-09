@@ -4,7 +4,7 @@ A multi-turn human-in-the-loop workflow.
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - Openai API key
 
@@ -41,7 +41,7 @@ A multi-turn human-in-the-loop workflow.
    pnpm dev
    ```
 
-5. Test in Playground:
+5. Test in Mastra Studio:
 
    ```bash
    http://localhost:4111

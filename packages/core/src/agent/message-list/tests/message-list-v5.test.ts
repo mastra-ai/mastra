@@ -1,11 +1,14 @@
-import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from 'ai';
-import { isToolUIPart } from 'ai-v5';
-import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from 'ai-v5';
+import type { CoreMessage as AIV4CoreMessage, UIMessage as AIV4UIMessage } from '@internal/ai-sdk-v4';
+import { isToolUIPart } from '@internal/ai-sdk-v5';
+import type { ModelMessage as AIV5ModelMessage, UIMessage as AIV5UIMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
-import type { MastraMessageV2 } from '../index';
+import { TypeDetector } from '../detection/TypeDetector';
+import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
-import { hasAIV5CoreMessageCharacteristics } from '../utils/ai-v4-v5/core-model-message';
-import { hasAIV5UIMessageCharacteristics } from '../utils/ai-v4-v5/ui-message';
+
+// Use TypeDetector's static methods for V4/V5 detection
+const hasAIV5CoreMessageCharacteristics = TypeDetector.hasAIV5CoreMessageCharacteristics;
+const hasAIV5UIMessageCharacteristics = TypeDetector.hasAIV5UIMessageCharacteristics;
 
 const threadId = 'test-thread';
 const resourceId = 'test-resource';
@@ -281,7 +284,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with pending state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -322,7 +325,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert tool invocations with result state', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -365,7 +368,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert reasoning parts', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'assistant',
           createdAt: new Date(),
@@ -400,7 +403,7 @@ describe('MessageList V5 Support', () => {
 
       it('should convert file parts with URL handling', () => {
         const list = new MessageList({ threadId, resourceId });
-        const v2Message: MastraMessageV2 = {
+        const v2Message: MastraDBMessage = {
           id: 'msg-1',
           role: 'user',
           createdAt: new Date(),
@@ -531,12 +534,11 @@ describe('MessageList V5 Support', () => {
         });
       });
 
-      it('prompt() should throw error for empty message list', () => {
+      it('prompt() should pass through empty message list unchanged', () => {
         const list = new MessageList({ threadId, resourceId });
 
-        expect(() => list.get.all.aiV5.prompt()).toThrow(
-          'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-        );
+        const prompt = list.get.all.aiV5.prompt();
+        expect(prompt).toHaveLength(0);
       });
 
       it('prompt() should ensure proper message ordering for Gemini compatibility', () => {
@@ -752,7 +754,7 @@ describe('MessageList V5 Support', () => {
       const list = new MessageList({ threadId, resourceId });
 
       // Add a v5 message with reasoning through the conversion pipeline
-      const v2Message: MastraMessageV2 = {
+      const v2Message: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -939,9 +941,9 @@ describe('MessageList V5 Support', () => {
       const messageList = new MessageList();
       const imageUrl = 'https://httpbin.org/image/png';
 
-      // This mimics what happens when the user passes messages to stream
-      // with format: 'aisdk' containing file parts with URLs
-      const v2Message: MastraMessageV2 = {
+      // This mimics what happens when messages containing file parts with URLs
+      // are converted to AI SDK v5 format
+      const v2Message: MastraDBMessage = {
         id: 'test-msg-1',
         role: 'user',
         content: {
@@ -958,18 +960,18 @@ describe('MessageList V5 Support', () => {
 
       messageList.add(v2Message, 'user');
 
-      // Get V3 messages (internal format used for message processing)
-      const v3Messages = messageList.get.all.v3();
-      const v3FilePart = v3Messages[0].content.parts.find((p: any) => p.type === 'file');
+      // Get V5 UI messages (used for message processing)
+      const v5UiMessages = messageList.get.all.aiV5.ui();
+      const v5UiFilePart = v5UiMessages[0].parts.find((p: any) => p.type === 'file');
 
-      if (v3FilePart?.type === 'file') {
-        expect(v3FilePart.url).toBe(imageUrl);
+      if (v5UiFilePart?.type === 'file') {
+        expect(v5UiFilePart.url).toBe(imageUrl);
         // It should NOT be wrapped as a malformed data URI
-        expect(v3FilePart.url).not.toContain('data:image/png;base64,https://');
+        expect(v5UiFilePart.url).not.toContain('data:image/png;base64,https://');
       }
 
       // Get V2 messages back (this is what InputProcessors receive)
-      const v2Messages = messageList.get.all.v2();
+      const v2Messages = messageList.get.all.db();
       const v2FilePart = v2Messages[0].content.parts?.find((p: any) => p.type === 'file');
 
       // The URL should remain unchanged when converting back to V2
@@ -979,7 +981,7 @@ describe('MessageList V5 Support', () => {
         expect(v2FilePart.data).not.toContain('data:image/png;base64,https://');
       }
 
-      // Get V5 UI messages (used by AI SDK when format: 'aisdk')
+      // Get V5 UI messages (used for AI SDK v5 output)
       const v5UIMessages = messageList.get.all.aiV5.ui();
       const v5FilePart = v5UIMessages[0].parts.find(p => p.type === 'file');
 
@@ -1125,16 +1127,15 @@ describe('MessageList V5 Support', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should throw error for empty message list with prompt methods', () => {
+    it('should pass through empty message list unchanged with prompt methods', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      // Both v4 and v5 should throw error for empty list
-      expect(() => list.get.all.aiV4.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      // Both v4 and v5 should pass through empty list
+      const v4Prompt = list.get.all.aiV4.prompt();
+      expect(v4Prompt).toHaveLength(0);
+
+      const v5Prompt = list.get.all.aiV5.prompt();
+      expect(v5Prompt).toHaveLength(0);
     });
 
     it('should throw error for system messages with wrong role', () => {
@@ -1166,7 +1167,7 @@ describe('MessageList V5 Support', () => {
     it('should handle tool invocations with missing fields gracefully', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const incompleteToolMessage: MastraMessageV2 = {
+      const incompleteToolMessage: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -1206,7 +1207,7 @@ describe('MessageList V5 Support', () => {
     it('should filter out empty reasoning parts', () => {
       const list = new MessageList({ threadId, resourceId });
 
-      const messageWithEmptyReasoning: MastraMessageV2 = {
+      const messageWithEmptyReasoning: MastraDBMessage = {
         id: 'msg-1',
         role: 'assistant',
         createdAt: new Date(),
@@ -1293,7 +1294,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'input');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const filePart = v2Messages[0].content.parts.find(p => p.type === 'file');
         expect(filePart).toBeDefined();
@@ -1329,7 +1330,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const textPart = v2Messages[0].content.parts.find(p => p.type === 'text');
         expect(textPart).toBeDefined();
@@ -1366,7 +1367,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const reasoningPart = v2Messages[0].content.parts.find(p => p.type === 'reasoning');
         expect(reasoningPart).toBeDefined();
@@ -1406,7 +1407,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check callProviderMetadata was preserved on tool-invocation
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const toolPart = v2Messages[0].content.parts.find(p => p.type === 'tool-invocation');
         expect(toolPart).toBeDefined();
@@ -1448,7 +1449,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and check providerMetadata was preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         expect(v2Messages).toHaveLength(1);
         const sourcePart = v2Messages[0].content.parts.find(p => p.type === 'source');
         expect(sourcePart).toBeDefined();
@@ -1495,7 +1496,7 @@ describe('MessageList V5 Support', () => {
         list.add(v5UIMessage, 'response');
 
         // Get V2 messages and verify all providerMetadata preserved
-        const v2Messages = list.get.all.v2();
+        const v2Messages = list.get.all.db();
         const parts = v2Messages[0].content.parts;
 
         const textPart = parts.find(p => p.type === 'text');
@@ -1520,6 +1521,344 @@ describe('MessageList V5 Support', () => {
         const v5ReasoningPart = v5Parts.find(p => p.type === 'reasoning');
         expect(v5ReasoningPart?.providerMetadata).toEqual(reasoningProviderMetadata);
       });
+    });
+  });
+
+  describe('data-* parts handling', () => {
+    it('should preserve data-* parts when message is detected as V4 (text + data-* only)', () => {
+      // This message has no V5-specific characteristics, so it's treated as V4
+      // and parts are passed through without filtering - this works correctly
+      const list = new MessageList({ threadId, resourceId });
+
+      const message: AIV5UIMessage = {
+        id: 'msg-v4-path',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Running task...' },
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 1, progress: 33 },
+          } as any,
+        ],
+      };
+
+      list.add(message, 'response');
+
+      const dbMessages = list.get.all.db();
+      const dataProgressParts = dbMessages[0].content.parts.filter((p: any) => p.type?.startsWith('data-'));
+
+      expect(dataProgressParts.length).toBe(1);
+      expect(dataProgressParts[0]).toMatchObject({
+        type: 'data-progress',
+        data: { taskName: 'first-task', step: 1, progress: 33 },
+      });
+    });
+
+    it('should preserve data-* parts when message has V5 tool parts', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const v5Message: AIV5UIMessage = {
+        id: 'msg-v5-with-data',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-test-tool', // V5 tool part format
+            toolCallId: 'call-1',
+            state: 'output-available',
+            input: { param: 'value' },
+            output: { result: 'success' },
+          } as any,
+          { type: 'text', text: 'Task running...' },
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 1, progress: 33, status: 'in-progress' },
+          } as any,
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 2, progress: 66, status: 'in-progress' },
+          } as any,
+          {
+            type: 'data-progress',
+            data: { taskName: 'first-task', step: 3, progress: 99, status: 'complete' },
+          } as any,
+          { type: 'text', text: 'Task completed!' },
+        ],
+      };
+
+      list.add(v5Message, 'response');
+
+      const dbMessages = list.get.all.db();
+      expect(dbMessages).toHaveLength(1);
+
+      const dataProgressParts = dbMessages[0].content.parts.filter((p: any) => p.type?.startsWith('data-'));
+
+      expect(dataProgressParts.length).toBe(3);
+      expect(dataProgressParts[0]).toMatchObject({
+        type: 'data-progress',
+        data: { taskName: 'first-task', step: 1, progress: 33, status: 'in-progress' },
+      });
+    });
+
+    it('should preserve custom data-* part types in V5 messages', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      const v5Message: AIV5UIMessage = {
+        id: 'msg-custom-data-v5',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-analytics-tool',
+            toolCallId: 'call-2',
+            state: 'output-available',
+            input: {},
+            output: { tracked: true },
+          } as any,
+          { type: 'text', text: 'Hello' },
+          { type: 'data-custom', data: { foo: 'bar' } } as any,
+          { type: 'data-analytics', data: { event: 'click', count: 5 } } as any,
+        ],
+      };
+
+      list.add(v5Message, 'response');
+
+      const dbMessages = list.get.all.db();
+      const customParts = dbMessages[0].content.parts.filter((p: any) => p.type?.startsWith('data-'));
+
+      expect(customParts.length).toBe(2);
+      expect(customParts[0]).toMatchObject({ type: 'data-custom', data: { foo: 'bar' } });
+      expect(customParts[1]).toMatchObject({ type: 'data-analytics', data: { event: 'click', count: 5 } });
+    });
+
+    it('should roundtrip data-* parts through V5 UI -> V2 DB -> V5 UI conversion', () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      // Add V5 message with tool part and data-* parts
+      const originalMessage: AIV5UIMessage = {
+        id: 'msg-roundtrip',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-progress-tool',
+            toolCallId: 'call-1',
+            state: 'output-available',
+            input: { task: 'test' },
+            output: { success: true },
+          } as any,
+          { type: 'text', text: 'Progress update' },
+          { type: 'data-progress', data: { step: 1, total: 3 } } as any,
+        ],
+      };
+
+      list.add(originalMessage, 'response');
+
+      // Convert back to V5 UI format
+      const v5Messages = list.get.all.aiV5.ui();
+      expect(v5Messages).toHaveLength(1);
+
+      // Find the data-progress part in the converted message
+      const dataProgressPart = v5Messages[0].parts.find((p: any) => p.type === 'data-progress');
+
+      expect(dataProgressPart).toBeDefined();
+      expect((dataProgressPart as any)?.data).toEqual({ step: 1, total: 3 });
+    });
+  });
+
+  describe('toModelOutput support', () => {
+    it('should use stored modelOutput from providerMetadata in llmPrompt', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('What is the weather?', 'input');
+
+      // Message with toModelOutput result stored at creation time on providerMetadata.mastra.modelOutput
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-tool',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-1',
+                toolName: 'getWeather',
+                state: 'result',
+                args: { city: 'NYC' },
+                result: { temperature: 72, humidity: 45, conditions: 'sunny', forecast: [1, 2, 3, 4, 5] },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Temperature: 72°F, sunny' },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      // llmPrompt should use the stored modelOutput, not the raw result
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      expect(toolRole).toBeDefined();
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output.type).toBe('text');
+      expect(toolResultPart.output.value).toBe('Temperature: 72°F, sunny');
+    });
+
+    it('should preserve raw result in stored messages when modelOutput is set', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Call a tool', 'input');
+
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-tool-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-2',
+                toolName: 'fetchData',
+                state: 'result',
+                args: { url: 'https://example.com' },
+                result: { status: 200, body: 'lots of data here' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Data fetched successfully' },
+                },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      // llmPrompt should use stored modelOutput
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output.type).toBe('text');
+      expect(toolResultPart.output.value).toBe('Data fetched successfully');
+
+      // But the raw DB messages should still have the original result
+      const dbMessages = list.get.all.db();
+      const toolDbMsg = dbMessages.find(m => m.content.parts?.some((p: any) => p.type === 'tool-invocation'));
+      const toolPart = toolDbMsg?.content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
+    });
+
+    it('should only override output for tool results that have stored modelOutput', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Do things', 'input');
+
+      const multiToolMessage: MastraDBMessage = {
+        id: 'msg-multi',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-a',
+                toolName: 'toolA',
+                state: 'result',
+                args: {},
+                result: { raw: 'a-data' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'A transformed' },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-b',
+                toolName: 'toolB',
+                state: 'result',
+                args: {},
+                result: { raw: 'b-data' },
+              },
+              // No modelOutput — should get default json conversion
+            },
+          ],
+        },
+      };
+
+      list.add(multiToolMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRoles = prompt.filter(m => m.role === 'tool');
+
+      const allToolResults = toolRoles.flatMap((m: any) => m.content.filter((p: any) => p.type === 'tool-result'));
+
+      const resultA = allToolResults.find((p: any) => p.toolName === 'toolA');
+      const resultB = allToolResults.find((p: any) => p.toolName === 'toolB');
+
+      // toolA has stored modelOutput — should use it
+      expect(resultA.output.type).toBe('text');
+      expect(resultA.output.value).toBe('A transformed');
+
+      // toolB has no stored modelOutput — should get default json conversion
+      expect(resultB.output.type).toBe('json');
+      expect(resultB.output.value).toEqual({ raw: 'b-data' });
+    });
+
+    it('should fall back to default conversion when no modelOutput is stored', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Ask something', 'input');
+
+      // No providerMetadata / no modelOutput
+      const toolResultMessage: MastraDBMessage = {
+        id: 'msg-no-model-output',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-fallback',
+                toolName: 'search',
+                state: 'result',
+                args: { q: 'test' },
+                result: { results: ['a', 'b', 'c'] },
+              },
+            },
+          ],
+        },
+      };
+
+      list.add(toolResultMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+
+      // Default AI SDK conversion — json wrapping
+      expect(toolResultPart.output.type).toBe('json');
+      expect(toolResultPart.output.value).toEqual({ results: ['a', 'b', 'c'] });
     });
   });
 });

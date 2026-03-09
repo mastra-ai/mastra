@@ -10,7 +10,8 @@ import { memory } from './memory.js';
 import { getBaseModelConfig } from './model.js';
 
 export const daneCommitMessage = new Agent({
-  name: 'DaneCommitMessage',
+  id: 'dane-commit-message',
+  name: 'Dane Commit Message',
   instructions: `
     You are Dane, the ultimate GitHub operator.
     You help engineers generate commit messages.
@@ -23,7 +24,8 @@ export const daneCommitMessage = new Agent({
 });
 
 export const daneIssueLabeler = new Agent({
-  name: 'DaneIssueLabeler',
+  id: 'dane-issue-labeler',
+  name: 'Dane Issue Labeler',
   instructions: `
     You are Dane, the ultimate GitHub operator.
     You help engineers label their issues.
@@ -33,7 +35,8 @@ export const daneIssueLabeler = new Agent({
 });
 
 export const daneLinkChecker = new Agent({
-  name: 'DaneLinkChecker',
+  id: 'dane-link-checker',
+  name: 'Dane Link Checker',
   instructions: `
     You are Dane, the link checker for Mastra AI. You report on broken links whenever you see them.
     Make sure to include the url in the message.
@@ -49,7 +52,8 @@ export const daneLinkChecker = new Agent({
 });
 
 export const daneChangeLog = new Agent({
-  name: 'DanePackagePublisher',
+  id: 'dane-package-publisher',
+  name: 'Dane Package Publisher',
   instructions: `
     You are Dane, the changelog writer for Mastra AI. Every week we need to write a changelog for the Mastra AI project.
     ## Style Guide
@@ -66,6 +70,7 @@ export const daneChangeLog = new Agent({
 });
 
 export const dane = new Agent({
+  id: 'dane',
   name: 'Dane',
   instructions: `
     You are Dane, my assistant and one of my best friends. We are an ace team!

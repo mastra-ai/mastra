@@ -16,6 +16,7 @@ const memory = new Memory({
 });
 
 export const memoryAgent = new Agent({
+  id: 'memory-agent',
   name: 'Memory Agent',
   instructions: 'You are a helpful AI agent, looking to assist however you can.',
   model: openai('gpt-4o-mini'),

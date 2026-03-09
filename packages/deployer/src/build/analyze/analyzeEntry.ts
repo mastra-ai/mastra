@@ -1,17 +1,21 @@
-import { noopLogger, type IMastraLogger } from '@mastra/core/logger';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { noopLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@mastra/core/logger';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 import virtual from '@rollup/plugin-virtual';
-import { fileURLToPath } from 'node:url';
-import { rollup, type OutputChunk, type Plugin, type SourceMap } from 'rollup';
-import resolveFrom from 'resolve-from';
-import { esbuild } from '../plugins/esbuild';
+import { readJSON } from 'fs-extra/esm';
+import { resolveModule } from 'local-pkg';
+import { rollup } from 'rollup';
+import type { OutputChunk, Plugin, SourceMap } from 'rollup';
+import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { isNodeBuiltin } from '../isNodeBuiltin';
+import { getPackageRootPath } from '../package-info';
+import { esbuild } from '../plugins/esbuild';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import { getPackageName, getPackageRootPath, slash } from '../utils';
-import { type WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
+import { getPackageName, slash } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
 /**
@@ -62,7 +66,9 @@ function getInputPlugins(
         transformMixedEsModules: true,
         extensions: ['.js', '.ts'],
       }),
-      removeDeployer(mastraEntry, { sourcemap: sourcemapEnabled }),
+      removeDeployer(mastraEntry, {
+        sourcemap: sourcemapEnabled,
+      }),
       esbuild(),
     ],
   );
@@ -79,10 +85,13 @@ async function captureDependenciesToOptimize(
   output: OutputChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
   projectRoot: string,
+  initialDepsToOptimize: Map<string, DependencyMetadata>,
   {
     logger,
+    shouldCheckTransitiveDependencies,
   }: {
     logger: IMastraLogger;
+    shouldCheckTransitiveDependencies: boolean;
   },
 ): Promise<Map<string, DependencyMetadata>> {
   const depsToOptimize = new Map<string, DependencyMetadata>();
@@ -99,7 +108,7 @@ async function captureDependenciesToOptimize(
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
-    if (isNodeBuiltin(dependency) || DEPS_TO_IGNORE.includes(dependency)) {
+    if (isNodeBuiltin(dependency) || dependency.startsWith('#')) {
       continue;
     }
 
@@ -107,15 +116,31 @@ async function captureDependenciesToOptimize(
     const pkgName = getPackageName(dependency);
     let rootPath: string | null = null;
     let isWorkspace = false;
+    let version: string | undefined;
 
     if (pkgName) {
       rootPath = await getPackageRootPath(dependency, entryRootPath);
       isWorkspace = workspaceMap.has(pkgName);
+
+      // Read version from package.json when we have a valid rootPath
+      if (rootPath) {
+        try {
+          const pkgJson = await readJSON(`${rootPath}/package.json`);
+          version = pkgJson.version;
+        } catch {
+          // Failed to read package.json, version will remain undefined
+        }
+      }
     }
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
 
-    depsToOptimize.set(dependency, { exports: bindings, rootPath: normalizedRootPath, isWorkspace });
+    depsToOptimize.set(dependency, {
+      exports: bindings,
+      rootPath: normalizedRootPath,
+      isWorkspace,
+      version,
+    });
   }
 
   /**
@@ -143,9 +168,13 @@ async function captureDependenciesToOptimize(
       }
 
       try {
-        // Absolute path to the dependency
-        const resolvedPath = resolveFrom(projectRoot, dep);
-
+        const importerPath = output.facadeModuleId
+          ? pathToFileURL(output.facadeModuleId).href
+          : pathToFileURL(projectRoot).href;
+        // Absolute path to the dependency using ESM-compatible resolution
+        const resolvedPath = resolveModule(dep, {
+          paths: [importerPath],
+        });
         if (!resolvedPath) {
           logger.warn(`Could not resolve path for workspace dependency ${dep}`);
           continue;
@@ -156,6 +185,7 @@ async function captureDependenciesToOptimize(
           projectRoot,
           logger: noopLogger,
           sourcemapEnabled: false,
+          initialDepsToOptimize: depsToOptimize,
         });
 
         if (!analysis?.dependencies) {
@@ -186,14 +216,38 @@ async function captureDependenciesToOptimize(
     }
   }
 
-  await checkTransitiveDependencies(new Map());
+  if (shouldCheckTransitiveDependencies) {
+    await checkTransitiveDependencies(initialDepsToOptimize);
+  }
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
   const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && !isNodeBuiltin(dynamicImport)) {
-        depsToOptimize.set(dynamicImport, { exports: ['*'], rootPath: null, isWorkspace: false });
+        // Try to resolve version for dynamic imports as well
+        const pkgName = getPackageName(dynamicImport);
+        let version: string | undefined;
+        let rootPath: string | null = null;
+
+        if (pkgName) {
+          rootPath = await getPackageRootPath(dynamicImport, entryRootPath);
+          if (rootPath) {
+            try {
+              const pkgJson = await readJSON(`${rootPath}/package.json`);
+              version = pkgJson.version;
+            } catch {
+              // Failed to read package.json
+            }
+          }
+        }
+
+        depsToOptimize.set(dynamicImport, {
+          exports: ['*'],
+          rootPath: rootPath ? slash(rootPath) : null,
+          isWorkspace: false,
+          version,
+        });
       }
     }
   }
@@ -212,6 +266,7 @@ async function captureDependenciesToOptimize(
  * @param options.logger - Logger instance for debugging
  * @param options.sourcemapEnabled - Whether sourcemaps are enabled
  * @param options.workspaceMap - Map of workspace packages
+ * @param options.shouldCheckTransitiveDependencies - Whether to recursively analyze transitive workspace dependencies (default: false)
  * @returns A promise that resolves to an object containing the analyzed dependencies and generated output
  */
 export async function analyzeEntry(
@@ -228,11 +283,15 @@ export async function analyzeEntry(
     sourcemapEnabled,
     workspaceMap,
     projectRoot,
+    initialDepsToOptimize = new Map(), // used to avoid infinite recursion
+    shouldCheckTransitiveDependencies = false,
   }: {
     logger: IMastraLogger;
     sourcemapEnabled: boolean;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
+    initialDepsToOptimize?: Map<string, DependencyMetadata>;
+    shouldCheckTransitiveDependencies?: boolean;
   },
 ): Promise<{
   dependencies: Map<string, DependencyMetadata>;
@@ -244,7 +303,7 @@ export async function analyzeEntry(
   const optimizerBundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
     input: isVirtualFile ? '#entry' : entry,
-    treeshake: 'smallest',
+    treeshake: false,
     preserveSymlinks: true,
     plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, { sourcemapEnabled }),
     external: DEPS_TO_IGNORE,
@@ -257,9 +316,16 @@ export async function analyzeEntry(
 
   await optimizerBundler.close();
 
-  const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
-    logger,
-  });
+  const depsToOptimize = await captureDependenciesToOptimize(
+    output[0] as OutputChunk,
+    workspaceMap,
+    projectRoot,
+    initialDepsToOptimize,
+    {
+      logger,
+      shouldCheckTransitiveDependencies,
+    },
+  );
 
   return {
     dependencies: depsToOptimize,

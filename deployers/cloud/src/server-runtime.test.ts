@@ -46,7 +46,7 @@ describe('CloudDeployer Server Runtime', () => {
 
   describe('Server Entry Code Generation', () => {
     it('should generate valid server initialization code', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Validate it's valid JavaScript/TypeScript
@@ -63,7 +63,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should handle environment variables correctly', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check environment variable handling
@@ -77,7 +77,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should setup logging correctly', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Verify logger setup
@@ -90,7 +90,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should configure HTTP transport when endpoint is provided', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('new HttpTransport({');
@@ -99,57 +99,60 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should setup storage and vector stores correctly', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
-      // Check storage initialization
-      expect(entry).toContain('if (mastra?.storage) {');
-      expect(entry).toContain('mastra.storage.init()');
+      // Check storage initialization respects disableInit
+      expect(entry).toContain('!userStorage.disableInit');
+      expect(entry).toContain('userStorage.init()');
 
       // Check LibSQL setup
       expect(entry).toContain('const storage = new LibSQLStore({');
+      expect(entry).toContain("id: 'mastra-cloud-storage-libsql'");
       expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
       expect(entry).toContain('authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN');
 
       expect(entry).toContain('const vector = new LibSQLVector({');
-      expect(entry).toContain('connectionUrl: process.env.MASTRA_STORAGE_URL');
+      expect(entry).toContain('url: process.env.MASTRA_STORAGE_URL');
 
       expect(entry).toContain('await storage.init()');
       expect(entry).toContain('mastra?.setStorage(storage)');
-      expect(entry).toContain('mastra?.memory?.setStorage(storage)');
-      expect(entry).toContain('mastra?.memory?.setVector(vector)');
-    });
 
-    it('should register hooks for generation and evaluation', () => {
-      // @ts-ignore - accessing private method for testing
-      const entry = deployer.getEntry();
-
-      expect(entry).toContain('registerHook(AvailableHooks.ON_GENERATION');
-      expect(entry).toContain('evaluate({');
-      expect(entry).toContain('agentName,');
-      expect(entry).toContain('input,');
-      expect(entry).toContain('metric,');
-      expect(entry).toContain('output,');
-      expect(entry).toContain('runId,');
-      expect(entry).toContain('globalRunId: runId,');
-      expect(entry).toContain('instructions,');
-
-      expect(entry).toContain('registerHook(AvailableHooks.ON_EVALUATION');
-      expect(entry).toContain('await mastra.storage.insert({');
-      expect(entry).toContain('tableName: MastraStorage.TABLE_EVALS');
+      // Check that user storage respects disableInit
+      expect(entry).toContain('const userStorage = mastra?.getStorage()');
+      expect(entry).toContain('if (userStorage && !userStorage.disableInit)');
+      expect(entry).toContain('userStorage.init()');
     });
 
     it('should create node server with correct configuration', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
-      expect(entry).toContain(
-        'await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });',
-      );
+      // Default: studio disabled
+      expect(entry).toContain('studio: false');
+      expect(entry).toContain('swaggerUI: false');
+      expect(entry).toContain('tools: getToolExports(tools)');
+    });
+
+    it('should create node server with studio enabled when studio is true', () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+      // @ts-expect-error - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('studio: true');
+      expect(entry).toContain('swaggerUI: false');
+    });
+
+    it('should create node server with studio disabled when studio is false', () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+      // @ts-expect-error - accessing private method for testing
+      const entry = studioDeployer.getEntry();
+
+      expect(entry).toContain('studio: false');
     });
 
     it('should include readiness logging with correct metadata', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check server starting log
@@ -173,14 +176,14 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should include auth entrypoint', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('// Mock auth entrypoint');
     });
 
     it('should handle success entrypoint', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // The successEntrypoint should be included but we don't have its content mocked
@@ -191,19 +194,17 @@ describe('CloudDeployer Server Runtime', () => {
 
   describe('Runtime Error Scenarios', () => {
     it('should handle missing mastra instance gracefully', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Check optional chaining for mastra
       expect(entry).toContain('mastra?.getLogger()');
-      expect(entry).toContain('mastra?.storage');
+      expect(entry).toContain('mastra?.getStorage()');
       expect(entry).toContain('mastra?.setStorage');
-      expect(entry).toContain('mastra?.memory?.setStorage');
-      expect(entry).toContain('mastra?.memory?.setVector');
     });
 
     it('should skip HTTP transport in CI environment', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain("if (process.env.CI !== 'true') {");
@@ -211,7 +212,7 @@ describe('CloudDeployer Server Runtime', () => {
     });
 
     it('should only setup cloud storage when credentials are present', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       expect(entry).toContain('if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {');

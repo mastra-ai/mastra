@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { NodeRelationship, ObjectType } from './types';
 import type { Metadata, RelatedNodeInfo, RelatedNodeType, BaseNodeParams, TextNodeParams } from './types';
 

@@ -39,12 +39,12 @@ describe('createTool', () => {
       inputSchema: z.object({
         color: z.string(),
       }),
-      execute: async ({ context }) => {
-        return { success: true, color: context.color };
+      execute: async input => {
+        return { success: true, color: input.color };
       },
     });
 
-    const result = await tool.execute?.({ context: { color: 'blue' } });
+    const result = await tool.execute?.({ color: 'blue' });
     expect(result).toEqual({ success: true, color: 'blue' });
   });
 });

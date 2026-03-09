@@ -1,12 +1,12 @@
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getPackages } from '@manypkg/get-packages';
 import { writeJson } from 'fs-extra/esm';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const { packages } = await getPackages(process.cwd());
-const versionsToSync = ['@mastra/loggers', '@mastra/libsql', '@mastra/cloud'];
+const versionsToSync = ['@mastra/auth-cloud', '@mastra/loggers', '@mastra/libsql', '@mastra/cloud'];
 
 const versionsToWrite = {};
 packages.forEach(pkg => {

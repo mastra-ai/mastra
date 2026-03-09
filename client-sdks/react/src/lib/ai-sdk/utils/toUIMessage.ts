@@ -1,6 +1,7 @@
-import { AgentChunkType, ChunkType } from '@mastra/core/stream';
-import { MastraUIMessage, MastraUIMessageMetadata } from '../types';
-import { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import { formatStreamCompletionFeedback } from '@mastra/core/loop';
+import type { AgentChunkType, ChunkType } from '@mastra/core/stream';
+import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
+import type { MastraUIMessage, MastraUIMessageMetadata, MastraExtendedTextPart } from '../types';
 
 type StreamChunk = {
   type: string;
@@ -42,7 +43,9 @@ export const mapWorkflowStreamChunkToWatchResult = (
         ? { result: lastStep?.output }
         : finalStatus === 'failed' && lastStep?.status === 'failed'
           ? { error: lastStep?.error }
-          : {}),
+          : finalStatus === 'tripwire' && chunk.payload.tripwire
+            ? { tripwire: chunk.payload.tripwire }
+            : {}),
     };
   }
 
@@ -91,6 +94,26 @@ export const mapWorkflowStreamChunkToWatchResult = (
     };
   }
 
+  if (chunk.type === 'workflow-step-progress') {
+    const progressSteps = {
+      ...prev?.steps,
+      [chunk.payload.id]: {
+        ...prev?.steps?.[chunk.payload.id],
+        foreachProgress: {
+          completedCount: chunk.payload.completedCount,
+          totalCount: chunk.payload.totalCount,
+          currentIndex: chunk.payload.currentIndex,
+          iterationStatus: chunk.payload.iterationStatus,
+          iterationOutput: chunk.payload.iterationOutput,
+        },
+      },
+    };
+    return {
+      ...prev,
+      steps: progressSteps,
+    };
+  }
+
   if (chunk.type === 'workflow-step-result') {
     return {
       ...prev,
@@ -111,21 +134,59 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
   // Always return a new array reference for React
   const result = [...conversation];
 
+  // Handle data-* chunks (custom data chunks from writer.custom())
+  if (chunk.type.startsWith('data-')) {
+    const lastMessage = result[result.length - 1];
+    if (!lastMessage || lastMessage.role !== 'assistant') {
+      // Create a new assistant message with the data part
+      const newMessage: MastraUIMessage = {
+        id: `data-${chunk.runId}-${Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: chunk.type as `data-${string}`,
+            data: 'data' in chunk ? chunk.data : undefined,
+          },
+        ],
+        metadata,
+      };
+      return [...result, newMessage];
+    }
+
+    // Add data part to existing assistant message
+    const updatedMessage: MastraUIMessage = {
+      ...lastMessage,
+      parts: [
+        ...lastMessage.parts,
+        {
+          type: chunk.type as `data-${string}`,
+          data: 'data' in chunk ? chunk.data : undefined,
+        },
+      ],
+    };
+    return [...result.slice(0, -1), updatedMessage];
+  }
+
   switch (chunk.type) {
     case 'tripwire': {
-      // Create a new assistant message
+      // Create a new assistant message with tripwire-specific metadata
       const newMessage: MastraUIMessage = {
         id: `tripwire-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [
           {
             type: 'text',
-            text: chunk.payload.tripwireReason,
+            text: chunk.payload.reason,
           },
         ],
         metadata: {
           ...metadata,
-          status: 'warning',
+          status: 'tripwire',
+          tripwire: {
+            retry: chunk.payload.retry,
+            tripwirePayload: chunk.payload.metadata,
+            processorId: chunk.payload.processorId,
+          },
         },
       };
 
@@ -134,8 +195,9 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
     case 'start': {
       // Create a new assistant message
+      // Use the server-provided messageId if available, otherwise fall back to generated ID
       const newMessage: MastraUIMessage = {
-        id: `start-${chunk.runId + Date.now()}`,
+        id: typeof chunk.payload.messageId === 'string' ? chunk.payload.messageId : `start-${chunk.runId + Date.now()}`,
         role: 'assistant',
         parts: [],
         metadata,
@@ -144,43 +206,79 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       return [...result, newMessage];
     }
 
-    case 'text-start':
+    case 'text-start': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      const textId = chunk.payload.id || `text-${Date.now()}`;
+
+      const newTextPart: MastraExtendedTextPart = {
+        type: 'text',
+        text: '',
+        state: 'streaming',
+        textId: textId,
+        providerMetadata: chunk.payload.providerMetadata,
+      };
+
+      // If the last message is a completion/isTaskComplete result message, start a new assistant message
+      if (lastMessage.metadata?.completionResult) {
+        const newMessage: MastraUIMessage = {
+          id: `start-${chunk.runId}-${Date.now()}`,
+          role: 'assistant',
+          parts: [newTextPart],
+          metadata,
+        };
+        return [...result, newMessage];
+      }
+
+      const parts = [...lastMessage.parts];
+      parts.push(newTextPart);
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          parts,
+        },
+      ];
+    }
+
     case 'text-delta': {
       const lastMessage = result[result.length - 1];
       if (!lastMessage || lastMessage.role !== 'assistant') return result;
 
-      // Find or create a text part
       const parts = [...lastMessage.parts];
-      let textPartIndex = parts.findIndex(part => part.type === 'text');
+      const textId = chunk.payload.id;
 
-      if (chunk.type === 'text-start') {
-        // Add a new text part if it doesn't exist
-        if (textPartIndex === -1) {
-          parts.push({
-            type: 'text',
-            text: '',
-            state: 'streaming',
-            providerMetadata: chunk.payload.providerMetadata,
-          });
-        }
+      let textPartIndex = textId
+        ? parts.findLastIndex(part => part.type === 'text' && (part as MastraExtendedTextPart).textId === textId)
+        : -1;
+
+      if (textPartIndex === -1) {
+        textPartIndex = parts.findLastIndex(
+          part => part.type === 'text' && (part as MastraExtendedTextPart).state === 'streaming',
+        );
+      }
+
+      if (textPartIndex === -1) {
+        const newTextPart: MastraExtendedTextPart = {
+          type: 'text',
+          text: chunk.payload.text,
+          state: 'streaming',
+          textId: textId,
+          providerMetadata: chunk.payload.providerMetadata,
+        };
+        parts.push(newTextPart);
       } else {
-        // text-delta: append to existing text part or create if missing
-        if (textPartIndex === -1) {
-          parts.push({
-            type: 'text',
-            text: chunk.payload.text,
+        const textPart = parts[textPartIndex];
+        if (textPart.type === 'text') {
+          const extendedTextPart = textPart as MastraExtendedTextPart;
+          const updatedTextPart: MastraExtendedTextPart = {
+            ...extendedTextPart,
+            text: extendedTextPart.text + chunk.payload.text,
             state: 'streaming',
-            providerMetadata: chunk.payload.providerMetadata,
-          });
-        } else {
-          const textPart = parts[textPartIndex];
-          if (textPart.type === 'text') {
-            parts[textPartIndex] = {
-              ...textPart,
-              text: textPart.text + chunk.payload.text,
-              state: 'streaming',
-            };
-          }
+          };
+          parts[textPartIndex] = updatedTextPart;
         }
       }
 
@@ -294,22 +392,41 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       // Find and update the corresponding tool call
       const parts = [...lastMessage.parts];
       const toolPartIndex = parts.findIndex(
-        part => part.type === 'dynamic-tool' && 'toolCallId' in part && part.toolCallId === chunk.payload.toolCallId,
+        part =>
+          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+          'toolCallId' in part &&
+          part.toolCallId === chunk.payload.toolCallId,
       );
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
+        if (
+          toolPart.type === 'dynamic-tool' ||
+          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+        ) {
+          const toolName =
+            'toolName' in toolPart && typeof toolPart.toolName === 'string'
+              ? toolPart.toolName
+              : toolPart.type.startsWith('tool-')
+                ? toolPart.type.substring(5)
+                : '';
 
-        if (toolPart.type === 'dynamic-tool') {
+          const toolCallId = (toolPart as any).toolCallId;
+
           if ((chunk.type === 'tool-result' && chunk.payload.isError) || chunk.type === 'tool-error') {
             const error = chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result;
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName: toolPart.toolName,
-              toolCallId: toolPart.toolCallId,
+              toolName,
+              toolCallId,
               state: 'output-error',
-              input: toolPart.input,
-              errorText: String(error),
+              input: (toolPart as any).input,
+              errorText:
+                typeof error === 'string'
+                  ? error
+                  : error instanceof Error
+                    ? error.message
+                    : ((error as any)?.message ?? String(error)),
               callProviderMetadata: chunk.payload.providerMetadata,
             };
           } else {
@@ -325,10 +442,10 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             }
             parts[toolPartIndex] = {
               type: 'dynamic-tool',
-              toolName: toolPart.toolName,
-              toolCallId: toolPart.toolCallId,
+              toolName,
+              toolCallId,
               state: 'output-available',
-              input: toolPart.input,
+              input: (toolPart as any).input,
               output,
               callProviderMetadata: chunk.payload.providerMetadata,
             };
@@ -352,17 +469,34 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
       // Find and update the corresponding tool call
       const parts = [...lastMessage.parts];
       const toolPartIndex = parts.findIndex(
-        part => part.type === 'dynamic-tool' && 'toolCallId' in part && part.toolCallId === chunk.payload.toolCallId,
+        part =>
+          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) &&
+          'toolCallId' in part &&
+          part.toolCallId === chunk.payload.toolCallId,
       );
 
       if (toolPartIndex !== -1) {
         const toolPart = parts[toolPartIndex];
-        if (toolPart.type === 'dynamic-tool') {
+        // Handle dynamic-tool and tool-* part types
+        if (
+          toolPart.type === 'dynamic-tool' ||
+          (typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-'))
+        ) {
+          // Extract toolName, toolCallId, input from different part structures
+          const toolName =
+            'toolName' in toolPart && typeof toolPart.toolName === 'string'
+              ? toolPart.toolName
+              : typeof toolPart.type === 'string' && toolPart.type.startsWith('tool-')
+                ? toolPart.type.substring(5)
+                : '';
+          const toolCallId = (toolPart as any).toolCallId;
+          const input = (toolPart as any).input;
+
           // Handle workflow-related output chunks
           if (chunk.payload.output?.type?.startsWith('workflow-')) {
             // Get existing workflow state from the output field
             const existingWorkflowState =
-              (toolPart.output as WorkflowStreamResult<any, any, any, any>) ||
+              ((toolPart as any).output as WorkflowStreamResult<any, any, any, any>) ||
               ({} as WorkflowStreamResult<any, any, any, any>);
 
             // Use the mapWorkflowStreamChunkToWatchResult pattern for accumulation
@@ -372,7 +506,11 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             );
 
             parts[toolPartIndex] = {
-              ...toolPart,
+              type: 'dynamic-tool',
+              toolName,
+              toolCallId,
+              state: 'input-streaming',
+              input,
               output: updatedWorkflowState as any,
             };
           } else if (
@@ -380,14 +518,18 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             (chunk.payload.output?.from === 'USER' &&
               chunk.payload.output?.payload?.output?.type?.startsWith('workflow-'))
           ) {
-            return toUIMessageFromAgent(chunk.payload.output, conversation, metadata);
+            return toUIMessageFromAgent(chunk.payload.output, conversation, metadata, toolCallId, toolName);
           } else {
             // Handle regular tool output
-            const currentOutput = (toolPart.output as any) || [];
+            const currentOutput = ((toolPart as any).output as any) || [];
             const existingOutput = Array.isArray(currentOutput) ? currentOutput : [];
 
             parts[toolPartIndex] = {
-              ...toolPart,
+              type: 'dynamic-tool',
+              toolName,
+              toolCallId,
+              state: 'input-streaming',
+              input,
               output: [...existingOutput, chunk.payload.output] as any,
             };
           }
@@ -401,6 +543,39 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
           parts,
         },
       ];
+    }
+
+    case 'is-task-complete': {
+      if (chunk.payload.suppressFeedback) return result;
+
+      const feedback = formatStreamCompletionFeedback(
+        {
+          complete: chunk.payload.passed,
+          scorers: chunk.payload.results,
+          totalDuration: chunk.payload.duration,
+          timedOut: chunk.payload.timedOut,
+          completionReason: chunk.payload.reason,
+        },
+        chunk.payload.maxIterationReached,
+      );
+      const newMessage: MastraUIMessage = {
+        id: `is-task-complete-${chunk.runId + Date.now()}`,
+        role: 'assistant',
+        parts: [
+          {
+            type: 'text',
+            text: feedback,
+          },
+        ],
+        metadata: {
+          ...metadata,
+          completionResult: {
+            passed: chunk.payload.passed,
+          },
+        } as MastraUIMessageMetadata,
+      };
+
+      return [...result, newMessage];
     }
 
     case 'source': {
@@ -490,10 +665,39 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
             mode: 'stream',
             requireApprovalMetadata: {
               ...lastRequireApprovalMetadata,
-              [chunk.payload.toolCallId]: {
+              [chunk.payload.toolName]: {
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
+              },
+            },
+          },
+        },
+      ];
+    }
+
+    case 'tool-call-suspended': {
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+
+      // Find and update the corresponding tool call
+
+      const lastSuspendedTools = lastMessage.metadata?.mode === 'stream' ? lastMessage.metadata?.suspendedTools : {};
+
+      return [
+        ...result.slice(0, -1),
+        {
+          ...lastMessage,
+          metadata: {
+            ...lastMessage.metadata,
+            mode: 'stream',
+            suspendedTools: {
+              ...lastSuspendedTools,
+              [chunk.payload.toolName]: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                suspendPayload: chunk.payload.suspendPayload,
               },
             },
           },
@@ -507,11 +711,16 @@ export const toUIMessage = ({ chunk, conversation, metadata }: ToUIMessageArgs):
 
       // Mark streaming parts as done
       const parts = lastMessage.parts.map(part => {
-        if (part.type === 'text' && part.state === 'streaming') {
-          return { ...part, state: 'done' as const };
-        }
-        if (part.type === 'reasoning' && part.state === 'streaming') {
-          return { ...part, state: 'done' as const };
+        if (
+          typeof part === 'object' &&
+          part !== null &&
+          'type' in part &&
+          'state' in part &&
+          part.state === 'streaming'
+        ) {
+          if (part.type === 'text' || part.type === 'reasoning') {
+            return { ...part, state: 'done' as const };
+          }
         }
         return part;
       });
@@ -554,6 +763,8 @@ const toUIMessageFromAgent = (
   chunk: AgentChunkType,
   conversation: MastraUIMessage[],
   metadata: MastraUIMessageMetadata,
+  parentToolCallId?: string,
+  parentToolName?: string,
 ): MastraUIMessage[] => {
   const lastMessage = conversation[conversation.length - 1];
   if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
@@ -562,7 +773,13 @@ const toUIMessageFromAgent = (
 
   if (chunk.type === 'text-delta') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];
@@ -586,7 +803,13 @@ const toUIMessageFromAgent = (
     } as any;
   } else if (chunk.type === 'tool-call') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];
@@ -609,7 +832,13 @@ const toUIMessageFromAgent = (
     } as any;
   } else if (chunk.type === 'tool-output') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];
@@ -639,7 +868,13 @@ const toUIMessageFromAgent = (
     }
   } else if (chunk.type === 'tool-result') {
     const agentChunk = chunk.payload;
-    const toolPartIndex = parts.findIndex(part => part.type === 'dynamic-tool');
+    // Find the specific agent tool by toolCallId or toolName
+    const toolPartIndex = parts.findIndex(
+      part =>
+        part.type === 'dynamic-tool' &&
+        ((parentToolCallId && (part as any).toolCallId === parentToolCallId) ||
+          (parentToolName && (part as any).toolName === parentToolName)),
+    );
 
     if (toolPartIndex === -1) return conversation;
     const toolPart = parts[toolPartIndex];

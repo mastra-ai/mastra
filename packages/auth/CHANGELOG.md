@@ -1,5 +1,77 @@
 # @mastra/auth
 
+## 1.0.1
+
+### Patch Changes
+
+- dependencies updates: ([#13134](https://github.com/mastra-ai/mastra/pull/13134))
+  - Updated dependency [`jsonwebtoken@^9.0.3` ↗︎](https://www.npmjs.com/package/jsonwebtoken/v/9.0.3) (from `^9.0.2`, in `dependencies`)
+
+- dependencies updates: ([#13135](https://github.com/mastra-ai/mastra/pull/13135))
+  - Updated dependency [`jwks-rsa@^3.2.2` ↗︎](https://www.npmjs.com/package/jwks-rsa/v/3.2.2) (from `^3.2.0`, in `dependencies`)
+
+## 1.0.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13134](https://github.com/mastra-ai/mastra/pull/13134))
+  - Updated dependency [`jsonwebtoken@^9.0.3` ↗︎](https://www.npmjs.com/package/jsonwebtoken/v/9.0.3) (from `^9.0.2`, in `dependencies`)
+
+- dependencies updates: ([#13135](https://github.com/mastra-ai/mastra/pull/13135))
+  - Updated dependency [`jwks-rsa@^3.2.2` ↗︎](https://www.npmjs.com/package/jwks-rsa/v/3.2.2) (from `^3.2.0`, in `dependencies`)
+
+## 1.0.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+## 1.0.0-beta.2
+
+### Patch Changes
+
+- Add embedded documentation support for Mastra packages ([#11472](https://github.com/mastra-ai/mastra/pull/11472))
+
+  Mastra packages now include embedded documentation in the published npm package under `dist/docs/`. This enables coding agents and AI assistants to understand and use the framework by reading documentation directly from `node_modules`.
+
+  Each package includes:
+  - **SKILL.md** - Entry point explaining the package's purpose and capabilities
+  - **SOURCE_MAP.json** - Machine-readable index mapping exports to types and implementation files
+  - **Topic folders** - Conceptual documentation organized by feature area
+
+  Documentation is driven by the `packages` frontmatter field in MDX files, which maps docs to their corresponding packages. CI validation ensures all docs include this field.
+
+## 1.0.0-beta.1
+
+### Patch Changes
+
+- Allow provider to pass through options to the auth config ([#10284](https://github.com/mastra-ai/mastra/pull/10284))
+
+## 1.0.0-beta.0
+
+### Major Changes
+
+- Bump minimum required Node.js version to 22.13.0 ([#9706](https://github.com/mastra-ai/mastra/pull/9706))
+
+- Mark as stable ([`83d5942`](https://github.com/mastra-ai/mastra/commit/83d5942669ce7bba4a6ca4fd4da697a10eb5ebdc))
+
 ## 0.1.3
 
 ### Patch Changes

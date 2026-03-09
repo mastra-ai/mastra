@@ -1,0 +1,770 @@
+/**
+ * BaseObservability - Abstract base class for Observability implementations
+ */
+
+import { MastraBase } from '@mastra/core/base';
+import type { RequestContext } from '@mastra/core/di';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { RegisteredLogger } from '@mastra/core/logger';
+import { TracingEventType } from '@mastra/core/observability';
+import type {
+  Span,
+  ObservabilityExporter,
+  ObservabilityBridge,
+  SpanOutputProcessor,
+  TracingEvent,
+  AnySpan,
+  EndSpanOptions,
+  UpdateSpanOptions,
+  StartSpanOptions,
+  CreateSpanOptions,
+  ObservabilityInstance,
+  CustomSamplerOptions,
+  ExportedSpan,
+  AnyExportedSpan,
+  TraceState,
+  TracingOptions,
+  LoggerContext,
+  MetricsContext,
+  ObservabilityEvent,
+  SpanType,
+} from '@mastra/core/observability';
+import { getNestedValue, setNestedValue } from '@mastra/core/utils';
+import { ObservabilityBus } from '../bus';
+import type { ObservabilityInstanceConfig } from '../config';
+import { SamplingStrategyType } from '../config';
+import { LoggerContextImpl } from '../context/logger';
+import { MetricsContextImpl } from '../context/metrics';
+import { CardinalityFilter } from '../metrics/cardinality';
+import { NoOpSpan } from '../spans';
+
+// ============================================================================
+// Abstract Base Class
+// ============================================================================
+
+/**
+ * Abstract base class for all Observability implementations in Mastra.
+ */
+export abstract class BaseObservabilityInstance extends MastraBase implements ObservabilityInstance {
+  protected config: ObservabilityInstanceConfig;
+
+  /**
+   * Unified event bus for all observability signals.
+   * Routes events to registered exporters based on event type.
+   */
+  protected observabilityBus: ObservabilityBus;
+
+  /**
+   * Cardinality filter for metrics label protection.
+   */
+  protected cardinalityFilter: CardinalityFilter;
+
+  constructor(config: ObservabilityInstanceConfig) {
+    super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
+
+    // Apply defaults for optional fields
+    this.config = {
+      serviceName: config.serviceName,
+      name: config.name,
+      sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
+      exporters: config.exporters ?? [],
+      spanOutputProcessors: config.spanOutputProcessors ?? [],
+      bridge: config.bridge ?? undefined,
+      includeInternalSpans: config.includeInternalSpans ?? false,
+      requestContextKeys: config.requestContextKeys ?? [],
+      serializationOptions: config.serializationOptions,
+    };
+
+    // Initialize cardinality filter for metrics
+    this.cardinalityFilter = new CardinalityFilter();
+
+    // Initialize the unified ObservabilityBus and register all exporters
+    this.observabilityBus = new ObservabilityBus();
+    for (const exporter of this.exporters) {
+      this.observabilityBus.registerExporter(exporter);
+    }
+
+    // Register bridge on the bus so it receives all signals (tracing + non-tracing)
+    if (this.config.bridge) {
+      this.observabilityBus.registerBridge(this.config.bridge);
+    }
+
+    // Enable auto-extracted metrics (TracingEvent → MetricEvent cross-emission)
+    this.observabilityBus.enableAutoExtractedMetrics(this.cardinalityFilter);
+
+    // Initialize bridge if present
+    if (this.config.bridge?.init) {
+      this.config.bridge.init({ config: this.config });
+    }
+  }
+
+  /**
+   * Override setLogger to add Observability specific initialization log
+   * and propagate logger to exporters and bridge
+   */
+  __setLogger(logger: IMastraLogger) {
+    super.__setLogger(logger);
+
+    // Propagate logger to all exporters that support it
+    this.exporters.forEach(exporter => {
+      if (typeof exporter.__setLogger === 'function') {
+        exporter.__setLogger(logger);
+      }
+    });
+
+    // Propagate logger to bridge if present
+    if (this.config.bridge?.__setLogger) {
+      this.config.bridge.__setLogger(logger);
+    }
+
+    // Log Observability initialization details after logger is properly set
+    this.logger.debug(
+      `[Observability] Initialized [service=${this.config.serviceName}] [instance=${this.config.name}] [sampling=${this.config.sampling?.type}] [bridge=${!!this.config.bridge}]`,
+    );
+  }
+
+  // ============================================================================
+  // Protected getters for clean config access
+  // ============================================================================
+
+  protected get exporters(): ObservabilityExporter[] {
+    return this.config.exporters || [];
+  }
+
+  protected get spanOutputProcessors(): SpanOutputProcessor[] {
+    return this.config.spanOutputProcessors || [];
+  }
+
+  // ============================================================================
+  // Public API - Single type-safe span creation method
+  // ============================================================================
+
+  /**
+   * Start a new span of a specific SpanType
+   *
+   * Sampling Decision:
+   * - For root spans (no parent): Perform sampling check using the configured strategy
+   * - For child spans: Inherit the sampling decision from the parent
+   *   - If parent is a NoOpSpan (not sampled), child is also a NoOpSpan
+   *   - If parent is a valid span (sampled), child is also sampled
+   *
+   * This ensures trace-level sampling: either all spans in a trace are sampled or none are.
+   * See: https://github.com/mastra-ai/mastra/issues/11504
+   */
+  startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType> {
+    const { customSamplerOptions, requestContext, metadata, tracingOptions, ...rest } = options;
+
+    // Determine sampling: inherit from parent or make new decision for root spans
+    if (options.parent) {
+      // Child span: inherit sampling decision from parent
+      // If parent is a NoOpSpan (not sampled), child should also be a NoOpSpan
+      if (!options.parent.isValid) {
+        return new NoOpSpan<TType>({ ...rest, metadata }, this);
+      }
+      // Parent is valid (sampled), so child will also be sampled - continue to create actual span
+    } else {
+      // Root span: perform sampling check
+      if (!this.shouldSample(customSamplerOptions)) {
+        return new NoOpSpan<TType>({ ...rest, metadata }, this);
+      }
+    }
+
+    // Compute or inherit TraceState
+    let traceState: TraceState | undefined;
+
+    if (options.parent) {
+      // Child span: inherit from parent
+      traceState = options.parent.traceState;
+    } else {
+      // Root span: compute new TraceState
+      traceState = this.computeTraceState(tracingOptions);
+    }
+
+    // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root spans)
+    const tracingMetadata = !options.parent ? tracingOptions?.metadata : undefined;
+    const mergedMetadata = metadata || tracingMetadata ? { ...metadata, ...tracingMetadata } : undefined;
+
+    // Extract metadata from RequestContext
+    const enrichedMetadata = this.extractMetadataFromRequestContext(requestContext, mergedMetadata, traceState);
+
+    // Tags are only passed for root spans (no parent)
+    const tags = !options.parent ? tracingOptions?.tags : undefined;
+
+    // Extract traceId and parentSpanId from tracingOptions for root spans (no parent)
+    // These allow nested workflows to join the parent workflow's trace
+    const traceId = !options.parent ? (options.traceId ?? tracingOptions?.traceId) : options.traceId;
+    const parentSpanId = !options.parent
+      ? (options.parentSpanId ?? tracingOptions?.parentSpanId)
+      : options.parentSpanId;
+
+    const span = this.createSpan<TType>({
+      ...rest,
+      traceId,
+      parentSpanId,
+      metadata: enrichedMetadata,
+      traceState,
+      tags,
+    });
+
+    if (span.isEvent) {
+      this.emitSpanEnded(span);
+    } else {
+      // Automatically wire up tracing lifecycle
+      this.wireSpanLifecycle(span);
+
+      // Emit span started event
+      this.emitSpanStarted(span);
+    }
+
+    return span;
+  }
+
+  /**
+   * Rebuild a span from exported data for lifecycle operations.
+   * Used by durable execution engines (e.g., Inngest) to end/update spans
+   * that were created in a previous durable operation.
+   *
+   * The rebuilt span:
+   * - Does NOT emit SPAN_STARTED (assumes original span already did)
+   * - Can have end(), update(), error() called on it
+   * - Will emit SPAN_ENDED or SPAN_UPDATED when those methods are called
+   *
+   * @param cached - The exported span data to rebuild from
+   * @returns A span that can have lifecycle methods called on it
+   */
+  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType> {
+    // Create span with existing IDs from cached data
+    const span = this.createSpan<TType>({
+      name: cached.name,
+      type: cached.type,
+      traceId: cached.traceId,
+      spanId: cached.id,
+      parentSpanId: cached.parentSpanId,
+      startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
+      input: cached.input,
+      attributes: cached.attributes,
+      metadata: cached.metadata,
+      entityType: cached.entityType,
+      entityId: cached.entityId,
+      entityName: cached.entityName,
+    });
+
+    // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
+    this.wireSpanLifecycle(span);
+
+    return span;
+  }
+
+  // ============================================================================
+  // Abstract Methods - Must be implemented by concrete classes
+  // ============================================================================
+
+  /**
+   * Create a new span (called after sampling)
+   *
+   * Implementations should:
+   * 1. Create a plain span with the provided attributes
+   * 2. Return the span - base class handles all tracing lifecycle automatically
+   *
+   * The base class will automatically:
+   * - Set trace relationships
+   * - Wire span lifecycle callbacks
+   * - Emit span_started event
+   */
+  protected abstract createSpan<TType extends SpanType>(options: CreateSpanOptions<TType>): Span<TType>;
+
+  // ============================================================================
+  // Configuration Management
+  // ============================================================================
+
+  /**
+   * Get current configuration
+   */
+  getConfig(): Readonly<ObservabilityInstanceConfig> {
+    return { ...this.config };
+  }
+
+  // ============================================================================
+  // Plugin Access
+  // ============================================================================
+
+  /**
+   * Get all exporters
+   */
+  getExporters(): readonly ObservabilityExporter[] {
+    return [...this.exporters];
+  }
+
+  /**
+   * Get all span output processors
+   */
+  getSpanOutputProcessors(): readonly SpanOutputProcessor[] {
+    return [...this.spanOutputProcessors];
+  }
+
+  /**
+   * Get the bridge instance if configured
+   */
+  getBridge(): ObservabilityBridge | undefined {
+    return this.config.bridge;
+  }
+
+  /**
+   * Get the logger instance (for exporters and other components)
+   */
+  getLogger() {
+    return this.logger;
+  }
+
+  /**
+   * Get the ObservabilityBus for this instance.
+   * The bus routes all observability events (tracing, logs, metrics, scores, feedback)
+   * to registered exporters based on event type.
+   */
+  getObservabilityBus(): ObservabilityBus {
+    return this.observabilityBus;
+  }
+
+  // ============================================================================
+  // Context-factory bridge methods
+  // ============================================================================
+
+  /**
+   * Extract entity context labels from a span's entity hierarchy by
+   * walking the parent chain.
+   *
+   * Returns labels for: entity_type/name, parent_type/name, root_type/name.
+   * Internal spans are skipped when resolving parent and root entities.
+   */
+  private extractEntityLabels(span: AnySpan): Record<string, string> {
+    const labels: Record<string, string> = {};
+
+    if (span.entityType) labels.entity_type = span.entityType;
+    if (span.entityName) labels.entity_name = span.entityName;
+
+    // Find nearest non-internal parent (mirrors getParentSpan(false))
+    let parentSpan: AnySpan | undefined = span.parent;
+    while (parentSpan && parentSpan.isInternal) {
+      parentSpan = parentSpan.parent;
+    }
+
+    if (parentSpan?.entityType && parentSpan.entityName) {
+      labels.parent_type = parentSpan.entityType;
+      labels.parent_name = parentSpan.entityName;
+
+      // Keep walking to find the root (outermost) non-internal entity
+      let rootEntity = parentSpan;
+      let current: AnySpan | undefined = parentSpan.parent;
+      while (current) {
+        if (!current.isInternal && current.entityType && current.entityName) {
+          rootEntity = current;
+        }
+        current = current.parent;
+      }
+      if (rootEntity !== parentSpan) {
+        labels.root_type = rootEntity.entityType!;
+        labels.root_name = rootEntity.entityName!;
+      }
+    }
+
+    return labels;
+  }
+
+  /**
+   * Resolve tags for a span. Uses the span's own tags if present,
+   * otherwise walks to the root span to inherit its tags.
+   */
+  private resolveSpanTags(span: AnySpan): string[] | undefined {
+    if (span.tags) return span.tags;
+
+    let root: AnySpan = span;
+    while (root.parent) {
+      root = root.parent;
+    }
+    return root.tags;
+  }
+
+  /**
+   * Get a LoggerContext correlated to a span.
+   * Called by the context-factory in core (deriveLoggerContext) so that
+   * `observabilityContext.loggerVNext` is a real logger instead of no-op.
+   */
+  getLoggerContext(span?: AnySpan): LoggerContext {
+    const entityLabels = span ? this.extractEntityLabels(span) : undefined;
+    const hasEntityLabels = entityLabels && Object.keys(entityLabels).length > 0;
+
+    // Merge entity labels + span metadata + serviceName into a single metadata object
+    const metadata: Record<string, unknown> | undefined =
+      hasEntityLabels || span?.metadata || this.config.serviceName
+        ? {
+            ...(hasEntityLabels ? entityLabels : undefined),
+            ...span?.metadata,
+            ...(this.config.serviceName ? { serviceName: this.config.serviceName } : undefined),
+          }
+        : undefined;
+
+    return new LoggerContextImpl({
+      traceId: span?.traceId,
+      spanId: span?.id,
+      tags: span ? this.resolveSpanTags(span) : undefined,
+      metadata,
+      observabilityBus: this.observabilityBus,
+    });
+  }
+
+  /**
+   * Get a MetricsContext, optionally tagged from a span's entity info.
+   * Called by the context-factory in core (deriveMetricsContext) so that
+   * `observabilityContext.metrics` is a real metrics context instead of no-op.
+   */
+  getMetricsContext(span?: AnySpan): MetricsContext {
+    const labels: Record<string, string> = span ? this.extractEntityLabels(span) : {};
+
+    // Extract model/provider from span attributes (present on MODEL_GENERATION spans)
+    const attrs = span?.attributes as Record<string, unknown> | undefined;
+    if (attrs?.model && typeof attrs.model === 'string') labels.model = attrs.model;
+    if (attrs?.provider && typeof attrs.provider === 'string') labels.provider = attrs.provider;
+
+    if (this.config.serviceName) labels.service_name = this.config.serviceName;
+
+    return new MetricsContextImpl({
+      labels: Object.keys(labels).length > 0 ? labels : undefined,
+      observabilityBus: this.observabilityBus,
+      cardinalityFilter: this.cardinalityFilter,
+    });
+  }
+
+  /**
+   * Emit any observability event through the bus.
+   * The bus routes the event to the appropriate handler on each registered exporter,
+   * and for tracing events triggers auto-extracted metrics.
+   */
+  protected emitObservabilityEvent(event: ObservabilityEvent): void {
+    this.observabilityBus.emit(event);
+  }
+
+  // ============================================================================
+  // Span Lifecycle Management
+  // ============================================================================
+
+  /**
+   * Automatically wires up Observability lifecycle events for any span
+   * This ensures all spans emit events regardless of implementation
+   */
+  private wireSpanLifecycle<TType extends SpanType>(span: Span<TType>): void {
+    // bypass wire up if internal span and not includeInternalSpans
+    if (!this.config.includeInternalSpans && span.isInternal) {
+      return;
+    }
+
+    // Store original methods
+    const originalEnd = span.end.bind(span);
+    const originalUpdate = span.update.bind(span);
+
+    // Wrap methods to automatically emit tracing events
+    span.end = (options?: EndSpanOptions<TType>) => {
+      if (span.isEvent) {
+        this.logger.warn(`End event is not available on event spans`);
+        return;
+      }
+      originalEnd(options);
+      this.emitSpanEnded(span);
+    };
+
+    span.update = (options: UpdateSpanOptions<TType>) => {
+      if (span.isEvent) {
+        this.logger.warn(`Update() is not available on event spans`);
+        return;
+      }
+      originalUpdate(options);
+      this.emitSpanUpdated(span);
+    };
+  }
+
+  // ============================================================================
+  // Utility Methods
+  // ============================================================================
+
+  /**
+   * Check if a trace should be sampled
+   */
+  protected shouldSample(options?: CustomSamplerOptions): boolean {
+    // Check built-in sampling strategy
+    const { sampling } = this.config;
+
+    switch (sampling?.type) {
+      case undefined:
+        return true;
+      case SamplingStrategyType.ALWAYS:
+        return true;
+      case SamplingStrategyType.NEVER:
+        return false;
+      case SamplingStrategyType.RATIO:
+        if (sampling.probability === undefined || sampling.probability < 0 || sampling.probability > 1) {
+          this.logger.warn(
+            `Invalid sampling probability: ${sampling.probability}. Expected value between 0 and 1. Defaulting to no sampling.`,
+          );
+          return false;
+        }
+        return Math.random() < sampling.probability;
+      case SamplingStrategyType.CUSTOM:
+        return sampling.sampler(options);
+      default:
+        throw new Error(`Sampling strategy type not implemented: ${(sampling as any).type}`);
+    }
+  }
+
+  /**
+   * Compute TraceState for a new trace based on configured and per-request keys
+   */
+  protected computeTraceState(tracingOptions?: TracingOptions): TraceState | undefined {
+    const configuredKeys = this.config.requestContextKeys ?? [];
+    const additionalKeys = tracingOptions?.requestContextKeys ?? [];
+
+    // Merge: configured + additional
+    const allKeys = [...configuredKeys, ...additionalKeys];
+
+    const hideInput = tracingOptions?.hideInput;
+    const hideOutput = tracingOptions?.hideOutput;
+
+    // Return undefined if no TraceState properties are needed
+    if (allKeys.length === 0 && !hideInput && !hideOutput) {
+      return undefined;
+    }
+
+    return {
+      requestContextKeys: allKeys,
+      ...(hideInput !== undefined && { hideInput }),
+      ...(hideOutput !== undefined && { hideOutput }),
+    };
+  }
+
+  /**
+   * Extract metadata from RequestContext using TraceState
+   */
+  protected extractMetadataFromRequestContext(
+    requestContext: RequestContext | undefined,
+    explicitMetadata: Record<string, any> | undefined,
+    traceState: TraceState | undefined,
+  ): Record<string, any> | undefined {
+    if (!requestContext || !traceState || traceState.requestContextKeys.length === 0) {
+      return explicitMetadata;
+    }
+
+    const extracted = this.extractKeys(requestContext, traceState.requestContextKeys);
+
+    // Only return an object if we have extracted or explicit metadata
+    if (Object.keys(extracted).length === 0 && !explicitMetadata) {
+      return undefined;
+    }
+
+    return {
+      ...extracted,
+      ...explicitMetadata, // Explicit metadata always wins
+    };
+  }
+
+  /**
+   * Extract specific keys from RequestContext
+   */
+  protected extractKeys(requestContext: RequestContext, keys: string[]): Record<string, any> {
+    const result: Record<string, any> = {};
+
+    for (const key of keys) {
+      // Handle dot notation: get first part from RequestContext, then navigate nested properties
+      const parts = key.split('.');
+      const rootKey = parts[0]!; // parts[0] always exists since key is a non-empty string
+      const value = requestContext.get(rootKey);
+
+      if (value !== undefined) {
+        // If there are nested parts, extract them from the value
+        if (parts.length > 1) {
+          const nestedPath = parts.slice(1).join('.');
+          const nestedValue = getNestedValue(value, nestedPath);
+          if (nestedValue !== undefined) {
+            setNestedValue(result, key, nestedValue);
+          }
+        } else {
+          // Simple key, set directly
+          setNestedValue(result, key, value);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Process a span through all output processors
+   */
+  private processSpan(span?: AnySpan): AnySpan | undefined {
+    for (const processor of this.spanOutputProcessors) {
+      if (!span) {
+        break;
+      }
+
+      try {
+        span = processor.process(span);
+      } catch (error) {
+        this.logger.error(`[Observability] Processor error [name=${processor.name}]`, error);
+        // Continue with other processors
+      }
+    }
+
+    return span;
+  }
+
+  // ============================================================================
+  // Event-driven Export Methods
+  // ============================================================================
+
+  getSpanForExport(span: AnySpan): AnyExportedSpan | undefined {
+    if (!span.isValid) return undefined;
+    if (span.isInternal && !this.config.includeInternalSpans) return undefined;
+
+    const processedSpan = this.processSpan(span);
+    return processedSpan?.exportSpan(this.config.includeInternalSpans);
+  }
+
+  /**
+   * Emit a span started event.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
+   * and auto-extracted metrics are generated.
+   */
+  protected emitSpanStarted(span: AnySpan): void {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      const event: TracingEvent = { type: TracingEventType.SPAN_STARTED, exportedSpan };
+      this.emitTracingEvent(event);
+    }
+  }
+
+  /**
+   * Emit a span ended event (called automatically when spans end).
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
+   * and auto-extracted metrics are generated.
+   */
+  protected emitSpanEnded(span: AnySpan): void {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
+      this.emitTracingEvent(event);
+    }
+  }
+
+  /**
+   * Emit a span updated event.
+   * Routes through the ObservabilityBus so exporters receive it via onTracingEvent
+   * and auto-extracted metrics are generated.
+   */
+  protected emitSpanUpdated(span: AnySpan): void {
+    const exportedSpan = this.getSpanForExport(span);
+    if (exportedSpan) {
+      const event: TracingEvent = { type: TracingEventType.SPAN_UPDATED, exportedSpan };
+      this.emitTracingEvent(event);
+    }
+  }
+
+  /**
+   * Emit a tracing event through the bus.
+   *
+   * The bus routes the event to each registered exporter's and bridge's
+   * onTracingEvent handler and triggers auto-extracted metrics (e.g.,
+   * mastra_agent_runs_started, mastra_model_duration_ms).
+   */
+  private emitTracingEvent(event: TracingEvent): void {
+    this.observabilityBus.emit(event);
+  }
+
+  /**
+   * Export tracing event through all exporters and bridge.
+   *
+   * @deprecated Prefer emitTracingEvent() which routes through the bus.
+   * Kept for backward compatibility with subclasses that may override it.
+   */
+  protected async exportTracingEvent(event: TracingEvent): Promise<void> {
+    // Collect all export targets
+    const targets: Array<{ name: string; exportTracingEvent: (event: TracingEvent) => Promise<void> }> = [
+      ...this.exporters,
+    ];
+
+    // Add bridge if present
+    if (this.config.bridge) {
+      targets.push(this.config.bridge);
+    }
+
+    // Export to all targets
+    const exportPromises = targets.map(async target => {
+      try {
+        await target.exportTracingEvent(event);
+        this.logger.debug(`[Observability] Event exported [target=${target.name}] [type=${event.type}]`);
+      } catch (error) {
+        this.logger.error(`[Observability] Export error [target=${target.name}]`, error);
+        // Don't rethrow - continue with other targets
+      }
+    });
+
+    await Promise.allSettled(exportPromises);
+  }
+
+  // ============================================================================
+  // Lifecycle Management
+  // ============================================================================
+
+  /**
+   * Initialize Observability (called by Mastra during component registration)
+   */
+  init(): void {
+    this.logger.debug(`[Observability] Initialization started [name=${this.name}]`);
+
+    // Any initialization logic for the Observability system
+    // This could include setting up queues, starting background processes, etc.
+
+    this.logger.info(`[Observability] Initialized successfully [name=${this.name}]`);
+  }
+
+  /**
+   * Flush all observability data: awaits in-flight handler promises, then
+   * drains exporter and bridge SDK-internal buffers.
+   *
+   * Delegates to ObservabilityBus.flush() which owns the two-phase logic.
+   *
+   * This is critical for durable execution engines (e.g., Inngest) where
+   * the process may be interrupted after a step completes. Calling flush()
+   * outside the durable step ensures all span data reaches external systems.
+   */
+  async flush(): Promise<void> {
+    this.logger.debug(`[Observability] Flush started [name=${this.name}]`);
+    await this.observabilityBus.flush();
+    this.logger.debug(`[Observability] Flush completed [name=${this.name}]`);
+  }
+
+  /**
+   * Shutdown Observability and clean up resources
+   */
+  async shutdown(): Promise<void> {
+    this.logger.debug(`[Observability] Shutdown started [name=${this.name}]`);
+
+    // Phase 1: Shutdown the ObservabilityBus first (flushes remaining events, clears subscribers)
+    await this.observabilityBus.shutdown();
+
+    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed
+    const shutdownPromises: Promise<void>[] = [
+      ...this.exporters.map(e => e.shutdown()),
+      ...this.spanOutputProcessors.map(p => p.shutdown()),
+    ];
+    if (this.config.bridge) {
+      shutdownPromises.push(this.config.bridge.shutdown());
+    }
+    if (shutdownPromises.length > 0) {
+      const results = await Promise.allSettled(shutdownPromises);
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
+        }
+      }
+    }
+
+    this.logger.info(`[Observability] Shutdown completed [name=${this.name}]`);
+  }
+}

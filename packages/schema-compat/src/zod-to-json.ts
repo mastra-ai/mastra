@@ -1,31 +1,265 @@
 import type { JSONSchema7 } from 'json-schema';
-import { z } from 'zod';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
-import type { ZodType as ZodSchemaV4 } from 'zod/v4';
+import { z as zV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import zodToJsonSchemaOriginal from 'zod-to-json-schema';
 
+// Symbol to mark schemas as already patched (for idempotency)
+const PATCHED = Symbol('__mastra_patched__');
+
+/**
+ * Recursively patch Zod v4 record schemas that are missing valueType.
+ * This fixes a bug in Zod v4 where z.record(valueSchema) doesn't set def.valueType.
+ * The single-arg form should set valueType but instead only sets keyType.
+ */
+function patchRecordSchemas(schema: any): any {
+  if (!schema || typeof schema !== 'object') return schema;
+
+  // Skip if already patched (idempotency check)
+  if ((schema as any)[PATCHED]) return schema;
+  (schema as any)[PATCHED] = true;
+
+  // Check the _zod.def location (v4 structure)
+  const def = schema._zod?.def;
+
+  // Fix record schemas with missing valueType
+  if (def?.type === 'record' && def.keyType && !def.valueType) {
+    // The bug: z.record(valueSchema) puts the value in keyType instead of valueType
+    // Fix: move it to valueType and set keyType to string (the default)
+    def.valueType = def.keyType;
+    def.keyType = zV4.string();
+  }
+
+  // Recursively patch nested schemas
+  if (!def) return schema;
+
+  if (def.type === 'object' && def.shape) {
+    const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
+    for (const key of Object.keys(shape)) {
+      patchRecordSchemas(shape[key]);
+    }
+  }
+
+  if (def.type === 'array' && def.element) {
+    patchRecordSchemas(def.element);
+  }
+
+  if (def.type === 'union' && def.options) {
+    def.options.forEach(patchRecordSchemas);
+  }
+
+  if (def.type === 'record') {
+    if (def.keyType) patchRecordSchemas(def.keyType);
+    if (def.valueType) patchRecordSchemas(def.valueType);
+  }
+
+  // Handle intersection types
+  if (def.type === 'intersection') {
+    if (def.left) patchRecordSchemas(def.left);
+    if (def.right) patchRecordSchemas(def.right);
+  }
+
+  // Handle lazy types - patch the schema returned by the getter
+  if (def.type === 'lazy') {
+    // For lazy schemas, we need to patch the schema when it's accessed
+    // Store the original getter and wrap it
+    if (def.getter && typeof def.getter === 'function') {
+      const originalGetter = def.getter;
+      def.getter = function () {
+        const innerSchema = originalGetter();
+        if (innerSchema) {
+          patchRecordSchemas(innerSchema);
+        }
+        return innerSchema;
+      };
+    }
+  }
+
+  // Handle wrapper types that have innerType
+  // This covers: optional, nullable, default, catch, nullish, and any other wrappers
+  if (def.innerType) {
+    patchRecordSchemas(def.innerType);
+  }
+
+  return schema;
+}
+
+/**
+ * Recursively fixes anyOf patterns that some providers (like OpenAI) don't accept.
+ * Converts anyOf: [{type: X}, {type: "null"}] to type: [X, "null"]
+ * Also fixes empty {} property schemas by converting to a union of primitive types.
+ */
+function fixAnyOfNullable(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema };
+
+  // Fix anyOf pattern: [{type: X}, {type: "null"}] or [{type: "null"}, {type: X}]
+  if (result.anyOf && Array.isArray(result.anyOf) && result.anyOf.length === 2) {
+    const nullSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type === 'null');
+    const otherSchema = result.anyOf.find((s: any) => typeof s === 'object' && s !== null && s.type !== 'null');
+
+    if (nullSchema && otherSchema && typeof otherSchema === 'object' && otherSchema.type) {
+      // Convert anyOf to type array format
+      // Normalize sibling fields (like properties/items) before returning
+      const { anyOf, ...rest } = result;
+      const fixedRest = fixAnyOfNullable(rest as JSONSchema7);
+      const fixedOther = fixAnyOfNullable(otherSchema as JSONSchema7);
+      return {
+        ...fixedRest,
+        ...fixedOther,
+        type: (Array.isArray(fixedOther.type)
+          ? [...fixedOther.type, 'null']
+          : [fixedOther.type, 'null']) as JSONSchema7['type'],
+      };
+    }
+  }
+
+  // Fix empty property schemas {} - OpenAI requires a type key
+  if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => {
+        const propSchema = value as JSONSchema7;
+
+        // If property is an empty object {}, convert to allow primitive types
+        // Note: We exclude 'object' (requires additionalProperties) and 'array' (requires items) for OpenAI
+        if (
+          typeof propSchema === 'object' &&
+          propSchema !== null &&
+          !Array.isArray(propSchema) &&
+          Object.keys(propSchema).length === 0
+        ) {
+          return [key, { type: ['string', 'number', 'boolean', 'null'] as JSONSchema7['type'] }];
+        }
+
+        // Recursively fix nested schemas
+        return [key, fixAnyOfNullable(propSchema)];
+      }),
+    );
+  }
+
+  // Recursively fix items in arrays
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => fixAnyOfNullable(item as JSONSchema7));
+    } else {
+      result.items = fixAnyOfNullable(result.items as JSONSchema7);
+    }
+  }
+
+  // Recursively fix anyOf/oneOf/allOf schemas
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => fixAnyOfNullable(s as JSONSchema7));
+  }
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    result.oneOf = result.oneOf.map(s => fixAnyOfNullable(s as JSONSchema7));
+  }
+  if (result.allOf && Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(s => fixAnyOfNullable(s as JSONSchema7));
+  }
+
+  return result;
+}
+
+/**
+ * Recursively ensures all properties in an object schema are included in the `required` array.
+ * OpenAI's strict structured output mode requires every key in `properties` to also appear in `required`.
+ *
+ * @param schema - The JSON Schema to process
+ * @returns A new schema with all properties marked as required
+ */
+export function ensureAllPropertiesRequired(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== 'object' || schema === null) {
+    return schema;
+  }
+
+  const result = { ...schema };
+
+  if (result.type === 'object' && result.properties) {
+    result.required = Object.keys(result.properties);
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([key, value]) => [key, ensureAllPropertiesRequired(value as JSONSchema7)]),
+    );
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item => ensureAllPropertiesRequired(item as JSONSchema7));
+    } else if (typeof result.items === 'object') {
+      result.items = ensureAllPropertiesRequired(result.items as JSONSchema7);
+    }
+  }
+
+  if (result.additionalProperties && typeof result.additionalProperties === 'object') {
+    result.additionalProperties = ensureAllPropertiesRequired(result.additionalProperties as JSONSchema7);
+  }
+
+  if (result.anyOf && Array.isArray(result.anyOf)) {
+    result.anyOf = result.anyOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+  if (result.oneOf && Array.isArray(result.oneOf)) {
+    result.oneOf = result.oneOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+  if (result.allOf && Array.isArray(result.allOf)) {
+    result.allOf = result.allOf.map(s => ensureAllPropertiesRequired(s as JSONSchema7));
+  }
+
+  return result;
+}
+
+// export function zotToJsonSchema(zodSchema: ZodSchemaV3 | ZodSchemaV4, target: Targets = 'jsonSchema7', strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative'): JSONSchema7 {
+//   const target = 'draft-07' as StandardJSONSchemaV1.Target;
+//   const standardSchema = toStandardSchema(zodSchema);
+//   const jsonSchema = standardSchemaToJSONSchema(standardSchema, {
+//     target,
+//   });
+
+//   traverse(jsonSchema, {
+//     cb: {
+//       pre: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+//         this.preProcessJSONNode(schema, parentSchema);
+//       },
+//       post: (schema, jsonPtr, rootSchema, parentJsonPtr, parentKeyword, parentSchema) => {
+//         this.postProcessJSONNode(schema, parentSchema);
+//       },
+//     },
+//   });
+
+// }
+
 export function zodToJsonSchema(
-  zodSchema: ZodSchemaV3 | ZodSchemaV4,
+  zodSchema: any,
   target: Targets = 'jsonSchema7',
   strategy: 'none' | 'seen' | 'root' | 'relative' = 'relative',
-) {
-  const fn = 'toJSONSchema';
+): JSONSchema7 {
+  // Route based on whether the schema is v4 (has _zod) or v3 (only has _def).
+  // We use zV4.toJSONSchema (imported from 'zod/v4') for v4 schemas, since the
+  // default 'zod' import may resolve to v3 depending on the environment.
+  // Without this check, v3 schemas passed to v4's toJSONSchema would throw
+  // "Cannot read properties of undefined (reading 'def')".
+  if (zodSchema?._zod) {
+    // Zod v4 path - patch record schemas before converting
+    patchRecordSchemas(zodSchema);
 
-  if (fn in z) {
-    // Use dynamic property access to avoid import errors in Zod v3
-    return (z as any)[fn](zodSchema, {
+    const jsonSchema = zV4.toJSONSchema(zodSchema, {
       unrepresentable: 'any',
       override: (ctx: any) => {
-        // Safe access to handle cases where _zod might be undefined
-        const def = ctx.zodSchema?._zod?.def;
-        if (def && def.type === 'date') {
+        // Handle both Zod v4 structures: _def directly or nested in _zod
+        const def = ctx.zodSchema?._def || ctx.zodSchema?._zod?.def;
+        // Check for date type using both possible property names
+        if (def && (def.typeName === 'ZodDate' || def.type === 'date')) {
           ctx.jsonSchema.type = 'string';
           ctx.jsonSchema.format = 'date-time';
         }
       },
     }) as JSONSchema7;
+
+    // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
+    return fixAnyOfNullable(jsonSchema);
   } else {
+    // Zod v3 path - use the original converter
     return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
       $refStrategy: strategy,
       target,

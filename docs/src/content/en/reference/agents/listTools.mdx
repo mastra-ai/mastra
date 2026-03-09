@@ -1,0 +1,70 @@
+---
+title: "Reference: Agent.listTools() | Agents"
+description: "Documentation for the `Agent.listTools()` method in Mastra agents, which retrieves the tools that the agent can use."
+packages:
+  - "@mastra/core"
+---
+
+# Agent.listTools()
+
+The `.listTools()` method retrieves the tools configured for an agent, resolving them if they're a function. These tools extend the agent's capabilities, allowing it to perform specific actions or access external systems.
+
+## Usage example
+
+```typescript
+await agent.listTools()
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'new RequestContext()',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tools',
+    type: 'TTools | Promise<TTools>',
+    description:
+      'The tools configured for the agent, either as a direct object or a promise that resolves to the tools.',
+  },
+]}
+/>
+
+## Extended usage example
+
+```typescript
+await agent.listTools({
+  requestContext: new RequestContext(),
+})
+```
+
+## Related
+
+- [Using tools with agents](/docs/agents/using-tools)
+- [Creating tools](/docs/mcp/overview)

@@ -1,41 +1,22 @@
-import { ReadableStream } from 'stream/web';
-import type { ToolSet } from 'ai-v5';
-import { RuntimeContext } from '../../runtime-context';
-import type { OutputSchema } from '../../stream/base/schema';
+import { ReadableStream } from 'node:stream/web';
+import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { MastraDBMessage } from '../../agent/message-list';
+import { getErrorFromUnknown } from '../../error';
+import { createObservabilityContext } from '../../observability';
+import { RequestContext } from '../../request-context';
+import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-/**
- * Check if a ReadableStreamDefaultController is open and can accept data.
- *
- * Note: While the ReadableStream spec indicates desiredSize can be:
- * - positive (ready), 0 (full but open), or null (closed/errored),
- * our empirical testing shows that after controller.close(), desiredSize becomes 0.
- * Therefore, we treat both 0 and null as closed states to prevent
- * "Invalid state: Controller is already closed" errors.
- *
- * @param controller - The ReadableStreamDefaultController to check
- * @returns true if the controller is open and can accept data
- */
-export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
-  return controller.desiredSize !== 0 && controller.desiredSize !== null;
-}
-
-export function workflowLoopStream<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   requireToolApproval,
-  telemetry_settings,
   models,
   toolChoice,
   modelSettings,
   _internal,
-  modelStreamSpan,
-  llmAISpan,
   messageId,
   runId,
   messageList,
@@ -43,40 +24,52 @@ export function workflowLoopStream<
   streamState,
   agentId,
   toolCallId,
+  toolCallConcurrency,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
-      const writer = new WritableStream<ChunkType<OUTPUT>>({
-        write: chunk => {
-          controller.enqueue(chunk);
-        },
-      });
-
-      modelStreamSpan.setAttributes({
-        ...(telemetry_settings?.recordInputs !== false
-          ? {
-              'stream.prompt.toolChoice': toolChoice ? JSON.stringify(toolChoice) : 'auto',
-            }
-          : {}),
-      });
+      const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
+        // Handle data-* chunks (custom data chunks from writer.custom())
+        // These need to be persisted to storage, not just streamed
+        // Transient chunks are streamed to the client but not saved to the DB
+        if (chunk.type.startsWith('data-') && messageId && !('transient' in chunk && chunk.transient)) {
+          const dataPart = {
+            type: chunk.type as `data-${string}`,
+            data: 'data' in chunk ? chunk.data : undefined,
+          };
+          const message: MastraDBMessage = {
+            id: messageId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [dataPart],
+            },
+            createdAt: new Date(),
+            threadId: _internal?.threadId,
+            resourceId: _internal?.resourceId,
+          };
+          messageList.add(message, 'response');
+        }
+        safeEnqueue(controller, chunk);
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
         messageId: messageId!,
         models,
-        telemetry_settings,
         _internal,
         modelSettings,
         toolChoice,
-        modelStreamSpan,
         controller,
-        writer,
+        outputWriter,
         runId,
         messageList,
         startTimestamp,
         streamState,
         agentId,
+        requireToolApproval,
+        toolCallConcurrency,
         ...rest,
       });
 
@@ -104,61 +97,73 @@ export function workflowLoopStream<
         },
       };
 
-      const msToFirstChunk = _internal?.now?.()! - startTimestamp!;
-
-      modelStreamSpan.addEvent('ai.stream.firstChunk', {
-        'ai.response.msToFirstChunk': msToFirstChunk,
-      });
-
-      modelStreamSpan.setAttributes({
-        'stream.response.timestamp': new Date(startTimestamp).toISOString(),
-        'stream.response.msToFirstChunk': msToFirstChunk,
-      });
-
       if (!resumeContext) {
-        controller.enqueue({
+        safeEnqueue(controller, {
           type: 'start',
           runId,
           from: ChunkFrom.AGENT,
           payload: {
             id: agentId,
+            messageId,
           },
         });
       }
 
-      const run = await agenticLoopWorkflow.createRunAsync({
+      const run = await agenticLoopWorkflow.createRun({
         runId,
       });
 
-      const runtimeContext = new RuntimeContext();
+      const requestContext = rest.requestContext ?? new RequestContext();
 
       if (requireToolApproval) {
-        runtimeContext.set('__mastra_requireToolApproval', true);
+        requestContext.set('__mastra_requireToolApproval', true);
       }
 
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
-            tracingContext: { currentSpan: llmAISpan },
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+            requestContext,
             label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
-            tracingContext: { currentSpan: llmAISpan },
-            runtimeContext,
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+            requestContext,
           });
 
       if (executionResult.status !== 'success') {
-        controller.close();
+        if (executionResult.status === 'failed') {
+          const error = getErrorFromUnknown(executionResult.error, {
+            fallbackMessage: 'Unknown error in agent workflow stream',
+          });
+
+          safeEnqueue(controller, {
+            type: 'error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { error },
+          });
+
+          if (rest.options?.onError) {
+            await rest.options?.onError?.({ error });
+          }
+        }
+
+        if (executionResult.status !== 'suspended') {
+          await agenticLoopWorkflow.deleteWorkflowRunById(runId);
+        }
+
+        safeClose(controller);
         return;
       }
 
-      if (executionResult.result.stepResult?.reason === 'abort') {
-        controller.close();
-        return;
-      }
+      await agenticLoopWorkflow.deleteWorkflowRunById(runId);
 
-      controller.enqueue({
+      // Always emit finish chunk, even for abort (tripwire) cases
+      // This ensures the stream properly completes and all promises are resolved
+      // The tripwire/abort status is communicated through the stepResult.reason
+      safeEnqueue(controller, {
         type: 'finish',
         runId,
         from: ChunkFrom.AGENT,
@@ -166,21 +171,13 @@ export function workflowLoopStream<
           ...executionResult.result,
           stepResult: {
             ...executionResult.result.stepResult,
-            // @ts-ignore we add 'abort' for tripwires so the type is not compatible
+            // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
             reason: executionResult.result.stepResult.reason,
           },
         },
       });
 
-      const msToFinish = (_internal?.now?.() ?? Date.now()) - startTimestamp;
-      modelStreamSpan.addEvent('ai.stream.finish');
-      modelStreamSpan.setAttributes({
-        'stream.response.msToFinish': msToFinish,
-        'stream.response.avgOutputTokensPerSecond':
-          (1000 * (executionResult?.result?.output?.usage?.outputTokens ?? 0)) / msToFinish,
-      });
-
-      controller.close();
+      safeClose(controller);
     },
   });
 }

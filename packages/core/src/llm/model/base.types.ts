@@ -1,43 +1,40 @@
 import type {
+  UIMessage,
   CoreMessage,
   GenerateTextResult as OriginalGenerateTextResult,
   GenerateObjectResult as OriginalGenerateObjectResult,
   StreamTextResult as OriginalStreamTextResult,
   StreamObjectResult as OriginalStreamObjectResult,
-  TelemetrySettings,
-  UIMessage,
-  Tool,
   generateText,
-  ToolSet,
   generateObject,
   streamText,
   streamObject,
-  DeepPartial,
   StreamObjectOnFinishCallback as OriginalStreamObjectOnFinishCallback,
   StreamTextOnFinishCallback as OriginalStreamTextOnFinishCallback,
   StreamTextOnStepFinishCallback as OriginalStreamTextOnStepFinishCallback,
   GenerateTextOnStepFinishCallback as OriginalGenerateTextOnStepFinishCallback,
-} from 'ai';
+  Tool,
+  ToolSet,
+  DeepPartial,
+} from '@internal/ai-sdk-v4';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
 import type { MessageList } from '../../agent/types';
-import type { TracingContext, TracingProperties } from '../../ai-tracing';
-import type { OutputProcessor } from '../../processors';
-import type { RuntimeContext } from '../../runtime-context';
-import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../scores';
+import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import type { ObservabilityContext, TracingProperties } from '../../observability';
+import type { OutputProcessorOrWorkflow } from '../../processors';
+import type { RequestContext } from '../../request-context';
 import type { inferOutput, ScoringProperties, TripwireProperties } from './shared.types';
 
-export type { ToolSet } from 'ai';
+export type { ToolSet } from '@internal/ai-sdk-v4';
 
-type MastraCustomLLMOptions = {
+type MastraCustomLLMOptions = ObservabilityContext & {
   tools?: Record<string, Tool>;
-  telemetry?: TelemetrySettings;
   threadId?: string;
   resourceId?: string;
-  runtimeContext: RuntimeContext;
-  tracingContext: TracingContext;
+  requestContext: RequestContext;
   runId?: string;
-  outputProcessors?: OutputProcessor[];
+  outputProcessors?: OutputProcessorOrWorkflow[];
 };
 type MastraCustomLLMOptionsKeys = keyof MastraCustomLLMOptions;
 

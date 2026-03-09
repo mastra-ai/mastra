@@ -1,6 +1,10 @@
 ---
-title: Speech-to-Text (STT) in Mastra | Mastra Docs
+title: "Speech-to-Text (STT) | Voice"
 description: Overview of Speech-to-Text capabilities in Mastra, including configuration, usage, and integration with voice providers.
+packages:
+  - "@mastra/core"
+  - "@mastra/node-audio"
+  - "@mastra/voice-openai"
 ---
 
 # Speech-to-Text (STT)
@@ -21,13 +25,13 @@ To use STT in Mastra, you need to provide a `listeningModel` when initializing t
 ```typescript
 const voice = new OpenAIVoice({
   listeningModel: {
-    name: "whisper-1",
+    name: 'whisper-1',
     apiKey: process.env.OPENAI_API_KEY,
   },
-});
+})
 
 // If using default settings the configuration can be simplified to:
-const voice = new OpenAIVoice();
+const voice = new OpenAIVoice()
 ```
 
 ## Available Providers
@@ -45,7 +49,7 @@ Mastra supports several Speech-to-Text providers, each with their own capabiliti
 Each provider is implemented as a separate package that you can install as needed:
 
 ```bash
-pnpm add @mastra/voice-openai  # Example for OpenAI
+pnpm add @mastra/voice-openai@latest  # Example for OpenAI
 ```
 
 ## Using the Listen Method
@@ -53,34 +57,33 @@ pnpm add @mastra/voice-openai  # Example for OpenAI
 The primary method for STT is the `listen()` method, which converts spoken audio into text. Here's how to use it:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
-import { OpenAIVoice } from "@mastra/voice-openai";
-import { getMicrophoneStream } from "@mastra/node-audio";
+import { Agent } from '@mastra/core/agent'
+import { OpenAIVoice } from '@mastra/voice-openai'
+import { getMicrophoneStream } from '@mastra/node-audio'
 
-const voice = new OpenAIVoice();
+const voice = new OpenAIVoice()
 
 const agent = new Agent({
-  name: "Voice Agent",
-  instructions:
-    "You are a voice assistant that provides recommendations based on user input.",
-  model: openai("gpt-4o"),
+  id: 'voice-agent',
+  name: 'Voice Agent',
+  instructions: 'You are a voice assistant that provides recommendations based on user input.',
+  model: 'openai/gpt-5.1',
   voice,
-});
+})
 
-const audioStream = getMicrophoneStream(); // Assume this function gets audio input
+const audioStream = getMicrophoneStream() // Assume this function gets audio input
 
 const transcript = await agent.voice.listen(audioStream, {
-  filetype: "m4a", // Optional: specify the audio file type
-});
+  filetype: 'm4a', // Optional: specify the audio file type
+})
 
-console.log(`User said: ${transcript}`);
+console.log(`User said: ${transcript}`)
 
 const { text } = await agent.generate(
   `Based on what the user said, provide them a recommendation: ${transcript}`,
-);
+)
 
-console.log(`Recommendation: ${text}`);
+console.log(`Recommendation: ${text}`)
 ```
 
-Check out the [Adding Voice to Agents](../agents/adding-voice.mdx) documentation to learn how to use STT in an agent.
+Check out the [Adding Voice to Agents](/docs/agents/adding-voice) documentation to learn how to use STT in an agent.

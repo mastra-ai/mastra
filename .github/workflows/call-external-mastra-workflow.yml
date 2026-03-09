@@ -1,0 +1,100 @@
+name: Call External Mastra Workflow
+
+on:
+  workflow_call:
+    inputs:
+      workflow_name:
+        description: 'Name of the external workflow to execute'
+        required: true
+        type: string
+      input_data:
+        description: 'JSON input data for the workflow'
+        required: true
+        type: string
+      base_url:
+        description: 'Base URL for the Mastra Cloud API'
+        required: true
+        type: string
+    secrets:
+      MASTRA_TRIAGE_JWT_KEY:
+        required: true
+
+jobs:
+  execute-workflow:
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create and execute workflow run
+        run: |
+          set -e
+
+          WORKFLOW_NAME="${{ inputs.workflow_name }}"
+          BASE_URL="${{ inputs.base_url }}"
+
+          # Validate workflow_name to prevent unsafe characters in URL paths
+          if ! echo "$WORKFLOW_NAME" | grep -Eq '^[a-zA-Z0-9_-]+$'; then
+            echo "Error: Invalid workflow_name '$WORKFLOW_NAME'"
+            echo "Workflow name must contain only alphanumeric characters, underscores, and hyphens"
+            exit 1
+          fi
+
+          echo "Creating workflow run for: $WORKFLOW_NAME"
+
+          # Create the workflow run and capture the runId
+          http_code=$(curl -w "%{http_code}" -o /tmp/create_response.json -s \
+            --max-time 30 \
+            "${BASE_URL}/${WORKFLOW_NAME}/create-run" \
+            -X 'POST' \
+            -H 'Authorization: Bearer ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}' \
+            -H 'Referer: https://cloud.mastra.ai/' \
+            -H 'User-Agent: Github Action')
+
+          create_response=$(cat /tmp/create_response.json)
+
+          # Check HTTP response code
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Error: Create-run request failed with HTTP code $http_code"
+            echo "Response: $create_response"
+            exit 1
+          fi
+
+          # Extract runId from the response
+          runId=$(echo "$create_response" | jq -r '.runId')
+
+          if [ "$runId" = "null" ] || [ -z "$runId" ]; then
+            echo "Error: Failed to extract runId from response"
+            echo "Response: $create_response"
+            exit 1
+          fi
+
+          echo "Successfully created workflow run with ID: $runId"
+
+          # Start the workflow with the runId
+          echo "Starting workflow with runId: $runId"
+
+          # Use jq to properly escape and validate the input data
+          echo '${{ inputs.input_data }}' | jq -c . > /tmp/input_data.json
+
+          http_code=$(curl -w "%{http_code}" -o /tmp/start_response.json -s \
+            --max-time 300 \
+            "${BASE_URL}/${WORKFLOW_NAME}/start?runId=${runId}" \
+            -X 'POST' \
+            -H 'Authorization: Bearer ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}' \
+            -H 'Referer: https://cloud.mastra.ai/' \
+            -H 'User-Agent: Github Action' \
+            -H 'Content-Type: application/json' \
+            --data-binary @/tmp/input_data.json)
+
+          start_response=$(cat /tmp/start_response.json)
+
+          # Check HTTP response code
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Error: Start workflow request failed with HTTP code $http_code"
+            echo "Response: $start_response"
+            exit 1
+          fi
+
+          echo "Workflow start response (HTTP $http_code):"
+          echo "$start_response" | jq .
+
+          echo "Workflow execution completed successfully"

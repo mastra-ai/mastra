@@ -6,6 +6,7 @@ const IGNORE_LIST = [
   '@mastra/memory-integration-tests',
   '@mastra/longmemeval',
   '@mastra/mcp-configuration',
+  'mastra-docs',
 ];
 
 const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra'];
@@ -127,6 +128,12 @@ async function main() {
       hasError = true;
     } else if (pkg.bugs.url !== ISSUES_URL) {
       console.log(`❌ ${file}: bugs.url should be "${ISSUES_URL}"`);
+      hasError = true;
+    }
+
+    // Check if engines field exists and includes node
+    if (!pkg.engines || !pkg.engines.node) {
+      console.log(`❌ ${file}: missing engines.node field`);
       hasError = true;
     }
 

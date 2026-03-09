@@ -1,19 +1,22 @@
-import { Link } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
   Crumb,
   HeaderGroup,
   Button,
-  DividerIcon,
   HeaderAction,
   Icon,
   DocsIcon,
   AgentIcon,
+  AgentCombobox,
+  useIsCmsAvailable,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
-export function AgentHeader({ agentName, agentId }: { agentName: string; agentId: string }) {
+export function AgentHeader({ agentId }: { agentId: string }) {
+  const { isCmsAvailable } = useIsCmsAvailable();
+
   return (
     <Header>
       <Breadcrumb>
@@ -23,23 +26,17 @@ export function AgentHeader({ agentName, agentId }: { agentName: string; agentId
           </Icon>
           Agents
         </Crumb>
-        <Crumb as={Link} to={`/agents/${agentId}`} isCurrent>
-          {agentName}
+        <Crumb as="span" to="" isCurrent>
+          <AgentCombobox value={agentId} variant="ghost" showSourceIcon={isCmsAvailable} />
         </Crumb>
       </Breadcrumb>
 
       <HeaderGroup>
-        <Button as={Link} to={`/agents/${agentId}/chat`}>
-          Chat
-        </Button>
-
-        <DividerIcon />
-
-        <Button as={Link} to={`/agents/${agentId}/traces`}>
+        <Button as={Link} to={`/observability?entity=${agentId}`}>
+          <Icon>
+            <EyeIcon />
+          </Icon>
           Traces
-        </Button>
-        <Button as={Link} to={`/agents/${agentId}/evals`}>
-          Evals
         </Button>
       </HeaderGroup>
 

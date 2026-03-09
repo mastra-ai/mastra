@@ -1,5 +1,4 @@
-import type { InternalCoreTool } from '@mastra/core/tools';
-import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { RequestHandlerExtra, RequestOptions } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
   ElicitRequest,
   ElicitResult,
@@ -8,7 +7,6 @@ import type {
   Resource,
   ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
-import type { z } from 'zod';
 
 /**
  * Callback function to retrieve content for a specific resource.
@@ -83,8 +81,14 @@ export type MCPServerPrompts = {
  * Actions for handling elicitation requests (interactive user input collection).
  */
 export type ElicitationActions = {
-  /** Function to send an elicitation request to the client */
-  sendRequest: (request: ElicitRequest['params']) => Promise<ElicitResult>;
+  /**
+   * Function to send an elicitation request to the client.
+   *
+   * @param request - The elicitation request parameters
+   * @param options - Optional request options (timeout, signal, etc.)
+   * @returns Promise resolving to the client's elicitation response
+   */
+  sendRequest: (request: ElicitRequest['params'], options?: RequestOptions) => Promise<ElicitResult>;
 };
 
 /**
@@ -93,66 +97,10 @@ export type ElicitationActions = {
 export type MCPRequestHandlerExtra = RequestHandlerExtra<any, any>;
 
 /**
- * Tool definition for MCP servers with support for elicitation.
- *
- * Extends standard Mastra tools with MCP-specific capabilities including interactive
- * user input collection via elicitation and request context access.
- *
- * @template TSchemaIn - Input schema type (Zod schema or undefined)
- * @template TSchemaOut - Output schema type (Zod schema or undefined)
- *
- * @example
- * ```typescript
- * const myTool: MCPTool<z.ZodObject<{ name: z.ZodString }>> = {
- *   id: 'greet',
- *   description: 'Greets a person',
- *   parameters: z.object({ name: z.string() }),
- *   execute: async ({ context }, { elicitation, extra }) => {
- *     // Can request additional user input during execution
- *     const userInfo = await elicitation.sendRequest({
- *       message: 'Please provide your email',
- *       requestedSchema: { type: 'object', properties: { email: { type: 'string' } } }
- *     });
- *     return `Hello ${context.name}!`;
- *   }
- * };
- * ```
- */
-export type MCPTool<
-  TSchemaIn extends z.ZodSchema | undefined = undefined,
-  TSchemaOut extends z.ZodSchema | undefined = undefined,
-> = {
-  /** Optional unique identifier for the tool */
-  id?: InternalCoreTool['id'];
-  /** Optional description of what the tool does */
-  description?: InternalCoreTool['description'];
-  /** Input parameters schema (inferred from TSchemaIn if provided) */
-  parameters: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any;
-  /** Optional output schema for structured responses (inferred from TSchemaOut if provided) */
-  outputSchema?: TSchemaOut extends z.ZodSchema ? z.infer<TSchemaOut> : any;
-  /**
-   * Function that executes the tool's logic.
-   *
-   * @param params - Tool input parameters
-   * @param params.context - Validated input matching the parameters schema
-   * @param options - Execution options
-   * @param options.elicitation - Actions for requesting user input during execution
-   * @param options.extra - MCP request handler context with session information
-   * @returns Promise resolving to the tool's result
-   */
-  execute: (
-    params: { context: TSchemaIn extends z.ZodSchema ? z.infer<TSchemaIn> : any },
-    options: Parameters<NonNullable<InternalCoreTool['execute']>>[1] & {
-      elicitation: ElicitationActions;
-      extra: MCPRequestHandlerExtra;
-    },
-  ) => Promise<any>;
-};
-
-/**
  * Re-exported MCP SDK types for resource handling.
  *
  * - `Resource`: Represents a data resource exposed by the server
  * - `ResourceTemplate`: URI template for dynamic resource generation
+ * - `RequestOptions`: Options for MCP requests (timeout, signal, etc.)
  */
-export type { Resource, ResourceTemplate };
+export type { Resource, ResourceTemplate, RequestOptions };

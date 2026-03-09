@@ -1,4 +1,4 @@
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 
 import '../../../index.css';
 
@@ -6,21 +6,17 @@ import { lodashTitleCase } from '@/lib/string';
 import { AlertCircleIcon } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { WorkflowGraphInner } from './workflow-graph-inner';
-import { WorkflowNestedGraphProvider } from '../context/workflow-nested-graph-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useContext } from 'react';
 import { GetWorkflowResponse } from '@mastra/client-js';
-import { WorkflowSendEventFormProps } from './workflow-run-event-form';
 
 export interface WorkflowGraphProps {
   workflowId: string;
   isLoading?: boolean;
   workflow?: GetWorkflowResponse;
-  onShowTrace?: ({ runId, stepName }: { runId: string; stepName: string }) => void;
-  onSendEvent?: WorkflowSendEventFormProps['onSendEvent'];
 }
 
-export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading, onSendEvent }: WorkflowGraphProps) {
+export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraphProps) {
   const { snapshot } = useContext(WorkflowRunContext);
 
   if (isLoading) {
@@ -43,18 +39,10 @@ export function WorkflowGraph({ workflowId, onShowTrace, workflow, isLoading, on
   }
 
   return (
-    <WorkflowNestedGraphProvider
-      key={snapshot?.runId ?? workflowId}
-      onShowTrace={onShowTrace}
-      onSendEvent={onSendEvent}
-    >
-      <ReactFlowProvider>
-        <WorkflowGraphInner
-          workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
-          onShowTrace={onShowTrace}
-          onSendEvent={onSendEvent}
-        />
-      </ReactFlowProvider>
-    </WorkflowNestedGraphProvider>
+    <ReactFlowProvider>
+      <WorkflowGraphInner
+        workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
+      />
+    </ReactFlowProvider>
   );
 }

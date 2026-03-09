@@ -1,6 +1,65 @@
-import type { AITraceRecord, AITracesPaginatedArg } from '@mastra/core/storage';
-import type { ClientOptions, GetAITracesResponse, GetScoresBySpanParams, GetScoresResponse } from '../types';
+import type { ListScoresResponse } from '@mastra/core/evals';
+import type { SpanType } from '@mastra/core/observability';
+import type {
+  TraceRecord,
+  ListTracesArgs,
+  ListTracesResponse,
+  SpanIds,
+  PaginationArgs,
+  SpanRecord,
+  PaginationInfo,
+  ScoreTracesRequest,
+  ScoreTracesResponse,
+} from '@mastra/core/storage';
+import type { ClientOptions } from '../types';
+import { toQueryParams } from '../utils';
 import { BaseResource } from './base';
+
+// ============================================================================
+// Legacy Types (for backward compatibility with main branch API)
+// ============================================================================
+
+/**
+ * Legacy pagination arguments from main branch.
+ * @deprecated Use ListTracesArgs instead with the new listTraces() method.
+ */
+export interface LegacyPaginationArgs {
+  dateRange?: {
+    start?: Date;
+    end?: Date;
+  };
+  page?: number;
+  perPage?: number;
+}
+
+/**
+ * Legacy traces query parameters from main branch.
+ * @deprecated Use ListTracesArgs instead with the new listTraces() method.
+ */
+export interface LegacyTracesPaginatedArg {
+  filters?: {
+    name?: string;
+    spanType?: SpanType;
+    entityId?: string;
+    entityType?: 'agent' | 'workflow';
+  };
+  pagination?: LegacyPaginationArgs;
+}
+
+/**
+ * Legacy response type from main branch.
+ * @deprecated Use ListTracesResponse instead.
+ */
+export interface LegacyGetTracesResponse {
+  spans: SpanRecord[];
+  pagination: PaginationInfo;
+}
+
+export type ListScoresBySpanParams = SpanIds & PaginationArgs;
+
+// ============================================================================
+// Observability Resource
+// ============================================================================
 
 export class Observability extends BaseResource {
   constructor(options: ClientOptions) {
@@ -8,20 +67,23 @@ export class Observability extends BaseResource {
   }
 
   /**
-   * Retrieves a specific AI trace by ID
+   * Retrieves a specific trace by ID
    * @param traceId - ID of the trace to retrieve
-   * @returns Promise containing the AI trace with all its spans
+   * @returns Promise containing the trace with all its spans
    */
-  getTrace(traceId: string): Promise<AITraceRecord> {
-    return this.request(`/api/observability/traces/${traceId}`);
+  getTrace(traceId: string): Promise<TraceRecord> {
+    return this.request(`/observability/traces/${traceId}`);
   }
 
   /**
-   * Retrieves paginated list of AI traces with optional filtering
-   * @param params - Parameters for pagination and filtering
+   * Retrieves paginated list of traces with optional filtering.
+   * This is the legacy API preserved for backward compatibility.
+   *
+   * @param params - Parameters for pagination and filtering (legacy format)
    * @returns Promise containing paginated traces and pagination info
+   * @deprecated Use {@link listTraces} instead for new features like ordering and more filters.
    */
-  getTraces(params: AITracesPaginatedArg): Promise<GetAITracesResponse> {
+  getTraces(params: LegacyTracesPaginatedArg): Promise<LegacyGetTracesResponse> {
     const { pagination, filters } = params;
     const { page, perPage, dateRange } = pagination || {};
     const { name, spanType, entityId, entityType } = filters || {};
@@ -53,7 +115,19 @@ export class Observability extends BaseResource {
     }
 
     const queryString = searchParams.toString();
-    return this.request(`/api/observability/traces${queryString ? `?${queryString}` : ''}`);
+    return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Retrieves paginated list of traces with optional filtering and sorting.
+   * This is the new API with improved filtering options.
+   *
+   * @param params - Parameters for pagination, filtering, and ordering
+   * @returns Promise containing paginated traces and pagination info
+   */
+  listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
+    const queryString = toQueryParams(params, ['filters', 'pagination', 'orderBy']);
+    return this.request(`/observability/traces${queryString ? `?${queryString}` : ''}`);
   }
 
   /**
@@ -61,28 +135,21 @@ export class Observability extends BaseResource {
    * @param params - Parameters containing trace ID, span ID, and pagination options
    * @returns Promise containing scores and pagination info
    */
-  public getScoresBySpan(params: GetScoresBySpanParams): Promise<GetScoresResponse> {
-    const { traceId, spanId, page, perPage } = params;
-    const searchParams = new URLSearchParams();
-
-    if (page !== undefined) {
-      searchParams.set('page', String(page));
-    }
-    if (perPage !== undefined) {
-      searchParams.set('perPage', String(perPage));
-    }
-
-    const queryString = searchParams.toString();
+  listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
+    const { traceId, spanId, ...pagination } = params;
+    const queryString = toQueryParams(pagination);
     return this.request(
-      `/api/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
+      `/observability/traces/${encodeURIComponent(traceId)}/${encodeURIComponent(spanId)}/scores${queryString ? `?${queryString}` : ''}`,
     );
   }
 
-  score(params: {
-    scorerName: string;
-    targets: Array<{ traceId: string; spanId?: string }>;
-  }): Promise<{ status: string; message: string }> {
-    return this.request(`/api/observability/traces/score`, {
+  /**
+   * Scores one or more traces using a specified scorer.
+   * @param params - Scorer name and targets to score
+   * @returns Promise containing the scoring status
+   */
+  score(params: ScoreTracesRequest): Promise<ScoreTracesResponse> {
+    return this.request(`/observability/traces/score`, {
       method: 'POST',
       body: { ...params },
     });

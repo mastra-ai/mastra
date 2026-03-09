@@ -1,11 +1,13 @@
-import type { CoreMessage } from 'ai';
+import type { CoreMessage } from '@internal/ai-sdk-v4';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
-import { RuntimeContext } from '../../runtime-context';
+import { RequestContext } from '../../request-context';
 import { MockProvider } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { makeCoreTool } from '../../utils';
+import { MastraLLMV1 } from './model';
 
 describe('MastraLLM', () => {
   const mockMastra = {
@@ -16,7 +18,7 @@ describe('MastraLLM', () => {
     } as any,
   };
 
-  const runtimeContext = new RuntimeContext();
+  const requestContext = new RequestContext();
   const tracingContext = {};
 
   const mockTools = {
@@ -33,7 +35,7 @@ describe('MastraLLM', () => {
         name: 'test',
         logger: mockMastra.logger,
         mastra: mockMastra as any,
-        runtimeContext,
+        requestContext,
         tracingContext,
       },
     ),
@@ -86,7 +88,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -105,7 +107,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         output: schema,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -118,7 +120,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -131,7 +133,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -146,7 +148,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -162,7 +164,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -178,7 +180,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -190,7 +192,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -202,7 +204,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -220,7 +222,7 @@ describe('MastraLLM', () => {
         output: schema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -242,7 +244,7 @@ describe('MastraLLM', () => {
         output: jsonSchema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -260,7 +262,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -282,7 +284,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -299,7 +301,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -316,7 +318,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -331,7 +333,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -347,7 +349,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -370,7 +372,7 @@ describe('MastraLLM', () => {
         onStepFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -386,7 +388,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -409,7 +411,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -426,7 +428,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -441,7 +443,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -456,7 +458,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -474,7 +476,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -490,7 +492,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -522,7 +524,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -540,7 +542,7 @@ describe('MastraLLM', () => {
 
       const result = await aisdkObject.__textObject({
         messages,
-        runtimeContext,
+        requestContext,
         structuredOutput: schema,
         temperature: 0.7,
         tracingContext,
@@ -558,7 +560,7 @@ describe('MastraLLM', () => {
         messages,
         structuredOutput: arraySchema,
         temperature: 0.7,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -580,7 +582,7 @@ describe('MastraLLM', () => {
         messages,
         structuredOutput: jsonSchema,
         temperature: 0.7,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -599,7 +601,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         structuredOutput: schema,
         temperature: 0.7,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
     });
@@ -618,7 +620,7 @@ describe('MastraLLM', () => {
         structuredOutput: schema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -634,7 +636,7 @@ describe('MastraLLM', () => {
         structuredOutput: arraySchema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -656,7 +658,7 @@ describe('MastraLLM', () => {
         structuredOutput: jsonSchema,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -678,7 +680,7 @@ describe('MastraLLM', () => {
         onFinish,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -698,7 +700,7 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -717,7 +719,7 @@ describe('MastraLLM', () => {
         tools: mockTools,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
@@ -738,11 +740,148 @@ describe('MastraLLM', () => {
         runId,
         temperature: 0.7,
         maxSteps: 5,
-        runtimeContext,
+        requestContext,
         tracingContext,
       });
 
       expect(streamSpy).toHaveBeenCalled();
+    });
+  });
+
+  // Regression tests for https://github.com/mastra-ai/mastra/issues/12184
+  // LLM errors must be routed through the Mastra logger instead of bypassing to console.error
+  describe('error logging via Mastra logger (issue #12184)', () => {
+    const makeErrorMastra = () => ({
+      logger: {
+        debug: vi.fn(),
+        warn: vi.fn(),
+        info: vi.fn(),
+        error: vi.fn(),
+      } as any,
+    });
+
+    const providerError = new Error('400 input too long');
+
+    it('should log error through Mastra logger when __text (generateText) fails', async () => {
+      const errorMastra = makeErrorMastra();
+
+      const errorModel = new MockLanguageModelV1({
+        doGenerate: async () => {
+          throw providerError;
+        },
+        doStream: async () => {
+          throw providerError;
+        },
+      });
+
+      const llm = new MastraLLMV1({ model: errorModel });
+      llm.__registerPrimitives(errorMastra);
+
+      await expect(
+        llm.__text({
+          messages: [{ role: 'user', content: 'test' }],
+          requestContext: new RequestContext(),
+          tracingContext: {},
+        }),
+      ).rejects.toThrow();
+
+      expect(errorMastra.logger.error).toHaveBeenCalled();
+    });
+
+    it('should log error through Mastra logger when __textObject (generateObject) fails', async () => {
+      const errorMastra = makeErrorMastra();
+
+      const errorModel = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw providerError;
+        },
+        doStream: async () => {
+          throw providerError;
+        },
+      });
+
+      const llm = new MastraLLMV1({ model: errorModel });
+      llm.__registerPrimitives(errorMastra);
+
+      await expect(
+        llm.__textObject({
+          messages: [{ role: 'user', content: 'test' }],
+          structuredOutput: z.object({ content: z.string() }),
+          requestContext: new RequestContext(),
+          tracingContext: {},
+        }),
+      ).rejects.toThrow();
+
+      expect(errorMastra.logger.error).toHaveBeenCalled();
+    });
+
+    it('should log streaming error through Mastra logger when __stream (streamText) fails', async () => {
+      const errorMastra = makeErrorMastra();
+
+      const errorModel = new MockLanguageModelV1({
+        doGenerate: async () => {
+          throw providerError;
+        },
+        doStream: async () => {
+          throw providerError;
+        },
+      });
+
+      const llm = new MastraLLMV1({ model: errorModel });
+      llm.__registerPrimitives(errorMastra);
+
+      const result = llm.__stream({
+        messages: [{ role: 'user', content: 'test' }],
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      });
+
+      // Consume the stream to trigger the error path
+      try {
+        for await (const _ of result.textStream) {
+          // noop
+        }
+      } catch {
+        // error expected
+      }
+
+      expect(errorMastra.logger.error).toHaveBeenCalled();
+    });
+
+    it('should log streaming error through Mastra logger when __streamObject (streamObject) fails', async () => {
+      const errorMastra = makeErrorMastra();
+
+      const errorModel = new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => {
+          throw providerError;
+        },
+        doStream: async () => {
+          throw providerError;
+        },
+      });
+
+      const llm = new MastraLLMV1({ model: errorModel });
+      llm.__registerPrimitives(errorMastra);
+
+      const result = llm.__streamObject({
+        messages: [{ role: 'user', content: 'test' }],
+        structuredOutput: z.object({ content: z.string() }),
+        requestContext: new RequestContext(),
+        tracingContext: {},
+      });
+
+      // Consume the stream to trigger the error path
+      try {
+        for await (const _ of result.partialObjectStream) {
+          // noop
+        }
+      } catch {
+        // error expected
+      }
+
+      expect(errorMastra.logger.error).toHaveBeenCalled();
     });
   });
 });

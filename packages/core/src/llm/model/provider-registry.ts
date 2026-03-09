@@ -3,11 +3,11 @@
  * Loads provider data from JSON file and exports typed interfaces
  */
 
-import fs from 'fs';
-import { createRequire } from 'module';
-import os from 'os';
-import path from 'path';
-import type { ProviderConfig } from './gateways/base.js';
+import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
+import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
 import staticRegistry from './provider-registry.json';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
 
@@ -24,22 +24,53 @@ interface RegistryData {
 let registryData: RegistryData | null = null;
 
 // Cache file helpers (dev mode only)
-const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
-const CACHE_FILE = path.join(CACHE_DIR, 'gateway-refresh-time');
-const GLOBAL_PROVIDER_REGISTRY_JSON = path.join(CACHE_DIR, 'provider-registry.json');
-const GLOBAL_PROVIDER_TYPES_DTS = path.join(CACHE_DIR, 'provider-types.generated.d.ts');
+// Use functions so we don't call os.homedir() at top level, which
+// causes an error in sandboxed environments when you merely
+// import @mastra/core. In those sandboxes, if you just don't use these
+// functions then you don't hit these errors.
+const CACHE_DIR = () => path.join(os.homedir(), '.cache', 'mastra');
+const CACHE_FILE = () => path.join(CACHE_DIR(), 'gateway-refresh-time');
+const GLOBAL_PROVIDER_REGISTRY_JSON = () => path.join(CACHE_DIR(), 'provider-registry.json');
+const GLOBAL_PROVIDER_TYPES_DTS = () => path.join(CACHE_DIR(), 'provider-types.generated.d.ts');
 
 let modelRouterCacheFailed = false;
 
 /**
+ * Write a file atomically using the write-to-temp-then-rename pattern (synchronous version).
+ * This prevents file corruption when multiple processes write to the same file concurrently.
+ *
+ * @param filePath - The target file path
+ * @param content - The content to write
+ * @param encoding - The encoding to use (default: 'utf-8')
+ */
+function atomicWriteFileSync(filePath: string, content: string, encoding: BufferEncoding = 'utf-8'): void {
+  // Use random suffix to avoid collisions between concurrent writes
+  const randomSuffix = Math.random().toString(36).substring(2, 15);
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.${randomSuffix}.tmp`;
+
+  try {
+    fs.writeFileSync(tempPath, content, encoding);
+    fs.renameSync(tempPath, filePath);
+  } catch (error) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      // Ignore cleanup errors
+    }
+    throw error;
+  }
+}
+
+/**
  * Syncs provider files from global cache to local dist/ directory if needed.
  * Compares file contents to determine if copy is necessary.
+ * Validates JSON before copying to prevent propagating corrupted files.
  */
 function syncGlobalCacheToLocal(): void {
   try {
     // Check if global cache files exist
-    const globalJsonExists = fs.existsSync(GLOBAL_PROVIDER_REGISTRY_JSON);
-    const globalDtsExists = fs.existsSync(GLOBAL_PROVIDER_TYPES_DTS);
+    const globalJsonExists = fs.existsSync(GLOBAL_PROVIDER_REGISTRY_JSON());
+    const globalDtsExists = fs.existsSync(GLOBAL_PROVIDER_TYPES_DTS());
 
     if (!globalJsonExists && !globalDtsExists) {
       // No global cache, nothing to sync
@@ -57,7 +88,24 @@ function syncGlobalCacheToLocal(): void {
 
     // Sync JSON file if global exists and differs from local
     if (globalJsonExists) {
-      const globalJsonContent = fs.readFileSync(GLOBAL_PROVIDER_REGISTRY_JSON, 'utf-8');
+      const globalJsonContent = fs.readFileSync(GLOBAL_PROVIDER_REGISTRY_JSON(), 'utf-8');
+
+      // Validate JSON before copying to prevent propagating corrupted files
+      try {
+        JSON.parse(globalJsonContent);
+      } catch {
+        console.warn(
+          `[GatewayRegistry] Detected corrupted global cache at ${GLOBAL_PROVIDER_REGISTRY_JSON()}. ` +
+            `Deleting corrupted file.`,
+        );
+        try {
+          fs.unlinkSync(GLOBAL_PROVIDER_REGISTRY_JSON());
+        } catch {
+          // Ignore deletion errors
+        }
+        return; // Don't sync corrupted file
+      }
+
       let shouldCopyJson = true;
 
       if (fs.existsSync(localJsonPath)) {
@@ -66,36 +114,55 @@ function syncGlobalCacheToLocal(): void {
       }
 
       if (shouldCopyJson) {
-        fs.writeFileSync(localJsonPath, globalJsonContent, 'utf-8');
+        // Use atomic write to prevent corruption from concurrent writes
+        atomicWriteFileSync(localJsonPath, globalJsonContent, 'utf-8');
       }
     }
 
     // Sync .d.ts file if global exists and differs from local
     if (globalDtsExists) {
-      const globalDtsContent = fs.readFileSync(GLOBAL_PROVIDER_TYPES_DTS, 'utf-8');
-      let shouldCopyDts = true;
+      const globalDtsContent = fs.readFileSync(GLOBAL_PROVIDER_TYPES_DTS(), 'utf-8');
 
-      if (fs.existsSync(localDtsPath)) {
-        const localDtsContent = fs.readFileSync(localDtsPath, 'utf-8');
-        shouldCopyDts = globalDtsContent !== localDtsContent;
-      }
+      // Validate .d.ts content: check for unquoted provider names that start with a digit
+      // (e.g. "readonly 302ai:" instead of "readonly '302ai':"), which produces invalid TypeScript.
+      // This can happen if the global cache was written by an older version without the quoting fix.
+      if (/readonly\s+\d/.test(globalDtsContent)) {
+        console.warn(
+          `[GatewayRegistry] Detected invalid provider-types in global cache at ${GLOBAL_PROVIDER_TYPES_DTS()}. ` +
+            `Deleting corrupted file.`,
+        );
+        try {
+          fs.unlinkSync(GLOBAL_PROVIDER_TYPES_DTS());
+        } catch {
+          // Ignore deletion errors
+        }
+        // Don't sync corrupted .d.ts file; fall through to keep existing local file
+      } else {
+        let shouldCopyDts = true;
 
-      if (shouldCopyDts) {
-        fs.writeFileSync(localDtsPath, globalDtsContent, 'utf-8');
+        if (fs.existsSync(localDtsPath)) {
+          const localDtsContent = fs.readFileSync(localDtsPath, 'utf-8');
+          shouldCopyDts = globalDtsContent !== localDtsContent;
+        }
+
+        if (shouldCopyDts) {
+          // Use atomic write to prevent corruption from concurrent writes
+          atomicWriteFileSync(localDtsPath, globalDtsContent, 'utf-8');
+        }
       }
     }
   } catch (error) {
-    // Silent fail - backwards compatibility means we fall back to existing files
+    // Silent fail - fall back to existing files
     console.warn('Failed to sync global cache to local:', error);
   }
 }
 
 function getLastRefreshTimeFromDisk(): Date | null {
   try {
-    if (!fs.existsSync(CACHE_FILE)) {
+    if (!fs.existsSync(CACHE_FILE())) {
       return null;
     }
-    const timestamp = fs.readFileSync(CACHE_FILE, 'utf-8').trim();
+    const timestamp = fs.readFileSync(CACHE_FILE(), 'utf-8').trim();
     return new Date(parseInt(timestamp, 10));
   } catch (err) {
     console.warn('[GatewayRegistry] Failed to read cache file:', err);
@@ -106,10 +173,10 @@ function getLastRefreshTimeFromDisk(): Date | null {
 
 function saveLastRefreshTimeToDisk(date: Date): void {
   try {
-    if (!fs.existsSync(CACHE_DIR)) {
-      fs.mkdirSync(CACHE_DIR, { recursive: true });
+    if (!fs.existsSync(CACHE_DIR())) {
+      fs.mkdirSync(CACHE_DIR(), { recursive: true });
     }
-    fs.writeFileSync(CACHE_FILE, date.getTime().toString(), 'utf-8');
+    fs.writeFileSync(CACHE_FILE(), date.getTime().toString(), 'utf-8');
   } catch (err) {
     modelRouterCacheFailed = true;
     console.warn('[GatewayRegistry] Failed to write cache file:', err);
@@ -162,17 +229,41 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
       registryData = JSON.parse(content);
       return registryData!;
     } catch (err) {
-      errors.push(`${jsonPath}: ${err instanceof Error ? err.message : String(err)}`);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      errors.push(`${jsonPath}: ${errorMessage}`);
+
+      // If the file exists but has corrupted JSON (not ENOENT), delete it and fall back to static registry
+      // This handles cases where concurrent writes corrupted the file before the atomic write fix
+      const isFileNotFound = err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT';
+      const isJsonParseError = err instanceof SyntaxError;
+
+      if (!isFileNotFound && isJsonParseError) {
+        console.warn(
+          `[GatewayRegistry] Detected corrupted provider-registry.json at ${jsonPath}. ` +
+            `Deleting corrupted file and falling back to static registry.`,
+        );
+        try {
+          fs.unlinkSync(jsonPath);
+        } catch {
+          // Ignore deletion errors
+        }
+        // Fall back to static registry (bundled at build time)
+        registryData = staticRegistry;
+        return registryData;
+      }
+
       continue;
     }
   }
 
-  throw new Error(
-    `Failed to load provider registry with dynamic loading. Make sure provider-registry.json is generated by running: npm run generate:providers
-
-Tried paths:
-${errors.join('\n')}`,
+  // If all paths failed, fall back to static registry instead of throwing
+  // This provides a more graceful degradation
+  console.warn(
+    `[GatewayRegistry] Could not load provider registry from any path. Falling back to static registry.\n` +
+      `Tried paths:\n${errors.join('\n')}`,
   );
+  registryData = staticRegistry;
+  return registryData;
 }
 
 // Export registry data via Proxy for lazy loading
@@ -316,6 +407,7 @@ export class GatewayRegistry {
   private refreshInterval: NodeJS.Timeout | null = null;
   private isRefreshing = false;
   private useDynamicLoading: boolean;
+  private customGateways: MastraModelGateway[] = [];
 
   private constructor(options: GatewayRegistryOptions = {}) {
     const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
@@ -330,6 +422,21 @@ export class GatewayRegistry {
       GatewayRegistry.instance = new GatewayRegistry(options);
     }
     return GatewayRegistry.instance;
+  }
+
+  /**
+   * Register custom gateways for type generation
+   * @param gateways - Array of custom gateway instances
+   */
+  registerCustomGateways(gateways: MastraModelGateway[]): void {
+    this.customGateways = gateways;
+  }
+
+  /**
+   * Get all registered custom gateways
+   */
+  getCustomGateways(): MastraModelGateway[] {
+    return this.customGateways;
   }
 
   /**
@@ -360,8 +467,11 @@ export class GatewayRegistry {
       const { NetlifyGateway } = await import('./gateways/netlify.js');
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
-      // Initialize gateways
-      const gateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+      // Initialize default gateways
+      const defaultGateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+
+      // Combine default and custom gateways
+      const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
       const { providers, models } = await fetchProvidersFromGateways(gateways);
@@ -371,9 +481,9 @@ export class GatewayRegistry {
 
       // Write to global cache first (so all projects can benefit)
       try {
-        fs.mkdirSync(CACHE_DIR, { recursive: true });
-        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON, GLOBAL_PROVIDER_TYPES_DTS, providers, models);
-        // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR}`);
+        fs.mkdirSync(CACHE_DIR(), { recursive: true });
+        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON(), GLOBAL_PROVIDER_TYPES_DTS(), providers, models);
+        // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
         console.warn('[GatewayRegistry] Failed to write to global cache:', error);
       }

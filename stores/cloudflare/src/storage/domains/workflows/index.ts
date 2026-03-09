@@ -1,15 +1,41 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, ensureDate, WorkflowsStorage } from '@mastra/core/storage';
-import type { WorkflowRun, WorkflowRuns } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  TABLE_WORKFLOW_SNAPSHOT,
+  ensureDate,
+  WorkflowsStorage,
+  normalizePerPage,
+} from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  WorkflowRuns,
+  StorageListWorkflowRunsInput,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { StoreOperationsCloudflare } from '../operations';
+import { CloudflareKVDB, resolveCloudflareConfig } from '../../db';
+import type { CloudflareDomainConfig } from '../../types';
 
 export class WorkflowsStorageCloudflare extends WorkflowsStorage {
-  private operations: StoreOperationsCloudflare;
+  #db: CloudflareKVDB;
 
-  constructor({ operations }: { operations: StoreOperationsCloudflare }) {
+  constructor(config: CloudflareDomainConfig) {
     super();
-    this.operations = operations;
+    this.#db = new CloudflareKVDB(resolveCloudflareConfig(config));
+  }
+
+  supportsConcurrentUpdates(): boolean {
+    // Cloudflare KV is eventually-consistent and doesn't support atomic read-modify-write
+    // operations or conditional writes needed for concurrent updates
+    return false;
+  }
+
+  async init(): Promise<void> {
+    // Cloudflare KV is schemaless, no table creation needed
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
   private validateWorkflowParams(params: { workflowName: string; runId: string }): void {
@@ -19,41 +45,26 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     }
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults(_args: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error(
+      'updateWorkflowResults is not implemented for Cloudflare KV storage. Cloudflare KV is eventually-consistent and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  async updateWorkflowState(_args: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    throw new Error(
+      'updateWorkflowState is not implemented for Cloudflare KV storage. Cloudflare KV is eventually-consistent and does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot(params: {
@@ -61,26 +72,33 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const { workflowName, runId, resourceId, snapshot } = params;
+      const { workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
+      const now = new Date();
 
-      await this.operations.putKV({
+      // Check if existing record exists to preserve createdAt
+      const existingKey = this.#db.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
+      const existing = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, existingKey);
+
+      await this.#db.putKV({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
-        key: this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId }),
+        key: existingKey,
         value: {
           workflow_name: workflowName,
           run_id: runId,
           resourceId,
-          snapshot: typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot),
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          snapshot: JSON.stringify(snapshot),
+          createdAt: existing?.createdAt ?? createdAt ?? now,
+          updatedAt: updatedAt ?? now,
         },
       });
     } catch (error) {
       throw new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error persisting workflow snapshot for workflow ${params.workflowName}, run ${params.runId}`,
@@ -99,8 +117,8 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       this.validateWorkflowParams(params);
       const { workflowName, runId } = params;
 
-      const key = this.operations.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
-      const data = await this.operations.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
+      const key = this.#db.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
+      const data = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
       if (!data) return null;
 
       // Parse the snapshot from JSON string if needed
@@ -109,7 +127,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           text: `Error loading workflow snapshot for workflow ${params.workflowName}, run ${params.runId}`,
@@ -133,7 +151,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
       } catch (e) {
         // If parsing fails, return the raw snapshot string
-        console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
       }
     }
 
@@ -158,7 +176,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     resourceId?: string;
   }): string {
     // Add namespace prefix if configured
-    const prefix = this.operations.namespacePrefix ? `${this.operations.namespacePrefix}:` : '';
+    const prefix = this.#db.namespacePrefix ? `${this.#db.namespacePrefix}:` : '';
     let key = `${prefix}${TABLE_WORKFLOW_SNAPSHOT}`;
     if (workflowName) key += `:${workflowName}`;
     if (runId) key += `:${runId}`;
@@ -166,56 +184,62 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     return key;
   }
 
-  async getWorkflowRuns({
+  async listWorkflowRuns({
     workflowName,
-    limit = 20,
-    offset = 0,
+    page = 0,
+    perPage = 20,
     resourceId,
     fromDate,
     toDate,
-  }: {
-    workflowName?: string;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-    fromDate?: Date;
-    toDate?: Date;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
+      if (page < 0 || !Number.isInteger(page)) {
+        throw new MastraError(
+          {
+            id: createStorageErrorId('CLOUDFLARE', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { page },
+          },
+          new Error('page must be a non-negative integer'),
+        );
+      }
+
+      const normalizedPerPage = normalizePerPage(perPage, 20);
+      const offset = page * normalizedPerPage;
       // List all keys in the workflow snapshot table
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowName });
-      const keyObjs = await this.operations.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      const keyObjs = await this.#db.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
       const runs: WorkflowRun[] = [];
       for (const { name: key } of keyObjs) {
-        // Extract workflow_name, run_id, resourceId from key
+        // Extract workflow_name, run_id, and optionally resourceId from key
         const parts = key.split(':');
         const idx = parts.indexOf(TABLE_WORKFLOW_SNAPSHOT);
         if (idx === -1 || parts.length < idx + 3) continue;
         const wfName = parts[idx + 1];
-        const _runId = parts[idx + 2];
-        // If resourceId is present in the key, it's at idx+3
+        // resourceId may be in key (legacy) at idx+3
         const keyResourceId = parts.length > idx + 3 ? parts[idx + 3] : undefined;
-        // Filter by namespace, workflowName, resourceId if provided
+        // Filter by workflowName if provided
         if (workflowName && wfName !== workflowName) continue;
-        // If resourceId filter is provided, the key must have that resourceId
-        if (resourceId && keyResourceId !== resourceId) continue;
         // Load the snapshot
-        const data = await this.operations.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
+        const data = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, key);
         if (!data) continue;
         try {
-          // Additional check: if resourceId filter is provided but key doesn't have resourceId, skip
-          if (resourceId && !keyResourceId) continue;
+          // Filter by resourceId - check both key (legacy) and data (current)
+          const effectiveResourceId = keyResourceId || data.resourceId;
+          if (resourceId && effectiveResourceId !== resourceId) continue;
+          const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
+          if (status && snapshotData.status !== status) continue;
           // Filter by fromDate/toDate
           const createdAt = ensureDate(data.createdAt);
           if (fromDate && createdAt && createdAt < fromDate) continue;
           if (toDate && createdAt && createdAt > toDate) continue;
           // Parse the snapshot from JSON string if needed
-          const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
-          const resourceIdToUse = keyResourceId || data.resourceId;
           const run = this.parseWorkflowRun({
             ...data,
             workflow_name: wfName,
-            resourceId: resourceIdToUse,
+            resourceId: effectiveResourceId,
             snapshot: snapshotData,
           });
           runs.push(run);
@@ -230,7 +254,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
         return bDate - aDate;
       });
       // Apply pagination
-      const pagedRuns = runs.slice(offset, offset + limit);
+      const pagedRuns = runs.slice(offset, offset + normalizedPerPage);
       return {
         runs: pagedRuns,
         total: runs.length,
@@ -238,7 +262,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -263,7 +287,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       }
       // Try to find the data by listing keys with the prefix and finding the exact match
       const prefix = this.buildWorkflowSnapshotPrefix({ workflowName, runId });
-      const keyObjs = await this.operations.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
+      const keyObjs = await this.#db.listKV(TABLE_WORKFLOW_SNAPSHOT, { prefix });
       if (!keyObjs.length) return null;
 
       // Find the exact key that matches our workflow and run
@@ -277,7 +301,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       });
 
       if (!exactKey) return null;
-      const data = await this.operations.getKV(TABLE_WORKFLOW_SNAPSHOT, exactKey.name);
+      const data = await this.#db.getKV(TABLE_WORKFLOW_SNAPSHOT, exactKey.name);
       if (!data) return null;
       // Parse the snapshot from JSON string if needed
       const snapshotData = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
@@ -285,7 +309,7 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: 'CLOUDFLARE_STORAGE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('CLOUDFLARE', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -298,6 +322,29 @@ export class WorkflowsStorageCloudflare extends WorkflowsStorage {
       this.logger.trackException?.(mastraError);
       this.logger.error(mastraError.toString());
       return null;
+    }
+  }
+
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      if (!runId || !workflowName) {
+        throw new Error('runId and workflowName are required');
+      }
+      const key = this.#db.getKey(TABLE_WORKFLOW_SNAPSHOT, { workflow_name: workflowName, run_id: runId });
+      await this.#db.deleteKV(TABLE_WORKFLOW_SNAPSHOT, key);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
     }
   }
 }

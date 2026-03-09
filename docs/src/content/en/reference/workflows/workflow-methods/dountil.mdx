@@ -1,52 +1,54 @@
 ---
-title: "Reference: Workflow.dountil() | Workflows | Mastra Docs"
+title: "Reference: Workflow.dountil() | Workflows"
 description: Documentation for the `Workflow.dountil()` method in workflows, which creates a loop that executes a step until a condition is met.
+packages:
+  - "@mastra/core"
 ---
 
-# Workflow.dountil()
+# Workflow\.dountil()
 
 The `.dountil()` method executes a step until a condition is met. It always runs the step at least once before evaluating the condition. The first time the condition is evaluated, `iterationCount` is `1`.
 
 ## Usage example
 
-```typescript copy
-workflow.dountil(step1, async ({ inputData }) => true);
+```typescript
+workflow.dountil(step1, async ({ inputData }) => true)
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "step",
-      type: "Step",
-      description: "The step instance to execute in the loop",
-      isOptional: false,
-    },
-    {
-      name: "condition",
-      type: "(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>",
-      description:
-        "A function that returns a boolean indicating whether to continue the loop. The function receives the execution parameters and the iteration count.",
-      isOptional: false,
-    },
-  ]}
+  {
+    name: 'step',
+    type: 'Step',
+    description: 'The step instance to execute in the loop',
+    isOptional: false,
+  },
+  {
+    name: 'condition',
+    type: '(params : ExecuteParams & { iterationCount: number }) => Promise<boolean>',
+    description:
+      'A function that returns a boolean indicating whether to continue the loop. The function receives the execution parameters and the iteration count.',
+    isOptional: false,
+  },
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "workflow",
-      type: "Workflow",
-      description: "The workflow instance for method chaining",
-    },
-  ]}
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: 'The workflow instance for method chaining',
+  },
+]}
 />
 
 ## Related
 
-- [Control Flow](../../../docs/workflows/control-flow.mdx)
+- [Control Flow](/docs/workflows/control-flow)
 
-- [ExecuteParams](../step.mdx#ExecuteParams)
+- [ExecuteParams](../step#constructor-parameters)

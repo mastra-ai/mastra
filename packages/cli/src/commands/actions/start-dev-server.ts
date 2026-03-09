@@ -7,10 +7,11 @@ interface DevArgs {
   root?: string;
   tools?: string;
   env?: string;
-  inspect?: boolean;
-  inspectBrk?: boolean;
+  inspect?: string | boolean;
+  inspectBrk?: string | boolean;
   customArgs?: string;
   https?: boolean;
+  requestContextPresets?: string;
   debug: boolean;
 }
 
@@ -25,10 +26,11 @@ export const startDevServer = async (args: DevArgs) => {
     root: args?.root,
     tools: args?.tools ? args.tools.split(',') : [],
     env: args?.env,
-    inspect: args?.inspect && !args?.inspectBrk,
+    inspect: args?.inspectBrk ? false : args?.inspect,
     inspectBrk: args?.inspectBrk,
     customArgs: args?.customArgs ? args.customArgs.split(',') : [],
     https: args?.https,
+    requestContextPresets: args?.requestContextPresets,
     debug: args.debug,
   }).catch(err => {
     logger.error(err.message);

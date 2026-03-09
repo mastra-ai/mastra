@@ -1,16 +1,18 @@
 ---
-title: "Reference: Agent.getDescription() | Agents | Mastra Docs"
+title: "Reference: Agent.getDescription() | Agents"
 description: "Documentation for the `Agent.getDescription()` method in Mastra agents, which retrieves the agent's description."
+packages:
+  - "@mastra/core"
 ---
 
 # Agent.getDescription()
 
-The `.getDescription()` method retrieves the description configured for an agent. This method returns a simple string description that describes the agent's purpose and capabilities.
+The `.getDescription()` method retrieves the description configured for an agent. This method returns a string description that describes the agent's purpose and capabilities.
 
 ## Usage example
 
-```typescript copy
-agent.getDescription();
+```typescript
+agent.getDescription()
 ```
 
 ## Parameters
@@ -21,14 +23,14 @@ This method takes no parameters.
 
 <PropertiesTable
   content={[
-    {
-      name: "description",
-      type: "string",
-      description: "The description of the agent, or an empty string if no description was configured.",
-    },
-  ]}
+  {
+    name: 'description',
+    type: 'string',
+    description: 'The description of the agent, or an empty string if no description was configured.',
+  },
+]}
 />
 
 ## Related
 
-- [Agents overview](../../docs/agents/overview.mdx)
+- [Agents overview](/docs/agents/overview)

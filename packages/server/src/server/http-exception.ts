@@ -54,12 +54,6 @@ type ServerErrorStatusCode = 500 | 501 | 502 | 503 | 504 | 505 | 506 | 507 | 508
 export type UnofficialStatusCode = -1;
 
 /**
- * @deprecated
- * Use `UnofficialStatusCode` instead.
- */
-export type UnOfficalStatusCode = UnofficialStatusCode;
-
-/**
  * If you want to use an unofficial status, use `UnofficialStatusCode`.
  */
 export type StatusCode =

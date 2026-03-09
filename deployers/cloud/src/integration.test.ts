@@ -1,10 +1,15 @@
-import { mkdtempSync, rmSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execa } from 'execa';
 import { ensureDir, writeFile, readFile } from 'fs-extra';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { copy } from 'fs-extra/esm';
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll } from 'vitest';
 
 import { CloudDeployer } from './index.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Mock the logger to avoid redis connection issues
 vi.mock('./utils/logger.js', () => ({
@@ -16,10 +21,23 @@ vi.mock('./utils/logger.js', () => ({
   },
 }));
 
+// Mock fs-extra/esm copy for studio tests
+vi.mock('fs-extra/esm', async () => {
+  const actual = await vi.importActual('fs-extra/esm');
+  return {
+    ...actual,
+    copy: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 describe('CloudDeployer Integration Tests', () => {
   let deployer: CloudDeployer;
   let tempDir: string;
   let outputDir: string;
+
+  beforeAll(async () => {
+    await execa('pnpm', ['prepack'], { cwd: join(__dirname, '..') });
+  });
 
   beforeEach(async () => {
     deployer = new CloudDeployer();
@@ -46,26 +64,12 @@ describe('CloudDeployer Integration Tests', () => {
       // Create some existing files to ensure clean preparation
       await writeFile(join(outputDir, 'old-file.txt'), 'old content');
 
-      // @ts-ignore - accessing protected method for testing
       await deployer.prepare(outputDir);
 
       // Verify output directories are created
-      const fs = await import('fs');
+      const fs = await import('node:fs');
       expect(fs.existsSync(join(outputDir, '.build'))).toBe(true);
       expect(fs.existsSync(join(outputDir, 'output'))).toBe(true);
-    });
-
-    it('should write instrumentation file correctly', async () => {
-      await deployer.writeInstrumentationFile(outputDir);
-
-      const instrumentationPath = join(outputDir, 'instrumentation.mjs');
-      const fs = await import('fs');
-      expect(fs.existsSync(instrumentationPath)).toBe(true);
-
-      const content = await readFile(instrumentationPath, 'utf-8');
-      expect(content).toContain('MastraCloudExporter');
-      expect(content).toContain('NodeSDK');
-      expect(content).toContain('telemetry');
     });
 
     it('should write package.json with cloud dependencies', async () => {
@@ -80,10 +84,15 @@ describe('CloudDeployer Integration Tests', () => {
       const packageJsonPath = join(outputDir, 'package.json');
       const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf-8'));
 
+      const versionsJsonPath = join(__dirname, '../versions.json');
+      const versionsJson = JSON.parse(await readFile(versionsJsonPath, 'utf-8'));
+
+      expect(Object.keys(versionsJson).length).toBeGreaterThan(0);
+
       // Verify cloud-specific dependencies
-      expect(packageJson.dependencies['@mastra/loggers']).toBe('0.10.14');
-      expect(packageJson.dependencies['@mastra/libsql']).toBe('0.15.0');
-      expect(packageJson.dependencies['@mastra/cloud']).toBe('0.1.17');
+      for (const [key, value] of Object.entries(versionsJson)) {
+        expect(packageJson.dependencies[key]).toBe(value);
+      }
 
       // Verify original dependencies
       expect(packageJson.dependencies['express']).toBe('^4.18.0');
@@ -92,15 +101,10 @@ describe('CloudDeployer Integration Tests', () => {
       // Verify nested package handling (should only take first part)
       expect(packageJson.dependencies['nested']).toBe('2.0.0');
 
-      // Verify telemetry dependencies
-      expect(packageJson.dependencies['@opentelemetry/core']).toBeDefined();
-      expect(packageJson.dependencies['@opentelemetry/sdk-node']).toBeDefined();
-
       // Verify package.json structure
       expect(packageJson.name).toBe('server');
       expect(packageJson.type).toBe('module');
       expect(packageJson.main).toBe('index.mjs');
-      expect(packageJson.scripts.start).toContain('node --import=./instrumentation.mjs');
     });
 
     it('should handle scoped packages correctly in package.json', async () => {
@@ -128,7 +132,7 @@ describe('CloudDeployer Integration Tests', () => {
     });
 
     it('should generate valid entry code for server', () => {
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // Basic validation that it's valid JavaScript
@@ -145,8 +149,6 @@ describe('CloudDeployer Integration Tests', () => {
         "import { mastra } from '#mastra'",
         "import { MultiLogger } from '@mastra/core/logger'",
         "import { PinoLogger } from '@mastra/loggers'",
-        "import { evaluate } from '@mastra/core/eval'",
-        "import { AvailableHooks, registerHook } from '@mastra/core/hooks'",
         "import { LibSQLStore, LibSQLVector } from '@mastra/libsql'",
       ];
 
@@ -169,13 +171,12 @@ describe('CloudDeployer Integration Tests', () => {
       const nonExistentDir = join(tempDir, 'non-existent');
 
       // These operations should create directories as needed
-      await expect(deployer.writeInstrumentationFile(nonExistentDir)).resolves.not.toThrow();
       await expect(deployer.writePackageJson(nonExistentDir, new Map())).resolves.not.toThrow();
     });
 
     it('should maintain correct entry code structure even with special characters in constants', () => {
       // This tests that the template literals are properly escaped
-      // @ts-ignore - accessing private method for testing
+      // @ts-expect-error - accessing private method for testing
       const entry = deployer.getEntry();
 
       // The regex needs to account for multiline JSON objects
@@ -205,7 +206,7 @@ describe('CloudDeployer Integration Tests', () => {
       let capturedEntry: string = '';
       let capturedToolsPaths: any[] = [];
 
-      // @ts-ignore - accessing protected method for testing
+      // @ts-expect-error - accessing protected method for testing
       deployer._bundle = async (entry: string, mastraFile: string, output: string, toolsPaths: any[]) => {
         capturedEntry = entry;
         capturedToolsPaths = toolsPaths;
@@ -217,9 +218,53 @@ describe('CloudDeployer Integration Tests', () => {
       expect(capturedEntry).toContain('import { createNodeServer');
       expect(capturedEntry).toContain('import { LibSQLStore, LibSQLVector }');
 
-      // Verify tools path was included
+      // Verify tools path was included - now it's an array of glob patterns
       expect(capturedToolsPaths).toHaveLength(1);
-      expect(capturedToolsPaths[0]).toContain('src/mastra/tools');
+      expect(Array.isArray(capturedToolsPaths[0])).toBe(true);
+      expect(capturedToolsPaths[0][0]).toContain('tools');
+    });
+  });
+
+  describe('Studio Bundling', () => {
+    beforeEach(() => {
+      vi.mocked(copy).mockClear();
+    });
+
+    it('should copy studio assets when studio is true', async () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).toHaveBeenCalledTimes(1);
+      expect(copy).toHaveBeenCalledWith(expect.stringContaining('dist/studio'), expect.stringContaining('studio'), {
+        overwrite: true,
+      });
+    });
+
+    it('should not copy studio assets when studio is false', async () => {
+      const studioDeployer = new CloudDeployer({ studio: false });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('should not copy studio assets when studio is not provided', async () => {
+      const studioDeployer = new CloudDeployer();
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('should copy studio to correct output path', async () => {
+      const studioDeployer = new CloudDeployer({ studio: true });
+
+      await studioDeployer.prepare(outputDir);
+
+      expect(copy).toHaveBeenCalledWith(expect.any(String), join(outputDir, 'output', 'studio'), {
+        overwrite: true,
+      });
     });
   });
 });

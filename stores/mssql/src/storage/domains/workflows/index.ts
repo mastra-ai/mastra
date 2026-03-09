@@ -1,84 +1,302 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { WorkflowsStorage, TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  WorkflowsStorage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
+  normalizePerPage,
+} from '@mastra/core/storage';
+import type {
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+  CreateIndexOptions,
+} from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import sql from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
-
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    resourceId: row.resourceId,
-  };
-}
 
 export class WorkflowsMSSQL extends WorkflowsStorage {
   public pool: sql.ConnectionPool;
-  private operations: StoreOperationsMSSQL;
-  private schema: string;
+  private db: MssqlDB;
+  private schema?: string;
+  private needsConnect: boolean;
+  private skipDefaultIndexes?: boolean;
+  private indexes?: CreateIndexOptions[];
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: sql.ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, schemaName, skipDefaultIndexes, indexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.operations = operations;
-    this.schema = schema;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
+    this.needsConnect = needsConnect;
+    this.skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  supportsConcurrentUpdates(): boolean {
+    return true;
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  /**
+   * Returns default index definitions for the workflows domain tables.
+   * Currently no default indexes are defined for workflows.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for workflows.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for workflows domain
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.indexes || this.indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.indexes) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger?.warn?.(`Failed to parse snapshot for workflow ${row.workflow_name}:`, e);
+      }
+    }
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      resourceId: row.resourceId,
+    };
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+
+    try {
+      await transaction.begin();
+
+      // Load existing snapshot within transaction with exclusive lock to prevent race conditions
+      const selectRequest = new sql.Request(transaction);
+      selectRequest.input('workflow_name', workflowName);
+      selectRequest.input('run_id', runId);
+
+      const existingSnapshotResult = await selectRequest.query(
+        `SELECT snapshot FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+
+      let snapshot: WorkflowRunState;
+      if (!existingSnapshotResult.recordset || existingSnapshotResult.recordset.length === 0) {
+        // Create new snapshot if none exists
+        snapshot = {
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          timestamp: Date.now(),
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          status: 'pending',
+          value: {},
+          waitingPaths: {},
+          runId: runId,
+          requestContext: {},
+        } as WorkflowRunState;
+      } else {
+        // Parse existing snapshot
+        const existingSnapshot = existingSnapshotResult.recordset[0].snapshot;
+        snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+      }
+
+      // Merge the new step result and request context
+      snapshot.context[stepId] = result;
+      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+      // Upsert within the same transaction to handle both insert and update
+      const upsertReq = new sql.Request(transaction);
+      upsertReq.input('workflow_name', workflowName);
+      upsertReq.input('run_id', runId);
+      upsertReq.input('snapshot', JSON.stringify(snapshot));
+      upsertReq.input('createdAt', sql.DateTime2, new Date());
+      upsertReq.input('updatedAt', sql.DateTime2, new Date());
+
+      await upsertReq.query(
+        `MERGE ${table} AS target
+         USING (SELECT @workflow_name AS workflow_name, @run_id AS run_id) AS src
+           ON target.workflow_name = src.workflow_name AND target.run_id = src.run_id
+         WHEN MATCHED THEN UPDATE SET snapshot = @snapshot, [updatedAt] = @updatedAt
+         WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, snapshot, [createdAt], [updatedAt])
+           VALUES (@workflow_name, @run_id, @snapshot, @createdAt, @updatedAt);`,
+      );
+
+      await transaction.commit();
+      return snapshot.context;
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+
+    try {
+      await transaction.begin();
+
+      // Load existing snapshot within transaction with exclusive lock to prevent race conditions
+      const selectRequest = new sql.Request(transaction);
+      selectRequest.input('workflow_name', workflowName);
+      selectRequest.input('run_id', runId);
+
+      const existingSnapshotResult = await selectRequest.query(
+        `SELECT snapshot FROM ${table} WITH (UPDLOCK, HOLDLOCK) WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+
+      if (!existingSnapshotResult.recordset || existingSnapshotResult.recordset.length === 0) {
+        await transaction.rollback();
+        return undefined;
+      }
+
+      // Parse existing snapshot
+      const existingSnapshot = existingSnapshotResult.recordset[0].snapshot;
+      const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+      if (!snapshot || !snapshot?.context) {
+        await transaction.rollback();
+        throw new MastraError(
+          {
+            id: createStorageErrorId('MSSQL', 'UPDATE_WORKFLOW_STATE', 'SNAPSHOT_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            details: {
+              workflowName,
+              runId,
+            },
+          },
+          new Error(`Snapshot not found for runId ${runId}`),
+        );
+      }
+
+      // Merge the new options with the existing snapshot
+      const updatedSnapshot = { ...snapshot, ...opts };
+
+      // Update the snapshot within the same transaction
+      const updateRequest = new sql.Request(transaction);
+      updateRequest.input('snapshot', JSON.stringify(updatedSnapshot));
+      updateRequest.input('workflow_name', workflowName);
+      updateRequest.input('run_id', runId);
+      updateRequest.input('updatedAt', sql.DateTime2, new Date());
+
+      await updateRequest.query(
+        `UPDATE ${table} SET snapshot = @snapshot, [updatedAt] = @updatedAt WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+
+      await transaction.commit();
+      return updatedSnapshot;
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({
@@ -115,7 +333,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('MSSQL', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -136,7 +354,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load({
+      const result = await this.db.load({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: {
           workflow_name: workflowName,
@@ -150,7 +368,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('MSSQL', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -195,11 +413,11 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         return null;
       }
 
-      return parseWorkflowRun(result.recordset[0]);
+      return this.parseWorkflowRun(result.recordset[0]);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -212,21 +430,46 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
+    const transaction = this.pool.transaction();
+    try {
+      await transaction.begin();
+      const deleteRequest = new sql.Request(transaction);
+      deleteRequest.input('workflow_name', workflowName);
+      deleteRequest.input('run_id', runId);
+      await deleteRequest.query(`DELETE FROM ${table} WHERE workflow_name = @workflow_name AND run_id = @run_id`);
+      await transaction.commit();
+    } catch (error) {
+      try {
+        await transaction.rollback();
+      } catch {
+        // Ignore rollback errors
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    page,
+    perPage,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const paramMap: Record<string, any> = {};
@@ -236,13 +479,18 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         paramMap['workflowName'] = workflowName;
       }
 
+      if (status) {
+        conditions.push(`JSON_VALUE([snapshot], '$.status') = @status`);
+        paramMap['status'] = status;
+      }
+
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
@@ -268,25 +516,28 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         }
       });
 
-      if (limit !== undefined && offset !== undefined) {
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
+      if (usePagination) {
         const countQuery = `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`;
         const countResult = await request.query(countQuery);
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
       let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
-      if (limit !== undefined && offset !== undefined) {
-        query += ` OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`;
-        request.input('limit', limit);
+      if (usePagination) {
+        const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
+        const offset = page! * normalizedPerPage;
+        query += ` OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+        request.input('perPage', normalizedPerPage);
         request.input('offset', offset);
       }
       const result = await request.query(query);
-      const runs = (result.recordset || []).map(row => parseWorkflowRun(row));
+      const runs = (result.recordset || []).map(row => this.parseWorkflowRun(row));
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

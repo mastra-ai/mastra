@@ -23,9 +23,11 @@ export async function GET() {
     modelProvider: selectedModel?.provider || `OPEN_AI`,
   });
 
-  const chats = await mastra.memory?.getThreadsByResourceId({
-    resourceId: session.user.id!,
+  const result = await mastra.memory?.listThreads({
+    filter: { resourceId: session.user.id! },
+    page: 0,
+    perPage: 10,
   });
 
-  return Response.json(chats || []);
+  return Response.json(result?.threads || []);
 }

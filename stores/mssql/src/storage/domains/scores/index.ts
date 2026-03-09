@@ -1,55 +1,118 @@
+import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { ScoreRowData, ValidatedSaveScorePayload } from '@mastra/core/scores';
-import { saveScorePayloadSchema } from '@mastra/core/scores';
-import type { PaginationInfo, StoragePagination } from '@mastra/core/storage';
-import { ScoresStorage, TABLE_SCORERS } from '@mastra/core/storage';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
+import { saveScorePayloadSchema } from '@mastra/core/evals';
+import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  ScoresStorage,
+  TABLE_SCORERS,
+  TABLE_SCHEMAS,
+  calculatePagination,
+  normalizePerPage,
+  transformScoreRow as coreTransformScoreRow,
+} from '@mastra/core/storage';
 import type { ConnectionPool } from 'mssql';
-import type { StoreOperationsMSSQL } from '../operations';
+import { MssqlDB, resolveMssqlConfig } from '../../db';
+import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
-function parseJSON(jsonString: string): any {
-  try {
-    return JSON.parse(jsonString);
-  } catch {
-    return jsonString;
-  }
-}
-
+/**
+ * MSSQL-specific score row transformation.
+ * Converts timestamp strings to Date objects.
+ */
 function transformScoreRow(row: Record<string, any>): ScoreRowData {
-  return {
-    ...row,
-    input: parseJSON(row.input),
-    scorer: parseJSON(row.scorer),
-    preprocessStepResult: parseJSON(row.preprocessStepResult),
-    analyzeStepResult: parseJSON(row.analyzeStepResult),
-    metadata: parseJSON(row.metadata),
-    output: parseJSON(row.output),
-    additionalContext: parseJSON(row.additionalContext),
-    runtimeContext: parseJSON(row.runtimeContext),
-    entity: parseJSON(row.entity),
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  } as ScoreRowData;
+  return coreTransformScoreRow(row, {
+    convertTimestamps: true,
+  });
 }
 
 export class ScoresMSSQL extends ScoresStorage {
   public pool: ConnectionPool;
-  private operations: StoreOperationsMSSQL;
+  private db: MssqlDB;
   private schema?: string;
+  private needsConnect: boolean;
+  private skipDefaultIndexes?: boolean;
+  private indexes?: CreateIndexOptions[];
 
-  constructor({
-    pool,
-    operations,
-    schema,
-  }: {
-    pool: ConnectionPool;
-    operations: StoreOperationsMSSQL;
-    schema?: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_SCORERS] as const;
+
+  constructor(config: MssqlDomainConfig) {
     super();
+    const { pool, schemaName, skipDefaultIndexes, indexes, needsConnect } = resolveMssqlConfig(config);
     this.pool = pool;
-    this.operations = operations;
-    this.schema = schema;
+    this.schema = schemaName;
+    this.db = new MssqlDB({ pool, schemaName, skipDefaultIndexes });
+    this.needsConnect = needsConnect;
+    this.skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.indexes = indexes?.filter(idx => (ScoresMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  async init(): Promise<void> {
+    if (this.needsConnect) {
+      await this.pool.connect();
+      this.needsConnect = false;
+    }
+    await this.db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Returns default index definitions for the scores domain tables.
+   * IMPORTANT: Uses seq_id DESC instead of createdAt DESC for MSSQL due to millisecond accuracy limitations
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.schema ? `${this.schema}_` : '';
+    return [
+      {
+        name: `${schemaPrefix}mastra_scores_trace_id_span_id_seqid_idx`,
+        table: TABLE_SCORERS,
+        columns: ['traceId', 'spanId', 'seq_id DESC'],
+      },
+    ];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.skipDefaultIndexes) {
+      return;
+    }
+
+    for (const indexDef of this.getDefaultIndexDefinitions()) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.indexes || this.indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.indexes) {
+      try {
+        await this.db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.db.clearTable({ tableName: TABLE_SCORERS });
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
@@ -68,7 +131,7 @@ export class ScoresMSSQL extends ScoresStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_SCORE_BY_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'GET_SCORE_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { id },
@@ -78,16 +141,23 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
-    let validatedScore: ValidatedSaveScorePayload;
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
+    let validatedScore: SaveScorePayload;
     try {
       validatedScore = saveScorePayloadSchema.parse(score);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_SCORE_VALIDATION_FAILED',
+          id: createStorageErrorId('MSSQL', 'SAVE_SCORE', 'VALIDATION_FAILED'),
           domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
+          category: ErrorCategory.USER,
+          details: {
+            scorer: typeof score.scorer?.id === 'string' ? score.scorer.id : String(score.scorer?.id ?? 'unknown'),
+            entityId: score.entityId ?? 'unknown',
+            entityType: score.entityType ?? 'unknown',
+            traceId: score.traceId ?? '',
+            spanId: score.spanId ?? '',
+          },
         },
         error,
       );
@@ -95,7 +165,8 @@ export class ScoresMSSQL extends ScoresStorage {
 
     try {
       // Generate ID like other storage implementations
-      const scoreId = crypto.randomUUID();
+      const scoreId = randomUUID();
+      const now = new Date();
 
       const {
         scorer,
@@ -105,36 +176,35 @@ export class ScoresMSSQL extends ScoresStorage {
         input,
         output,
         additionalContext,
-        runtimeContext,
+        requestContext,
         entity,
         ...rest
       } = validatedScore;
 
-      await this.operations.insert({
+      await this.db.insert({
         tableName: TABLE_SCORERS,
         record: {
           id: scoreId,
           ...rest,
-          input: JSON.stringify(input) || '',
-          output: JSON.stringify(output) || '',
-          preprocessStepResult: preprocessStepResult ? JSON.stringify(preprocessStepResult) : null,
-          analyzeStepResult: analyzeStepResult ? JSON.stringify(analyzeStepResult) : null,
-          metadata: metadata ? JSON.stringify(metadata) : null,
-          additionalContext: additionalContext ? JSON.stringify(additionalContext) : null,
-          runtimeContext: runtimeContext ? JSON.stringify(runtimeContext) : null,
-          entity: entity ? JSON.stringify(entity) : null,
-          scorer: scorer ? JSON.stringify(scorer) : null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          input: input || '',
+          output: output || '',
+          preprocessStepResult: preprocessStepResult || null,
+          analyzeStepResult: analyzeStepResult || null,
+          metadata: metadata || null,
+          additionalContext: additionalContext || null,
+          requestContext: requestContext || null,
+          entity: entity || null,
+          scorer: scorer || null,
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
         },
       });
 
-      const scoreFromDb = await this.getScoreById({ id: scoreId });
-      return { score: scoreFromDb! };
+      return { score: { ...validatedScore, id: scoreId, createdAt: now, updatedAt: now } as ScoreRowData };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_SAVE_SCORE_FAILED',
+          id: createStorageErrorId('MSSQL', 'SAVE_SCORE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -143,59 +213,97 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
+    entityId,
+    entityType,
+    source,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+    source?: ScoringSource;
+  }): Promise<ListScoresResponse> {
     try {
-      const request = this.pool.request();
-      request.input('p1', scorerId);
+      // Build dynamic WHERE clause
+      const conditions: string[] = ['[scorerId] = @p1'];
+      const params: Record<string, any> = { p1: scorerId };
+      let paramIndex = 2;
 
-      const totalResult = await request.query(
-        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [scorerId] = @p1`,
-      );
+      if (entityId) {
+        conditions.push(`[entityId] = @p${paramIndex}`);
+        params[`p${paramIndex}`] = entityId;
+        paramIndex++;
+      }
 
+      if (entityType) {
+        conditions.push(`[entityType] = @p${paramIndex}`);
+        params[`p${paramIndex}`] = entityType;
+        paramIndex++;
+      }
+
+      if (source) {
+        conditions.push(`[source] = @p${paramIndex}`);
+        params[`p${paramIndex}`] = source;
+        paramIndex++;
+      }
+
+      const whereClause = conditions.join(' AND ');
+      const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) });
+
+      // Count query
+      const countRequest = this.pool.request();
+      Object.entries(params).forEach(([key, value]) => {
+        countRequest.input(key, value);
+      });
+
+      const totalResult = await countRequest.query(`SELECT COUNT(*) as count FROM ${tableName} WHERE ${whereClause}`);
       const total = totalResult.recordset[0]?.count || 0;
-
+      const { page, perPage: perPageInput } = pagination;
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
 
-      const dataRequest = this.pool.request();
-      dataRequest.input('p1', scorerId);
-      dataRequest.input('p2', pagination.perPage);
-      dataRequest.input('p3', pagination.page * pagination.perPage);
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
-      const result = await dataRequest.query(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [scorerId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
-      );
+      // Data query
+      const dataRequest = this.pool.request();
+      Object.entries(params).forEach(([key, value]) => {
+        dataRequest.input(key, value);
+      });
+      dataRequest.input('perPage', limitValue);
+      dataRequest.input('offset', start);
+
+      const dataQuery = `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY [createdAt] DESC OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
+
+      const result = await dataRequest.query(dataQuery);
 
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_SCORES_BY_SCORER_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_SCORES_BY_SCORER_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { scorerId },
@@ -205,13 +313,13 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const request = this.pool.request();
       request.input('p1', runId);
@@ -221,23 +329,29 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageInput,
             hasMore: false,
           },
           scores: [],
         };
       }
 
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
       const dataRequest = this.pool.request();
       dataRequest.input('p1', runId);
-      dataRequest.input('p2', pagination.perPage);
-      dataRequest.input('p3', pagination.page * pagination.perPage);
+      dataRequest.input('p2', limitValue);
+      dataRequest.input('p3', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [runId] = @p1 ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
@@ -246,16 +360,16 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_SCORES_BY_RUN_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_SCORES_BY_RUN_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId },
@@ -265,7 +379,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -273,7 +387,7 @@ export class ScoresMSSQL extends ScoresStorage {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const request = this.pool.request();
       request.input('p1', entityId);
@@ -284,24 +398,29 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
       const dataRequest = this.pool.request();
       dataRequest.input('p1', entityId);
       dataRequest.input('p2', entityType);
-      dataRequest.input('p3', pagination.perPage);
-      dataRequest.input('p4', pagination.page * pagination.perPage);
+      dataRequest.input('p3', limitValue);
+      dataRequest.input('p4', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [entityId] = @p1 AND [entityType] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
@@ -310,16 +429,16 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: Number(total) > (pagination.page + 1) * pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
         scores: result.recordset.map(row => transformScoreRow(row)),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_SCORES_BY_ENTITY_ID_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_SCORES_BY_ENTITY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { entityId, entityType },
@@ -329,7 +448,7 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -337,7 +456,7 @@ export class ScoresMSSQL extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
+  }): Promise<ListScoresResponse> {
     try {
       const request = this.pool.request();
       request.input('p1', traceId);
@@ -348,25 +467,30 @@ export class ScoresMSSQL extends ScoresStorage {
       );
 
       const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
+
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
       if (total === 0) {
         return {
           pagination: {
             total: 0,
-            page: pagination.page,
-            perPage: pagination.perPage,
+            page,
+            perPage: perPageForResponse,
             hasMore: false,
           },
           scores: [],
         };
       }
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
 
-      const limit = pagination.perPage + 1;
       const dataRequest = this.pool.request();
       dataRequest.input('p1', traceId);
       dataRequest.input('p2', spanId);
-      dataRequest.input('p3', limit);
-      dataRequest.input('p4', pagination.page * pagination.perPage);
+      dataRequest.input('p3', limitValue);
+      dataRequest.input('p4', start);
 
       const result = await dataRequest.query(
         `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [traceId] = @p1 AND [spanId] = @p2 ORDER BY [createdAt] DESC OFFSET @p4 ROWS FETCH NEXT @p3 ROWS ONLY`,
@@ -375,16 +499,16 @@ export class ScoresMSSQL extends ScoresStorage {
       return {
         pagination: {
           total: Number(total),
-          page: pagination.page,
-          perPage: pagination.perPage,
-          hasMore: result.recordset.length > pagination.perPage,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
         },
-        scores: result.recordset.slice(0, pagination.perPage).map(row => transformScoreRow(row)),
+        scores: result.recordset.map(row => transformScoreRow(row)),
       };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_MSSQL_STORE_GET_SCORES_BY_SPAN_FAILED',
+          id: createStorageErrorId('MSSQL', 'LIST_SCORES_BY_SPAN', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { traceId, spanId },

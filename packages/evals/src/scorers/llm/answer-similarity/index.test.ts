@@ -1,7 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { describe, it, expect } from 'vitest';
-import type { TestCase } from '../../../metrics/llm/utils';
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import type { TestCase } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createAnswerSimilarityScorer } from '.';
 
 interface AnswerSimilarityTestCase extends TestCase {
@@ -125,14 +125,14 @@ describe('Answer Similarity Scorer', () => {
     async ({ input, output, groundTruth, expectedResult }) => {
       const run = createAgentTestRun({
         inputMessages: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-input',
             role: 'user',
             content: input,
           }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             id: 'test-output',
             role: 'assistant',
             content: output,
@@ -165,14 +165,14 @@ describe('Answer Similarity Scorer', () => {
 
     const run = createAgentTestRun({
       inputMessages: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-input',
           role: 'user',
           content: missingGroundTruthCase.input,
         }),
       ],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-output',
           role: 'assistant',
           content: missingGroundTruthCase.output,
@@ -193,14 +193,14 @@ describe('Answer Similarity Scorer', () => {
 
     const run = createAgentTestRun({
       inputMessages: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-input',
           role: 'user',
           content: missingGroundTruthCase.input,
         }),
       ],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-output',
           role: 'assistant',
           content: missingGroundTruthCase.output,
@@ -229,14 +229,14 @@ describe('Answer Similarity Scorer', () => {
 
     const run = createAgentTestRun({
       inputMessages: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-input',
           role: 'user',
           content: 'What is 2+2?',
         }),
       ],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-output',
           role: 'assistant',
           content: '4',
@@ -256,14 +256,14 @@ describe('Answer Similarity Scorer', () => {
   it('should handle non-string ground truth', async () => {
     const run = createAgentTestRun({
       inputMessages: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-input',
           role: 'user',
           content: 'What is the result?',
         }),
       ],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-output',
           role: 'assistant',
           content: 'The result is 42 points',
@@ -287,14 +287,14 @@ describe('Answer Similarity Scorer', () => {
 
     const run = createAgentTestRun({
       inputMessages: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-input',
           role: 'user',
           content: 'What is the answer?',
         }),
       ],
       output: [
-        createUIMessage({
+        createTestMessage({
           id: 'test-output',
           role: 'assistant',
           content: 'The answer is 42',

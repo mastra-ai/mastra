@@ -1,85 +1,295 @@
-import type { StepResult, WorkflowRun, WorkflowRuns, WorkflowRunState } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
-import type { IDatabase } from 'pg-promise';
-import type { StoreOperationsPG } from '../operations';
-import { getTableName } from '../utils';
+import {
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
+  WorkflowsStorage,
+  createStorageErrorId,
+} from '@mastra/core/storage';
+import type {
+  UpdateWorkflowStateOptions,
+  StorageListWorkflowRunsInput,
+  WorkflowRun,
+  WorkflowRuns,
+  CreateIndexOptions,
+} from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
+import type { PgDomainConfig } from '../../db';
 
-function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name as string,
-    runId: row.run_id as string,
-    snapshot: parsedSnapshot,
-    resourceId: row.resourceId as string,
-    createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
-    updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
-  };
+function getSchemaName(schema?: string) {
+  return schema ? `"${schema}"` : '"public"';
+}
+
+function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {
+  const quotedIndexName = `"${indexName}"`;
+  return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
+}
+
+/**
+ * Sanitizes JSON string by removing problematic Unicode sequences that PostgreSQL jsonb rejects.
+ * Removes:
+ * - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
+ * - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
+ */
+function sanitizeJsonForPg(jsonString: string): string {
+  return jsonString.replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '');
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
-  public client: IDatabase<{}>;
-  private operations: StoreOperationsPG;
-  private schema: string;
+  #db: PgDB;
+  #schema: string;
+  #skipDefaultIndexes?: boolean;
+  #indexes?: CreateIndexOptions[];
 
-  constructor({
-    client,
-    operations,
-    schema,
-  }: {
-    client: IDatabase<{}>;
-    operations: StoreOperationsPG;
-    schema: string;
-  }) {
+  /** Tables managed by this domain */
+  static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  constructor(config: PgDomainConfig) {
     super();
-    this.client = client;
-    this.operations = operations;
-    this.schema = schema;
+    const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
+    this.#db = new PgDB({ client, schemaName, skipDefaultIndexes });
+    this.#schema = schemaName || 'public';
+    this.#skipDefaultIndexes = skipDefaultIndexes;
+    // Filter indexes to only those for tables managed by this domain
+    this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  supportsConcurrentUpdates(): boolean {
+    return true;
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
+      updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
+    };
+  }
+
+  /**
+   * Returns all DDL statements for this domain: table with unique constraint.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+
+    // Table (includes the UNIQUE constraint on workflow_name, run_id via generateTableSQL)
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
+    return statements;
+  }
+
+  /**
+   * Returns default index definitions for the workflows domain tables.
+   * Currently no default indexes are defined for workflows.
+   */
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    return [];
+  }
+
+  /**
+   * Creates default indexes for optimal query performance.
+   * Currently no default indexes are defined for workflows.
+   */
+  async createDefaultIndexes(): Promise<void> {
+    if (this.#skipDefaultIndexes) {
+      return;
+    }
+    // No default indexes for workflows domain
+  }
+
+  async init(): Promise<void> {
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      ifNotExists: ['resourceId'],
+    });
+    await this.createDefaultIndexes();
+    await this.createCustomIndexes();
+  }
+
+  /**
+   * Creates custom user-defined indexes for this domain's tables.
+   */
+  async createCustomIndexes(): Promise<void> {
+    if (!this.#indexes || this.#indexes.length === 0) {
+      return;
+    }
+
+    for (const indexDef of this.#indexes) {
+      try {
+        await this.#db.createIndex(indexDef);
+      } catch (error) {
+        // Log but continue - indexes are performance optimizations
+        this.logger?.warn?.(`Failed to create custom index ${indexDef.name}:`, error);
+      }
+    }
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      // Use a transaction with row-level locking to ensure atomicity
+      return await this.#db.client.tx(async t => {
+        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
+        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+
+        let snapshot: WorkflowRunState;
+        if (!existingSnapshotResult) {
+          // Create new snapshot if none exists
+          snapshot = {
+            context: {},
+            activePaths: [],
+            timestamp: Date.now(),
+            suspendedPaths: {},
+            activeStepsPath: {},
+            resumeLabels: {},
+            serializedStepGraph: [],
+            status: 'pending',
+            value: {},
+            waitingPaths: {},
+            runId: runId,
+            requestContext: {},
+          } as WorkflowRunState;
+        } else {
+          // Parse existing snapshot
+          const existingSnapshot = existingSnapshotResult.snapshot;
+          snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        }
+
+        // Merge the new step result and request context
+        snapshot.context[stepId] = result;
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+        // Upsert the snapshot within the same transaction
+        const now = new Date();
+        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+        await t.none(
+          `INSERT INTO ${tableName} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (workflow_name, run_id) DO UPDATE
+           SET snapshot = $3, "updatedAt" = $5`,
+          [workflowName, runId, sanitizedSnapshot, now, now],
+        );
+
+        return snapshot.context;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
+  }
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      // Use a transaction with row-level locking to ensure atomicity
+      return await this.#db.client.tx(async t => {
+        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
+        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+
+        if (!existingSnapshotResult) {
+          return undefined;
+        }
+
+        // Parse existing snapshot
+        const existingSnapshot = existingSnapshotResult.snapshot;
+        const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+        if (!snapshot || !snapshot?.context) {
+          throw new Error(`Snapshot not found for runId ${runId}`);
+        }
+
+        // Merge the new options with the existing snapshot
+        const updatedSnapshot = { ...snapshot, ...opts };
+
+        // Update the snapshot within the same transaction
+        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        await t.none(
+          `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
+          [sanitizedSnapshot, new Date(), workflowName, runId],
+        );
+
+        return updatedSnapshot;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({
@@ -87,25 +297,33 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
-      const now = new Date().toISOString();
-      await this.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+      const now = new Date();
+      const createdAtValue = createdAt ? createdAt : now;
+      const updatedAtValue = updatedAt ? updatedAt : now;
+      // Sanitize the snapshot JSON to remove problematic Unicode sequences
+      const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+      await this.#db.client.none(
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), now, now],
+        [workflowName, runId, resourceId, sanitizedSnapshot, createdAtValue, updatedAtValue],
       );
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('PG', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -122,7 +340,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     try {
-      const result = await this.operations.load<{ snapshot: WorkflowRunState }>({
+      const result = await this.#db.load<{ snapshot: WorkflowRunState }>({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         keys: { workflow_name: workflowName, run_id: runId },
       });
@@ -131,7 +349,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('PG', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
@@ -166,26 +384,25 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get results
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC LIMIT 1
         `;
 
       const queryValues = values;
 
-      const result = await this.client.oneOrNone(query, queryValues);
+      const result = await this.#db.client.oneOrNone(query, queryValues);
 
       if (!result) {
         return null;
       }
 
-      return parseWorkflowRun(result);
+      return this.parseWorkflowRun(result);
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('PG', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
@@ -198,21 +415,37 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns({
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      await this.#db.client.none(
+        `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`,
+        [runId, workflowName],
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            runId,
+            workflowName,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async listWorkflowRuns({
     workflowName,
     fromDate,
     toDate,
-    limit,
-    offset,
+    perPage,
+    page,
     resourceId,
-  }: {
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-    resourceId?: string;
-  } = {}): Promise<WorkflowRuns> {
+    status,
+  }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
       const values: any[] = [];
@@ -224,14 +457,28 @@ export class WorkflowsPG extends WorkflowsStorage {
         paramIndex++;
       }
 
+      if (status) {
+        // Use regexp_replace to strip problematic Unicode escape sequences before casting to jsonb.
+        // PostgreSQL's jsonb cast fails on:
+        // - \u0000 (null character) with error 22P05 "unsupported Unicode escape sequence"
+        // - \uD800-\uDFFF (unpaired surrogates) with "Unicode low surrogate must follow a high surrogate"
+        // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
+        // See: https://github.com/mastra-ai/mastra/issues/11563
+        conditions.push(
+          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
+        );
+        values.push(status);
+        paramIndex++;
+      }
+
       if (resourceId) {
-        const hasResourceId = await this.operations.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+        const hasResourceId = await this.#db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
         if (hasResourceId) {
           conditions.push(`"resourceId" = $${paramIndex}`);
           values.push(resourceId);
           paramIndex++;
         } else {
-          console.warn(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
+          this.logger?.warn?.(`[${TABLE_WORKFLOW_SNAPSHOT}] resourceId column not found. Skipping resourceId filter.`);
         }
       }
 
@@ -249,37 +496,38 @@ export class WorkflowsPG extends WorkflowsStorage {
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       let total = 0;
-      // Only get total count when using pagination
-      if (limit !== undefined && offset !== undefined) {
-        const countResult = await this.client.one(
-          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })} ${whereClause}`,
+      const usePagination = typeof perPage === 'number' && typeof page === 'number';
+      if (usePagination) {
+        const countResult = await this.#db.client.one(
+          `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} ${whereClause}`,
           values,
         );
         total = Number(countResult.count);
       }
 
-      // Get results
+      const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
+      const offset = usePagination ? page! * normalizedPerPage : undefined;
+
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: this.schema })}
+          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC
-          ${limit !== undefined && offset !== undefined ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
+          ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}
         `;
 
-      const queryValues = limit !== undefined && offset !== undefined ? [...values, limit, offset] : values;
+      const queryValues = usePagination ? [...values, normalizedPerPage, offset] : values;
 
-      const result = await this.client.manyOrNone(query, queryValues);
+      const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
-        return parseWorkflowRun(row);
+        return this.parseWorkflowRun(row);
       });
 
-      // Use runs.length as total when not paginating
       return { runs, total: total || runs.length };
     } catch (error) {
       throw new MastraError(
         {
-          id: 'MASTRA_STORAGE_PG_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('PG', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {

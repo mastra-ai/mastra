@@ -1,4 +1,5 @@
-import { cn } from '@/lib/utils';
+import { EntityType } from '@mastra/core/observability';
+import type { EntityOptions } from '@mastra/playground-ui';
 import {
   HeaderTitle,
   Header,
@@ -6,7 +7,6 @@ import {
   TracesList,
   tracesListColumns,
   PageHeader,
-  EntityOptions,
   TracesTools,
   TraceDialog,
   parseError,
@@ -19,13 +19,18 @@ import {
   getToPreviousEntryFn,
   useAgents,
   useWorkflows,
+  useScorers,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { useEffect, useState } from 'react';
-import { EyeIcon } from 'lucide-react';
-import { useAITraces } from '@/domains/observability/hooks/use-ai-traces';
-import { useAITrace } from '@/domains/observability/hooks/use-ai-trace';
 
+import { EyeIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { useTrace } from '@/domains/observability/hooks/use-trace';
+import { useTraces } from '@/domains/observability/hooks/use-traces';
+
+import { cn } from '@/lib/utils';
 
 export default function Observability() {
   const navigate = useNavigate();
@@ -41,8 +46,9 @@ export default function Observability() {
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
+  const { data: scorers = {}, isLoading: isLoadingScorers } = useScorers();
 
-  const { data: aiTrace, isLoading: isLoadingAiTrace } = useAITrace(selectedTraceId, { enabled: !!selectedTraceId });
+  const { data: Trace, isLoading: isLoadingTrace } = useTrace(selectedTraceId, { enabled: !!selectedTraceId });
 
   const traceId = searchParams.get('traceId');
   const spanId = searchParams.get('spanId');
@@ -50,64 +56,69 @@ export default function Observability() {
   const scoreId = searchParams.get('scoreId');
 
   const {
-    data: aiTraces = [],
+    data: traces = [],
     isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-    error: aiTracesError,
-    isError: isAiTracesError,
-  } = useAITraces({
-    filters:
-      selectedEntityOption?.type === 'all'
-        ? undefined
-        : {
-            entityId: selectedEntityOption?.value,
-            entityType: selectedEntityOption?.type,
-          },
-    dateRange:
-      selectedDateFrom && selectedDateTo
-        ? {
-            end: selectedDateTo,
-            start: selectedDateFrom,
-          }
-        : undefined,
+    error: TracesError,
+    isError: isTracesError,
+  } = useTraces({
+    filters: {
+      ...(selectedEntityOption?.type !== 'all' && {
+        entityId: selectedEntityOption?.value,
+        entityType: selectedEntityOption?.type,
+      }),
+      ...(selectedDateFrom && {
+        startedAt: {
+          start: selectedDateFrom,
+        },
+      }),
+      ...(selectedDateTo && {
+        endedAt: {
+          end: selectedDateTo,
+        },
+      }),
+    },
   });
 
-  useEffect(() => {
-    if (traceId) {
-      setSelectedTraceId(traceId);
-      setDialogIsOpen(true);
-    }
-  }, [traceId]);
+  // Sync URL traceId to state
+  if (traceId && traceId !== selectedTraceId) {
+    setSelectedTraceId(traceId);
+    setDialogIsOpen(true);
+  }
 
-  const agentOptions: EntityOptions[] = (Object.entries(agents) || []).map(([, value]) => ({
-    value: value.name,
-    label: value.name,
-    type: 'agent' as const,
-  }));
+  const agentOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(agents) || []).map(([_, value]) => ({
+        value: value.id,
+        label: value.name,
+        type: EntityType.AGENT,
+      })),
+    [agents],
+  );
 
-  const workflowOptions: EntityOptions[] = (Object.entries(workflows || {}) || []).map(([, value]) => ({
-    value: value.name,
-    label: value.name,
-    type: 'workflow' as const,
-  }));
+  const workflowOptions: EntityOptions[] = useMemo(
+    () =>
+      (Object.entries(workflows || {}) || []).map(([, value]) => ({
+        value: value.name,
+        label: value.name,
+        type: EntityType.WORKFLOW_RUN,
+      })),
+    [workflows],
+  );
 
-  const entityOptions: EntityOptions[] = [
-    { value: 'all', label: 'All', type: 'all' as const },
-    ...agentOptions,
-    ...workflowOptions,
-  ];
+  const entityOptions: EntityOptions[] = useMemo(
+    () => [{ value: 'all', label: 'All', type: 'all' as const }, ...agentOptions, ...workflowOptions],
+    [agentOptions, workflowOptions],
+  );
 
-  useEffect(() => {
-    if (entityOptions) {
-      const entityName = searchParams.get('entity');
-      const entityOption = entityOptions.find(option => option.value === entityName);
-      if (entityOption && entityOption.value !== selectedEntityOption?.value) {
-        setSelectedEntityOption(entityOption);
-      }
-    }
-  }, [searchParams, selectedEntityOption, entityOptions]);
+  // Sync URL entity to state
+  const entityName = searchParams.get('entity');
+  const matchedEntityOption = entityOptions.find(option => option.value === entityName);
+  if (matchedEntityOption && matchedEntityOption.value !== selectedEntityOption?.value) {
+    setSelectedEntityOption(matchedEntityOption);
+  }
 
   const handleReset = () => {
     setSelectedTraceId(undefined);
@@ -126,7 +137,7 @@ export default function Observability() {
   };
 
   const handleSelectedEntityChange = (option: EntityOptions | undefined) => {
-    option?.value && setSearchParams({ entity: option?.value });
+    if (option?.value) setSearchParams({ entity: option.value });
   };
 
   const handleTraceClick = (id: string) => {
@@ -137,17 +148,46 @@ export default function Observability() {
     setDialogIsOpen(true);
   };
 
-  const error = isAiTracesError ? parseError(aiTracesError) : undefined;
+  const error = isTracesError ? parseError(TracesError) : undefined;
+
+  // 403 check - permission denied for traces
+  if (TracesError && is403ForbiddenError(TracesError)) {
+    return (
+      <MainContentLayout>
+        <Header>
+          <HeaderTitle>
+            <Icon>
+              <EyeIcon />
+            </Icon>
+            Observability
+          </HeaderTitle>
+
+          <HeaderAction>
+            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
+              <Icon>
+                <DocsIcon />
+              </Icon>
+              Observability documentation
+            </Button>
+          </HeaderAction>
+        </Header>
+
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="traces" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   const filtersApplied = selectedEntityOption?.value !== 'all' || selectedDateFrom || selectedDateTo;
 
   const toNextTrace = getToNextEntryFn({
-    entries: aiTraces.map(item => ({ id: item.traceId })),
+    entries: traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
   const toPreviousTrace = getToPreviousEntryFn({
-    entries: aiTraces.map(item => ({ id: item.traceId })),
+    entries: traces.map(item => ({ id: item.traceId })),
     id: selectedTraceId,
     update: setSelectedTraceId,
   });
@@ -164,7 +204,7 @@ export default function Observability() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/observability/ai-tracing/overview" target="_blank">
+            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
               <Icon>
                 <DocsIcon />
               </Icon>
@@ -174,7 +214,7 @@ export default function Observability() {
         </Header>
 
         <div className={cn(`grid overflow-y-auto h-full`)}>
-          <div className={cn('max-w-[100rem] px-[3rem] mx-auto grid content-start gap-[2rem] h-full')}>
+          <div className={cn('max-w-[100rem] px-12 mx-auto grid content-start gap-8 h-full')}>
             <PageHeader
               title="Observability"
               description="Explore observability traces for your entities"
@@ -196,7 +236,7 @@ export default function Observability() {
               <EntryListSkeleton columns={tracesListColumns} />
             ) : (
               <TracesList
-                traces={aiTraces}
+                traces={traces}
                 selectedTraceId={selectedTraceId}
                 onTraceClick={handleTraceClick}
                 errorMsg={error?.error}
@@ -210,25 +250,23 @@ export default function Observability() {
         </div>
       </MainContentLayout>
       <TraceDialog
-        traceSpans={aiTrace?.spans}
+        traceSpans={Trace?.spans}
         traceId={selectedTraceId}
         initialSpanId={spanId || undefined}
         initialSpanTab={spanTab === 'scores' ? 'scores' : 'details'}
         initialScoreId={scoreId || undefined}
-        traceDetails={aiTraces.find(t => t.traceId === selectedTraceId)}
+        traceDetails={traces.find(t => t.traceId === selectedTraceId)}
         isOpen={dialogIsOpen}
         onClose={() => {
-          navigate(`/observability`);
+          void navigate(`/observability`);
           setDialogIsOpen(false);
         }}
         onNext={toNextTrace}
         onPrevious={toPreviousTrace}
-        isLoadingSpans={isLoadingAiTrace}
-        onScorerTriggered={scorerName => {
-          setDialogIsOpen(false);
-          navigate(`/scorers/${scorerName}`);
-        }}
+        isLoadingSpans={isLoadingTrace}
         computeTraceLink={(traceId, spanId) => `/observability?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`}
+        scorers={scorers}
+        isLoadingScorers={isLoadingScorers}
       />
     </>
   );

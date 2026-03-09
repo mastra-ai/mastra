@@ -2,6 +2,12 @@
 
 A Mastra authentication provider for Auth0 integration. This package provides seamless authentication and authorization using Auth0's JWT tokens.
 
+## Requirements
+
+- Node.js 22.13.0 or later
+- Auth0 account and configured application
+- Valid Auth0 domain and API identifier
+
 ## Installation
 
 ```bash
@@ -15,7 +21,7 @@ pnpm add @mastra/auth-auth0
 ## Usage
 
 ```typescript
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthAuth0 } from '@mastra/auth-auth0';
 
 // Initialize with options
@@ -31,7 +37,7 @@ const auth0Provider = new MastraAuthAuth0();
 const mastra = new Mastra({
   ...
   server: {
-    experimental_auth: auth0Provider,
+    auth: auth0Provider,
   },
 });
 ```
@@ -77,9 +83,3 @@ const user = await auth0Provider.authenticateToken('your-jwt-token');
 // Authorize a user
 const isAuthorized = await auth0Provider.authorizeUser(user);
 ```
-
-## Requirements
-
-- Node.js 16 or higher
-- Auth0 account and configured application
-- Valid Auth0 domain and API identifier

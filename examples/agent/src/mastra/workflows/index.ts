@@ -7,6 +7,9 @@ export const myWorkflow = createWorkflow({
   inputSchema: z.object({
     ingredient: z.string(),
   }),
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
   outputSchema: z.object({
     result: z.string(),
   }),
@@ -21,10 +24,14 @@ const step = createStep({
   outputSchema: z.object({
     result: z.string(),
   }),
-  execute: async ({ inputData }) => {
+  requestContextSchema: z.object({
+    userId: z.string(),
+  }),
+  execute: async ({ inputData, requestContext }) => {
+    const userId = requestContext?.get('userId');
     await new Promise(resolve => setTimeout(resolve, 3000));
     return {
-      result: inputData.ingredient,
+      result: inputData.ingredient + ' from ' + userId,
     };
   },
 });
@@ -240,8 +247,8 @@ export const lessComplexWorkflow = createWorkflow({
   // Map the branch result back to a single text field
   .map(async ({ inputData }) => {
     // The branch step returns either short-text or long-text result
-    const result = inputData['short-text'] || inputData['long-text'];
-    return { text: result.text };
+    const result = inputData['short-text']?.text ?? inputData['long-text']?.text ?? '';
+    return { text: result };
   })
 
   // Nested workflow
@@ -249,6 +256,9 @@ export const lessComplexWorkflow = createWorkflow({
 
   // doUntil loop - continues until text has 20+ characters
   .dountil(addLetterWithCountStep, async ({ inputData: { text } }) => text.length >= 20)
+
+  // Suspend/resume step - requires user input
+  .then(suspendResumeStep)
 
   // Final step
   .then(finalStep)

@@ -1,0 +1,307 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+import { WORKSPACE_TOOLS } from '../../constants';
+import { LocalFilesystem } from '../../filesystem';
+import { LocalSandbox } from '../../sandbox';
+import { Workspace } from '../../workspace';
+import { createWorkspaceTools } from '../tools';
+
+describe('createWorkspaceTools', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workspace-tools-test-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('should create filesystem tools when filesystem is available', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+  });
+
+  it('should not create filesystem tools when no filesystem', () => {
+    const workspace = new Workspace({
+      sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+  });
+
+  it('should create search tools when BM25 is enabled', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      bm25: true,
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
+  });
+
+  it('should not create search tools when search not configured', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
+  });
+
+  it('should create sandbox tools when sandbox is available', () => {
+    const workspace = new Workspace({
+      sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+  });
+
+  it('should not create sandbox tools when no sandbox', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+  });
+
+  it('should create all tools when all capabilities available', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+      bm25: true,
+    });
+    const tools = createWorkspaceTools(workspace);
+
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.DELETE);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.MKDIR);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.SEARCH);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SEARCH.INDEX);
+    expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+  });
+
+  it('should not inject path context into execute_command tool description', () => {
+    const workspace = new Workspace({
+      filesystem: new LocalFilesystem({ basePath: tempDir }),
+      sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+    });
+    const tools = createWorkspaceTools(workspace);
+    const executeTool = tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+    // The tool description should be the base description, not augmented with path context
+    expect(executeTool.description).not.toContain('Local filesystem');
+    expect(executeTool.description).not.toContain('Local command execution');
+  });
+
+  it('should have all expected tool names with proper namespacing', () => {
+    expect(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE).toBe('mastra_workspace_read_file');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE).toBe('mastra_workspace_write_file');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE).toBe('mastra_workspace_edit_file');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES).toBe('mastra_workspace_list_files');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.DELETE).toBe('mastra_workspace_delete');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.FILE_STAT).toBe('mastra_workspace_file_stat');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.MKDIR).toBe('mastra_workspace_mkdir');
+    expect(WORKSPACE_TOOLS.FILESYSTEM.GREP).toBe('mastra_workspace_grep');
+    expect(WORKSPACE_TOOLS.SEARCH.SEARCH).toBe('mastra_workspace_search');
+    expect(WORKSPACE_TOOLS.SEARCH.INDEX).toBe('mastra_workspace_index');
+    expect(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND).toBe('mastra_workspace_execute_command');
+    expect(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT).toBe('mastra_workspace_get_process_output');
+    expect(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS).toBe('mastra_workspace_kill_process');
+  });
+
+  describe('tool name remapping', () => {
+    it('should use custom name as dictionary key when name is provided', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view' },
+          mastra_workspace_grep: { name: 'search_content' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('view');
+      expect(tools).toHaveProperty('search_content');
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.READ_FILE);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+    });
+
+    it('should keep default names for non-remapped tools', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('view');
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.FILESYSTEM.GREP);
+    });
+
+    it('should preserve config options when name is remapped', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view', requireApproval: true },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('view');
+      expect(tools['view'].requireApproval).toBe(true);
+    });
+
+    it('should update tool id to match remapped name', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'view' },
+          mastra_workspace_edit_file: { name: 'string_replace_lsp' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      // The tool id should be updated to match the exposed name so that
+      // fallback-by-id resolution doesn't allow calling by the old name
+      expect((tools['view'] as any).id).toBe('view');
+      expect((tools['string_replace_lsp'] as any).id).toBe('string_replace_lsp');
+
+      // Non-remapped tools should keep their default id
+      expect((tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE] as any).id).toBe(WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE);
+    });
+
+    it('should remap sandbox tools', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+        tools: {
+          mastra_workspace_execute_command: { name: 'execute_command' },
+        },
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty('execute_command');
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+    });
+
+    it('should throw on duplicate custom names', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          mastra_workspace_read_file: { name: 'my_tool' },
+          mastra_workspace_grep: { name: 'my_tool' },
+        },
+      });
+
+      expect(() => createWorkspaceTools(workspace)).toThrow(/Duplicate workspace tool name "my_tool"/);
+    });
+
+    it('should throw when custom name conflicts with a default name', () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          // Remap read_file to the default name of grep — conflict
+          mastra_workspace_read_file: { name: WORKSPACE_TOOLS.FILESYSTEM.GREP },
+        },
+      });
+
+      expect(() => createWorkspaceTools(workspace)).toThrow(/Duplicate workspace tool name/);
+    });
+  });
+
+  describe('background process tools', () => {
+    it('should register process tools when sandbox has processes (LocalSandbox)', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
+    });
+
+    it('should not register process tools when sandbox has no processes', () => {
+      // Minimal sandbox without processes
+      const sandbox = {
+        id: 'test',
+        name: 'test',
+        provider: 'test',
+        status: 'running' as const,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 0,
+        }),
+      };
+      const workspace = new Workspace({ sandbox });
+      const tools = createWorkspaceTools(workspace);
+
+      expect(tools).toHaveProperty(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
+      expect(tools).not.toHaveProperty(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS);
+    });
+
+    it('should include background param in execute_command schema when processes available', () => {
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: tempDir }),
+      });
+      const tools = createWorkspaceTools(workspace);
+      const execTool = tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+      const shape = execTool.inputSchema.shape;
+      expect(shape).toHaveProperty('background');
+    });
+
+    it('should not include background param in execute_command schema when no processes', () => {
+      const sandbox = {
+        id: 'test',
+        name: 'test',
+        provider: 'test',
+        status: 'running' as const,
+        executeCommand: async () => ({
+          success: true,
+          exitCode: 0,
+          stdout: '',
+          stderr: '',
+          executionTimeMs: 0,
+        }),
+      };
+      const workspace = new Workspace({ sandbox });
+      const tools = createWorkspaceTools(workspace);
+      const execTool = tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+      const shape = execTool.inputSchema.shape;
+      expect(shape).not.toHaveProperty('background');
+    });
+  });
+});

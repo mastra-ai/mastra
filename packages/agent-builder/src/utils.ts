@@ -1,13 +1,13 @@
-import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'child_process';
-import type { SpawnOptions } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
-import { copyFile, readFile } from 'fs/promises';
-import { createRequire } from 'module';
-import { dirname, basename, extname, resolve, join } from 'path';
-import { promisify } from 'util';
-import type { MastraLanguageModel } from '@mastra/core/agent';
+import { exec as execNodejs, execFile as execFileNodejs, spawn as nodeSpawn } from 'node:child_process';
+import type { SpawnOptions } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { copyFile, readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, basename, extname, resolve, join } from 'node:path';
+import { promisify } from 'node:util';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '@mastra/core/agent';
 import { ModelRouterLanguageModel } from '@mastra/core/llm';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { UNIT_KINDS } from './types';
 import type { UnitKind } from './types';
 
@@ -411,20 +411,20 @@ export async function renameAndCopyFile(sourceFile: string, targetFile: string):
   return uniqueTargetFile;
 }
 
-// Type guard to check if object is a valid MastraLanguageModel
-export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel => {
+// Type guard to check if object is a valid language model (V1, V2, or V3)
+export const isValidMastraLanguageModel = (model: any): model is MastraLanguageModel | MastraLegacyLanguageModel => {
   return model && typeof model === 'object' && typeof model.modelId === 'string';
 };
 
 // Helper function to resolve target path with smart defaults
-export const resolveTargetPath = (inputData: any, runtimeContext: any): string => {
+export const resolveTargetPath = (inputData: any, requestContext: any): string => {
   // If explicitly provided, use it
   if (inputData.targetPath) {
     return inputData.targetPath;
   }
 
-  // Check runtime context
-  const contextPath = runtimeContext.get('targetPath');
+  // Check request context
+  const contextPath = requestContext.get('targetPath');
   if (contextPath) {
     return contextPath;
   }
@@ -615,7 +615,7 @@ export const createModelInstance = async (
   provider: string,
   modelId: string,
   version: 'v1' | 'v2' = 'v2',
-): Promise<MastraLanguageModel | null> => {
+): Promise<MastraLanguageModel | MastraLegacyLanguageModel | ModelRouterLanguageModel | null> => {
   try {
     // Dynamic imports to avoid issues if packages aren't available
     const providerMap = {
@@ -662,20 +662,20 @@ export const createModelInstance = async (
   }
 };
 
-// Helper function to resolve model from runtime context with AI SDK version detection
+// Helper function to resolve model from request context with AI SDK version detection
 export const resolveModel = async ({
-  runtimeContext,
+  requestContext,
   defaultModel = 'openai/gpt-4.1',
   projectPath,
 }: {
-  runtimeContext: RuntimeContext;
-  defaultModel?: MastraLanguageModel | string;
+  requestContext: RequestContext;
+  defaultModel?: MastraLanguageModel | MastraLegacyLanguageModel | string;
   projectPath?: string;
-}): Promise<MastraLanguageModel> => {
-  // First try to get model from runtime context
-  const modelFromContext = runtimeContext.get('model');
+}): Promise<MastraLanguageModel | MastraLegacyLanguageModel> => {
+  // First try to get model from request context
+  const modelFromContext = requestContext.get('model');
   if (modelFromContext) {
-    console.info('Using model from runtime context');
+    console.info('Using model from request context');
     // Type check to ensure it's a MastraLanguageModel
     if (isValidMastraLanguageModel(modelFromContext)) {
       return modelFromContext;
@@ -685,8 +685,8 @@ export const resolveModel = async ({
     );
   }
 
-  // Check for selected model info in runtime context
-  const selectedModel = runtimeContext.get('selectedModel') as { provider: string; modelId: string } | undefined;
+  // Check for selected model info in request context
+  const selectedModel = requestContext.get('selectedModel') as { provider: string; modelId: string } | undefined;
   if (selectedModel?.provider && selectedModel?.modelId && projectPath) {
     console.info(`Resolving selected model: ${selectedModel.provider}/${selectedModel.modelId}`);
 
@@ -697,7 +697,7 @@ export const resolveModel = async ({
     const modelInstance = await createModelInstance(selectedModel.provider, selectedModel.modelId, version);
     if (modelInstance) {
       // Store resolved model back in context for other steps to use
-      runtimeContext.set('model', modelInstance);
+      requestContext.set('model', modelInstance);
       return modelInstance;
     }
   }

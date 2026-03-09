@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 
-import { createAgentTestRun, createUIMessage } from '../../utils';
+import { createAgentTestRun, createTestMessage } from '../../utils';
 import { createTextualDifferenceScorer } from './index';
 
 describe('TextualDifferenceMetric', () => {
   const scorer = createTextualDifferenceScorer();
 
   it('should return perfect match for identical strings', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(1);
@@ -20,8 +20,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle small differences', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The quick brown cat', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'The quick brown cat', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeGreaterThan(0.8);
@@ -29,8 +29,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle word additions', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The very quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'The very quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeGreaterThan(0.7);
@@ -38,8 +38,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle word deletions', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox jumps', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The quick fox jumps', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox jumps', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'The quick fox jumps', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeGreaterThan(0.7);
@@ -50,10 +50,14 @@ describe('TextualDifferenceMetric', () => {
     const result = await scorer.run(
       createAgentTestRun({
         inputMessages: [
-          createUIMessage({ content: 'The quick brown fox jumps over the lazy dog', role: 'user', id: 'test-input' }),
+          createTestMessage({
+            content: 'The quick brown fox jumps over the lazy dog',
+            role: 'user',
+            id: 'test-input',
+          }),
         ],
         output: [
-          createUIMessage({
+          createTestMessage({
             content: 'The slow black fox runs under the active cat',
             role: 'assistant',
             id: 'test-output',
@@ -67,8 +71,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle completely different strings', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'Lorem ipsum dolor sit amet', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'Lorem ipsum dolor sit amet', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeLessThan(0.3);
@@ -76,8 +80,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle empty strings', async () => {
-    const inputMessages = [createUIMessage({ content: '', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: '', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: '', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(1);
@@ -86,8 +90,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle one empty string', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: '', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBe(0);
@@ -96,8 +100,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle case sensitivity', async () => {
-    const inputMessages = [createUIMessage({ content: 'The Quick Brown Fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'the quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The Quick Brown Fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'the quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeLessThan(1);
@@ -105,8 +109,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should handle whitespace sensitivity', async () => {
-    const inputMessages = [createUIMessage({ content: 'The   quick\nbrown    fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The   quick\nbrown    fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.score).toBeLessThan(1);
@@ -114,8 +118,8 @@ describe('TextualDifferenceMetric', () => {
   });
 
   it('should include difference details in result', async () => {
-    const inputMessages = [createUIMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createUIMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
+    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
+    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
 
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.preprocessStepResult).toMatchObject({

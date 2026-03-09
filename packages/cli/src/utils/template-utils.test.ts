@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@clack/prompts', () => ({
   select: vi.fn(),
   isCancel: vi.fn(),
+  confirm: vi.fn(),
 }));
 
 beforeEach(() => {

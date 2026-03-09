@@ -1,4 +1,4 @@
-import os from 'os';
+import os from 'node:os';
 
 export const LOCAL = process.env.LOCAL === 'true';
 export const TEAM_ID: string = process.env.TEAM_ID ?? '';

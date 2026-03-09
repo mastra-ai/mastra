@@ -1,9 +1,9 @@
-import { existsSync } from 'fs';
-import { readFile, readdir } from 'fs/promises';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
-import { stepCountIs } from 'ai';
 import type { z } from 'zod';
 import { AgentBuilder } from '../../agent';
 import { AgentBuilderDefaults } from '../../defaults';
@@ -25,13 +25,15 @@ import {
 import type { DiscoveredWorkflowSchema } from './schema';
 import { restrictedTaskManager } from './tools';
 
+type WorkflowBuilderInputSchemaType = z.infer<typeof WorkflowBuilderInputSchema>;
+
 // Step 1: Always discover existing workflows
 const workflowDiscoveryStep = createStep({
   id: 'workflow-discovery',
   description: 'Discover existing workflows in the project',
   inputSchema: WorkflowBuilderInputSchema,
   outputSchema: WorkflowDiscoveryResultSchema,
-  execute: async ({ inputData, runtimeContext: _runtimeContext }) => {
+  execute: async ({ inputData, requestContext: _requestContext }) => {
     console.info('Starting workflow discovery...');
     const { projectPath = process.cwd() } = inputData;
 
@@ -104,7 +106,7 @@ const projectDiscoveryStep = createStep({
   description: 'Analyze the project structure and setup',
   inputSchema: WorkflowDiscoveryResultSchema,
   outputSchema: ProjectDiscoveryResultSchema,
-  execute: async ({ inputData: _inputData, runtimeContext: _runtimeContext }) => {
+  execute: async ({ inputData: _inputData, requestContext: _requestContext }) => {
     console.info('Starting project discovery...');
 
     try {
@@ -168,21 +170,24 @@ const projectDiscoveryStep = createStep({
   },
 });
 
+type WorkflowResearchResult = z.infer<typeof WorkflowResearchResultSchema>;
+
 // Step 3: Research what is needed to be done
 const workflowResearchStep = createStep({
   id: 'workflow-research',
   description: 'Research Mastra workflows and gather relevant documentation',
   inputSchema: ProjectDiscoveryResultSchema,
   outputSchema: WorkflowResearchResultSchema,
-  execute: async ({ inputData, runtimeContext }) => {
+  execute: async ({ inputData, requestContext }) => {
     console.info('Starting workflow research...');
 
     try {
       // const filteredMcpTools = await initializeMcpTools();
 
-      const model = await resolveModel({ runtimeContext });
+      const model = await resolveModel({ requestContext });
 
       const researchAgent = new Agent({
+        id: 'workflow-research-agent',
         model,
         instructions: workflowBuilderPrompts.researchAgent.instructions,
         name: 'Workflow Research Agent',
@@ -196,11 +201,13 @@ const workflowResearchStep = createStep({
       });
 
       const result = await researchAgent.generate(researchPrompt, {
-        output: WorkflowResearchResultSchema,
+        structuredOutput: {
+          schema: WorkflowResearchResultSchema,
+        },
         // stopWhen: stepCountIs(10),
       });
 
-      const researchResult = await result.object;
+      const researchResult = (await result.object) as unknown as WorkflowResearchResult | null;
       if (!researchResult) {
         return {
           success: false,
@@ -251,7 +258,7 @@ const taskExecutionStep = createStep({
   outputSchema: TaskExecutionResultSchema,
   suspendSchema: TaskExecutionSuspendSchema,
   resumeSchema: TaskExecutionResumeSchema,
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const {
       action,
       workflowName,
@@ -268,7 +275,7 @@ const taskExecutionStep = createStep({
     console.info(`Executing ${tasks.length} tasks using AgentBuilder stream...`);
 
     try {
-      const model = await resolveModel({ runtimeContext });
+      const model = await resolveModel({ requestContext });
       const currentProjectPath = projectPath || process.cwd();
 
       // Pre-populate taskManager with the planned tasks
@@ -320,18 +327,12 @@ ${workflowBuilderPrompts.validation.instructions}`,
         resumeData,
       });
 
-      const originalInstructions = await executionAgent.getInstructions({ runtimeContext: runtimeContext });
-      const additionalInstructions = executionAgent.instructions;
-
-      let enhancedInstructions = originalInstructions as string;
-      if (additionalInstructions) {
-        enhancedInstructions = `${originalInstructions}\n\n${additionalInstructions}`;
-      }
+      const originalInstructions = await executionAgent.getInstructions({ requestContext: requestContext });
 
       const enhancedOptions = {
         stopWhen: stepCountIs(100),
         temperature: 0.3,
-        instructions: enhancedInstructions,
+        instructions: originalInstructions,
       };
 
       // Loop until all tasks are completed
@@ -540,7 +541,7 @@ export const workflowBuilderWorkflow = createWorkflow({
   .then(workflowResearchStep)
   // Map research result to planning input format
   .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData();
+    const initData = getInitData<WorkflowBuilderInputSchemaType>();
     const discoveryResult = getStepResult(workflowDiscoveryStep);
     const projectResult = getStepResult(projectDiscoveryStep);
     // const researchResult = getStepResult(workflowResearchStep);
@@ -566,7 +567,7 @@ export const workflowBuilderWorkflow = createWorkflow({
   })
   // Map sub-workflow result to task execution input
   .map(async ({ getStepResult, getInitData }) => {
-    const initData = getInitData();
+    const initData = getInitData<WorkflowBuilderInputSchemaType>();
     const discoveryResult = getStepResult(workflowDiscoveryStep);
     const projectResult = getStepResult(projectDiscoveryStep);
     // const researchResult = getStepResult(workflowResearchStep);

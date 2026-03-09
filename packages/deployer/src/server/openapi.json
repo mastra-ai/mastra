@@ -27,24 +27,6 @@
         "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }]
       }
     },
-    "/api/agents/{agentId}/evals/ci": {
-      "get": {
-        "responses": { "200": { "description": "List of evals" } },
-        "operationId": "getApiAgentsByAgentIdEvalsCi",
-        "description": "Get CI evals by agent ID",
-        "tags": ["agents"],
-        "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }]
-      }
-    },
-    "/api/agents/{agentId}/evals/live": {
-      "get": {
-        "responses": { "200": { "description": "List of evals" } },
-        "operationId": "getApiAgentsByAgentIdEvalsLive",
-        "description": "Get live evals by agent ID",
-        "tags": ["agents"],
-        "parameters": [{ "name": "agentId", "in": "path", "required": true, "schema": { "type": "string" } }]
-      }
-    },
     "/api/agents/{agentId}/generate": {
       "post": {
         "responses": { "200": { "description": "Generated response" }, "404": { "description": "Agent not found" } },

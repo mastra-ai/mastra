@@ -1,7 +1,7 @@
 // Constants and Types (keeping from original implementation)
 export const RegisteredLogger = {
   AGENT: 'AGENT',
-  AI_TRACING: 'AI_TRACING',
+  OBSERVABILITY: 'OBSERVABILITY',
   AUTH: 'AUTH',
   NETWORK: 'NETWORK',
   WORKFLOW: 'WORKFLOW',
@@ -16,6 +16,8 @@ export const RegisteredLogger = {
   EMBEDDINGS: 'EMBEDDINGS',
   MCP_SERVER: 'MCP_SERVER',
   SERVER_CACHE: 'SERVER_CACHE',
+  SERVER: 'SERVER',
+  WORKSPACE: 'WORKSPACE',
 } as const;
 
 export type RegisteredLogger = (typeof RegisteredLogger)[keyof typeof RegisteredLogger];

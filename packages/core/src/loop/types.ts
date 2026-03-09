@@ -1,65 +1,99 @@
-import type { LanguageModelV2, SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import type { Span } from '@opentelemetry/api';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type {
   CallSettings,
   IdGenerator,
-  StopCondition,
-  TelemetrySettings,
+  StopCondition as StopConditionV5,
   ToolChoice,
   ToolSet,
-  StepResult,
-  ModelMessage,
-} from 'ai-v5';
+} from '@internal/ai-sdk-v5';
+import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
 import z from 'zod';
-import type { MessageList } from '../agent/message-list';
+import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
+import type { MessageInput, MessageList } from '../agent/message-list';
+import type { SaveQueueManager } from '../agent/save-queue';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { AISpan, AISpanType, ModelSpanTracker } from '../ai-tracing';
+import type { ModelRouterModelId } from '../llm/model';
+import type { ModelMethodType } from '../llm/model/model.loop.types';
+import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { OutputProcessor, ProcessorState } from '../processors';
-import type { OutputSchema } from '../stream/base/schema';
+import type { MastraMemory, MemoryConfig } from '../memory';
+import type { IModelSpanTracker, ObservabilityContext } from '../observability';
+import type {
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
+  ProcessorState,
+} from '../processors';
+import type { RequestContext } from '../request-context';
 import type {
   ChunkType,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   ModelManagerModelConfig,
+  StreamTransportRef,
 } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
+import type { OutputWriter } from '../workflows/types';
+import type { Workspace } from '../workspace/workspace';
+
+type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
 
 export type StreamInternal = {
   now?: () => number;
   generateId?: IdGenerator;
   currentDate?: () => Date;
+  saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
+  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  threadId?: string;
+  resourceId?: string;
+  memory?: MastraMemory; // MastraMemory from memory/memory
+  threadExists?: boolean;
+  // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
+  stepTools?: ToolSet;
+  // Active tools from prepareStep - used by toolCallStep to reject calls to hidden tools
+  stepActiveTools?: string[];
+  // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
+  stepWorkspace?: Workspace;
+  // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
+  _delegationBailed?: boolean;
+  // Stream transport reference (e.g., WebSocket) for stream lifecycle management
+  transportRef?: StreamTransportRef;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
-  model?: LanguageModelV2;
+  model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModelV2;
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
-  system?: string;
-  messages?: Array<ModelMessage>;
+  messages?: Array<MessageInput>;
+  /**
+   * Workspace to use for this step. When provided, this workspace will be passed to tool
+   * execution context, allowing tools to access workspace.filesystem and workspace.sandbox.
+   * This enables dynamic workspace configuration per-step via prepareStep.
+   */
+  workspace?: Workspace;
 };
 
-export type PrepareStepFunction<TOOLS extends ToolSet = ToolSet> = (options: {
-  steps: Array<StepResult<TOOLS>>;
-  stepNumber: number;
-  model: LanguageModelV2;
-  messages: Array<ModelMessage>;
-}) => PromiseLike<PrepareStepResult<TOOLS> | undefined> | PrepareStepResult<TOOLS> | undefined;
+/**
+ * Function called before each step of multi-step execution.
+ */
+export type PrepareStepFunction = (
+  args: ProcessInputStepArgs,
+) => Promise<ProcessInputStepResult | undefined | void> | ProcessInputStepResult | undefined | void;
 
-export type LoopConfig<OUTPUT extends OutputSchema = undefined> = {
+export type LoopConfig<OUTPUT = undefined> = {
   onChunk?: (chunk: ChunkType<OUTPUT>) => Promise<void> | void;
   onError?: ({ error }: { error: Error | string }) => Promise<void> | void;
-  onFinish?: MastraOnFinishCallback;
-  onStepFinish?: MastraOnStepFinishCallback;
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;
   onAbort?: (event: any) => Promise<void> | void;
-  activeTools?: Array<keyof ToolSet> | undefined;
   abortSignal?: AbortSignal;
   returnScorerData?: boolean;
-  prepareStep?: PrepareStepFunction<any>;
+  prepareStep?: PrepareStepFunction;
 };
 
-export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema | undefined = undefined> = {
+export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;
@@ -72,50 +106,82 @@ export type LoopOptions<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
   runId?: string;
   idGenerator?: MastraIdGenerator;
   toolCallStreaming?: boolean;
-  telemetry_settings?: TelemetrySettings;
   messageList: MessageList;
   includeRawChunks?: boolean;
-  modelSettings?: CallSettings;
-  headers?: Record<string, string>;
-  toolChoice?: ToolChoice<any>;
+  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  toolChoice?: ToolChoice<TOOLS>;
+  activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;
-  providerOptions?: SharedV2ProviderOptions;
-  tools?: Tools;
-  outputProcessors?: OutputProcessor[];
+  providerOptions?: SharedProviderOptions;
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  inputProcessors?: InputProcessorOrWorkflow[];
+  tools?: TOOLS;
   experimental_generateMessageId?: () => string;
-  stopWhen?: StopCondition<NoInfer<Tools>> | Array<StopCondition<NoInfer<Tools>>>;
+  stopWhen?: StopCondition | Array<StopCondition>;
   maxSteps?: number;
   _internal?: StreamInternal;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   returnScorerData?: boolean;
   downloadRetries?: number;
   downloadConcurrency?: number;
-  llmAISpan?: AISpan<AISpanType.LLM_GENERATION>;
-  modelSpanTracker?: ModelSpanTracker;
+  modelSpanTracker?: IModelSpanTracker;
   requireToolApproval?: boolean;
+  autoResumeSuspendedTools?: boolean;
   agentId: string;
-};
+  toolCallConcurrency?: number;
+  agentName?: string;
+  requestContext?: RequestContext;
+  methodType: ModelMethodType;
+  /**
+   * Maximum number of times processors can trigger a retry per generation.
+   * When a processor calls abort({ retry: true }), the agent will retry with feedback.
+   * If not set, no retries are performed.
+   */
+  maxProcessorRetries?: number;
 
-export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = LoopOptions<
-  Tools,
-  OUTPUT
-> & {
+  /**
+   * isTaskComplete scoring configuration for supervisor patterns.
+   * Scorers evaluate whether the task is complete after each iteration.
+   *
+   * When scorers fail, feedback is automatically added to the message list
+   * so the LLM can see why the task isn't complete and adjust its approach.
+   */
+  isTaskComplete?: IsTaskCompleteConfig;
+
+  /**
+   * Callback fired after each iteration completes.
+   * Allows monitoring and controlling iteration flow with feedback.
+   */
+  onIterationComplete?: OnIterationCompleteHandler;
+  /**
+   * Default workspace for the agent. This workspace will be passed to tool execution
+   * context unless overridden by prepareStep or processInputStep.
+   */
+  workspace?: Workspace;
+  /**
+   * Shared processor state that persists across loop iterations.
+   * Used by all processor methods (input and output) to share state.
+   * Keyed by processor ID.
+   */
+  processorStates?: Map<string, ProcessorState>;
+} & Partial<ObservabilityContext>;
+
+export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopOptions<Tools, OUTPUT> & {
   messageId: string;
   runId: string;
   startTimestamp: number;
-  modelStreamSpan: Span;
   _internal: StreamInternal;
   streamState: {
     serialize: () => any;
     deserialize: (state: any) => void;
   };
-  processorStates?: Map<string, ProcessorState<OUTPUT>>;
+  methodType: ModelMethodType;
 };
 
-export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> = {
+export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = {
   messageId: string;
   controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
-  writer: WritableStream<ChunkType<OUTPUT>>;
+  outputWriter: OutputWriter;
 } & LoopRun<Tools, OUTPUT>;
 
 export const PRIMITIVE_TYPES = z.enum(['agent', 'workflow', 'none', 'tool']);

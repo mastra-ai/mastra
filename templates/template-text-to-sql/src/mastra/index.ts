@@ -1,25 +1,26 @@
 import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
 import { PinoLogger } from '@mastra/loggers';
+import { LibSQLStore } from '@mastra/libsql';
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { sqlAgent } from './agents/sql-agent';
-import { databaseQueryWorkflow } from './workflows/database-query-workflow';
 
 export const mastra = new Mastra({
   agents: { sqlAgent },
-  workflows: {
-    databaseQueryWorkflow,
-  },
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
-    url: ':memory:',
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
   }),
   logger: new PinoLogger({
-    name: 'Mastra',
+    name: 'Mastra Text-to-SQL',
     level: 'info',
   }),
-  observability: {
-    default: {
-      enabled: true,
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'text-to-sql',
+        exporters: [new DefaultExporter(), new CloudExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+      },
     },
-  },
+  }),
 });

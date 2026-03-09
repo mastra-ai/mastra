@@ -1,3 +1,4 @@
+import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
 import { PinoLogger } from '@mastra/loggers';
@@ -5,7 +6,8 @@ import { webAgent } from './agents/web-agent';
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
-    // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
+    id: 'mastra-storage',
+    // stores observability, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db
     url: ':memory:',
   }),
   agents: { webAgent },
@@ -13,9 +15,18 @@ export const mastra = new Mastra({
     name: 'Mastra',
     level: 'info',
   }),
-  observability: {
-    default: {
-      enabled: true,
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new DefaultExporter(), // Persists traces to storage for Mastra Studio
+          new CloudExporter(), // Sends traces to Mastra Cloud (if MASTRA_CLOUD_ACCESS_TOKEN is set)
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+        ],
+      },
     },
-  },
+  }),
 });

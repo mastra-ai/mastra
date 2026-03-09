@@ -1,4 +1,4 @@
-import type { TransformCallback } from 'stream';
+import type { TransformCallback } from 'node:stream';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
 import { LoggerTransport } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
@@ -66,7 +66,7 @@ class RedisTransport extends LoggerTransport {
     cb(err);
   }
 
-  getLogs(_args: {
+  listLogs(_args: {
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;
@@ -84,7 +84,7 @@ class RedisTransport extends LoggerTransport {
     });
   }
 
-  getLogsByRunId(_args?: {
+  listLogsByRunId(_args?: {
     fromDate?: Date;
     toDate?: Date;
     logLevel?: LogLevel;

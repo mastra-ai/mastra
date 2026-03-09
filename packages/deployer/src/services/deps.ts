@@ -1,7 +1,7 @@
-import fs from 'fs';
-import fsPromises from 'fs/promises';
-import path, { dirname } from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import path, { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@mastra/core/base';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';

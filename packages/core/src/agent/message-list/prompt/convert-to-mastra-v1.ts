@@ -2,9 +2,9 @@
  * This file is an adaptation of https://github.com/vercel/ai/blob/e14c066bf4d02c5ee2180c56a01fa0e5216bc582/packages/ai/core/prompt/convert-to-core-messages.ts
  * But has been modified to work with Mastra storage adapter messages (MastraMessageV1)
  */
-import type { AssistantContent, ToolResultPart } from 'ai';
+import type { AssistantContent, ToolResultPart } from '@internal/ai-sdk-v4';
 import type { MastraMessageV1 } from '../../../memory/types';
-import type { MastraMessageContentV2, MastraMessageV2 } from '../../message-list';
+import type { MastraMessageContentV2, MastraDBMessage } from '../../message-list';
 import { attachmentsToParts } from './attachments-to-parts';
 
 const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
@@ -25,8 +25,7 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
       (msg.role !== `assistant` || (msg.role === `assistant` && msg.content.at(-1)?.type !== `tool-call`))
     ) {
       for (const part of msg.content) {
-        // @ts-ignore needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
-        // I'm not sure what's adding `never` to the union but this code definitely works..
+        // @ts-expect-error needs type gymnastics? msg.content and previousMessage.content are the same type here since both are arrays
         previousMessage.content.push(part);
       }
     } else {
@@ -55,7 +54,7 @@ const makePushOrCombine = (v1Messages: MastraMessageV1[]) => {
     }
   };
 };
-export function convertToV1Messages(messages: Array<MastraMessageV2>) {
+export function convertToV1Messages(messages: Array<MastraDBMessage>) {
   const v1Messages: MastraMessageV1[] = [];
   const pushOrCombine = makePushOrCombine(v1Messages);
 
@@ -96,7 +95,7 @@ export function convertToV1Messages(messages: Array<MastraMessageV2>) {
             role: 'user',
             ...fields,
             type: 'text',
-            // @ts-ignore
+            // @ts-expect-error - content type mismatch in conversion
             content: userContent,
           });
         } else {

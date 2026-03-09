@@ -1,25 +1,47 @@
-import { writeFileSync } from 'fs';
-import { join } from 'path';
-import process from 'process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { Deployer } from '@mastra/deployer';
-import { move } from 'fs-extra/esm';
+import { injectStudioHtmlConfig } from '@mastra/deployer/build';
+import { copy, move } from 'fs-extra/esm';
 import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';
 
 export class VercelDeployer extends Deployer {
   private vcConfigOverrides: VcConfigOverrides = {};
+  private studio: boolean;
 
   constructor(options: VercelDeployerOptions = {}) {
     super({ name: 'VERCEL' });
     this.outputDir = join('.vercel', 'output', 'functions', 'index.func');
+    this.studio = options.studio ?? false;
 
-    // Store all overrides centrally
-    this.vcConfigOverrides = { ...options };
+    const { studio, ...overrides } = options;
+    this.vcConfigOverrides = { ...overrides };
   }
 
   async prepare(outputDirectory: string): Promise<void> {
     await super.prepare(outputDirectory);
 
     this.writeVercelJSON(join(outputDirectory, this.outputDir, '..', '..'));
+
+    if (this.studio) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+
+      const studioSource = join(dirname(__dirname), 'dist', 'studio');
+      const staticDir = join(outputDirectory, '.vercel', 'output', 'static');
+
+      try {
+        await copy(studioSource, staticDir, { overwrite: true });
+      } catch (err) {
+        throw new Error(
+          `Failed to copy studio assets from "${studioSource}" to "${staticDir}": ${err instanceof Error ? err.message : err}`,
+        );
+      }
+
+      this.injectStudioConfig(staticDir);
+    }
   }
 
   private getEntry(): string {
@@ -28,53 +50,11 @@ import { handle } from 'hono/vercel'
 import { mastra } from '#mastra';
 import { createHonoServer, getToolExports } from '#server';
 import { tools } from '#tools';
-import { evaluate } from '@mastra/core/eval';
-import { AvailableHooks, registerHook } from '@mastra/core/hooks';
-import { TABLE_EVALS } from '@mastra/core/storage';
-import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
-import { checkEvalStorageFields } from '@mastra/core/utils';
-
-registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
-  evaluate({
-    agentName,
-    input,
-    metric,
-    output,
-    runId,
-    globalRunId: runId,
-    instructions,
-  });
-});
+import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
 if (mastra.getStorage()) {
   mastra.__registerInternalWorkflow(scoreTracesWorkflow);
 }
-
-registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-  const storage = mastra.getStorage();
-  if (storage) {
-    // Check for required fields
-    const logger = mastra?.getLogger();
-    const areFieldsValid = checkEvalStorageFields(traceObject, logger);
-    if (!areFieldsValid) return;
-
-    await storage.insert({
-      tableName: TABLE_EVALS,
-      record: {
-        input: traceObject.input,
-        output: traceObject.output,
-        result: JSON.stringify(traceObject.result || {}),
-        agent_name: traceObject.agentName,
-        metric_name: traceObject.metricName,
-        instructions: traceObject.instructions,
-        test_info: null,
-        global_run_id: traceObject.globalRunId,
-        run_id: traceObject.runId,
-        created_at: new Date().toISOString(),
-      },
-    });
-  }
-});
 
 const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
 
@@ -88,19 +68,41 @@ export const HEAD = handle(app);
 `;
   }
 
+  private injectStudioConfig(staticDir: string) {
+    const indexPath = join(staticDir, 'index.html');
+    let html = readFileSync(indexPath, 'utf-8');
+
+    /**
+     * Use window.location expressions so the SPA constructs the correct same-origin endpoint.
+     * Port uses a ternary: window.location.port is '' for default ports (80/443), and the SPA falls back to 4111 for empty strings, so we return the default port explicitly instead.
+     */
+    html = injectStudioHtmlConfig(html, {
+      host: `window.location.hostname`,
+      port: `(window.location.port || (window.location.protocol === 'https:' ? '443' : '80'))`,
+      protocol: `window.location.protocol.replace(':', '')`,
+      apiPrefix: `'/api'`,
+      basePath: '',
+      hideCloudCta: `'true'`,
+      cloudApiEndpoint: `''`,
+      experimentalFeatures: `'false'`,
+      telemetryDisabled: `''`,
+      requestContextPresets: `''`,
+    });
+
+    writeFileSync(indexPath, html);
+  }
+
   private writeVercelJSON(outputDirectory: string) {
-    writeFileSync(
-      join(outputDirectory, 'config.json'),
-      JSON.stringify({
-        version: 3,
-        routes: [
-          {
-            src: '/(.*)',
-            dest: '/',
-          },
-        ],
-      }),
-    );
+    const routes = this.studio
+      ? [
+          { src: '/api/(.*)', dest: '/' },
+          { src: '/health', dest: '/' },
+          { handle: 'filesystem' as const },
+          { src: '/(.*)', dest: '/index.html', check: true },
+        ]
+      : [{ src: '/(.*)', dest: '/' }];
+
+    writeFileSync(join(outputDirectory, 'config.json'), JSON.stringify({ version: 3, routes }));
   }
 
   async bundle(

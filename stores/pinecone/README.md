@@ -13,10 +13,10 @@ pnpm add @mastra/pinecone
 ```typescript
 import { PineconeVector } from '@mastra/pinecone';
 
-const vectorStore = new PineconeVector(
-  'your-api-key',
-  'optional-environment-url'
-);
+const vectorStore = new PineconeVector({
+  id: 'my-pinecone',
+  apiKey: 'your-api-key',
+});
 
 // Create a new index
 await vectorStore.createIndex({ indexName: 'my-index', dimension: 1536, metric: 'cosine' });
@@ -30,9 +30,9 @@ const ids = await vectorStore.upsert({ indexName: 'my-index', vectors, metadata 
 const results = await vectorStore.query({
   indexName: 'my-index',
   queryVector: [0.1, 0.2, ...],
-  topK: 10, // topK
-  filter: { text: { $eq: 'doc1' } }, // optional filter
-  includeVector: false, // includeValues
+  topK: 10,
+  filter: { text: { $eq: 'doc1' } },
+  includeVector: false,
 });
 ```
 
@@ -40,11 +40,14 @@ const results = await vectorStore.query({
 
 Required:
 
+- `id`: Unique identifier for this vector store instance
 - `apiKey`: Your Pinecone API key
 
 Optional:
 
-- `environment`: Your Pinecone environment URL (controller host URL)
+- `controllerHostUrl`: Custom Pinecone controller host URL
+- `cloud`: Cloud provider for new index creation ('aws' | 'gcp' | 'azure', default: 'aws')
+- `region`: Region for new index creation (default: 'us-east-1')
 
 ## Features
 
@@ -62,6 +65,9 @@ Optional:
 - `createIndex({indexName, dimension, metric?})`: Create a new index
 - `upsert({indexName, vectors, metadata?, ids?})`: Add or update vectors
 - `query({indexName, queryVector, topK?, filter?, includeVector?})`: Search for similar vectors
+- `updateVector({ indexName, id?, filter?, namespace?, update })`: Update a single vector by ID or metadata filter
+- `deleteVector({ indexName, id })`: Delete a single vector by ID
+- `deleteVectors({ indexName, ids?, filter?, namespace? })`: Delete multiple vectors by IDs or metadata filter
 - `listIndexes()`: List all indexes
 - `describeIndex(indexName)`: Get index statistics
 - `deleteIndex(indexName)`: Delete an index

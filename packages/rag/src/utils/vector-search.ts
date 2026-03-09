@@ -1,5 +1,5 @@
 import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
-import { embedV1, embedV2 } from '@mastra/core/vector';
+import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
 
@@ -44,12 +44,21 @@ export const vectorQuerySearch = async ({
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
   let embeddingResult;
 
-  if (model.specificationVersion === 'v2') {
+  if (model.specificationVersion === 'v3') {
+    embeddingResult = await embedV3({
+      model: model,
+      value: queryText,
+      maxRetries,
+      // Type assertion needed: providerOptions type is a union, but embedV3 expects specific version
+      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV3>[0]['providerOptions'] }),
+    });
+  } else if (model.specificationVersion === 'v2') {
     embeddingResult = await embedV2({
       model: model,
       value: queryText,
       maxRetries,
-      ...(providerOptions && { providerOptions }),
+      // Type assertion needed: providerOptions type is a union, but embedV2 expects specific version
+      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV2>[0]['providerOptions'] }),
     });
   } else {
     embeddingResult = await embedV1({

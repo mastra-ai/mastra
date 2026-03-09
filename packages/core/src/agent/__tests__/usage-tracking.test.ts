@@ -1,4 +1,4 @@
-import { convertArrayToReadableStream, MockLanguageModelV2 } from 'ai-v5/test';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect } from 'vitest';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
@@ -22,9 +22,9 @@ describe('Agent usage tracking', () => {
           doStream: async () => {
             return {
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello world!' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello world!' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -36,7 +36,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -64,10 +65,10 @@ describe('Agent usage tracking', () => {
           doStream: async () => {
             return {
               stream: convertArrayToReadableStream([
-                { type: 'text-start', id: '1' },
-                { type: 'text-delta', id: '1', delta: 'Hello ' },
-                { type: 'text-delta', id: '1', delta: 'world!' },
-                { type: 'text-end', id: '1' },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello ' },
+                { type: 'text-delta', id: 'text-1', delta: 'world!' },
+                { type: 'text-end', id: 'text-1' },
                 {
                   type: 'finish',
                   finishReason: 'stop',
@@ -79,7 +80,8 @@ describe('Agent usage tracking', () => {
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -113,10 +115,12 @@ describe('Agent usage tracking', () => {
         // Create a V1 mock that returns usage in legacy format
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -138,10 +142,12 @@ describe('Agent usage tracking', () => {
       it('should expose usage with promptTokens and completionTokens (legacy format)', async () => {
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -171,10 +177,12 @@ describe('Agent usage tracking', () => {
       it('generate should use promptTokens/completionTokens until migration', async () => {
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });
@@ -190,10 +198,12 @@ describe('Agent usage tracking', () => {
       it('stream should use promptTokens/completionTokens until migration', async () => {
         const model = createMockModel({
           mockText: 'Hello world!',
+          version: 'v1',
         });
 
         const agent = new Agent({
-          name: 'test-agent',
+          id: 'test-agent',
+          name: 'Test Agent',
           model,
           instructions: 'You are a helpful assistant',
         });

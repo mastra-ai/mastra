@@ -1,0 +1,72 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic.js 1`] = `
+"import { TestDeployer } from '@mastra/deployer/test';
+
+const deployer = new TestDeployer();
+
+export { deployer };
+"
+`;
+
+exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-const.js 1`] = `
+"import { createApiRoute } from '@mastra/core/server';
+import { TestDeployer } from '@mastra/deployer/test';
+
+const testDeployer = new TestDeployer();
+({
+  apiRoutes: [createApiRoute({
+    path: "/hello",
+    method: "get",
+    handler: async (req, res) => {
+      res.send("Hello World");
+    }
+  })]
+});
+const deployer = testDeployer;
+
+export { deployer };
+"
+`;
+
+exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-function.js 1`] = `
+"import { testDeployer } from '@mastra/deployer/test';
+
+function getDeployer() {
+  return testDeployer;
+}
+const deployer = getDeployer();
+
+export { deployer };
+"
+`;
+
+exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-import.js 1`] = `
+"import { testDeployer } from '@mastra/deployer/test';
+
+const deployer = testDeployer;
+
+export { deployer };
+"
+`;
+
+exports[`Remove deployer > should remove the deployer from ./__fixtures__/basic-with-spread.js 1`] = `
+"import { createLogger } from '@mastra/core/logger';
+import { TestDeployer } from '@mastra/deployer/test';
+
+({
+  logger: createLogger({
+    name: "yo",
+    level: "info"
+  })
+});
+({
+  deployer: new TestDeployer({
+    name: "yo"
+  })
+});
+const deployer = {};
+
+export { deployer };
+"
+`;

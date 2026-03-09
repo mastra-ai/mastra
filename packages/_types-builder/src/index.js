@@ -3,11 +3,37 @@ import { globby } from 'globby';
 import fs from 'fs/promises';
 import path from 'path';
 import { statSync } from 'fs';
+import { replaceTypes } from './replace-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
 
+// pnpm-specific environment variables that npm doesn't recognize
+// These cause "Unknown env config" warnings when passed to npx/npm
+const pnpmSpecificEnvVars = new Set([
+  'npm_config_catalog',
+  'npm_config_verify-deps-before-run',
+  'npm_config_npm-globalconfig',
+  'npm_config__jsr-registry',
+  'npm_config_patched-dependencies',
+]);
+
+/**
+ * Get a filtered copy of process.env without pnpm-specific npm_config_* variables
+ * @returns {NodeJS.ProcessEnv}
+ */
+function getFilteredEnv() {
+  return Object.fromEntries(Object.entries(process.env).filter(([key]) => !pnpmSpecificEnvVars.has(key)));
+}
+
 // @see https://blog.devgenius.io/compiling-from-typescript-with-js-extension-e2b6de3e6baf
-export async function generateTypes(rootDir) {
+/**
+ * Generate types for the given root directory and bundled packages.
+ *
+ * @param {string} rootDir
+ * @param {Set<string>} bundledPackages
+ * @returns {Promise<void>}
+ */
+export async function generateTypes(rootDir, bundledPackages = new Set()) {
   try {
     // Use spawn instead of exec to properly inherit stdio
     // Use shell: true for cross-platform compatibility
@@ -15,6 +41,7 @@ export async function generateTypes(rootDir) {
       cwd: rootDir,
       stdio: 'inherit',
       shell: true,
+      env: getFilteredEnv(),
     });
 
     await new Promise((resolve, reject) => {
@@ -33,8 +60,18 @@ export async function generateTypes(rootDir) {
       cwd: rootDir,
       onlyFiles: true,
     });
+
     for (const dtsFile of dtsFiles) {
       const fullPath = path.join(rootDir, dtsFile);
+      if (bundledPackages.size) {
+        try {
+          await replaceTypes(fullPath, rootDir, bundledPackages);
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.log(`failed to embed types: ${fullPath}`, err);
+          throw err;
+        }
+      }
       let modified = false;
       let code = (await fs.readFile(fullPath)).toString();
 

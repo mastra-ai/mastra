@@ -1,5 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
+import type z from 'zod';
 import { resolveModel } from '../../utils';
 import { PlanningIterationResultSchema } from '../shared/schema';
 import { taskPlanningPrompts } from './prompts';
@@ -13,6 +14,8 @@ import {
   TaskApprovalSuspendSchema,
 } from './schema';
 
+type PlanningIterationResult = z.infer<typeof PlanningIterationResultSchema>;
+
 // Planning iteration step (with questions and user answers)
 const planningIterationStep = createStep({
   id: 'planning-iteration',
@@ -21,7 +24,7 @@ const planningIterationStep = createStep({
   outputSchema: PlanningIterationResultSchema,
   suspendSchema: PlanningIterationSuspendSchema,
   resumeSchema: PlanningIterationResumeSchema,
-  execute: async ({ inputData, resumeData, suspend, runtimeContext }) => {
+  execute: async ({ inputData, resumeData, suspend, requestContext }) => {
     const {
       action,
       workflowName,
@@ -35,14 +38,14 @@ const planningIterationStep = createStep({
 
     console.info('Starting planning iteration...');
 
-    // Get or initialize Q&A tracking in runtime context
+    // Get or initialize Q&A tracking in request context
     const qaKey = 'workflow-builder-qa';
     let storedQAPairs: Array<{
       question: any;
       answer: string | null;
       askedAt: string;
       answeredAt: string | null;
-    }> = runtimeContext.get(qaKey) || [];
+    }> = requestContext.get(qaKey) || [];
 
     // Process new answers from user input or resume data
     const newAnswers = { ...(userAnswers || {}), ...(resumeData?.answers || {}) };
@@ -62,8 +65,8 @@ const planningIterationStep = createStep({
         return pair;
       });
 
-      // Store updated pairs back to runtime context
-      runtimeContext.set(qaKey, storedQAPairs);
+      // Store updated pairs back to request context
+      requestContext.set(qaKey, storedQAPairs);
     }
 
     // console.info('after', storedQAPairs);
@@ -75,9 +78,10 @@ const planningIterationStep = createStep({
     try {
       // const filteredMcpTools = await initializeMcpTools();
 
-      const model = await resolveModel({ runtimeContext });
+      const model = await resolveModel({ requestContext });
 
       const planningAgent = new Agent({
+        id: 'workflow-planning-agent',
         model,
         instructions: taskPlanningPrompts.planningAgent.instructions({
           storedQAPairs,
@@ -113,11 +117,13 @@ const planningIterationStep = createStep({
           });
 
       const result = await planningAgent.generate(planningPrompt, {
-        output: PlanningAgentOutputSchema,
+        structuredOutput: {
+          schema: PlanningAgentOutputSchema,
+        },
         // maxSteps: 15,
       });
 
-      const planResult = await result.object;
+      const planResult = (await result.object) as unknown as PlanningIterationResult | null;
       if (!planResult) {
         return {
           tasks: [],
@@ -135,7 +141,7 @@ const planningIterationStep = createStep({
 
         console.info(planResult.questions);
 
-        // Store new questions as Q&A pairs in runtime context
+        // Store new questions as Q&A pairs in request context
         const newQAPairs = planResult.questions.map((question: any) => ({
           question,
           answer: null,
@@ -144,7 +150,7 @@ const planningIterationStep = createStep({
         }));
 
         storedQAPairs = [...storedQAPairs, ...newQAPairs];
-        runtimeContext.set(qaKey, storedQAPairs);
+        requestContext.set(qaKey, storedQAPairs);
 
         console.info(
           `Updated Q&A state: ${storedQAPairs.length} total question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
@@ -163,8 +169,8 @@ const planningIterationStep = createStep({
       // Plan is complete
       console.info(`Planning complete with ${planResult.tasks.length} tasks`);
 
-      // Update runtime context with final state
-      runtimeContext.set(qaKey, storedQAPairs);
+      // Update request context with final state
+      requestContext.set(qaKey, storedQAPairs);
       console.info(
         `Final Q&A state: ${storedQAPairs.length} total question-answer pairs, ${storedQAPairs.filter(p => p.answer).length} answered`,
       );

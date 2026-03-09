@@ -1,8 +1,9 @@
 const meta = {
-  index: "Overview",
-  netlify: "Netlify",
-  openrouter: "OpenRouter",
-  vercel: "Vercel",
-};
+  index: 'Overview',
+  azure: 'Azure OpenAI',
+  netlify: 'Netlify',
+  openrouter: 'OpenRouter',
+  vercel: 'Vercel',
+}
 
-export default meta;
+export default meta

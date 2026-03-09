@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { TraceTimelineSpan } from './trace-timeline-span';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { UISpan } from '../types';
 
 type TraceTimelineProps = {
@@ -8,9 +8,22 @@ type TraceTimelineProps = {
   onSpanClick: (id: string) => void;
   selectedSpanId?: string;
   isLoading?: boolean;
+  fadedTypes?: string[];
+  expandedSpanIds?: string[];
+  setExpandedSpanIds?: React.Dispatch<React.SetStateAction<string[]>>;
+  featuredSpanIds?: string[];
 };
 
-export function TraceTimeline({ hierarchicalSpans = [], onSpanClick, selectedSpanId, isLoading }: TraceTimelineProps) {
+export function TraceTimeline({
+  hierarchicalSpans = [],
+  onSpanClick,
+  selectedSpanId,
+  isLoading,
+  fadedTypes,
+  expandedSpanIds,
+  setExpandedSpanIds,
+  featuredSpanIds,
+}: TraceTimelineProps) {
   const overallLatency = hierarchicalSpans?.[0]?.latency || 0;
   const overallStartTime = hierarchicalSpans?.[0]?.startTime || '';
   const overallEndTime = hierarchicalSpans?.[0]?.endTime || '';
@@ -20,7 +33,7 @@ export function TraceTimeline({ hierarchicalSpans = [], onSpanClick, selectedSpa
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center text-[0.875rem] gap-[1rem] bg-surface3/50 rounded-md p-[1.5rem] justify-center text-icon3',
+            'flex items-center text-ui-md gap-4 bg-surface3/50 rounded-md p-6 justify-center text-neutral3',
             '[&_svg]:w-[1.25em] [&_svg]:h-[1.25em] [&_svg]:opacity-50',
           )}
         >
@@ -28,9 +41,9 @@ export function TraceTimeline({ hierarchicalSpans = [], onSpanClick, selectedSpa
         </div>
       ) : (
         <div
-          className={cn('grid items-start content-start gap-y-[2px] overflow-hidden', 'xl:gap-x-[1rem] xl:py-[1rem]', {
-            'xl:grid-cols-[3fr_auto]': !overallEndTime,
-            'xl:grid-cols-[3fr_2fr]': overallEndTime,
+          className={cn('grid items-start content-start gap-y-0.5 overflow-hidden grid-cols-[1fr_auto] xl:py-4', {
+            'xl:grid-cols-[1fr_auto_auto]': !overallEndTime,
+            'xl:grid-cols-[2fr_auto_1fr]': overallEndTime,
           })}
         >
           {hierarchicalSpans?.map(span => (
@@ -42,6 +55,10 @@ export function TraceTimeline({ hierarchicalSpans = [], onSpanClick, selectedSpa
               overallLatency={overallLatency}
               overallStartTime={overallStartTime}
               overallEndTime={overallEndTime}
+              fadedTypes={fadedTypes}
+              featuredSpanIds={featuredSpanIds}
+              expandedSpanIds={expandedSpanIds}
+              setExpandedSpanIds={setExpandedSpanIds}
             />
           ))}
         </div>

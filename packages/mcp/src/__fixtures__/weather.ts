@@ -1,5 +1,5 @@
-import type { IncomingMessage, ServerResponse } from 'http';
-import { createServer } from 'http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createServer } from 'node:http';
 import { createTool } from '@mastra/core/tools';
 import type { Prompt, PromptMessage, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
@@ -30,9 +30,9 @@ const weatherToolDefinition = createTool({
   id: 'getWeather',
   description: 'Get current weather for a location',
   inputSchema: weatherInputSchema,
-  execute: async ({ context }) => {
+  execute: async input => {
     try {
-      const weatherData = await getWeather(context.location);
+      const weatherData = await getWeather(input.location);
       return {
         content: [
           {

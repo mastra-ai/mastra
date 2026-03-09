@@ -1,6 +1,8 @@
 ---
-title: "Reference: Mastra.getDeployer() | Core | Mastra Docs"
+title: "Reference: Mastra.getDeployer() | Core"
 description: "Documentation for the `Mastra.getDeployer()` method in Mastra, which retrieves the configured deployer instance."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.getDeployer()
@@ -9,27 +11,27 @@ The `.getDeployer()` method is used to retrieve the deployer instance that has b
 
 ## Usage example
 
-```typescript copy
-mastra.getDeployer();
+```typescript
+mastra.getDeployer()
 ```
 
 ## Parameters
 
-This method does not accept any parameters.
+This method doesn't accept any parameters.
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "deployer",
-      type: "MastraDeployer | undefined",
-      description: "The configured deployer instance, or undefined if no deployer has been configured.",
-    },
-  ]}
+  {
+    name: 'deployer',
+    type: 'MastraDeployer | undefined',
+    description: 'The configured deployer instance, or undefined if no deployer has been configured.',
+  },
+]}
 />
 
 ## Related
 
-- [Deployment overview](../../docs/deployment/overview.mdx)
-- [Deployer reference](../../reference/deployer/deployer.mdx)
+- [Deployment overview](/docs/deployment/overview)
+- [Deployer reference](/reference/deployer/)

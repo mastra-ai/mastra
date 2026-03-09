@@ -1,36 +1,31 @@
+import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import z from 'zod';
-import { Agent } from '../../agent';
-import type { MastraMessageV2 } from '../../agent/message-list';
+import { Agent, isSupportedLanguageModel } from '../../agent';
+import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
-import type { TracingContext } from '../../ai-tracing';
+import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
 /**
- * Confidence scores for each moderation category (0-1)
+ * Individual moderation category score
  */
-export interface ModerationCategoryScores {
-  hate?: number;
-  'hate/threatening'?: number;
-  harassment?: number;
-  'harassment/threatening'?: number;
-  'self-harm'?: number;
-  'self-harm/intent'?: number;
-  'self-harm/instructions'?: number;
-  sexual?: number;
-  'sexual/minors'?: number;
-  violence?: number;
-  'violence/graphic'?: number;
-  [customCategory: string]: number | undefined;
+export interface ModerationCategoryScore {
+  category: string;
+  score: number;
 }
+
+export type ModerationCategoryScores = ModerationCategoryScore[];
 
 /**
  * Result structure for moderation
  */
 export interface ModerationResult {
-  category_scores?: ModerationCategoryScores;
-  reason?: string;
+  category_scores: ModerationCategoryScores | null;
+  reason: string | null;
 }
 
 /**
@@ -81,6 +76,29 @@ export interface ModerationOptions {
    * Default: 0 (no context window)
    */
   chunkWindow?: number;
+
+  /**
+   * Structured output options used for the moderation agent
+   */
+  structuredOutputOptions?: {
+    /**
+     * Whether to use system prompt injection instead of native response format to coerce the LLM to respond with json text if the LLM does not natively support structured outputs.
+     */
+    jsonPromptInjection?: boolean;
+  };
+
+  /**
+   * Provider-specific options passed to the internal moderation agent.
+   * Use this to control model behavior like reasoning effort for thinking models.
+   *
+   * @example
+   * ```ts
+   * providerOptions: {
+   *   openai: { reasoningEffort: 'low' }
+   * }
+   * ```
+   */
+  providerOptions?: ProviderOptions;
 }
 
 /**
@@ -90,8 +108,9 @@ export interface ModerationOptions {
  * Provides flexible moderation with custom categories, thresholds, and strategies
  * while maintaining compatibility with OpenAI's moderation API structure.
  */
-export class ModerationProcessor implements Processor {
-  readonly name = 'moderation';
+export class ModerationProcessor implements Processor<'moderation'> {
+  readonly id = 'moderation';
+  readonly name = 'Moderation';
 
   private moderationAgent: Agent;
   private categories: string[];
@@ -99,6 +118,8 @@ export class ModerationProcessor implements Processor {
   private strategy: 'block' | 'warn' | 'filter';
   private includeScores: boolean;
   private chunkWindow: number;
+  private structuredOutputOptions?: ModerationOptions['structuredOutputOptions'];
+  private providerOptions?: ProviderOptions;
 
   // Default OpenAI moderation categories
   private static readonly DEFAULT_CATEGORIES = [
@@ -121,29 +142,34 @@ export class ModerationProcessor implements Processor {
     this.strategy = options.strategy || 'block';
     this.includeScores = options.includeScores ?? false;
     this.chunkWindow = options.chunkWindow ?? 0;
+    this.structuredOutputOptions = options.structuredOutputOptions;
+    this.providerOptions = options.providerOptions;
 
     // Create internal moderation agent
     this.moderationAgent = new Agent({
-      name: 'content-moderator',
+      id: 'content-moderator',
+      name: 'Content Moderator',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
     });
   }
 
-  async processInput(args: {
-    messages: MastraMessageV2[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, tracingContext } = args;
+      const { messages, abort, ...rest } = args;
+      const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
         return messages;
       }
 
       const results: ModerationResult[] = [];
-      const passedMessages: MastraMessageV2[] = [];
+      const passedMessages: MastraDBMessage[] = [];
 
       // Evaluate each message
       for (const message of messages) {
@@ -154,7 +180,7 @@ export class ModerationProcessor implements Processor {
           continue;
         }
 
-        const moderationResult = await this.moderateContent(textContent, false, tracingContext);
+        const moderationResult = await this.moderateContent(textContent, false, observabilityContext);
         results.push(moderationResult);
 
         if (this.isModerationFlagged(moderationResult)) {
@@ -178,23 +204,26 @@ export class ModerationProcessor implements Processor {
     }
   }
 
-  async processOutputResult(args: {
-    messages: MastraMessageV2[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<MastraMessageV2[]> {
+  async processOutputResult(
+    args: {
+      messages: MastraDBMessage[];
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MastraDBMessage[]> {
     return this.processInput(args);
   }
 
-  async processOutputStream(args: {
-    part: ChunkType;
-    streamParts: ChunkType[];
-    state: Record<string, any>;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<ChunkType | null | undefined> {
+  async processOutputStream(
+    args: {
+      part: ChunkType;
+      streamParts: ChunkType[];
+      state: Record<string, any>;
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<ChunkType | null | undefined> {
     try {
-      const { part, streamParts, abort, tracingContext } = args;
+      const { part, streamParts, abort, ...rest } = args;
+      const observabilityContext = resolveObservabilityContext(rest);
 
       // Only process text-delta chunks for moderation
       if (part.type !== 'text-delta') {
@@ -204,7 +233,7 @@ export class ModerationProcessor implements Processor {
       // Build context from chunks based on chunkWindow (streamParts includes the current part)
       const contentToModerate = this.buildContextFromChunks(streamParts);
 
-      const moderationResult = await this.moderateContent(contentToModerate, true, tracingContext);
+      const moderationResult = await this.moderateContent(contentToModerate, true, observabilityContext);
 
       if (this.isModerationFlagged(moderationResult)) {
         this.handleFlaggedContent(moderationResult, this.strategy, abort);
@@ -232,7 +261,7 @@ export class ModerationProcessor implements Processor {
   private async moderateContent(
     content: string,
     isStream = false,
-    tracingContext?: TracingContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<ModerationResult> {
     const prompt = this.createModerationPrompt(content, isStream);
 
@@ -240,44 +269,54 @@ export class ModerationProcessor implements Processor {
       const model = await this.moderationAgent.getModel();
       const schema = z.object({
         category_scores: z
-          .object(
-            this.categories.reduce(
-              (props, category) => {
-                props[category] = z.number().min(0).max(1).optional();
-                return props;
-              },
-              {} as Record<string, z.ZodType<number | undefined>>,
-            ),
+          .array(
+            z.object({
+              category: z
+                .enum(this.categories as [string, ...string[]])
+                .describe('The moderation category being evaluated'),
+              score: z
+                .number()
+                .min(0)
+                .max(1)
+                .describe('Confidence score between 0 and 1 indicating how strongly the content matches this category'),
+            }),
           )
-          .optional(),
-        reason: z.string().optional(),
+          .describe('Array of flagged categories with their confidence scores')
+          .nullable(),
+        reason: z.string().describe('Brief explanation of why content was flagged').nullable(),
       });
       let response;
-      if (model.specificationVersion === 'v2') {
+      if (isSupportedLanguageModel(model)) {
         response = await this.moderationAgent.generate(prompt, {
           structuredOutput: {
             schema,
+            ...(this.structuredOutputOptions ?? {}),
           },
           modelSettings: {
             temperature: 0,
           },
-          tracingContext,
+          providerOptions: this.providerOptions,
+          ...observabilityContext,
         });
       } else {
         response = await this.moderationAgent.generateLegacy(prompt, {
           output: schema,
           temperature: 0,
-          tracingContext,
+          providerOptions: this.providerOptions as SharedV2ProviderOptions,
+          ...observabilityContext,
         });
       }
 
-      const result = response.object as ModerationResult;
+      const result = response.object satisfies ModerationResult;
 
       return result;
     } catch (error) {
       console.warn('[ModerationProcessor] Agent moderation failed, allowing content:', error);
       // Fail open - return empty result if moderation agent fails (no moderation needed)
-      return {};
+      return {
+        category_scores: null,
+        reason: null,
+      };
     }
   }
 
@@ -286,10 +325,8 @@ export class ModerationProcessor implements Processor {
    */
   private isModerationFlagged(result: ModerationResult): boolean {
     // Check if any category scores exceed the threshold
-    if (result.category_scores) {
-      const scores = Object.values(result.category_scores).filter(score => typeof score === 'number') as number[];
-      if (scores.length === 0) return false;
-      const maxScore = Math.max(...scores);
+    if (result.category_scores && result.category_scores.length > 0) {
+      const maxScore = Math.max(...result.category_scores.map(cat => cat.score));
       return maxScore >= this.threshold;
     }
 
@@ -304,13 +341,13 @@ export class ModerationProcessor implements Processor {
     strategy: 'block' | 'warn' | 'filter',
     abort: (reason?: string) => never,
   ): void {
-    const flaggedCategories = Object.entries(result.category_scores || {})
-      .filter(([_, score]) => typeof score === 'number' && score >= this.threshold)
-      .map(([category]) => category);
+    const flaggedCategories = (result.category_scores || [])
+      .filter(cat => cat.score >= this.threshold)
+      .map(cat => cat.category);
 
     const message = `Content flagged for moderation. Categories: ${flaggedCategories.join(', ')}${
       result.reason ? `. Reason: ${result.reason}` : ''
-    }${this.includeScores ? `. Scores: ${JSON.stringify(result.category_scores)}` : ''}`;
+    }${this.includeScores ? `. Scores: ${result.category_scores?.map(cat => `${cat.category}: ${cat.score}`).join(', ')}` : ''}`;
 
     switch (strategy) {
       case 'block':
@@ -328,7 +365,7 @@ export class ModerationProcessor implements Processor {
   /**
    * Extract text content from message for moderation
    */
-  private extractTextContent(message: MastraMessageV2): string {
+  private extractTextContent(message: MastraDBMessage): string {
     let text = '';
 
     if (message.content.parts) {
@@ -355,7 +392,7 @@ export class ModerationProcessor implements Processor {
 Evaluate the provided content against these categories:
 ${this.categories.map(cat => `- ${cat}`).join('\n')}
 
-IMPORTANT: IF NO MODERATION IS NEEDED, RETURN AN EMPTY OBJECT, DO NOT INCLUDE ANYTHING ELSE. Do not include any zeros in your response, if the response should be 0, omit it, they will be counted as false.
+IMPORTANT: Only include categories that are actually flagged. If no moderation issues are detected, return an empty array for category_scores.
 
 Guidelines:
 - Be thorough but not overly strict

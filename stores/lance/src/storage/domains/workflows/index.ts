@@ -1,72 +1,99 @@
 import type { Connection } from '@lancedb/lancedb';
-import type { StepResult, WorkflowRunState, WorkflowRuns } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { WorkflowRun } from '@mastra/core/storage';
-import { ensureDate, TABLE_WORKFLOW_SNAPSHOT, WorkflowsStorage } from '@mastra/core/storage';
+import type {
+  WorkflowRun,
+  StorageListWorkflowRunsInput,
+  WorkflowRuns,
+  UpdateWorkflowStateOptions,
+} from '@mastra/core/storage';
+import {
+  createStorageErrorId,
+  ensureDate,
+  normalizePerPage,
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
+  WorkflowsStorage,
+} from '@mastra/core/storage';
+import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import { LanceDB, resolveLanceConfig } from '../../db';
+import type { LanceDomainConfig } from '../../db';
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: ensureDate(row.createdAt)!,
-    updatedAt: ensureDate(row.updatedAt)!,
-    resourceId: row.resourceId,
-  };
+/**
+ * Escapes single quotes in SQL string values to prevent SQL injection.
+ */
+function escapeSql(str: string): string {
+  return str.replace(/'/g, "''");
 }
 
 export class StoreWorkflowsLance extends WorkflowsStorage {
   client: Connection;
-  constructor({ client }: { client: Connection }) {
+  #db: LanceDB;
+  constructor(config: LanceDomainConfig) {
     super();
+    const client = resolveLanceConfig(config);
     this.client = client;
+    this.#db = new LanceDB({ client });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // runtimeContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      runtimeContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  supportsConcurrentUpdates(): boolean {
+    return false;
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: {
-        status: string;
-        result?: StepResult<any, any, any, any>;
-        error?: string;
-        suspendedPaths?: Record<string, number[]>;
-        waitingPaths?: Record<string, number[]>;
-      };
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: ensureDate(row.createdAt)!,
+      updatedAt: ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
+  }
+
+  async init(): Promise<void> {
+    const schema = TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT];
+    await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema });
+    // Add resourceId column for backwards compatibility
+    await this.#db.alterTable({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema,
+      ifNotExists: ['resourceId'],
+    });
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  async updateWorkflowResults(_args: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    throw new Error(
+      'updateWorkflowResults is not implemented for LanceDB storage. LanceDB does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
+  }
+
+  async updateWorkflowState(_args: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    throw new Error(
+      'updateWorkflowState is not implemented for LanceDB storage. LanceDB does not support atomic read-modify-write operations needed for concurrent workflow updates.',
+    );
   }
 
   async persistWorkflowSnapshot({
@@ -74,34 +101,42 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     runId,
     resourceId,
     snapshot,
+    createdAt,
+    updatedAt,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
+    createdAt?: Date;
+    updatedAt?: Date;
   }): Promise<void> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
       // Try to find the existing record
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table
+        .query()
+        .where(`workflow_name = '${escapeSql(workflowName)}' AND run_id = '${escapeSql(runId)}'`);
       const records = await query.toArray();
-      let createdAt: number;
-      const now = Date.now();
+      let createdAtValue: number;
+      const now = createdAt?.getTime() ?? Date.now();
 
       if (records.length > 0) {
-        createdAt = records[0].createdAt ?? now;
+        createdAtValue = records[0].createdAt ?? now;
       } else {
-        createdAt = now;
+        createdAtValue = now;
       }
+
+      const { status, value, ...rest } = snapshot;
 
       const record = {
         workflow_name: workflowName,
         run_id: runId,
         resourceId,
-        snapshot: JSON.stringify(snapshot),
-        createdAt,
-        updatedAt: now,
+        snapshot: JSON.stringify({ status, value, ...rest }), // this is to ensure status is always just before value, for when querying the db by status
+        createdAt: createdAtValue,
+        updatedAt: updatedAt ?? now,
       };
 
       await table
@@ -112,7 +147,7 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_PERSIST_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('LANCE', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -130,13 +165,15 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   }): Promise<WorkflowRunState | null> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      const query = table.query().where(`workflow_name = '${workflowName}' AND run_id = '${runId}'`);
+      const query = table
+        .query()
+        .where(`workflow_name = '${escapeSql(workflowName)}' AND run_id = '${escapeSql(runId)}'`);
       const records = await query.toArray();
       return records.length > 0 ? JSON.parse(records[0].snapshot) : null;
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_LOAD_WORKFLOW_SNAPSHOT_FAILED',
+          id: createStorageErrorId('LANCE', 'LOAD_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { workflowName, runId },
@@ -155,19 +192,19 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
   } | null> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
-      let whereClause = `run_id = '${args.runId}'`;
+      let whereClause = `run_id = '${escapeSql(args.runId)}'`;
       if (args.workflowName) {
-        whereClause += ` AND workflow_name = '${args.workflowName}'`;
+        whereClause += ` AND workflow_name = '${escapeSql(args.workflowName)}'`;
       }
       const query = table.query().where(whereClause);
       const records = await query.toArray();
       if (records.length === 0) return null;
       const record = records[0];
-      return parseWorkflowRun(record);
+      return this.parseWorkflowRun(record);
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_WORKFLOW_RUN_BY_ID_FAILED',
+          id: createStorageErrorId('LANCE', 'GET_WORKFLOW_RUN_BY_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: args.runId, workflowName: args.workflowName ?? '' },
@@ -177,15 +214,25 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
     }
   }
 
-  async getWorkflowRuns(args?: {
-    namespace?: string;
-    resourceId?: string;
-    workflowName?: string;
-    fromDate?: Date;
-    toDate?: Date;
-    limit?: number;
-    offset?: number;
-  }): Promise<WorkflowRuns> {
+  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+    try {
+      const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
+      const whereClause = `run_id = '${escapeSql(runId)}' AND workflow_name = '${escapeSql(workflowName)}'`;
+      await table.delete(whereClause);
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'DELETE_WORKFLOW_RUN_BY_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId, workflowName },
+        },
+        error,
+      );
+    }
+  }
+
+  async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     try {
       const table = await this.client.openTable(TABLE_WORKFLOW_SNAPSHOT);
 
@@ -194,11 +241,23 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
       const conditions: string[] = [];
 
       if (args?.workflowName) {
-        conditions.push(`workflow_name = '${args.workflowName.replace(/'/g, "''")}'`);
+        conditions.push(`workflow_name = '${escapeSql(args.workflowName)}'`);
+      }
+
+      if (args?.status) {
+        // Escape for LIKE pattern: backslashes, single quotes, and LIKE wildcards
+        const escapedStatus = args.status
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "''")
+          .replace(/%/g, '\\%')
+          .replace(/_/g, '\\_');
+        // Note: Using LIKE pattern since LanceDB doesn't support JSON extraction on string columns
+        // The pattern ensures we match the workflow status (which appears before "value") and not step status
+        conditions.push(`\`snapshot\` LIKE '%"status":"${escapedStatus}","value"%'`);
       }
 
       if (args?.resourceId) {
-        conditions.push(`\`resourceId\` = '${args.resourceId}'`);
+        conditions.push(`\`resourceId\` = '${escapeSql(args.resourceId)}'`);
       }
 
       if (args?.fromDate instanceof Date) {
@@ -219,27 +278,38 @@ export class StoreWorkflowsLance extends WorkflowsStorage {
         total = await table.countRows();
       }
 
-      if (args?.limit) {
-        query.limit(args.limit);
-      }
+      if (args?.perPage !== undefined && args?.page !== undefined) {
+        const normalizedPerPage = normalizePerPage(args.perPage, Number.MAX_SAFE_INTEGER);
 
-      if (args?.offset) {
-        query.offset(args.offset);
+        if (args.page < 0 || !Number.isInteger(args.page)) {
+          throw new MastraError(
+            {
+              id: createStorageErrorId('LANCE', 'LIST_WORKFLOW_RUNS', 'INVALID_PAGINATION'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { page: args.page, perPage: args.perPage },
+            },
+            new Error(`Invalid pagination parameters: page=${args.page}, perPage=${args.perPage}`),
+          );
+        }
+        const offset = args.page * normalizedPerPage;
+        query.limit(normalizedPerPage);
+        query.offset(offset);
       }
 
       const records = await query.toArray();
 
       return {
-        runs: records.map(record => parseWorkflowRun(record)),
+        runs: records.map(record => this.parseWorkflowRun(record)),
         total: total || records.length,
       };
     } catch (error: any) {
       throw new MastraError(
         {
-          id: 'LANCE_STORE_GET_WORKFLOW_RUNS_FAILED',
+          id: createStorageErrorId('LANCE', 'LIST_WORKFLOW_RUNS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
-          details: { namespace: args?.namespace ?? '', workflowName: args?.workflowName ?? '' },
+          details: { resourceId: args?.resourceId ?? '', workflowName: args?.workflowName ?? '' },
         },
         error,
       );

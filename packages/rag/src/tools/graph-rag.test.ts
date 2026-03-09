@@ -1,4 +1,4 @@
-import { RuntimeContext } from '@mastra/core/runtime-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GraphRAG } from '../graph-rag';
 import { vectorQuerySearch } from '../utils';
@@ -18,19 +18,31 @@ vi.mock('../utils', async importOriginal => {
   };
 });
 
+// Create a mock instance tracker
+const mockGraphRAGInstances: any[] = [];
+
 vi.mock('../graph-rag', async importOriginal => {
   const actual: any = await importOriginal();
+
+  // Use a class for constructor (Vitest v4 requirement)
+  class MockGraphRAG {
+    createGraph = vi.fn();
+    query = vi.fn(() => [
+      { content: 'foo', metadata: { text: 'foo' } },
+      { content: 'bar', metadata: { text: 'bar' } },
+    ]);
+
+    constructor() {
+      mockGraphRAGInstances.push(this);
+    }
+  }
+
+  // Create a spy on the class
+  const GraphRAGSpy = vi.fn(MockGraphRAG as any);
+
   return {
     ...actual,
-    GraphRAG: vi.fn().mockImplementation(() => {
-      return {
-        createGraph: vi.fn(),
-        query: vi.fn(() => [
-          { content: 'foo', metadata: { text: 'foo' } },
-          { content: 'bar', metadata: { text: 'bar' } },
-        ]),
-      };
-    }),
+    GraphRAG: GraphRAGSpy,
   };
 });
 
@@ -50,6 +62,7 @@ const mockMastra = {
 describe('createGraphRAGTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGraphRAGInstances.length = 0; // Clear instances
   });
 
   it('validates input schema', () => {
@@ -63,26 +76,31 @@ describe('createGraphRAGTool', () => {
     expect(() => tool.inputSchema?.parse({})).toThrow();
   });
 
-  describe('runtimeContext', () => {
-    it('calls vectorQuerySearch and GraphRAG with runtimeContext params', async () => {
+  describe('requestContext', () => {
+    it('calls vectorQuerySearch and GraphRAG with requestContext params', async () => {
       const tool = createGraphRAGTool({
         id: 'test',
         model: mockModel,
         indexName: 'testIndex',
         vectorStoreName: 'testStore',
       });
-      const runtimeContext = new RuntimeContext();
-      runtimeContext.set('indexName', 'anotherIndex');
-      runtimeContext.set('vectorStoreName', 'anotherStore');
-      runtimeContext.set('topK', 5);
-      runtimeContext.set('filter', { foo: 'bar' });
-      runtimeContext.set('randomWalkSteps', 99);
-      runtimeContext.set('restartProb', 0.42);
-      const result = await tool.execute({
-        context: { queryText: 'foo', topK: 2 },
-        mastra: mockMastra as any,
-        runtimeContext,
-      });
+      const requestContext = new RequestContext();
+      requestContext.set('indexName', 'anotherIndex');
+      requestContext.set('vectorStoreName', 'anotherStore');
+      requestContext.set('topK', 5);
+      requestContext.set('filter', { foo: 'bar' });
+      requestContext.set('randomWalkSteps', 99);
+      requestContext.set('restartProb', 0.42);
+      const result = await tool.execute(
+        {
+          queryText: 'foo',
+          topK: 2,
+        },
+        {
+          mastra: mockMastra as any,
+          requestContext,
+        },
+      );
       expect(result.relevantContext).toEqual(['foo', 'bar']);
       expect(result.sources.length).toBe(2);
       expect(vectorQuerySearch).toHaveBeenCalledWith(
@@ -100,7 +118,7 @@ describe('createGraphRAGTool', () => {
       );
       // GraphRAG createGraph and query should be called
       expect(GraphRAG).toHaveBeenCalled();
-      const instance = (GraphRAG as any).mock.results[0].value;
+      const instance = mockGraphRAGInstances[0];
       expect(instance.createGraph).toHaveBeenCalled();
       expect(instance.query).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -110,6 +128,193 @@ describe('createGraphRAGTool', () => {
           restartProb: 0.42,
         }),
       );
+    });
+  });
+
+  describe('dynamic vectorStore (multi-tenant schema support)', () => {
+    it('should support vectorStore as a function that receives requestContext', async () => {
+      // Simulate multi-tenant setup where each tenant has a different schema
+      const tenantAVectorStore = { id: 'tenant-a-store' } as any;
+      const tenantBVectorStore = { id: 'tenant-b-store' } as any;
+
+      const vectorStoreResolver = vi.fn(({ requestContext }: { requestContext?: RequestContext }) => {
+        const schemaId = requestContext?.get('schemaId');
+        return schemaId === 'tenant-a' ? tenantAVectorStore : tenantBVectorStore;
+      });
+
+      const tool = createGraphRAGTool({
+        indexName: 'tenant_embeddings',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      // Test with tenant A context
+      const tenantAContext = new RequestContext();
+      tenantAContext.set('schemaId', 'tenant-a');
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: tenantAContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ requestContext: tenantAContext }));
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: tenantAVectorStore,
+        }),
+      );
+
+      vi.clearAllMocks();
+      mockGraphRAGInstances.length = 0;
+
+      // Test with tenant B context
+      const tenantBContext = new RequestContext();
+      tenantBContext.set('schemaId', 'tenant-b');
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: tenantBContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ requestContext: tenantBContext }));
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: tenantBVectorStore,
+        }),
+      );
+    });
+
+    it('should support async vectorStore resolver function', async () => {
+      const asyncVectorStore = { id: 'async-resolved-store' } as any;
+
+      const asyncVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          // Simulate async operation (e.g., fetching from DB or initializing per-tenant store)
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return asyncVectorStore;
+        },
+      );
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: asyncVectorStore,
+        }),
+      );
+    });
+
+    it('should return empty results when async vectorStore resolver throws', async () => {
+      const resolverError = new Error('Failed to resolve vector store for tenant');
+
+      const failingVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          throw resolverError;
+        },
+      );
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: failingVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      // Error is logged and returns empty results for graceful degradation
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(failingVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
+    });
+
+    it('should pass mastra instance to vectorStore resolver function', async () => {
+      const vectorStoreResolver = vi.fn(({ mastra: _mastra }: { mastra?: any }) => {
+        // Use mastra to get a custom vector store
+        return { id: 'mastra-resolved-store' } as any;
+      });
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { mastra: mockMastra as any, requestContext });
+
+      expect(vectorStoreResolver).toHaveBeenCalledWith(expect.objectContaining({ mastra: mockMastra }));
+    });
+
+    it('should still support static vectorStore (existing behavior)', async () => {
+      const staticVectorStore = { id: 'static-store' } as any;
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: staticVectorStore,
+      });
+
+      await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext: new RequestContext() });
+
+      expect(vectorQuerySearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vectorStore: staticVectorStore,
+        }),
+      );
+    });
+
+    it('should return empty results when vectorStore resolver returns undefined', async () => {
+      const vectorStoreResolver = vi.fn(({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+        // Simulate a resolver that can't find a store for the given context
+        return undefined;
+      });
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: vectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('schemaId', 'unknown-tenant');
+
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      // Returns empty results for graceful degradation
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(vectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
+    });
+
+    it('should return empty results when async vectorStore resolver returns undefined', async () => {
+      const asyncVectorStoreResolver = vi.fn(
+        async ({ requestContext: _requestContext }: { requestContext?: RequestContext }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return undefined;
+        },
+      );
+
+      const tool = createGraphRAGTool({
+        indexName: 'testIndex',
+        model: mockModel,
+        vectorStore: asyncVectorStoreResolver,
+      });
+
+      const requestContext = new RequestContext();
+
+      const result = await tool.execute({ queryText: 'test query', topK: 5 }, { requestContext });
+
+      // Returns empty results for graceful degradation
+      expect(result).toEqual({ relevantContext: [], sources: [] });
+      expect(asyncVectorStoreResolver).toHaveBeenCalled();
+      expect(vectorQuerySearch).not.toHaveBeenCalled();
     });
   });
 });

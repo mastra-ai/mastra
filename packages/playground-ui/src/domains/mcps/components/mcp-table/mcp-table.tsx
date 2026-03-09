@@ -1,43 +1,70 @@
 import { McpServerListResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 
 import { Icon } from '@/ds/icons/Icon';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
-import { ScrollableContainer } from '@/components/scrollable-container';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollableContainer } from '@/ds/components/ScrollableContainer';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { columns } from './columns';
 
 import { useLinkComponent } from '@/lib/framework';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 import { McpCoinIcon, McpServerIcon } from '@/ds/icons';
-import { Searchbar, SearchbarWrapper } from '@/components/ui/searchbar';
+import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 
 export interface MCPTableProps {
   mcpServers: McpServerListResponse['servers'];
   isLoading: boolean;
+  error?: Error | null;
 }
 
-export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
+export function MCPTable({ mcpServers, isLoading, error }: MCPTableProps) {
   const { navigate, paths } = useLinkComponent();
   const [search, setSearch] = useState('');
+
+  const filteredData = useMemo(
+    () => mcpServers.filter(server => server.name.toLowerCase().includes(search.toLowerCase())),
+    [mcpServers, search],
+  );
+
+  const { activeIndex } = useTableKeyboardNavigation({
+    itemCount: filteredData.length,
+    global: true,
+    onSelect: index => {
+      const server = filteredData[index];
+      if (server) {
+        navigate(paths.mcpServerLink(server.id));
+      }
+    },
+  });
+
   const table = useReactTable({
-    data: mcpServers,
+    data: filteredData,
     columns: columns as ColumnDef<McpServerListResponse['servers'][number]>[],
     getCoreRowModel: getCoreRowModel(),
   });
 
   const ths = table.getHeaderGroups()[0];
-  const rows = table.getRowModel().rows.concat();
+  const rows = table.getRowModel().rows;
 
-  if (rows.length === 0 && !isLoading) {
-    return <EmptyMCPTable />;
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="MCP servers" />
+      </div>
+    );
   }
 
-  const filteredRows = rows.filter(row => row.original.name.toLowerCase().includes(search.toLowerCase()));
+  if (mcpServers.length === 0 && !isLoading) {
+    return <EmptyMCPTable />;
+  }
 
   return (
     <div>
@@ -59,8 +86,12 @@ export function MCPTable({ mcpServers, isLoading }: MCPTableProps) {
                 ))}
               </Thead>
               <Tbody>
-                {filteredRows.map(row => (
-                  <Row key={row.id} onClick={() => navigate(paths.mcpServerLink(row.original.id))}>
+                {rows.map((row, index) => (
+                  <Row
+                    key={row.id}
+                    isActive={index === activeIndex}
+                    onClick={() => navigate(paths.mcpServerLink(row.original.id))}
+                  >
                     {row.getVisibleCells().map(cell => (
                       <React.Fragment key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}

@@ -1,5 +1,6 @@
-import { EntryList, getShortId } from '@/components/ui/elements';
-import { AISpanRecord } from '@mastra/core';
+import { EntryList } from '@/ds/components/EntryList';
+import { getShortId } from '@/ds/components/Text';
+import { SpanRecord } from '@mastra/core/storage';
 import { format, isToday } from 'date-fns';
 
 export const tracesListColumns = [
@@ -11,7 +12,7 @@ export const tracesListColumns = [
   { name: 'status', label: 'Status', size: '3rem' },
 ];
 
-type AITrace = Pick<AISpanRecord, 'traceId' | 'name'> & {
+type Trace = Pick<SpanRecord, 'traceId' | 'name' | 'entityType' | 'entityId' | 'entityName'> & {
   attributes?: Record<string, any> | null;
   createdAt: Date | string;
 };
@@ -19,7 +20,7 @@ type AITrace = Pick<AISpanRecord, 'traceId' | 'name'> & {
 type TracesListProps = {
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
-  traces?: AITrace[];
+  traces?: Trace[];
   errorMsg?: string;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;
@@ -61,7 +62,11 @@ export function TracesList({
                     date: isTodayDate ? 'Today' : format(createdAtDate, 'MMM dd'),
                     time: format(createdAtDate, 'h:mm:ss aaa'),
                     name: trace?.name,
-                    entityId: trace?.attributes?.agentId || trace?.attributes?.workflowId,
+                    entityId:
+                      trace?.entityName ||
+                      trace?.entityId ||
+                      trace?.attributes?.agentId ||
+                      trace?.attributes?.workflowId,
                     status: trace?.attributes?.status,
                   };
 

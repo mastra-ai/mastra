@@ -1,42 +1,80 @@
 export function getAuthEntrypoint() {
+  const tokensObject: Record<string, { id: string; role: string }> = {};
+
+  if (process.env.PLAYGROUND_JWT_TOKEN) {
+    tokensObject[process.env.PLAYGROUND_JWT_TOKEN] = { id: 'business-api', role: 'api' };
+  }
+  if (process.env.BUSINESS_JWT_TOKEN) {
+    tokensObject[process.env.BUSINESS_JWT_TOKEN] = { id: 'business-api', role: 'api' };
+  }
+
   return `
-  import { MastraAuthProvider } from '@mastra/core/server';
+  import { SimpleAuth, CompositeAuth } from '@mastra/core/server';
+  import { MastraCloudAuthProvider, MastraRBACCloud } from '@mastra/auth-cloud';
 
-  class MastraCloudAuth extends MastraAuthProvider {
-    constructor (auth) {
-      super()
-      this.auth = auth
+  // Service token auth (for business-api, playground internal calls)
+  class MastraCloudServiceAuth extends SimpleAuth {
+    constructor() {
+      super({
+        tokens: ${JSON.stringify(tokensObject)}
+      });
     }
 
-    async authenticateToken (...args) {
-      if (typeof args[0] === 'string') {
-        const token = args[0].replace('Bearer ', '');
-        const validTokens = [];
-        ${process.env.PLAYGROUND_JWT_TOKEN ? `validTokens.push('${process.env.PLAYGROUND_JWT_TOKEN}');` : ''}
-        ${process.env.BUSINESS_JWT_TOKEN ? `validTokens.push('${process.env.BUSINESS_JWT_TOKEN}');` : ''}
-        
-        if (validTokens.includes(token)) {
-          return { id: 'business-api' }
-        }
+    async authorizeUser(user, request) {
+      // Allow access to /api path
+      if (request && request.url && new URL(request.url).pathname === '/api') {
+        return true;
       }
-      return this.auth.authenticateToken(...args)
-    }
-
-    async authorizeUser (...args) {
-      if (args[1] && args[1].path === '/api') {
-        return true
+      // Allow access for business-api users
+      if (user && user.id === 'business-api') {
+        return true;
       }
-      if (args[0] && args[0].id === 'business-api') {
-        return true
-      }
-      return this.auth.authorizeUser(...args)
+      return false;
     }
   }
 
-  const serverConfig = mastra.getServer()
-  if (serverConfig && serverConfig.experimental_auth) {
-    const auth = serverConfig.experimental_auth
-    serverConfig.experimental_auth = new MastraCloudAuth(auth)
+  const serviceAuth = new MastraCloudServiceAuth();
+
+  // Cloud user auth (for end users via OAuth)
+  // Only enabled if MASTRA_CLOUD_API_URL is set
+  let cloudUserAuth = null;
+  if (process.env.MASTRA_CLOUD_API_URL) {
+    cloudUserAuth = new MastraCloudAuthProvider({
+      projectId: process.env.PROJECT_ID,
+      cloudBaseUrl: process.env.MASTRA_CLOUD_API_URL,
+      callbackUrl: process.env.MASTRA_CLOUD_CALLBACK_URL || \`\${process.env.MASTRA_CLOUD_API_URL}/auth/callback\`,
+    });
+  }
+
+  const serverConfig = mastra.getServer();
+  const userAuth = serverConfig?.auth;
+
+  // Only enable auth if cloudUserAuth or userAuth are defined
+  if (serverConfig && (cloudUserAuth || userAuth)) {
+    // Build provider list: service auth first, then cloud user auth, then user's custom auth
+    const providers = [serviceAuth];
+    if (cloudUserAuth) {
+      providers.push(cloudUserAuth);
+    }
+    if (userAuth) {
+      providers.push(userAuth);
+    }
+
+    serverConfig.auth = new CompositeAuth(providers);
+
+    // If cloud auth is enabled but no RBAC is configured, add default cloud RBAC
+    if (cloudUserAuth && !serverConfig.rbac) {
+      serverConfig.rbac = new MastraRBACCloud({
+        roleMapping: {
+          owner: ['*'],
+          admin: ['*:read', '*:write', '*:execute'],
+          api: ['*:read', '*:write', '*:execute'],
+          member: ['*:read', '*:execute'],
+          viewer: ['*:read'],
+          _default: [],
+        },
+      });
+    }
   }
   `;
 }

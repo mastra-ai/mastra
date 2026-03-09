@@ -1,8 +1,9 @@
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    name: 'e2e:stores/turbopuffer',
     environment: 'node',
     include: ['src/**/*.test.ts'],
     coverage: {

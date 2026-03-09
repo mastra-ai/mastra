@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.node.json",
+  "include": ["./global.d.ts", "src/**/*", "tsup.config.ts"],
+  "exclude": ["**/*.test.ts", "**/__fixtures__/"],
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  }
+}

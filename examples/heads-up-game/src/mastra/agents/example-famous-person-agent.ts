@@ -4,6 +4,7 @@ import { Memory } from '@mastra/memory';
 import { LibSQLVector } from '@mastra/libsql';
 
 export const famousPersonAgent = new Agent({
+  id: 'famous-person-generator',
   name: 'Famous Person Generator',
   instructions: `You are a famous person generator for a "Heads Up" guessing game.
 
@@ -21,7 +22,7 @@ Return only the person's name, nothing else.`,
   model: openai('gpt-4o'),
   memory: new Memory({
     vector: new LibSQLVector({
-      connectionUrl: 'file:../mastra.db',
+      url: 'file:../mastra.db',
     }),
     embedder: openai.embedding('text-embedding-3-small'),
     options: {

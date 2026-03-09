@@ -4,11 +4,11 @@
 [![CodeQl](https://github.com/mastra-ai/mastra/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/mastra-ai/mastra/actions/workflows/github-code-scanning/codeql)
 [![GitHub Repo stars](https://img.shields.io/github/stars/mastra-ai/mastra)](https://github.com/mastra-ai/mastra/stargazers)
 [![Discord](https://img.shields.io/discord/1309558646228779139?logo=discord&label=Discord&labelColor=white&color=7289DA)](https://discord.gg/BTYqqHKUrf)
-[![Twitter Follow](https://img.shields.io/twitter/follow/mastra_ai?style=social)](https://x.com/mastra_ai)
+[![Twitter Follow](https://img.shields.io/twitter/follow/mastra?style=social)](https://x.com/mastra)
 [![NPM Downloads](https://img.shields.io/npm/dm/%40mastra%252Fcore)](https://www.npmjs.com/package/@mastra/core)
 [![Static Badge](https://img.shields.io/badge/Y%20Combinator-W25-orange)](https://www.ycombinator.com/companies?batch=W25)
 
-From the team behind Gatsby, Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
+Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack.
 
 It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server. It's the easiest way to build, tune, and scale reliable AI products.
 
@@ -30,6 +30,8 @@ Some highlights include:
 
 - **Integrations** - Bundle agents and workflows into existing React, Next.js, or Node.js apps, or ship them as standalone endpoints. When building UIs, integrate with agentic libraries like Vercel's AI SDK UI and CopilotKit to bring your AI assistant to life on the web.
 
+- [**MCP servers**](https://mastra.ai/docs/tools-mcp/mcp-overview) - Author Model Context Protocol servers, exposing agents, tools, and other structured resources via the MCP interface. These can then be accessed by any system or agent that supports the protocol.
+
 - **Production essentials** - Shipping reliable agents takes ongoing insight, evaluation, and iteration. With built-in [evals](https://mastra.ai/docs/evals/overview) and [observability](https://mastra.ai/docs/observability/overview), Mastra gives you the tools to observe, measure, and refine continuously.
 
 ## Get started
@@ -48,13 +50,13 @@ If you're new to AI agents, check out our [templates](https://mastra.ai/docs/get
 
 Visit our [official documentation](https://mastra.ai/docs).
 
-## MCP Servers
+## Build with AI
 
-Learn how to make your IDE a Mastra expert by following the [`@mastra/mcp-docs-server` guide](https://mastra.ai/docs/getting-started/mcp-docs-server).
+Learn how to make your agent a Mastra expert by following the [Build with AI guide](https://mastra.ai/docs/getting-started/build-with-ai).
 
 ## Contributing
 
-Looking to contribute? All types of help are appreciated, from coding to testing and feature specification.
+Looking to contribute? All types of help are appreciated, from coding to testing and feature specification. Read [CONTRIBUTING.md](./CONTRIBUTING.md) for more details on how to get involved.
 
 If you are a developer and would like to contribute with code, please open an issue to discuss before opening a Pull Request.
 
@@ -66,8 +68,15 @@ We have an [open community Discord](https://discord.gg/BTYqqHKUrf). Come and say
 
 It's also super helpful if you leave the project a star here at the [top of the page](https://github.com/mastra-ai/mastra)
 
+## Licensing
+
+This repository uses a dual-license model:
+
+- **Apache License 2.0** — The core framework and the vast majority of this codebase is open source under Apache-2.0.
+- **Mastra Enterprise License** — Code in any directory named `ee/` (e.g., `packages/core/src/auth/ee/`) is source-available under the Mastra Enterprise License. These features require a valid enterprise license for production use but can be freely used for development and testing.
+
+See [LICENSE.md](./LICENSE.md) for the full license mapping and [ee/LICENSE](./ee/LICENSE) for the enterprise license terms.
+
 ## Security
 
-We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding
-we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get
-back to you.
+We are committed to maintaining the security of this repo and of Mastra as a whole. If you discover a security finding we ask you to please responsibly disclose this to us at [security@mastra.ai](mailto:security@mastra.ai) and we will get back to you.

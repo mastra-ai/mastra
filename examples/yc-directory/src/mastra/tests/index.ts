@@ -1,19 +1,17 @@
-import { openai } from '@ai-sdk/openai';
-import { evaluate } from '@mastra/evals';
-import { AnswerRelevancyMetric } from '@mastra/evals/llm';
-
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt';
+import { runEvals } from '@mastra/core/evals';
 import { ycAgent } from '../agents';
 
-const model = openai('gpt-4o');
-
-const metric = new AnswerRelevancyMetric(model, {
-  scale: 1,
+const scorer = createAnswerRelevancyScorer({
+  model: 'openai/gpt-4o',
+  options: {
+    scale: 1,
+    uncertaintyWeight: 0.3,
+  },
 });
 
-const result = await evaluate(
-  ycAgent,
-  'Can you tell me what recent YC companies are working on AI Frameworks?',
-  metric,
-);
-
-console.log(result);
+runEvals({
+  data: [{ input: 'Can you tell me what recent YC companies are working on AI Frameworks?' }],
+  scorers: [scorer],
+  target: ycAgent,
+});

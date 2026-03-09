@@ -1,4 +1,4 @@
-import type { LanguageModelV1StreamPart } from 'ai';
+import type { LanguageModelV1StreamPart } from '@internal/ai-sdk-v4';
 import type { RegisteredLogger } from '../../../logger';
 import { MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';
@@ -19,7 +19,7 @@ export class AISDKV4InputStream extends MastraModelInput {
     controller: ReadableStreamDefaultController<ChunkType>;
   }) {
     // ReadableStream throws TS errors, if imported not imported. What an annoying thing.
-    //@ts-ignore
+    // @ts-expect-error - ReadableStream async iteration
     for await (const chunk of stream) {
       const transformedChunk = convertFullStreamChunkToMastra(chunk, { runId });
       if (transformedChunk) {

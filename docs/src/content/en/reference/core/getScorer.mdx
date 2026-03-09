@@ -1,19 +1,21 @@
 ---
-title: "Reference: getScorer() | Core | Mastra Docs"
+title: "Reference: getScorer() | Core"
 description: "Documentation for the `getScorer()` method in Mastra, which retrieves a specific scorer by its registration key."
+packages:
+  - "@mastra/core"
 ---
 
 # getScorer()
 
-The `getScorer()` method retrieves a specific scorer that was registered with the Mastra instance using its registration key. This method provides type-safe access to scorers and throws an error if the requested scorer is not found.
+The `getScorer()` method retrieves a specific scorer that was registered with the Mastra instance using its registration key. This method provides type-safe access to scorers and throws an error if the requested scorer isn't found.
 
 ## Usage Example
 
 ```typescript
-import { mastra } from './mastra';
+import { mastra } from './mastra'
 
 // Get a specific scorer by key
-const relevancyScorer = mastra.getScorer('relevancyScorer');
+const relevancyScorer = mastra.getScorer('relevancyScorer')
 
 const weatherAgent = mastra.getAgent('weatherAgent')
 
@@ -24,52 +26,54 @@ await weatherAgent.generate('What is the weather in Rome', {
       scorer: relevancyScorer,
     },
   },
-});
+})
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "key",
-      type: "string",
-      description: "The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.",
-      isOptional: false,
-    },
-  ]}
+  {
+    name: 'key',
+    type: 'string',
+    description:
+      'The registration key of the scorer to retrieve. This should match a key used when registering scorers in the Mastra constructor.',
+    isOptional: false,
+  },
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "scorer",
-      type: "MastraScorer",
-      description: "The MastraScorer instance associated with the provided key.",
-    },
-  ]}
+  {
+    name: 'scorer',
+    type: 'MastraScorer',
+    description: 'The MastraScorer instance associated with the provided key.',
+  },
+]}
 />
 
 ## Error Handling
 
 This method throws a `MastraError` if:
-- The scorer with the specified key is not found
+
+- The scorer with the specified key isn't found
 - No scorers are registered with the Mastra instance
 
 ```typescript
 try {
-  const scorer = mastra.getScorer('nonExistentScorer');
+  const scorer = mastra.getScorer('nonExistentScorer')
 } catch (error) {
   if (error.id === 'MASTRA_GET_SCORER_NOT_FOUND') {
-    console.log('Scorer not found, using default evaluation');
+    console.log('Scorer not found, using default evaluation')
   }
 }
 ```
 
 ## Related
 
-- [getScorers()](../../reference/core/getScorers.mdx) - Get all registered scorers
-- [getScorerByName()](../../reference/core/getScorerByName.mdx) - Get a scorer by its name property
-- [Custom Scorers](../../docs/scorers/custom-scorers.mdx) - Learn how to create custom scorers
+- [listScorers()](/reference/core/listScorers) - Get all registered scorers
+- [getScorerById()](/reference/core/getScorerById) - Get a scorer by its id property
+- [Custom Scorers](/docs/evals/custom-scorers) - Learn how to create custom scorers

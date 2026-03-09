@@ -1,6 +1,8 @@
 ---
-title: "Reference: Mastra.setLogger() | Core | Mastra Docs"
+title: "Reference: Mastra.setLogger() | Core"
 description: "Documentation for the `Mastra.setLogger()` method in Mastra, which sets the logger for all components (agents, workflows, etc.)."
+packages:
+  - "@mastra/core"
 ---
 
 # Mastra.setLogger()
@@ -9,39 +11,39 @@ The `.setLogger()` method is used to set the logger for all components (agents, 
 
 ## Usage example
 
-```typescript copy
-mastra.setLogger({ logger: new PinoLogger({ name: "testLogger" }) });
+```typescript
+mastra.setLogger({ logger: new PinoLogger({ name: 'testLogger' }) })
 ```
 
 ## Parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "{ logger: TLogger }",
-      description: "An object containing the logger instance to set for all components.",
-    },
-  ]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
-    {
-      name: "logger",
-      type: "TLogger",
-      description: "The logger instance to set for all components (agents, workflows, etc.).",
-    },
-  ]}
+  {
+    name: 'options',
+    type: '{ logger: TLogger }',
+    description: 'An object containing the logger instance to set for all components.',
+    properties: [
+      {
+        type: '{ logger: TLogger }',
+        parameters: [
+          {
+            name: 'logger',
+            type: 'TLogger',
+            description: 'The logger instance to set for all components (agents, workflows, etc.).',
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 ## Returns
 
-This method does not return a value.
+This method doesn't return a value.
 
 ## Related
 
-- [Logging overview](../../docs/observability/logging.mdx)
-- [Logger reference](../../reference/observability/logger.mdx)
+- [Logging overview](/docs/observability/logging)
+- [Logger reference](/reference/logging/pino-logger)

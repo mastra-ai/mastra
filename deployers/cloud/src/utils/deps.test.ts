@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { MastraError } from '@mastra/core/error';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -182,7 +182,7 @@ describe('deps utils', () => {
       expect(logger.info).toHaveBeenCalledWith('Installing dependencies with pnpm in /test/project');
       expect(runWithExeca).toHaveBeenCalledWith({
         cmd: 'pnpm',
-        args: ['install'],
+        args: ['install', '--legacy-peer-deps=false', '--force'],
         cwd: '/test/project',
       });
     });
@@ -195,7 +195,7 @@ describe('deps utils', () => {
       expect(logger.info).toHaveBeenCalledWith('Installing dependencies with yarn in /test/project');
       expect(runWithExeca).toHaveBeenCalledWith({
         cmd: 'yarn',
-        args: ['install'],
+        args: ['install', '--legacy-peer-deps=false', '--force'],
         cwd: '/test/project',
       });
     });

@@ -9,13 +9,21 @@ import type {
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { RuntimeContext } from '@mastra/core/runtime-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
+import {
+  a2aAgentIdPathParams,
+  agentExecutionBodySchema,
+  agentCardResponseSchema,
+  agentExecutionResponseSchema,
+} from '../schemas/a2a';
+import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
+import { getAgentFromSystem } from './agents';
 
 const messageSendParamsSchema = z.object({
   message: z.object({
@@ -45,10 +53,10 @@ export async function getAgentCardByIdHandler({
     url: 'https://mastra.ai',
   },
   version = '1.0',
-  runtimeContext,
+  requestContext,
 }: Context & {
-  runtimeContext: RuntimeContext;
-  agentId: keyof ReturnType<typeof mastra.getAgents>;
+  requestContext: RequestContext;
+  agentId: keyof ReturnType<typeof mastra.listAgents>;
   executionUrl?: string;
   version?: string;
   provider?: {
@@ -56,20 +64,16 @@ export async function getAgentCardByIdHandler({
     url: string;
   };
 }): Promise<AgentCard> {
-  const agent = mastra.getAgent(agentId);
+  const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
 
-  if (!agent) {
-    throw new Error(`Agent with ID ${agentId} not found`);
-  }
-
-  const [instructions, tools] = await Promise.all([
-    agent.getInstructions({ runtimeContext }),
-    agent.getTools({ runtimeContext }),
-  ]);
+  const [instructions, tools]: [
+    Awaited<ReturnType<typeof agent.getInstructions>>,
+    Awaited<ReturnType<typeof agent.listTools>>,
+  ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
 
   // Extract agent information to create the AgentCard
   const agentCard: AgentCard = {
-    name: agent.id || agentId,
+    name: agent.id || (agentId as string),
     description: convertInstructionsToString(instructions),
     url: executionUrl,
     provider,
@@ -113,7 +117,7 @@ export async function handleMessageSend({
   agent,
   agentId,
   logger,
-  runtimeContext,
+  requestContext,
 }: {
   requestId: string;
   params: MessageSendParams;
@@ -121,7 +125,7 @@ export async function handleMessageSend({
   agent: Agent;
   agentId: string;
   logger?: IMastraLogger;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
   validateMessageSendParams(params);
 
@@ -148,9 +152,13 @@ export async function handleMessageSend({
   });
 
   try {
-    const { text } = await agent.generate([convertToCoreMessage(message)], {
+    // Pass contextId as threadId for memory persistence across A2A conversations
+    // Allow user to pass resourceId via metadata, fall back to agentId
+    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const result = await agent.generate([convertToCoreMessage(message)], {
       runId: taskId,
-      runtimeContext,
+      requestContext,
+      ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
 
     currentData = applyUpdateToTask(currentData, {
@@ -161,12 +169,23 @@ export async function handleMessageSend({
         parts: [
           {
             kind: 'text',
-            text: text,
+            text: result.text,
           },
         ],
         kind: 'message',
       },
     });
+
+    // Store execution details in task metadata
+    currentData.metadata = {
+      ...currentData.metadata,
+      execution: {
+        toolCalls: result.toolCalls,
+        toolResults: result.toolResults,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      },
+    };
 
     await taskStore.save({ agentId, data: currentData });
     context.task = currentData;
@@ -229,7 +248,7 @@ export async function* handleMessageStream({
   agent,
   agentId,
   logger,
-  runtimeContext,
+  requestContext,
 }: {
   requestId: string;
   params: MessageSendParams;
@@ -237,7 +256,7 @@ export async function* handleMessageStream({
   agent: Agent;
   agentId: string;
   logger?: IMastraLogger;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
 }) {
   yield createSuccessResponse(requestId, {
     state: 'working',
@@ -257,7 +276,7 @@ export async function* handleMessageStream({
       taskStore,
       agent,
       agentId,
-      runtimeContext,
+      requestContext,
       logger,
     });
   } catch (err) {
@@ -332,21 +351,21 @@ export async function getAgentExecutionHandler({
   requestId,
   mastra,
   agentId,
-  runtimeContext,
+  requestContext,
   method,
   params,
   taskStore,
   logger,
 }: Context & {
   requestId: string;
-  runtimeContext: RuntimeContext;
+  requestContext: RequestContext;
   agentId: string;
   method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
   params: MessageSendParams | TaskQueryParams | TaskIdParams;
   taskStore: InMemoryTaskStore;
   logger?: IMastraLogger;
 }): Promise<any> {
-  const agent = mastra.getAgent(agentId);
+  const agent = await getAgentFromSystem({ mastra, agentId });
 
   let taskId: string | undefined; // For error context
 
@@ -364,7 +383,7 @@ export async function getAgentExecutionHandler({
           taskStore,
           agent,
           agentId,
-          runtimeContext,
+          requestContext,
         });
         return result;
       }
@@ -375,7 +394,7 @@ export async function getAgentExecutionHandler({
           params: params as MessageSendParams,
           agent,
           agentId,
-          runtimeContext,
+          requestContext,
         });
         return result;
 
@@ -410,3 +429,83 @@ export async function getAgentExecutionHandler({
     return normalizeError(error, requestId, taskId, logger);
   }
 }
+
+// ============================================================================
+// Route Definitions (new pattern - handlers defined inline with createRoute)
+// ============================================================================
+
+export const GET_AGENT_CARD_ROUTE = createRoute({
+  method: 'GET',
+  path: '/.well-known/:agentId/agent-card.json',
+  responseType: 'json',
+  pathParamSchema: a2aAgentIdPathParams,
+  responseSchema: agentCardResponseSchema,
+  summary: 'Get agent card',
+  description: 'Returns the agent card information for A2A protocol discovery',
+  tags: ['Agent-to-Agent'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, requestContext }) => {
+    const executionUrl = `/a2a/${agentId}`;
+    const provider = {
+      organization: 'Mastra',
+      url: 'https://mastra.ai',
+    };
+    const version = '1.0';
+
+    const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
+
+    const [instructions, tools]: [
+      Awaited<ReturnType<typeof agent.getInstructions>>,
+      Awaited<ReturnType<typeof agent.listTools>>,
+    ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
+
+    const agentCard: AgentCard = {
+      name: agent.id || (agentId as string),
+      description: convertInstructionsToString(instructions),
+      url: executionUrl,
+      provider,
+      version,
+      capabilities: {
+        streaming: true,
+        pushNotifications: false,
+        stateTransitionHistory: false,
+      },
+      defaultInputModes: ['text'],
+      defaultOutputModes: ['text'],
+      skills: Object.entries(tools).map(([toolId, tool]) => ({
+        id: toolId,
+        name: toolId,
+        description: tool.description || `Tool: ${toolId}`,
+        tags: ['tool'],
+      })),
+    };
+
+    return agentCard;
+  },
+});
+
+export const AGENT_EXECUTION_ROUTE = createRoute({
+  method: 'POST',
+  path: '/a2a/:agentId',
+  responseType: 'json',
+  pathParamSchema: a2aAgentIdPathParams,
+  bodySchema: agentExecutionBodySchema,
+  responseSchema: agentExecutionResponseSchema,
+  summary: 'Execute agent',
+  description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
+  tags: ['Agent-to-Agent'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
+    const { id: requestId, method, params } = bodyParams;
+
+    return await getAgentExecutionHandler({
+      requestId: String(requestId),
+      mastra,
+      agentId: agentId as string,
+      requestContext,
+      method,
+      params,
+      taskStore: taskStore!,
+    });
+  },
+});

@@ -1,5 +1,3 @@
-import { Link } from 'react-router';
-
 import {
   Crumb,
   Header,
@@ -11,7 +9,11 @@ import {
   ApiIcon,
   WorkflowIcon,
   DocsIcon,
+  WorkflowCombobox,
+  Truncate,
 } from '@mastra/playground-ui';
+import { EyeIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
 export function WorkflowHeader({
   workflowName,
@@ -32,28 +34,29 @@ export function WorkflowHeader({
             </Icon>
             Workflows
           </Crumb>
-          <Crumb as={Link} to={`/workflows/${workflowId}`} isCurrent={!runId}>
-            {workflowName}
+          <Crumb as="span" to="" isCurrent={!runId}>
+            <WorkflowCombobox value={workflowId} variant="ghost" />
           </Crumb>
-
           {runId && (
             <Crumb as={Link} to={`/workflows/${workflowId}/graph/${runId}`} isCurrent>
-              {runId}
+              <Truncate untilChar="-" copy>
+                {runId}
+              </Truncate>
             </Crumb>
           )}
         </Breadcrumb>
 
         <HeaderGroup>
-          <Button as={Link} to={`/workflows/${workflowId}/graph`}>
-            Graph
-          </Button>
-          <Button as={Link} to={`/workflows/${workflowId}/traces`}>
+          <Button as={Link} to={`/observability?entity=${workflowName}`}>
+            <Icon>
+              <EyeIcon />
+            </Icon>
             Traces
           </Button>
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as={Link} target="_blank" to="/swagger-ui">
+          <Button as="a" target="_blank" href="/swagger-ui">
             <Icon>
               <ApiIcon />
             </Icon>

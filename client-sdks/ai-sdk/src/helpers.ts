@@ -1,20 +1,40 @@
-import type { ChunkType } from '@mastra/core';
+import type {
+  InferUIMessageChunk,
+  LanguageModelUsage as AISDKLanguageModelUsage,
+  ObjectStreamPart,
+  TextStreamPart,
+  ToolSet,
+  UIMessage,
+  FinishReason,
+} from '@internal/ai-sdk-v5';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '@mastra/core/stream';
-import type { PartialSchemaOutput, OutputSchema, DataChunkType } from '@mastra/core/stream';
+import type { DataChunkType, ChunkType, MastraFinishReason } from '@mastra/core/stream';
 
-import type { InferUIMessageChunk, ObjectStreamPart, TextStreamPart, ToolSet, UIMessage } from 'ai';
 import { isDataChunkType } from './utils';
 
-export type OutputChunkType<OUTPUT extends OutputSchema = undefined> =
+/**
+ * Maps Mastra's extended finish reasons to AI SDK-compatible values.
+ * 'tripwire' and 'retry' are Mastra-specific reasons for processor scenarios,
+ * which are mapped to 'other' for AI SDK compatibility.
+ */
+export function toAISDKFinishReason(reason: MastraFinishReason): FinishReason {
+  if (reason === 'tripwire' || reason === 'retry') {
+    return 'other';
+  }
+  return reason;
+}
+
+export type OutputChunkType<OUTPUT = undefined> =
   | TextStreamPart<ToolSet>
-  | ObjectStreamPart<PartialSchemaOutput<OUTPUT>>
+  | ObjectStreamPart<Partial<OUTPUT>>
+  | DataChunkType
   | undefined;
 
 export type ToolAgentChunkType = { type: 'tool-agent'; toolCallId: string; payload: any };
 export type ToolWorkflowChunkType = { type: 'tool-workflow'; toolCallId: string; payload: any };
 export type ToolNetworkChunkType = { type: 'tool-network'; toolCallId: string; payload: any };
 
-export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefined>({
+export function convertMastraChunkToAISDKv5<OUTPUT = undefined>({
   chunk,
   mode = 'stream',
 }: {
@@ -25,6 +45,8 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'start':
       return {
         type: 'start',
+        // Preserve messageId from the payload so it can be sent to useChat
+        ...(chunk.payload?.messageId ? { messageId: chunk.payload.messageId } : {}),
       };
     case 'step-start':
       const { messageId: _messageId, ...rest } = chunk.payload;
@@ -42,8 +64,9 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
     case 'finish': {
       return {
         type: 'finish',
-        finishReason: chunk.payload.stepResult.reason,
-        totalUsage: chunk.payload.output.usage,
+        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
+        // Cast needed: Mastra's LanguageModelUsage has optional properties, AI SDK has required-but-nullable
+        totalUsage: chunk.payload.output.usage as AISDKLanguageModelUsage,
       };
     }
     case 'reasoning-start':
@@ -127,6 +150,32 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
         toolName: chunk.payload.toolName,
         input: chunk.payload.args,
       };
+    case 'tool-call-approval':
+      return {
+        type: 'data-tool-call-approval',
+        id: chunk.payload.toolCallId,
+        data: {
+          state: 'data-tool-call-approval',
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          args: chunk.payload.args,
+          resumeSchema: chunk.payload.resumeSchema,
+        },
+      } satisfies DataChunkType;
+    case 'tool-call-suspended':
+      return {
+        type: 'data-tool-call-suspended',
+        id: chunk.payload.toolCallId,
+        data: {
+          state: 'data-tool-call-suspended',
+          runId: chunk.runId,
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+          suspendPayload: chunk.payload.suspendPayload,
+          resumeSchema: chunk.payload.resumeSchema,
+        },
+      } satisfies DataChunkType;
     case 'tool-call-input-streaming-start':
       return {
         type: 'tool-input-start',
@@ -160,7 +209,7 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
           ...rest,
         },
         usage: chunk.payload.output.usage,
-        finishReason: chunk.payload.stepResult.reason,
+        finishReason: toAISDKFinishReason(chunk.payload.stepResult.reason),
         providerMetadata,
       };
     }
@@ -220,7 +269,16 @@ export function convertMastraChunkToAISDKv5<OUTPUT extends OutputSchema = undefi
         type: 'object',
         object: chunk.object,
       };
-
+    case 'tripwire':
+      return {
+        type: 'data-tripwire',
+        data: {
+          reason: chunk.payload.reason,
+          retry: chunk.payload.retry,
+          metadata: chunk.payload.metadata,
+          processorId: chunk.payload.processorId,
+        },
+      };
     default:
       if (chunk.type && 'payload' in chunk && chunk.payload) {
         return {
@@ -402,6 +460,14 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
           toolCallId: part.toolCallId,
           payload: part.output,
         };
+      } else if (isDataChunkType(part.output)) {
+        if (!('data' in part.output)) {
+          throw new Error(
+            `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
+          );
+        }
+        const { type, data, id } = part.output;
+        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;
     }
@@ -433,10 +499,15 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
 
     case 'start': {
       if (sendStart) {
+        // Prefer responseMessageId (from client's last assistant message) when set,
+        // fall back to messageId from the chunk (server-generated).
+        // This ensures continuation flows (e.g. addToolResult) use the client's
+        // existing message ID so the response appends to the correct message.
+        const messageId = responseMessageId || ('messageId' in part ? part.messageId : undefined);
         return {
           type: 'start' as const,
           ...(messageMetadataValue != null ? { messageMetadata: messageMetadataValue } : {}),
-          ...(responseMessageId != null ? { messageId: responseMessageId } : {}),
+          ...(messageId != null ? { messageId } : {}),
         } as InferUIMessageChunk<UI_MESSAGE>;
       }
       return;
@@ -474,8 +545,10 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
             `UI Messages require a data property when using data- prefixed chunks \n ${JSON.stringify(part)}`,
           );
         }
-        return part;
+        const { type, data, id } = part;
+        return { type, data, ...(id !== undefined && { id }) } as InferUIMessageChunk<UI_MESSAGE>;
       }
+
       return;
     }
   }

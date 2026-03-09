@@ -1,24 +1,42 @@
 {
-  "name": "template-docs-chatbot",
-  "private": true,
+  "name": "@templates/agent",
+  "version": "1.0.0",
+  "description": "A Mastra agent that consumes tools from an MCP server for documentation assistance",
   "type": "module",
-  "description": "A monorepo template for building documentation chatbots with separate MCP server and agent components",
+  "main": "index.js",
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types",
-    "dev:mcp": "turbo run dev --filter=@templates/mcp-server",
-    "dev:agent": "turbo run dev --filter=@templates/agent"
+    "dev:mastra": "mastra dev",
+    "dev:mcp": "tsx src/mcp-server/server.ts",
+    "dev": "concurrently \"pnpm run dev:mastra\" \"pnpm run dev:mcp\"",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [
+    "agent",
+    "mastra",
+    "documentation",
+    "mcp"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/mcp": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest"
   },
   "devDependencies": {
-    "prettier": "^3.6.2",
-    "turbo": "^2.5.8",
-    "typescript": "5.8.3"
-  },
-  "packageManager": "pnpm@10.18.2",
-  "engines": {
-    "node": ">=20.9.0"
+    "@types/node": "^24.10.9",
+    "concurrently": "^9.2.1",
+    "dotenv": "^17.2.3",
+    "mastra": "latest",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "zod": "^4.3.6"
   }
 }

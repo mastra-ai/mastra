@@ -29,10 +29,7 @@ export const createConfig = async () =>
         '**/.mastra/**',
         '**/.cache/**',
         '**/node_modules/**',
-        '**/build/**',
-        '**/public/build/**',
         '**/playwright-report/**',
-        '**/server-build/**',
         '**/dist/**',
         '**/coverage/**',
       ],
@@ -42,6 +39,7 @@ export const createConfig = async () =>
     {
       plugins: {
         import: (await import('eslint-plugin-import-x')).default,
+        unicorn: (await import('eslint-plugin-unicorn')).default,
       },
       languageOptions: {
         globals: {
@@ -54,6 +52,7 @@ export const createConfig = async () =>
         'no-unexpected-multiline': ERROR,
         'no-warning-comments': [ERROR, { terms: ['FIXME'], location: 'anywhere' }],
         'import/no-duplicates': [ERROR, { 'prefer-inline': false }],
+        'unicorn/prefer-node-protocol': ERROR,
         'import/order': [
           ERROR,
           {
@@ -86,6 +85,7 @@ export const createConfig = async () =>
             parser: hasTypeScript ? (await import('typescript-eslint')).parser : undefined,
             parserOptions: {
               jsx: true,
+              tsconfigRootDir: import.meta.dirname,
             },
           },
           rules: {
@@ -141,7 +141,7 @@ export const createConfig = async () =>
             parser: (await import('typescript-eslint')).parser,
             parserOptions: {
               projectService: true,
-              tsConfigRootDir: import.meta.dirname,
+              tsconfigRootDir: import.meta.dirname,
             },
           },
           plugins: {
@@ -172,6 +172,17 @@ export const createConfig = async () =>
             '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
 
             '@typescript-eslint/no-floating-promises': 'error',
+
+            '@typescript-eslint/ban-ts-comment': [
+              ERROR,
+              {
+                'ts-expect-error': 'allow-with-description',
+                'ts-ignore': true,
+                'ts-nocheck': true,
+                'ts-check': false,
+                minimumDescriptionLength: 3,
+              },
+            ],
 
             // here are rules we've decided to not enable. Commented out rather
             // than setting them to disabled to avoid them being referenced at all

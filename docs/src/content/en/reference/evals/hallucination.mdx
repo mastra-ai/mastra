@@ -1,159 +1,127 @@
 ---
-title: "Reference: Hallucination | Metrics | Evals | Mastra Docs"
-description: Documentation for the Hallucination Metric in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
+title: "Reference: Hallucination Scorer | Evals"
+description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
+packages:
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
-import { ScorerCallout } from '@/components/scorer-callout'
+# Hallucination Scorer
 
-# HallucinationMetric
+The `createHallucinationScorer()` function evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This scorer measures hallucination by identifying direct contradictions between the context and the output.
 
-<ScorerCallout />
+## Parameters
 
-The `HallucinationMetric` evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This metric measures hallucination by identifying direct contradictions between the context and the output.
-
-## Basic Usage
-
-```typescript
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
-
-// Configure the model for evaluation
-const model = openai("gpt-4o-mini");
-
-const metric = new HallucinationMetric(model, {
-  context: [
-    "Tesla was founded in 2003 by Martin Eberhard and Marc Tarpenning in San Carlos, California.",
-  ],
-});
-
-const result = await metric.measure(
-  "Tell me about Tesla's founding.",
-  "Tesla was founded in 2004 by Elon Musk in California.",
-);
-
-console.log(result.score); // Score from 0-1
-console.log(result.info.reason); // Explanation of the score
-
-// Example output:
-// {
-//   score: 0.67,
-//   info: {
-//     reason: "The score is 0.67 because two out of three statements from the context
-//           (founding year and founders) were contradicted by the output, while the
-//           location statement was not contradicted."
-//   }
-// }
-```
-
-## Constructor Parameters
+The `createHallucinationScorer()` function accepts a single options object with the following properties:
 
 <PropertiesTable
   content={[
-    {
-      name: "model",
-      type: "LanguageModel",
-      description: "Configuration for the model used to evaluate hallucination",
-      isOptional: false,
-    },
-    {
-      name: "options",
-      type: "HallucinationMetricOptions",
-      description: "Configuration options for the metric",
-      isOptional: false,
-    },
-  ]}
+  {
+    name: 'model',
+    type: 'LanguageModel',
+    required: true,
+    description: 'Configuration for the model used to evaluate hallucination.',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'scale',
+            type: 'number',
+            description: 'Maximum score value.',
+            defaultValue: '1',
+          },
+          {
+            name: 'context',
+            type: 'string[]',
+            description: 'Static context strings to use as ground truth for hallucination detection.',
+          },
+          {
+            name: 'getContext',
+            type: '(params: GetContextParams) => string[] | Promise<string[]>',
+            description:
+              'A hook to dynamically resolve context at runtime. Takes priority over static context. Useful for live scoring where context (like tool results) is only available when the scorer runs.',
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
-### HallucinationMetricOptions
+This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
+
+## .run() Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "scale",
-      type: "number",
-      description: "Maximum score value",
-      isOptional: true,
-      defaultValue: "1",
-    },
-    {
-      name: "context",
-      type: "string[]",
-      description: "Array of context pieces used as the source of truth",
-      isOptional: false,
-    },
-  ]}
-/>
-
-## measure() Parameters
-
-<PropertiesTable
-  content={[
-    {
-      name: "input",
-      type: "string",
-      description: "The original query or prompt",
-      isOptional: false,
-    },
-    {
-      name: "output",
-      type: "string",
-      description: "The LLM's response to evaluate",
-      isOptional: false,
-    },
-  ]}
-/>
-
-## Returns
-
-<PropertiesTable
-  content={[
-    {
-      name: "score",
-      type: "number",
-      description: "Hallucination score (0 to scale, default 0-1)",
-    },
-    {
-      name: "info",
-      type: "object",
-      description: "Object containing the reason for the score",
-      properties: [
-        {
-          type: "string",
-          parameters: [
-            {
-              name: "reason",
-              type: "string",
-              description:
-                "Detailed explanation of the score and identified contradictions",
-            },
-          ],
-        },
-      ],
-    },
-  ]}
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description: 'Object with extracted claims: { claims: string[] }',
+  },
+  {
+    name: 'preprocessPrompt',
+    type: 'string',
+    description: 'The prompt sent to the LLM for the preprocess step (optional).',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description:
+      "Object with verdicts: { verdicts: Array<{ statement: string, verdict: 'yes' | 'no', reason: string }> }",
+  },
+  {
+    name: 'analyzePrompt',
+    type: 'string',
+    description: 'The prompt sent to the LLM for the analyze step (optional).',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Hallucination score (0 to scale, default 0-1).',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Detailed explanation of the score and identified contradictions.',
+  },
+  {
+    name: 'generateReasonPrompt',
+    type: 'string',
+    description: 'The prompt sent to the LLM for the generateReason step (optional).',
+  },
+]}
 />
 
 ## Scoring Details
 
-The metric evaluates hallucination through contradiction detection and unsupported claim analysis.
+The scorer evaluates hallucination through contradiction detection and unsupported claim analysis.
 
 ### Scoring Process
 
 1. Analyzes factual content:
-
    - Extracts statements from context
    - Identifies numerical values and dates
    - Maps statement relationships
-
-2. Analyzes output for hallucinations:
-
+1. Analyzes output for hallucinations:
    - Compares against context statements
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations
    - Evaluates numerical accuracy
    - Considers approximation context
-
-3. Calculates hallucination score:
+1. Calculates hallucination score:
    - Counts hallucinated statements (contradictions and unsupported claims)
    - Divides by total statements
    - Scales to configured range
@@ -174,54 +142,120 @@ Final score: `(hallucinated_statements / total_statements) * scale`
 
 ### Score interpretation
 
-(0 to scale, default 0-1)
+A hallucination score between 0 and 1:
 
-- 1.0: Complete hallucination - contradicts all context statements
-- 0.75: High hallucination - contradicts 75% of context statements
-- 0.5: Moderate hallucination - contradicts half of context statements
-- 0.25: Low hallucination - contradicts 25% of context statements
-- 0.0: No hallucination - output aligns with all context statements
+- **0.0**: No hallucination — all claims match the context.
+- **0.3–0.4**: Low hallucination — a few contradictions.
+- **0.5–0.6**: Mixed hallucination — several contradictions.
+- **0.7–0.8**: High hallucination — many contradictions.
+- **0.9–1.0**: Complete hallucination — most or all claims contradict the context.
 
 **Note:** The score represents the degree of hallucination - lower scores indicate better factual alignment with the provided context
 
-## Example with Analysis
+## Examples
 
-```typescript
-import { openai } from "@ai-sdk/openai";
-import { HallucinationMetric } from "@mastra/evals/llm";
+### Static Context
 
-// Configure the model for evaluation
-const model = openai("gpt-4o-mini");
+Use static context when you have known ground truth to compare against:
 
-const metric = new HallucinationMetric(model, {
-  context: [
-    "OpenAI was founded in December 2015 by Sam Altman, Greg Brockman, and others.",
-    "The company launched with a $1 billion investment commitment.",
-    "Elon Musk was an early supporter but left the board in 2018.",
-  ],
-});
+```typescript title="src/example-static-context.ts"
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
 
-const result = await metric.measure({
-  input: "What are the key details about OpenAI?",
-  output:
-    "OpenAI was founded in 2015 by Elon Musk and Sam Altman with a $2 billion investment.",
-});
-
-// Example output:
-// {
-//   score: 0.33,
-//   info: {
-//     reason: "The score is 0.33 because one out of three statements from the context
-//           was contradicted (the investment amount was stated as $2 billion instead
-//           of $1 billion). The founding date was correct, and while the output's
-//           description of founders was incomplete, it wasn't strictly contradictory."
-//   }
-// }
+const scorer = createHallucinationScorer({
+  model: 'openai/gpt-4o',
+  options: {
+    context: [
+      'The first iPhone was announced on January 9, 2007.',
+      'It was released on June 29, 2007.',
+      'Steve Jobs introduced it at Macworld.',
+    ],
+  },
+})
 ```
+
+### Dynamic Context with getContext
+
+Use `getContext` for live scoring scenarios where context comes from tool results:
+
+```typescript title="src/example-dynamic-context.ts"
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
+import { extractToolResults } from '@mastra/evals/scorers'
+
+const scorer = createHallucinationScorer({
+  model: 'openai/gpt-4o',
+  options: {
+    getContext: ({ run, step }) => {
+      // Extract tool results as context
+      const toolResults = extractToolResults(run.output)
+      return toolResults.map(t => JSON.stringify({ tool: t.toolName, result: t.result }))
+    },
+  },
+})
+```
+
+### Live Scoring with Agent
+
+Attach the scorer to an agent for live evaluation:
+
+```typescript title="src/example-live-scoring.ts"
+import { Agent } from '@mastra/core/agent'
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
+import { extractToolResults } from '@mastra/evals/scorers'
+
+const hallucinationScorer = createHallucinationScorer({
+  model: 'openai/gpt-4o',
+  options: {
+    getContext: ({ run }) => {
+      const toolResults = extractToolResults(run.output)
+      return toolResults.map(t => JSON.stringify({ tool: t.toolName, result: t.result }))
+    },
+  },
+})
+
+const agent = new Agent({
+  name: 'my-agent',
+  model: 'openai/gpt-4o',
+  instructions: 'You are a helpful assistant.',
+  evals: {
+    scorers: [hallucinationScorer],
+  },
+})
+```
+
+### Batch Evaluation with runEvals
+
+```typescript title="src/example-batch-evals.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
+import { myAgent } from './agent'
+
+const scorer = createHallucinationScorer({
+  model: 'openai/gpt-4o',
+  options: {
+    context: ['Known fact 1', 'Known fact 2'],
+  },
+})
+
+const result = await runEvals({
+  data: [{ input: 'Tell me about topic A' }, { input: 'Tell me about topic B' }],
+  scorers: [scorer],
+  target: myAgent,
+  onItemComplete: ({ scorerResults }) => {
+    console.log({
+      score: scorerResults[scorer.id].score,
+      reason: scorerResults[scorer.id].reason,
+    })
+  },
+})
+
+console.log(result.scores)
+```
+
+For more details on `runEvals`, see the [runEvals reference](/reference/evals/run-evals).
+
+To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#adding-scorers-to-agents) guide.
 
 ## Related
 
-- [Faithfulness Metric](./faithfulness)
-- [Answer Relevancy Metric](./answer-relevancy)
-- [Context Precision Metric](./context-precision)
-- [Context Relevancy Metric](./context-relevancy)
+- [Faithfulness Scorer](./faithfulness)
+- [Answer Relevancy Scorer](./answer-relevancy)

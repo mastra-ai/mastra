@@ -1,5 +1,6 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { embedMany } from 'ai';
+import type { EmbeddingModel } from 'ai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
@@ -16,8 +17,71 @@ Welcome to our comprehensive guide on modern web development. This resource cove
 - Senior developers seeking a refresher on current best practices
 `;
 
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+// Mock embedding model for testing
+const mockEmbeddingModel: EmbeddingModel<string> = {
+  specificationVersion: 'v1',
+  provider: 'mock-provider',
+  modelId: 'mock-embedding-model',
+  maxEmbeddingsPerCall: 128,
+  supportsParallelCalls: true,
+  async doEmbed({ values }: { values: string[] }) {
+    // Return dummy embeddings with consistent dimension (384)
+    const dimension = 384;
+    const embeddings: number[][] = values.map(() =>
+      Array(dimension)
+        .fill(0)
+        .map(() => Math.random()),
+    );
+    return { embeddings };
+  },
+};
+
+// Mock language model for keyword/title/summary/questions extraction
+// Returns different responses based on input text to make tests more realistic
+const mockLanguageModel = new MockLanguageModelV1({
+  doGenerate: async ({ prompt }) => {
+    // Generate a simple response based on the input
+    let mockResponse = 'keyword1, keyword2, keyword3';
+
+    // Check if this is a title extraction (look for context in the prompt)
+    const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+    const lowerPrompt = promptText.toLowerCase();
+
+    // Return different responses based on the type of extraction being done
+    // Match on the actual prompt patterns used by each extractor
+    if (promptText.includes('Alpha')) {
+      // Title extraction for Alpha document
+      mockResponse = 'Title for Alpha Document';
+    } else if (promptText.includes('Beta')) {
+      // Title extraction for Beta document
+      mockResponse = 'Title for Beta Document';
+    } else if (lowerPrompt.includes('extract') && lowerPrompt.includes('keywords')) {
+      // Keyword extraction (matches: "extract up to {maxKeywords} keywords")
+      mockResponse = 'KEYWORDS: keyword1, keyword2, keyword3';
+    } else if (lowerPrompt.includes('write a summary')) {
+      // Summary extraction
+      mockResponse = 'SUMMARY: This is a summary of the document content.';
+    } else if (lowerPrompt.includes('generate') && lowerPrompt.includes('questions')) {
+      // Question extraction
+      mockResponse = 'QUESTIONS: 1. What is this about?\n2. Why is this important?';
+    } else if (lowerPrompt.includes('give a title')) {
+      // Title extraction
+      mockResponse = 'Generated Document Title';
+    } else if (lowerPrompt.includes('based on the above candidate titles')) {
+      // Title combine template
+      mockResponse = 'Combined Document Title';
+    }
+
+    return {
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { promptTokens: 10, completionTokens: 20 },
+      text: mockResponse,
+    };
+  },
+  doStream: async () => {
+    throw new Error('Streaming not implemented for mock');
+  },
 });
 
 vi.setConfig({ testTimeout: 100_000, hookTimeout: 100_000 });
@@ -46,22 +110,42 @@ describe('MDocument', () => {
         maxSize: 1500,
         overlap: 0,
         extract: {
-          keywords: true,
+          keywords: { llm: mockLanguageModel },
         },
       });
 
       expect(doc.getMetadata()?.[0]).toBeTruthy();
       expect(chunks).toBeInstanceOf(Array);
-    }, 15000);
+      expect(chunks.length).toBeGreaterThan(0);
+      expect(chunks[0].metadata.excerptKeywords).toBeDefined();
+    });
 
     it('embed - create embedding from chunk', async () => {
+      // Ensure chunks are available (either from previous test or create new ones)
+      if (!chunks || chunks.length === 0) {
+        const testDoc = MDocument.fromMarkdown(sampleMarkdown);
+        chunks = await testDoc.chunk({ maxSize: 1500, overlap: 0 });
+      }
+
       const embeddings = await embedMany({
         values: chunks.map(chunk => chunk.text),
-        model: openai.embedding('text-embedding-3-small'),
+        model: mockEmbeddingModel,
       });
 
       expect(embeddings).toBeDefined();
-    }, 15000);
+      expect(embeddings.embeddings).toBeInstanceOf(Array);
+      expect(embeddings.embeddings.length).toBe(chunks.length);
+
+      // Verify each embedding has the correct dimension
+      embeddings.embeddings.forEach(embedding => {
+        expect(embedding).toBeInstanceOf(Array);
+        expect(embedding.length).toBe(384);
+
+        // Verify embeddings contain actual numbers (not all zeros)
+        const hasVariance = embedding.some(val => val !== embedding[0]);
+        expect(hasVariance).toBe(true);
+      });
+    });
   });
 
   describe('chunkCharacter', () => {
@@ -113,7 +197,7 @@ describe('MDocument', () => {
         isSeparatorRegex: false,
         maxSize: 50,
         overlap: 5,
-        keepSeparator: 'end',
+        separatorPosition: 'end',
       });
       const chunks = doc.getText();
 
@@ -133,7 +217,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -154,7 +238,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'start',
+          separatorPosition: 'start',
         });
 
         const chunks = doc.getText();
@@ -176,7 +260,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -196,7 +280,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'end',
+          separatorPosition: 'end',
         });
 
         const chunks = doc.getText();
@@ -216,7 +300,7 @@ describe('MDocument', () => {
           isSeparatorRegex: false,
           maxSize: 50,
           overlap: 5,
-          keepSeparator: 'start',
+          separatorPosition: 'start',
         });
 
         const chunks = doc.getText();
@@ -455,6 +539,743 @@ describe('MDocument', () => {
       expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
     });
 
+    it('chunkRecursive - PHP language support', async () => {
+      const phpCode = `
+              namespace App\\Controllers;
+
+              use App\\Models\\User;
+
+              class UserController {
+                public function index() {
+                  return User::all();
+                }
+
+                private function validate($data) {
+                  if (empty($data)) {
+                    return false;
+                  }
+                  return true;
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(phpCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PHP,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class'))).toBe(true);
+      expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - GO language support', async () => {
+      const goCode = `
+              package main
+
+              import "fmt"
+
+              type User struct {
+                Name string
+                Age  int
+              }
+
+              func main() {
+                user := User{Name: "John", Age: 30}
+                fmt.Println(user)
+              }
+
+              func validate(data string) bool {
+                if data == "" {
+                  return false
+                }
+                return true
+              }
+            `;
+
+      const doc = MDocument.fromText(goCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.GO,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('func'))).toBe(true);
+    });
+
+    it('chunkRecursive - JAVA language support', async () => {
+      const javaCode = `
+              package com.example;
+
+              import java.util.List;
+
+              public class User {
+                private String name;
+                private int age;
+
+                public String getName() {
+                  return name;
+                }
+
+                public void setName(String name) {
+                  this.name = name;
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(javaCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.JAVA,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('public'))).toBe(true);
+    });
+
+    it('chunkRecursive - KOTLIN language support', async () => {
+      const kotlinCode = `
+              package com.example
+
+              import kotlin.collections.List
+
+              data class User(val name: String, val age: Int)
+
+              fun main() {
+                val user = User("John", 30)
+                println(user)
+              }
+
+              fun validate(data: String): Boolean {
+                if (data.isEmpty()) {
+                  return false
+                }
+                return true
+              }
+            `;
+
+      const doc = MDocument.fromText(kotlinCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.KOTLIN,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('fun'))).toBe(true);
+    });
+
+    it('chunkRecursive - JS language support', async () => {
+      const jsCode = `
+              class User {
+                constructor(name, age) {
+                  this.name = name;
+                  this.age = age;
+                }
+
+                getName() {
+                  return this.name;
+                }
+              }
+
+              function validate(data) {
+                if (!data) {
+                  return false;
+                }
+                return true;
+              }
+
+              const user = new User("John", 30);
+            `;
+
+      const doc = MDocument.fromText(jsCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.JS,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - PYTHON language support', async () => {
+      const pythonCode = `
+              class User:
+                def __init__(self, name, age):
+                  self.name = name
+                  self.age = age
+
+                def get_name(self):
+                  return self.name
+
+              def validate(data):
+                if not data:
+                  return False
+                return True
+
+              async def fetch_user():
+                return User("John", 30)
+            `;
+
+      const doc = MDocument.fromText(pythonCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PYTHON,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('def'))).toBe(true);
+    });
+
+    it('chunkRecursive - RUBY language support', async () => {
+      const rubyCode = `
+              module MyApp
+                class User
+                  def initialize(name, age)
+                    @name = name
+                    @age = age
+                  end
+
+                  def get_name
+                    @name
+                  end
+                end
+
+                def validate(data)
+                  if data.nil?
+                    return false
+                  end
+                  true
+                end
+              end
+            `;
+
+      const doc = MDocument.fromText(rubyCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.RUBY,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('def'))).toBe(true);
+    });
+
+    it('chunkRecursive - RUST language support', async () => {
+      const rustCode = `
+              mod user {
+                pub struct User {
+                  name: String,
+                  age: u32,
+                }
+
+                impl User {
+                  pub fn new(name: String, age: u32) -> Self {
+                    User { name, age }
+                  }
+
+                  pub fn get_name(&self) -> &str {
+                    &self.name
+                  }
+                }
+              }
+
+              fn validate(data: &str) -> bool {
+                if data.is_empty() {
+                  return false;
+                }
+                true
+              }
+            `;
+
+      const doc = MDocument.fromText(rustCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.RUST,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('fn') || chunk.includes('impl'))).toBe(true);
+    });
+
+    it('chunkRecursive - SWIFT language support', async () => {
+      const swiftCode = `
+              import Foundation
+
+              struct User {
+                var name: String
+                var age: Int
+
+                func getName() -> String {
+                  return name
+                }
+              }
+
+              class UserManager {
+                func validate(data: String) -> Bool {
+                  if data.isEmpty {
+                    return false
+                  }
+                  return true
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(swiftCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.SWIFT,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('struct') || chunk.includes('func'))).toBe(true);
+    });
+
+    it('chunkRecursive - HTML language support', async () => {
+      const htmlCode = `
+              <html>
+              <body>
+                <header>
+                  <h1>Title</h1>
+                </header>
+                <div class="container">
+                  <p>Paragraph 1</p>
+                  <p>Paragraph 2</p>
+                  <ul>
+                    <li>Item 1</li>
+                    <li>Item 2</li>
+                  </ul>
+                </div>
+                <footer>
+                  <p>Footer</p>
+                </footer>
+              </body>
+              </html>
+            `;
+
+      const doc = MDocument.fromText(htmlCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.HTML,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('<') && chunk.includes('>'))).toBe(true);
+    });
+
+    it('chunkRecursive - SOL language support', async () => {
+      const solCode = `
+              pragma solidity ^0.8.0;
+
+              import "./Token.sol";
+
+              contract MyContract {
+                address public owner;
+                uint256 public value;
+
+                event ValueChanged(uint256 newValue);
+
+                modifier onlyOwner() {
+                  require(msg.sender == owner);
+                  _;
+                }
+
+                function setValue(uint256 _value) public onlyOwner {
+                  value = _value;
+                  emit ValueChanged(_value);
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(solCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.SOL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('contract') || chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - CSHARP language support', async () => {
+      const csharpCode = `
+              namespace MyApp.Models
+              {
+                using System;
+
+                public class User
+                {
+                  private string name;
+                  private int age;
+
+                  public string GetName()
+                  {
+                    return name;
+                  }
+
+                  public void SetName(string value)
+                  {
+                    name = value;
+                  }
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(csharpCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.CSHARP,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('public'))).toBe(true);
+    });
+
+    it('chunkRecursive - SCALA language support', async () => {
+      const scalaCode = `
+              package com.example
+
+              import scala.collection.immutable.List
+
+              case class User(name: String, age: Int)
+
+              object UserManager {
+                def validate(data: String): Boolean = {
+                  if (data.isEmpty) {
+                    false
+                  } else {
+                    true
+                  }
+                }
+              }
+            `;
+
+      const doc = MDocument.fromText(scalaCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.SCALA,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('class') || chunk.includes('case'))).toBe(true);
+    });
+
+    it('chunkRecursive - LUA language support', async () => {
+      const luaCode = `
+              function User:new(name, age)
+                local obj = {name = name, age = age}
+                setmetatable(obj, self)
+                self.__index = self
+                return obj
+              end
+
+              local function validate(data)
+                if data == nil then
+                  return false
+                end
+                return true
+              end
+
+              for i = 1, 10 do
+                print(i)
+              end
+            `;
+
+      const doc = MDocument.fromText(luaCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.LUA,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - PERL language support', async () => {
+      const perlCode = `
+              package User;
+
+              use strict;
+              use warnings;
+
+              sub new {
+                my $class = shift;
+                my $self = {
+                  name => shift,
+                  age => shift,
+                };
+                return bless $self, $class;
+              }
+
+              sub validate {
+                my $data = shift;
+                if (!$data) {
+                  return 0;
+                }
+                return 1;
+              }
+            `;
+
+      const doc = MDocument.fromText(perlCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PERL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('sub') || chunk.includes('package'))).toBe(true);
+    });
+
+    it('chunkRecursive - HASKELL language support', async () => {
+      const haskellCode = `
+              module User where
+
+              import Data.Maybe
+
+              data User = User { name :: String, age :: Int }
+
+              getName :: User -> String
+              getName user = name user
+
+              validate :: Maybe String -> Bool
+              validate Nothing = False
+              validate (Just str) = not (null str)
+
+              instance Show User where
+                show user = "User: " ++ name user
+            `;
+
+      const doc = MDocument.fromText(haskellCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.HASKELL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('data') || chunk.includes('module'))).toBe(true);
+    });
+
+    it('chunkRecursive - ELIXIR language support', async () => {
+      const elixirCode = `
+              defmodule User do
+                defstruct [:name, :age]
+
+                def new(name, age) do
+                  %User{name: name, age: age}
+                end
+
+                def get_name(%User{name: name}) do
+                  name
+                end
+              end
+
+              defmodule Validator do
+                def validate(data) do
+                  if data == nil do
+                    false
+                  else
+                    true
+                  end
+                end
+              end
+            `;
+
+      const doc = MDocument.fromText(elixirCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.ELIXIR,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('defmodule') || chunk.includes('def'))).toBe(true);
+    });
+
+    it('chunkRecursive - POWERSHELL language support', async () => {
+      const powershellCode = `
+              function Get-User {
+                param(
+                  [string]$Name,
+                  [int]$Age
+                )
+
+                $user = @{
+                  Name = $Name
+                  Age = $Age
+                }
+
+                return $user
+              }
+
+              function Test-Data {
+                param([string]$Data)
+
+                if ([string]::IsNullOrEmpty($Data)) {
+                  return $false
+                }
+                return $true
+              }
+
+              foreach ($i in 1..10) {
+                Write-Host $i
+              }
+            `;
+
+      const doc = MDocument.fromText(powershellCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.POWERSHELL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('function'))).toBe(true);
+    });
+
+    it('chunkRecursive - PROTO language support', async () => {
+      const protoCode = `
+              syntax = "proto3";
+
+              package example;
+
+              import "google/protobuf/timestamp.proto";
+
+              message User {
+                string name = 1;
+                int32 age = 2;
+                google.protobuf.Timestamp created_at = 3;
+              }
+
+              service UserService {
+                rpc GetUser (GetUserRequest) returns (User);
+                rpc ListUsers (ListUsersRequest) returns (stream User);
+              }
+
+              message GetUserRequest {
+                string user_id = 1;
+              }
+            `;
+
+      const doc = MDocument.fromText(protoCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.PROTO,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('message') || chunk.includes('service'))).toBe(true);
+    });
+
+    it('chunkRecursive - RST language support', async () => {
+      const rstCode = `
+              Title
+              =====
+
+              Section 1
+              ---------
+
+              This is a paragraph.
+
+              Section 2
+              ---------
+
+              Another paragraph.
+
+              .. code-block:: python
+
+                 def hello():
+                   print("Hello")
+
+              Subsection
+              **********
+
+              More content here.
+            `;
+
+      const doc = MDocument.fromText(rstCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.RST,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.length > 0)).toBe(true);
+    });
+
+    it('chunkRecursive - COBOL language support', async () => {
+      const cobolCode = `
+              IDENTIFICATION DIVISION.
+              PROGRAM-ID. SAMPLE.
+
+              ENVIRONMENT DIVISION.
+
+              DATA DIVISION.
+              WORKING-STORAGE SECTION.
+              01 WS-NAME PIC X(20).
+              01 WS-AGE PIC 99.
+
+              PROCEDURE DIVISION.
+              MAIN-PARA.
+                DISPLAY "Enter name: ".
+                ACCEPT WS-NAME.
+
+                IF WS-NAME = SPACES
+                  DISPLAY "Invalid"
+                ELSE
+                  DISPLAY "Valid".
+
+                STOP RUN.
+            `;
+
+      const doc = MDocument.fromText(cobolCode, { meta: 'data' });
+
+      await doc.chunk({
+        maxSize: 100,
+        overlap: 5,
+        language: Language.COBOL,
+      });
+
+      expect(doc.getDocs().length).toBeGreaterThan(1);
+      expect(doc.getText().some(chunk => chunk.includes('DIVISION') || chunk.includes('SECTION'))).toBe(true);
+    });
+
     it('should throw error for unsupported language', async () => {
       const doc = MDocument.fromText('tsCode', { meta: 'data' });
 
@@ -671,6 +1492,40 @@ describe('MDocument', () => {
       expect(docs?.[1]?.metadata?.['Header 2']).toBe('First Section');
     });
 
+    it('should respect maxSize option for sections strategy', async () => {
+      // Create HTML with large content that should be split
+      const longContent = 'This is some section content that needs to be chunked properly. '.repeat(30);
+      const html = `
+        <html>
+          <body>
+            <h1>Main Title</h1>
+            <p>${longContent}</p>
+            <h2>Second Section</h2>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        sections: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+        ],
+        maxSize: 300,
+        overlap: 30,
+      });
+
+      const docs = doc.getDocs();
+      // Content should be split into multiple chunks (more than 2 sections)
+      expect(docs.length).toBeGreaterThan(2);
+      // Each chunk should be roughly within maxSize
+      docs.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(400); // Some tolerance for overlap
+      });
+    });
+
     it('should properly merge metadata', async () => {
       const doc = new MDocument({
         docs: [
@@ -876,6 +1731,266 @@ describe('MDocument', () => {
       expect(xpath2).toBeDefined();
       expect(xpath2).toMatch(/^\/html\[1\]\/body\[1\]\/div\[1\]\/section\[1\]\/div\[2\]\/h1\[1\]$/);
     });
+
+    it('should respect maxSize option for headers strategy', async () => {
+      // Create HTML with large content that should be split
+      const longContent = 'This is some content. '.repeat(50); // ~1100 chars
+      const html = `
+        <html>
+          <body>
+            <h1>Title</h1>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [['h1', 'Header 1']],
+        maxSize: 200,
+        overlap: 20,
+      });
+
+      const docs = doc.getDocs();
+      // Content should be split into multiple chunks
+      expect(docs.length).toBeGreaterThan(1);
+      // Each chunk should be roughly within maxSize
+      docs.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(250); // Some tolerance for overlap
+      });
+    });
+
+    it('should not split chunks when maxSize is not specified', async () => {
+      const longContent = 'This is some content. '.repeat(50);
+      const html = `
+        <html>
+          <body>
+            <h1>Title</h1>
+            <p>${longContent}</p>
+          </body>
+        </html>
+      `;
+
+      const doc = MDocument.fromHTML(html, { meta: 'data' });
+      await doc.chunk({
+        strategy: 'html',
+        headers: [['h1', 'Header 1']],
+        // No maxSize specified
+      });
+
+      const docs = doc.getDocs();
+      // Should have exactly 1 chunk (not split by size)
+      expect(docs.length).toBe(1);
+      expect(docs[0]?.text.length).toBeGreaterThan(1000);
+    });
+
+    it('should handle complex academic paper structure with maxSize (arXiv-style HTML)', async () => {
+      // Simulate the structure of an academic paper like "Attention Is All You Need"
+      // from https://arxiv.org/html/1706.03762 - this addresses GitHub Issue #7942
+      const abstractContent = `The dominant sequence transduction models are based on complex recurrent or 
+        convolutional neural networks that include an encoder and a decoder. The best performing models 
+        also connect the encoder and decoder through an attention mechanism. We propose a new simple 
+        network architecture, the Transformer, based solely on attention mechanisms, dispensing with 
+        recurrence and convolutions entirely. Experiments on two machine translation tasks show these 
+        models to be superior in quality while being more parallelizable and requiring significantly 
+        less time to train.`;
+
+      const introContent = `Recurrent neural networks, long short-term memory and gated recurrent neural 
+        networks in particular, have been firmly established as state of the art approaches in sequence 
+        modeling and transduction problems such as language modeling and machine translation. Numerous 
+        efforts have since continued to push the boundaries of recurrent language models and encoder-decoder 
+        architectures. Recurrent models typically factor computation along the symbol positions of the 
+        input and output sequences. Aligning the positions to steps in computation time, they generate 
+        a sequence of hidden states as a function of the previous hidden state and the input for position.
+        This inherently sequential nature precludes parallelization within training examples, which becomes 
+        critical at longer sequence lengths, as memory constraints limit batching across examples.`;
+
+      const modelContent = `In this work we propose the Transformer, a model architecture eschewing recurrence 
+        and instead relying entirely on an attention mechanism to draw global dependencies between input 
+        and output. The Transformer allows for significantly more parallelization and can reach a new 
+        state of the art in translation quality after being trained for as little as twelve hours on 
+        eight P100 GPUs. Self-attention, sometimes called intra-attention is an attention mechanism 
+        relating different positions of a single sequence in order to compute a representation of the 
+        sequence. Self-attention has been used successfully in a variety of tasks including reading 
+        comprehension, abstractive summarization, textual entailment and learning task-independent 
+        sentence representations.`;
+
+      const attentionContent = `An attention function can be described as mapping a query and a set of 
+        key-value pairs to an output, where the query, keys, values, and output are all vectors. The 
+        output is computed as a weighted sum of the values, where the weight assigned to each value is 
+        computed by a compatibility function of the query with the corresponding key. We call our 
+        particular attention Scaled Dot-Product Attention. The input consists of queries and keys of 
+        dimension dk, and values of dimension dv. We compute the dot products of the query with all 
+        keys, divide each by sqrt(dk), and apply a softmax function to obtain the weights on the values.`;
+
+      const html = `
+        <html>
+          <head><title>Attention Is All You Need</title></head>
+          <body>
+            <h1>Attention Is All You Need</h1>
+            <h2>Abstract</h2>
+            <p>${abstractContent}</p>
+            
+            <h2>1 Introduction</h2>
+            <p>${introContent}</p>
+            
+            <h2>2 Model Architecture</h2>
+            <p>${modelContent}</p>
+            
+            <h3>2.1 Attention</h3>
+            <p>${attentionContent}</p>
+            
+            <h3>2.2 Multi-Head Attention</h3>
+            <p>Instead of performing a single attention function with d-dimensional keys, values and 
+            queries, we found it beneficial to linearly project the queries, keys and values h times 
+            with different, learned linear projections to dk, dk and dv dimensions, respectively.</p>
+            
+            <h2>3 Conclusion</h2>
+            <p>In this work, we presented the Transformer, the first sequence transduction model based 
+            entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder 
+            architectures with multi-headed self-attention.</p>
+          </body>
+        </html>
+      `;
+
+      // Test 1: Without maxSize - should produce fewer, larger chunks
+      const docWithoutMaxSize = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docWithoutMaxSize.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+      });
+      const docsWithoutMaxSize = docWithoutMaxSize.getDocs();
+
+      // Calculate max chunk size without maxSize option
+      const maxSizeWithout = Math.max(...docsWithoutMaxSize.map(d => d.text.length));
+
+      // Test 2: With maxSize=512 - should produce more, smaller chunks
+      const docWithMaxSize = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docWithMaxSize.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+        maxSize: 512,
+        overlap: 50,
+      });
+      const docsWithMaxSize = docWithMaxSize.getDocs();
+
+      // Calculate max chunk size with maxSize option
+      const maxSizeWith = Math.max(...docsWithMaxSize.map(d => d.text.length));
+
+      // Verify that maxSize creates more chunks (when content is large enough to split)
+      expect(docsWithMaxSize.length).toBeGreaterThanOrEqual(docsWithoutMaxSize.length);
+
+      // Verify chunk sizes are controlled (should be smaller with maxSize)
+      expect(maxSizeWith).toBeLessThanOrEqual(maxSizeWithout);
+
+      // Verify all chunks with maxSize are within the limit (with some tolerance)
+      docsWithMaxSize.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(600); // Allow some tolerance for overlap
+      });
+
+      // Test 3: Even smaller chunks for embedding use case
+      const docSmallChunks = MDocument.fromHTML(html, { source: 'arxiv' });
+      await docSmallChunks.chunk({
+        strategy: 'html',
+        headers: [
+          ['h1', 'Header 1'],
+          ['h2', 'Header 2'],
+          ['h3', 'Header 3'],
+        ],
+        maxSize: 256,
+        overlap: 25,
+      });
+      const docsSmallChunks = docSmallChunks.getDocs();
+
+      // Should have even more chunks with smaller maxSize
+      expect(docsSmallChunks.length).toBeGreaterThanOrEqual(docsWithMaxSize.length);
+
+      // Verify all chunks are within size limit
+      docsSmallChunks.forEach(d => {
+        expect(d.text.length).toBeLessThanOrEqual(320); // Allow some tolerance
+      });
+    });
+
+    // Integration test that hits the actual arXiv URL
+    // Skip in CI - run with: pnpm test -- --grep "arXiv integration"
+    it.skipIf(process.env.CI === 'true')(
+      'should chunk real arXiv paper HTML with maxSize (integration test)',
+      async () => {
+        // Fetch the actual "Attention Is All You Need" paper
+        // https://arxiv.org/html/1706.03762
+        const paperUrl = 'https://arxiv.org/html/1706.03762';
+        const response = await fetch(paperUrl);
+        expect(response.ok).toBe(true);
+
+        const paperText = await response.text();
+        expect(paperText.length).toBeGreaterThan(10000); // Should be a substantial HTML document
+
+        // Test 1: Without maxSize - large chunks
+        const docWithoutMaxSize = MDocument.fromHTML(paperText, { source: paperUrl });
+        await docWithoutMaxSize.chunk({
+          strategy: 'html',
+          headers: [
+            ['h1', 'Header 1'],
+            ['h2', 'Header 2'],
+            ['h3', 'Header 3'],
+          ],
+        });
+        const docsWithoutMaxSize = docWithoutMaxSize.getDocs();
+
+        // Should have chunks (the paper has multiple sections)
+        expect(docsWithoutMaxSize.length).toBeGreaterThan(0);
+
+        // Calculate stats for without maxSize
+        const sizesWithout = docsWithoutMaxSize.map(d => d.text.length);
+        const maxWithout = Math.max(...sizesWithout);
+        const avgWithout = sizesWithout.reduce((a, b) => a + b, 0) / sizesWithout.length;
+
+        // Test 2: With maxSize=512 - controlled chunks
+        const docWithMaxSize = MDocument.fromHTML(paperText, { source: paperUrl });
+        await docWithMaxSize.chunk({
+          strategy: 'html',
+          headers: [
+            ['h1', 'Header 1'],
+            ['h2', 'Header 2'],
+            ['h3', 'Header 3'],
+          ],
+          maxSize: 512,
+          overlap: 50,
+        });
+        const docsWithMaxSize = docWithMaxSize.getDocs();
+
+        // Calculate stats for with maxSize
+        const sizesWith = docsWithMaxSize.map(d => d.text.length);
+        const maxWith = Math.max(...sizesWith);
+
+        // Key assertion: maxSize should control chunk sizes
+        expect(maxWith).toBeLessThan(maxWithout);
+        expect(docsWithMaxSize.length).toBeGreaterThanOrEqual(docsWithoutMaxSize.length);
+
+        // Verify chunks are within size limit (with tolerance)
+        docsWithMaxSize.forEach(d => {
+          expect(d.text.length).toBeLessThanOrEqual(600);
+        });
+
+        // Log results for visibility when running locally
+        console.log('\n📊 arXiv Paper Chunking Results:');
+        console.log(`   Paper size: ${paperText.length.toLocaleString()} chars`);
+        console.log(
+          `   Without maxSize: ${docsWithoutMaxSize.length} chunks, max: ${maxWithout}, avg: ${Math.round(avgWithout)}`,
+        );
+        console.log(`   With maxSize=512: ${docsWithMaxSize.length} chunks, max: ${maxWith}`);
+      },
+      30000, // 30 second timeout for network request
+    );
   });
 
   describe('chunkJson', () => {
@@ -1528,7 +2643,7 @@ describe('MDocument', () => {
         strategy: 'latex',
         maxSize: 100,
         overlap: 10,
-        keepSeparator: 'start',
+        separatorPosition: 'start',
       });
 
       const chunks = doc.getText();
@@ -1558,7 +2673,7 @@ describe('MDocument', () => {
         strategy: 'latex',
         maxSize: 100,
         overlap: 10,
-        keepSeparator: 'start',
+        separatorPosition: 'start',
       });
 
       const chunks = doc.getText();
@@ -1566,7 +2681,7 @@ describe('MDocument', () => {
       expect(chunks.some(chunk => chunk.includes('E = mc^2'))).toBe(true);
     });
 
-    it('should split with keepSeparator at end', async () => {
+    it('should split with separatorPosition at end', async () => {
       const text = `Intro text here.
         \\section{First}
         Content A.
@@ -1580,7 +2695,7 @@ describe('MDocument', () => {
         strategy: 'latex',
         maxSize: 50,
         overlap: 0,
-        keepSeparator: 'end',
+        separatorPosition: 'end',
       });
 
       const chunks = doc.getText();
@@ -1874,9 +2989,9 @@ describe('MDocument', () => {
       const chunks = await doc.chunk({
         strategy: 'markdown',
         extract: {
-          title: true,
-          summary: true,
-          keywords: true,
+          title: { llm: mockLanguageModel },
+          summary: { llm: mockLanguageModel },
+          keywords: { llm: mockLanguageModel },
         },
       });
 
@@ -1884,8 +2999,8 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      expect(metadata.excerptKeywords).toMatch(/^KEYWORDS: .*/);
-    }, 15000);
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
 
     it('should extract metadata with custom settings', async () => {
       const doc = MDocument.fromMarkdown(
@@ -1896,19 +3011,23 @@ describe('MDocument', () => {
         strategy: 'markdown',
         extract: {
           title: {
+            llm: mockLanguageModel,
             nodes: 2,
             nodeTemplate: 'Generate a title for this: {context}',
             combineTemplate: 'Combine these titles: {context}',
           },
           summary: {
+            llm: mockLanguageModel,
             summaries: ['self'],
             promptTemplate: 'Summarize this: {context}',
           },
           questions: {
+            llm: mockLanguageModel,
             questions: 2,
             promptTemplate: 'Generate {numQuestions} questions about: {context}',
           },
           keywords: {
+            llm: mockLanguageModel,
             keywords: 3,
             promptTemplate: 'Extract {maxKeywords} key terms from: {context}',
           },
@@ -1919,12 +3038,9 @@ describe('MDocument', () => {
       expect(metadata).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
-      const qStr = metadata.questionsThisExcerptCanAnswer;
-      expect(qStr).toMatch(/1\..*\?/s);
-      expect(qStr).toMatch(/2\..*\?/s);
-      expect((qStr.match(/\?/g) || []).length).toBeGreaterThanOrEqual(2);
-      expect(metadata.excerptKeywords).toMatch(/^1\. .*\n2\. .*\n3\. .*$/);
-    }, 15000);
+      expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
+      expect(metadata.excerptKeywords).toBeDefined();
+    });
 
     it('should handle invalid summary types', async () => {
       const doc = MDocument.fromText('Test document');
@@ -1947,16 +3063,19 @@ describe('MDocument', () => {
 
     it('preserves metadata with KeywordExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { keywords: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
+
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
       expect(metadata.excerptKeywords).toBeDefined();
+      expect(typeof metadata.excerptKeywords).toBe('string');
+      expect(metadata.excerptKeywords.length).toBeGreaterThan(0);
     });
 
     it('preserves metadata with SummaryExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { summary: true } });
+      const chunks = await doc.chunk({ extract: { summary: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1965,7 +3084,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with QuestionsAnsweredExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { questions: true } });
+      const chunks = await doc.chunk({ extract: { questions: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1974,7 +3093,7 @@ describe('MDocument', () => {
 
     it('preserves metadata with TitleExtractor', async () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
-      const chunks = await doc.chunk({ extract: { title: true } });
+      const chunks = await doc.chunk({ extract: { title: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
@@ -1985,19 +3104,24 @@ describe('MDocument', () => {
       const doc = MDocument.fromText(baseText, { ...baseMetadata });
       const chunks = await doc.chunk({
         extract: {
-          keywords: true,
-          summary: true,
-          questions: true,
-          title: true,
+          keywords: { llm: mockLanguageModel },
+          summary: { llm: mockLanguageModel },
+          questions: { llm: mockLanguageModel },
+          title: { llm: mockLanguageModel },
         },
       });
       const metadata = chunks[0].metadata;
+
       expect(metadata.source).toBe('unit-test');
       expect(metadata.customField).toBe(123);
       expect(metadata.excerptKeywords).toBeDefined();
       expect(metadata.sectionSummary).toBeDefined();
       expect(metadata.questionsThisExcerptCanAnswer).toBeDefined();
       expect(metadata.documentTitle).toBeDefined();
+
+      // Verify each extractor produces distinct output
+      expect(metadata.excerptKeywords).not.toBe(metadata.sectionSummary);
+      expect(metadata.sectionSummary).not.toBe(metadata.questionsThisExcerptCanAnswer);
     });
     it('preserves metadata on all chunks when multiple are created', async () => {
       const text = 'Chunk one.\n\nChunk two.\n\nChunk three.';
@@ -2007,7 +3131,7 @@ describe('MDocument', () => {
         separator: '\n\n',
         maxSize: 20,
         overlap: 0,
-        extract: { keywords: true },
+        extract: { keywords: { llm: mockLanguageModel } },
       });
       expect(chunks.length).toBeGreaterThan(1);
       for (const chunk of chunks) {
@@ -2024,7 +3148,7 @@ describe('MDocument', () => {
         unrelatedField: 'should stay',
         source: 'unit-test',
       });
-      const chunks = await doc.chunk({ extract: { keywords: true } });
+      const chunks = await doc.chunk({ extract: { keywords: { llm: mockLanguageModel } } });
       const metadata = chunks[0].metadata;
       expect(metadata.source).toBe('unit-test');
       expect(metadata.unrelatedField).toBe('should stay');
@@ -2042,7 +3166,7 @@ describe('MDocument', () => {
         type: 'text',
       });
 
-      await doc.extractMetadata({ title: true });
+      await doc.extractMetadata({ title: { llm: mockLanguageModel } });
       const chunks = doc.getDocs();
 
       const titleA1 = chunks[0].metadata.documentTitle;
@@ -2052,7 +3176,11 @@ describe('MDocument', () => {
       expect(titleA1).toBeDefined();
       expect(titleA2).toBeDefined();
       expect(titleB).toBeDefined();
+
+      // Chunks with same docId should get same title (grouped)
       expect(titleA1).toBe(titleA2);
+
+      // Chunks with different docId should get different titles
       expect(titleA1).not.toBe(titleB);
     });
   });
@@ -2070,7 +3198,7 @@ describe('MDocument', () => {
         maxSize: 450,
         overlap: 0,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2107,7 +3235,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 100,
         sentenceEnders: ['.', '!', '?'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2129,7 +3257,7 @@ describe('MDocument', () => {
         maxSize: 120,
         overlap: 50,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2177,7 +3305,7 @@ describe('MDocument', () => {
         minSize: 5,
         maxSize: 100,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBe(1);
@@ -2195,7 +3323,7 @@ describe('MDocument', () => {
         maxSize: 100,
         targetSize: 40,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       // Should group multiple short sentences together
@@ -2218,7 +3346,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 100,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThan(1);
@@ -2238,7 +3366,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 200,
         sentenceEnders: ['.'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThanOrEqual(1);
@@ -2295,7 +3423,7 @@ describe('MDocument', () => {
         strategy: 'sentence',
         maxSize: 200,
         sentenceEnders: ['.', '?'],
-        keepSeparator: true,
+        separatorPosition: 'start',
       });
 
       expect(chunks.length).toBeGreaterThanOrEqual(1);

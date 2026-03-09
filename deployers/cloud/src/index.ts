@@ -1,5 +1,6 @@
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { join, dirname } from 'path';
+import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
 import { copy, readJSON } from 'fs-extra/esm';
 
@@ -10,16 +11,45 @@ import { getMastraEntryFile } from './utils/file.js';
 import { successEntrypoint } from './utils/report.js';
 
 export class CloudDeployer extends Deployer {
-  constructor() {
+  private studio: boolean;
+
+  constructor({ studio }: { studio?: boolean } = {}) {
     super({ name: 'cloud' });
+    this.studio = studio ?? false;
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+
+    // Always force externals: true for cloud deployments.
+    // The cloud deployer installs all dependencies from npm into node_modules,
+    // so bundling them inline serves no purpose. Bundling inline can also cause
+    // circular module evaluation deadlocks when dynamic imports (e.g. in
+    // MemoryLibSQL.init()) reference chunks that depend back on the entry module,
+    // resulting in "Detected unsettled top-level await" warnings.
+    return {
+      ...bundlerOptions,
+      externals: true,
+    };
   }
 
   async deploy(_outputDirectory: string): Promise<void> {}
-  async writeInstrumentationFile(outputDirectory: string) {
-    const instrumentationFile = join(outputDirectory, 'instrumentation.mjs');
-    const __dirname = dirname(fileURLToPath(import.meta.url));
 
-    await copy(join(__dirname, '../templates', 'instrumentation-template.js'), instrumentationFile);
+  async prepare(outputDirectory: string): Promise<void> {
+    await super.prepare(outputDirectory);
+
+    if (this.studio) {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+
+      const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+      await copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
+        overwrite: true,
+      });
+    }
   }
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
     const versions = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as
@@ -44,8 +74,12 @@ export class CloudDeployer extends Deployer {
 
     const mastraEntryFile = getMastraEntryFile(mastraDir);
 
-    const defaultToolsPath = join(mastraDir, MASTRA_DIRECTORY, 'tools');
+    const mastraAppDir = join(mastraDir, MASTRA_DIRECTORY);
 
+    // Use the getAllToolPaths method to prepare tools paths
+    const discoveredTools = this.getAllToolPaths(mastraAppDir);
+
+    await this.prepare(outputDirectory);
     await this._bundle(
       this.getEntry(),
       mastraEntryFile,
@@ -53,7 +87,7 @@ export class CloudDeployer extends Deployer {
         outputDirectory,
         projectRoot: mastraDir,
       },
-      [defaultToolsPath],
+      discoveredTools,
     );
     process.chdir(currentCwd);
   }
@@ -70,10 +104,9 @@ import { mastra } from '#mastra';
 import { MultiLogger } from '@mastra/core/logger';
 import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
-import { evaluate } from '@mastra/core/eval';
-import { AvailableHooks, registerHook } from '@mastra/core/hooks';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { scoreTracesWorkflow } from '@mastra/core/scores/scoreTraces';
+import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -112,58 +145,27 @@ const combinedLogger = existingLogger ? new MultiLogger([logger, existingLogger]
 
 mastra.setLogger({ logger: combinedLogger });
 
-if (mastra?.storage) {
-  mastra.storage.init()
-}
-
 if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
   const { MastraStorage } = await import('@mastra/core/storage');
   logger.info('Using Mastra Cloud Storage: ' + process.env.MASTRA_STORAGE_URL)
   const storage = new LibSQLStore({
+    id: 'mastra-cloud-storage-libsql',
     url: process.env.MASTRA_STORAGE_URL,
     authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
   })
   const vector = new LibSQLVector({
-    connectionUrl: process.env.MASTRA_STORAGE_URL,
+    id: 'mastra-cloud-storage-libsql-vector',
+    url: process.env.MASTRA_STORAGE_URL,
     authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
   })
 
   await storage.init()
   mastra?.setStorage(storage)
-
-  mastra?.memory?.setStorage(storage)
-  mastra?.memory?.setVector(vector)
-
-  registerHook(AvailableHooks.ON_GENERATION, ({ input, output, metric, runId, agentName, instructions }) => {
-    evaluate({
-      agentName,
-      input,
-      metric,
-      output,
-      runId,
-      globalRunId: runId,
-      instructions,
-    });
-  });
-  registerHook(AvailableHooks.ON_EVALUATION, async traceObject => {
-    if (mastra?.storage) {
-      await mastra.storage.insert({
-        tableName: MastraStorage.TABLE_EVALS,
-        record: {
-          input: traceObject.input,
-          output: traceObject.output,
-          result: JSON.stringify(traceObject.result),
-          agent_name: traceObject.agentName,
-          metric_name: traceObject.metricName,
-          instructions: traceObject.instructions,
-          test_info: null,
-          global_run_id: traceObject.globalRunId,
-          run_id: traceObject.runId,
-          created_at: new Date().toISOString(),
-        },
-      });
-    }
-  });
+} else {
+  const userStorage = mastra?.getStorage();
+  if (userStorage && !userStorage.disableInit) {
+    userStorage.init();
+  }
 }
 
 if (mastra?.getStorage()) {
@@ -172,7 +174,7 @@ if (mastra?.getStorage()) {
 
 ${getAuthEntrypoint()}
 
-await createNodeServer(mastra, { playground: false, swaggerUI: false, tools: getToolExports(tools) });
+await createNodeServer(mastra, { studio: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
 
 ${successEntrypoint()}
 

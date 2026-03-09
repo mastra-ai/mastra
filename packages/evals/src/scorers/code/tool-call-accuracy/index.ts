@@ -1,4 +1,4 @@
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { extractToolCalls } from '../../utils';
 interface ToolCallAccuracyOptions {
   expectedTool?: string;
@@ -75,6 +75,7 @@ export function createToolCallAccuracyScorerCode(options: ToolCallAccuracyOption
   };
 
   return createScorer({
+    id: 'code-tool-call-accuracy-scorer',
     name: 'Tool Call Accuracy Scorer',
     description: getDescription(),
     type: 'agent',

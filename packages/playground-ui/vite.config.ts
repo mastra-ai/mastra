@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react';
 import autoprefixer from 'autoprefixer';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 import tailwindcss from 'tailwindcss';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
@@ -30,7 +30,9 @@ export default defineConfig({
     lib: {
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
+        utils: resolve(__dirname, 'src/utils.ts'),
         tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
+        'tailwind.preset': resolve(__dirname, 'tailwind.preset.ts'),
       },
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => {

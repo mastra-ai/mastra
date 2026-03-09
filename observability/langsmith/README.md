@@ -10,21 +10,51 @@ npm install @mastra/langsmith
 
 ## Usage
 
+### Zero-Config Setup
+
+The exporter automatically reads credentials from environment variables:
+
+```bash
+# Required
+LANGSMITH_API_KEY=lsv2_pt_...
+
+# Optional
+LANGCHAIN_PROJECT=my-project  # Project name, defaults to "default"
+```
+
 ```typescript
 import { LangSmithExporter } from '@mastra/langsmith';
 
-// Set process.env.LANGSMITH_TRACING = "true";
-
-// Use with Mastra
 const mastra = new Mastra({
   ...,
   observability: {
     configs: {
       langsmith: {
-        serviceName: 'service',
+        serviceName: 'my-service',
+        exporters: [new LangSmithExporter()],
+      },
+    },
+  },
+});
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly:
+
+```typescript
+import { LangSmithExporter } from '@mastra/langsmith';
+
+const mastra = new Mastra({
+  ...,
+  observability: {
+    configs: {
+      langsmith: {
+        serviceName: 'my-service',
         exporters: [
           new LangSmithExporter({
-            apiKey: process.env.LANGSMITH_API_KEY, // Defaults to process.env.LANGSMITH_API_KEY
+            apiKey: 'lsv2_pt_...',
+            projectName: 'my-custom-project', // Optional
           }),
         ],
       },
@@ -33,9 +63,18 @@ const mastra = new Mastra({
 });
 ```
 
+### Configuration Options
+
+| Option        | Type     | Description                                                                                |
+| ------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `apiKey`      | `string` | LangSmith API key. Defaults to `LANGSMITH_API_KEY` env var                                 |
+| `projectName` | `string` | The name of the LangSmith project to send traces to. Overrides `LANGCHAIN_PROJECT` env var |
+| `apiUrl`      | `string` | Custom LangSmith API URL (for self-hosted instances)                                       |
+| `client`      | `Client` | Custom LangSmith client instance                                                           |
+
 ## Features
 
-### AI Tracing
+### Tracing
 
 - **Automatic span mapping**: Root spans become LangSmith traces
 - **Type-specific metadata**: Extracts relevant metadata for each span type (agents, tools, workflows)

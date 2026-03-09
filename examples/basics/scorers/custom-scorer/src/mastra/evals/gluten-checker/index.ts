@@ -1,9 +1,10 @@
 import { openai } from '@ai-sdk/openai';
-import { createScorer } from '@mastra/core/scores';
+import { createScorer } from '@mastra/core/evals';
 import { z } from 'zod';
 import { generateGlutenPrompt, generateReasonPrompt, GLUTEN_INSTRUCTIONS } from './prompts';
 
 export const glutenCheckerScorer = createScorer({
+  id: 'gluten-checker-scorer',
   name: 'Gluten Checker',
   description: 'Check if the output contains any gluten',
   judge: {

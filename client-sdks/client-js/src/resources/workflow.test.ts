@@ -17,13 +17,6 @@ describe('Workflow (fetch-mocked)', () => {
       if (url.includes('/start-async')) return Promise.resolve(createJsonResponse({ result: 'started-async' }));
       if (url.includes('/resume?runId=')) return Promise.resolve(createJsonResponse({ message: 'resumed' }));
       if (url.includes('/resume-async')) return Promise.resolve(createJsonResponse({ result: 'resumed-async' }));
-      if (url.includes('/watch?')) {
-        const body = Workflow.createRecordStream([
-          { type: 'transition', payload: { step: 's1' } },
-          { type: 'transition', payload: { step: 's2' } },
-        ]);
-        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
-      }
       if (url.includes('/stream?')) {
         const body = Workflow.createRecordStream([
           { type: 'log', payload: { msg: 'hello' } },
@@ -44,48 +37,36 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('returns runId when creating new run', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     expect(run.runId).toBe('r-123');
   });
 
   it('starts workflow run synchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const startRes = await run.start({ inputData: { a: 1 } });
     expect(startRes).toEqual({ message: 'started' });
   });
 
   it('starts workflow run asynchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const startAsyncRes = await run.startAsync({ inputData: { a: 1 } });
     expect(startAsyncRes).toEqual({ result: 'started-async' });
   });
 
   it('resumes workflow run synchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const resumeRes = await run.resume({ step: 's1' });
     expect(resumeRes).toEqual({ message: 'resumed' });
   });
 
   it('resumes workflow run asynchronously', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const resumeAsyncRes = await run.resumeAsync({ step: 's1' });
     expect(resumeAsyncRes).toEqual({ result: 'resumed-async' });
   });
 
-  it('watches workflow transitions and yields parsed records', async () => {
-    const run = await wf.createRunAsync();
-    const seen: any[] = [];
-    await run.watch(rec => {
-      seen.push(rec);
-    });
-    expect(seen).toEqual([
-      { type: 'transition', payload: { step: 's1' } },
-      { type: 'transition', payload: { step: 's2' } },
-    ]);
-  });
-
   it('streams workflow execution as parsed objects', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const stream = await run.stream({ inputData: { x: 1 } });
     const reader = (stream as ReadableStream<any>).getReader();
     const records: any[] = [];
@@ -100,13 +81,19 @@ describe('Workflow (fetch-mocked)', () => {
     ]);
   });
 
-  it('start uses provided runId', async () => {
-    const res = await wf.start({ runId: 'r-x', inputData: { b: 2 } });
-    expect(res).toEqual({ message: 'started' });
+  it('creates run using provided runId', async () => {
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) {
+        return Promise.resolve(createJsonResponse({ runId: 'r-x' }));
+      }
+    });
+    const run = await wf.createRun({ runId: 'r-x' });
+    expect(run.runId).toBe('r-x');
   });
 
   it('starts workflow run synchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { foo: 'bar' } };
     const result = await run.start({ inputData: { a: 1 }, tracingOptions });
     expect(result).toEqual({ message: 'started' });
@@ -119,7 +106,7 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('starts workflow run asynchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { traceId: 't-1' } };
     const result = await run.startAsync({ inputData: { a: 1 }, tracingOptions });
     expect(result).toEqual({ result: 'started-async' });
@@ -132,7 +119,7 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('resumes workflow run synchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { resume: true } };
     const result = await run.resume({ step: 's1', tracingOptions });
     expect(result).toEqual({ message: 'resumed' });
@@ -145,7 +132,7 @@ describe('Workflow (fetch-mocked)', () => {
   });
 
   it('resumes workflow run asynchronously with tracingOptions', async () => {
-    const run = await wf.createRunAsync();
+    const run = await wf.createRun();
     const tracingOptions = { metadata: { async: true } };
     const result = await run.resumeAsync({ step: 's1', tracingOptions });
     expect(result).toEqual({ result: 'resumed-async' });
@@ -160,6 +147,199 @@ describe('Workflow (fetch-mocked)', () => {
 
 // Mock fetch globally for client tests
 global.fetch = vi.fn();
+
+describe('Workflow error deserialization', () => {
+  let fetchMock: any;
+  let wf: Workflow;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as any;
+
+    const options: ClientOptions = { baseUrl: 'http://localhost', retries: 0 } as any;
+    wf = new Workflow(options, 'wf-1');
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('deserializes failed workflow error in startAsync', async () => {
+    const serializedError = {
+      name: 'StepError',
+      message: 'Step failed with validation error',
+      stack: 'Error: Step failed...\n    at ...',
+      statusCode: 400,
+      cause: {
+        name: 'ValidationError',
+        message: 'Invalid input',
+      },
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
+      if (url.includes('/start-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const run = await wf.createRun();
+
+    const result = (await run.startAsync({ inputData: {} })) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Step failed with validation error');
+    expect(result.error?.name).toBe('StepError');
+    expect(result.error.statusCode).toBe(400);
+    expect(result.error?.cause).toBeDefined();
+    expect(result.error?.cause?.message).toBe('Invalid input');
+  });
+
+  it('deserializes failed workflow error in resumeAsync', async () => {
+    const serializedError = {
+      name: 'ResumeError',
+      message: 'Resume step failed',
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
+      if (url.includes('/resume-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const run = await wf.createRun();
+
+    const result = (await run.resumeAsync({ step: 's1' })) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Resume step failed');
+    expect(result.error?.name).toBe('ResumeError');
+  });
+
+  it('deserializes failed workflow error in restartAsync', async () => {
+    const serializedError = {
+      name: 'RestartError',
+      message: 'Restart failed',
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
+      if (url.includes('/restart-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const run = await wf.createRun();
+
+    const result = (await run.restartAsync()) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Restart failed');
+  });
+
+  it('deserializes failed workflow error in timeTravelAsync', async () => {
+    const serializedError = {
+      name: 'TimeTravelError',
+      message: 'Time travel failed',
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: 'r-123' }));
+      if (url.includes('/time-travel-async')) {
+        return Promise.resolve(
+          createJsonResponse({
+            status: 'failed',
+            error: serializedError,
+          }),
+        );
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const run = await wf.createRun();
+
+    const result = (await run.timeTravelAsync({ step: 's1' })) as any;
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toBe('Time travel failed');
+  });
+
+  it('passes through successful workflow result unchanged', async () => {
+    const successResult = {
+      status: 'success',
+      result: { data: 'test-output' },
+      steps: {},
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: '123' }));
+      if (url.includes('/start-async')) {
+        return Promise.resolve(createJsonResponse(successResult));
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+    const run = await wf.createRun();
+
+    const result = (await run.startAsync({ inputData: {} })) as any;
+
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ data: 'test-output' });
+    expect(result.error).toBeUndefined();
+  });
+
+  it('passes through suspended workflow result unchanged', async () => {
+    const suspendedResult = {
+      status: 'suspended',
+      steps: {
+        step1: { status: 'suspended', suspendPayload: { waitingFor: 'approval' } },
+      },
+    };
+
+    fetchMock.mockImplementation((input: any) => {
+      const url = String(input);
+      if (url.includes('/create-run')) return Promise.resolve(createJsonResponse({ runId: '123' }));
+      if (url.includes('/start-async')) {
+        return Promise.resolve(createJsonResponse(suspendedResult));
+      }
+      return Promise.reject(new Error(`Unhandled fetch to ${url}`));
+    });
+
+    const run = await wf.createRun();
+
+    const result = (await run.startAsync({ inputData: {} })) as any;
+
+    expect(result.status).toBe('suspended');
+    expect(result.error).toBeUndefined();
+  });
+});
 
 describe('Workflow Client Methods', () => {
   let client: MastraClient;
@@ -232,7 +412,7 @@ describe('Workflow Client Methods', () => {
       workflow2: { name: 'Workflow 2' },
     };
     mockFetchResponse(mockResponse);
-    const result = await client.getWorkflows();
+    const result = await client.listWorkflows();
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
       `${clientOptions.baseUrl}/api/workflows`,
@@ -242,20 +422,20 @@ describe('Workflow Client Methods', () => {
     );
   });
 
-  it('should get all workflows with runtimeContext', async () => {
+  it('should get all workflows with requestContext', async () => {
     const mockResponse = {
       workflow1: { name: 'Workflow 1' },
       workflow2: { name: 'Workflow 2' },
     };
-    const runtimeContext = { userId: '123', tenantId: 'tenant-456' };
-    const expectedBase64 = btoa(JSON.stringify(runtimeContext));
+    const requestContext = { userId: '123', tenantId: 'tenant-456' };
+    const expectedBase64 = btoa(JSON.stringify(requestContext));
     const expectedEncodedBase64 = encodeURIComponent(expectedBase64);
 
     mockFetchResponse(mockResponse);
-    const result = await client.getWorkflows(runtimeContext);
+    const result = await client.listWorkflows(requestContext);
     expect(result).toEqual(mockResponse);
     expect(global.fetch).toHaveBeenCalledWith(
-      `${clientOptions.baseUrl}/api/workflows?runtimeContext=${expectedEncodedBase64}`,
+      `${clientOptions.baseUrl}/api/workflows?requestContext=${expectedEncodedBase64}`,
       expect.objectContaining({
         headers: expect.objectContaining(clientOptions.headers),
       }),

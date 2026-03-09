@@ -1,28 +1,32 @@
-import type { ScoreRowData, ScoringSource } from '../../../scores/types';
-import type { PaginationInfo, StoragePagination } from '../../types';
+import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '../../../evals/types';
+import { calculatePagination, normalizePerPage } from '../../base';
+import type { StoragePagination } from '../../types';
+import type { InMemoryDB } from '../inmemory-db';
 import { ScoresStorage } from './base';
 
-export type InMemoryScores = Map<string, ScoreRowData>;
-
 export class ScoresInMemory extends ScoresStorage {
-  scores: InMemoryScores;
+  private db: InMemoryDB;
 
-  constructor({ collection }: { collection: InMemoryScores }) {
+  constructor({ db }: { db: InMemoryDB }) {
     super();
-    this.scores = collection;
+    this.db = db;
+  }
+
+  async dangerouslyClearAll(): Promise<void> {
+    this.db.scores.clear();
   }
 
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
-    return this.scores.get(id) ?? null;
+    return this.db.scores.get(id) ?? null;
   }
 
-  async saveScore(score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'>): Promise<{ score: ScoreRowData }> {
+  async saveScore(score: SaveScorePayload): Promise<{ score: ScoreRowData }> {
     const newScore = { id: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date(), ...score };
-    this.scores.set(newScore.id, newScore);
+    this.db.scores.set(newScore.id, newScore);
     return { score: newScore };
   }
 
-  async getScoresByScorerId({
+  async listScoresByScorerId({
     scorerId,
     pagination,
     entityId,
@@ -34,8 +38,8 @@ export class ScoresInMemory extends ScoresStorage {
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(score => {
+  }): Promise<ListScoresResponse> {
+    const scores = Array.from(this.db.scores.values()).filter(score => {
       let baseFilter = score.scorerId === scorerId;
 
       if (entityId) {
@@ -53,37 +57,48 @@ export class ScoresInMemory extends ScoresStorage {
       return baseFilter;
     });
 
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }
 
-  async getScoresByRunId({
+  async listScoresByRunId({
     runId,
     pagination,
   }: {
     runId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(score => score.runId === runId);
+  }): Promise<ListScoresResponse> {
+    const scores = Array.from(this.db.scores.values()).filter(score => score.runId === runId);
+
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER); // false → MAX_SAFE_INTEGER
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }
 
-  async getScoresByEntityId({
+  async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
@@ -91,25 +106,30 @@ export class ScoresInMemory extends ScoresStorage {
     entityId: string;
     entityType: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(score => {
+  }): Promise<ListScoresResponse> {
+    const scores = Array.from(this.db.scores.values()).filter(score => {
       const baseFilter = score.entityId === entityId && score.entityType === entityType;
 
       return baseFilter;
     });
 
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }
 
-  async getScoresBySpan({
+  async listScoresBySpan({
     traceId,
     spanId,
     pagination,
@@ -117,18 +137,24 @@ export class ScoresInMemory extends ScoresStorage {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
-  }): Promise<{ pagination: PaginationInfo; scores: ScoreRowData[] }> {
-    const scores = Array.from(this.scores.values()).filter(
+  }): Promise<ListScoresResponse> {
+    const scores = Array.from(this.db.scores.values()).filter(
       score => score.traceId === traceId && score.spanId === spanId,
     );
     scores.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const { page, perPage: perPageInput } = pagination;
+    const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+    const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const end = perPageInput === false ? scores.length : start + perPage;
+
     return {
-      scores: scores.slice(pagination.page * pagination.perPage, (pagination.page + 1) * pagination.perPage),
+      scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: pagination.page,
-        perPage: pagination.perPage,
-        hasMore: scores.length > (pagination.page + 1) * pagination.perPage,
+        page: page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : scores.length > end,
       },
     };
   }

@@ -1,0 +1,15 @@
+- table:
+    - rowgroup:
+        - row "Name":
+            - columnheader "Name"
+    - rowgroup:
+        - row "Response Quality Scorer Evaluates the quality of agent responses":
+            - cell "Response Quality Scorer Evaluates the quality of agent responses":
+                - link "Response Quality Scorer":
+                    - /url: /scorers/response-quality
+                - text: ''
+        - row "Response Time Scorer Measures response latency performance":
+            - cell "Response Time Scorer Measures response latency performance":
+                - link "Response Time Scorer":
+                    - /url: /scorers/response-time
+                - text: ''

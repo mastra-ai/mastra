@@ -1,0 +1,402 @@
+{
+  "__structure__": [
+    "agent_run: \"agent run: 'test-agent'\"",
+    "├── model_generation: \"llm: 'mock-model-id'\"",
+    "│   └── model_step: \"step: 0\"",
+    "│       ├── model_chunk: \"chunk: 'text'\"",
+    "│       └── model_chunk: \"chunk: 'object'\"",
+    "└── processor_run: \"output stream processor: Structured Output\"",
+    "    └── agent_run: \"agent run: 'structured-output-structurer'\"",
+    "        └── model_generation: \"llm: 'mock-model-id'\"",
+    "            └── model_step: \"step: 0\"",
+    "                ├── model_chunk: \"chunk: 'object'\"",
+    "                └── model_chunk: \"chunk: 'text'\""
+  ],
+  "spans": [
+    {
+      "span": {
+        "id": "<span-1>",
+        "traceId": "<trace-1>",
+        "name": "agent run: 'test-agent'",
+        "type": "agent_run",
+        "completed": true,
+        "isEvent": false,
+        "isRootSpan": true,
+        "entityType": "agent",
+        "entityId": "test-agent",
+        "attributes": {
+          "instructions": "Return a simple response"
+        },
+        "metadata": {
+          "runId": "<runId-1>"
+        },
+        "input": "Return a list of items separated by commas",
+        "output": {
+          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "object": {
+            "items": "test structured output"
+          },
+          "files": []
+        }
+      },
+      "children": [
+        {
+          "span": {
+            "id": "<span-2>",
+            "traceId": "<trace-1>",
+            "name": "llm: 'mock-model-id'",
+            "type": "model_generation",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "agent",
+            "entityId": "test-agent",
+            "attributes": {
+              "model": "mock-model-id",
+              "provider": "mock-provider",
+              "streaming": true,
+              "parameters": {
+                "temperature": 0
+              },
+              "finishReason": "stop",
+              "responseId": "<responseId-1>",
+              "responseModel": "mock-model-id",
+              "completionStartTime": "<date>",
+              "usage": {
+                "inputTokens": 15,
+                "outputTokens": 25
+              }
+            },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
+            "input": {
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "Return a simple response"
+                },
+                {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Return a list of items separated by commas"
+                    }
+                  ]
+                }
+              ]
+            },
+            "output": {
+              "files": [],
+              "object": {
+                "items": "test structured output"
+              },
+              "reasoning": [],
+              "sources": [],
+              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "warnings": []
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-3>",
+                "traceId": "<trace-1>",
+                "name": "step: 0",
+                "type": "model_step",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-2>",
+                "entityType": "agent",
+                "entityId": "test-agent",
+                "attributes": {
+                  "stepIndex": 0,
+                  "messageId": "<messageId-1>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25
+                  },
+                  "isContinued": false,
+                  "finishReason": "stop"
+                },
+                "metadata": {
+                  "modelMetadata": {
+                    "modelId": "mock-model-id",
+                    "modelVersion": "v2",
+                    "modelProvider": "mock-provider"
+                  }
+                },
+                "input": {},
+                "output": {
+                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "toolCalls": [],
+                  "object": {
+                    "items": "test structured output"
+                  }
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-4>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'text'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "test-agent",
+                    "attributes": {
+                      "chunkType": "text",
+                      "sequenceNumber": 0
+                    },
+                    "output": {
+                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
+                    "name": "chunk: 'object'",
+                    "type": "model_chunk",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "agent",
+                    "entityId": "test-agent",
+                    "attributes": {
+                      "chunkType": "object",
+                      "sequenceNumber": 1
+                    },
+                    "output": {
+                      "items": "test structured output"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "span": {
+            "id": "<span-6>",
+            "traceId": "<trace-1>",
+            "name": "output stream processor: Structured Output",
+            "type": "processor_run",
+            "completed": true,
+            "isEvent": false,
+            "isRootSpan": false,
+            "parentId": "<span-1>",
+            "entityType": "output_processor",
+            "entityId": "test-agent",
+            "attributes": {
+              "processorExecutor": "legacy",
+              "processorIndex": 0
+            },
+            "input": {
+              "totalChunks": { "__or__": [5, 3] },
+              "accumulatedText": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+            },
+            "output": {
+              "totalChunks": { "__or__": [5, 3] },
+              "accumulatedText": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+            }
+          },
+          "children": [
+            {
+              "span": {
+                "id": "<span-7>",
+                "traceId": "<trace-1>",
+                "name": "agent run: 'structured-output-structurer'",
+                "type": "agent_run",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-6>",
+                "entityType": "agent",
+                "entityId": "structured-output-structurer",
+                "attributes": {
+                  "instructions": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                },
+                "metadata": {
+                  "runId": "<runId-2>"
+                },
+                "input": {
+                  "__or__": [
+                    "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 generate response",
+                    "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 stream response"
+                  ]
+                },
+                "output": {
+                  "text": "{\"items\":\"test structured output\"}",
+                  "object": {
+                    "items": "test structured output"
+                  },
+                  "files": []
+                }
+              },
+              "children": [
+                {
+                  "span": {
+                    "id": "<span-8>",
+                    "traceId": "<trace-1>",
+                    "name": "llm: 'mock-model-id'",
+                    "type": "model_generation",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-7>",
+                    "entityType": "agent",
+                    "entityId": "structured-output-structurer",
+                    "attributes": {
+                      "model": "mock-model-id",
+                      "provider": "mock-provider",
+                      "streaming": true,
+                      "parameters": {
+                        "temperature": 0
+                      },
+                      "finishReason": "stop",
+                      "responseId": "<responseId-2>",
+                      "responseModel": "mock-model-id",
+                      "completionStartTime": "<date>",
+                      "usage": {
+                        "inputTokens": 15,
+                        "outputTokens": 25
+                      }
+                    },
+                    "metadata": {
+                      "runId": "<runId-2>"
+                    },
+                    "input": {
+                      "messages": [
+                        {
+                          "role": "system",
+                          "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": {
+                                "__or__": [
+                                  "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 generate response",
+                                  "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details:\n\n# Assistant Response\nMock V2 stream response"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "output": {
+                      "files": [],
+                      "object": {
+                        "items": "test structured output"
+                      },
+                      "reasoning": [],
+                      "sources": [],
+                      "text": "{\"items\":\"test structured output\"}",
+                      "warnings": []
+                    }
+                  },
+                  "children": [
+                    {
+                      "span": {
+                        "id": "<span-9>",
+                        "traceId": "<trace-1>",
+                        "name": "step: 0",
+                        "type": "model_step",
+                        "completed": true,
+                        "isEvent": false,
+                        "isRootSpan": false,
+                        "parentId": "<span-8>",
+                        "entityType": "agent",
+                        "entityId": "structured-output-structurer",
+                        "attributes": {
+                          "stepIndex": 0,
+                          "messageId": "<messageId-2>",
+                          "usage": {
+                            "inputTokens": 15,
+                            "outputTokens": 25
+                          },
+                          "isContinued": false,
+                          "finishReason": "stop"
+                        },
+                        "metadata": {
+                          "modelMetadata": {
+                            "modelId": "mock-model-id",
+                            "modelVersion": "v2",
+                            "modelProvider": "mock-provider"
+                          }
+                        },
+                        "input": {},
+                        "output": {
+                          "text": "{\"items\":\"test structured output\"}",
+                          "toolCalls": [],
+                          "object": {
+                            "items": "test structured output"
+                          }
+                        }
+                      },
+                      "children": [
+                        {
+                          "span": {
+                            "id": "<span-10>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'object'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-9>",
+                            "entityType": "agent",
+                            "entityId": "structured-output-structurer",
+                            "attributes": {
+                              "chunkType": "object",
+                              "sequenceNumber": 0
+                            },
+                            "output": {}
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-11>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'text'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-9>",
+                            "entityType": "agent",
+                            "entityId": "structured-output-structurer",
+                            "attributes": {
+                              "chunkType": "text",
+                              "sequenceNumber": 1
+                            },
+                            "output": {
+                              "items": "test structured output"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

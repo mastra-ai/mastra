@@ -213,7 +213,7 @@ const stepA2 = new Step({
     const today = new Date().toISOString().split('T')[0];
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    const tools = await slack.getTools();
+    const tools = await slack.listTools();
 
     const channelId = context.triggerData.channelId;
 

@@ -1,6 +1,6 @@
-# @mastra/arize - OpenTelemetry + OpenInference AI Tracing Exporter
+# @mastra/arize - OpenTelemetry + OpenInference Tracing Exporter
 
-Export Mastra AI traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
+Export Mastra traces to any OpenTelemetry observability platform that supports OpenInference, like [Arize AX](https://arize.com/generative-ai/), or [Phoenix](https://phoenix.arize.com/).
 
 For more information on OpenInference, see the [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) specification.
 
@@ -14,31 +14,57 @@ npm install @mastra/arize
 
 You can add `ArizeExporter` to your Mastra configuration to export traces to Arize AX or Phoenix, or any other OpenTelemetry compatible observability platform that supports OpenInference.
 
-### Phoenix
+The exporter automatically reads credentials from environment variables, enabling zero-config setup.
+
+### Phoenix (Zero-Config)
+
+Set environment variables and use zero-config:
+
+```bash
+# Required - endpoint must end in /v1/traces
+PHOENIX_ENDPOINT=http://localhost:6006/v1/traces
+
+# Optional - for authenticated Phoenix instances
+PHOENIX_API_KEY=your-api-key
+
+# Optional - project name
+PHOENIX_PROJECT_NAME=my-project
+```
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core';
-
-// required, ends in /v1/traces
-const ENDPOINT = process.env.PHOENIX_ENDPOINT!;
-// optional if using unauthenticated Phoenix instance
-const API_KEY = process.env.PHOENIX_API_KEY;
-// optional, determines the project name in Phoenix
-const PROJECT_NAME = process.env.PHOENIX_PROJECT_NAME || 'mastra-service';
+import { Mastra } from '@mastra/core/mastra';
 
 const mastra = new Mastra({
   ...,
   observability: {
-    // Enables ArizeExporter for AI tracing
     configs: {
       arize: {
-        serviceName: PROJECT_NAME,
+        serviceName: 'my-service',
+        exporters: [new ArizeExporter()],
+      },
+    },
+  },
+});
+```
+
+### Phoenix (Explicit Configuration)
+
+```typescript
+import { ArizeExporter } from '@mastra/arize';
+import { Mastra } from '@mastra/core/mastra';
+
+const mastra = new Mastra({
+  ...,
+  observability: {
+    configs: {
+      arize: {
+        serviceName: 'my-service',
         exporters: [
           new ArizeExporter({
-            endpoint: ENDPOINT,
-            apiKey: API_KEY,
-            projectName: PROJECT_NAME,
+            endpoint: 'http://localhost:6006/v1/traces',
+            apiKey: 'your-api-key', // Optional
+            projectName: 'my-project', // Optional
           }),
         ],
       },
@@ -58,30 +84,53 @@ const mastra = new Mastra({
 >
 > Configure your `ArizeExporter` endpoint to `http://localhost:6006/v1/traces` and run the default Mastra weather agent to see traces!
 
-### Arize AX
+### Arize AX (Zero-Config)
+
+Set environment variables and use zero-config:
+
+```bash
+# Required
+ARIZE_SPACE_ID=your-space-id
+ARIZE_API_KEY=your-api-key
+
+# Optional
+ARIZE_PROJECT_NAME=my-project
+```
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core';
-
-// required space destination for trace exports
-const SPACE_ID = process.env.ARIZE_SPACE_ID!;
-// Arize AX API key
-const API_KEY = process.env.ARIZE_API_KEY!;
-// optional, determines the project name in Arize AX
-const PROJECT_NAME = process.env.ARIZE_PROJECT_NAME || 'mastra-service';
+import { Mastra } from '@mastra/core/mastra';
 
 const mastra = new Mastra({
   ...,
   observability: {
     configs: {
       arize: {
-        serviceName: PROJECT_NAME,
+        serviceName: 'my-service',
+        exporters: [new ArizeExporter()],
+      },
+    },
+  },
+});
+```
+
+### Arize AX (Explicit Configuration)
+
+```typescript
+import { ArizeExporter } from '@mastra/arize';
+import { Mastra } from '@mastra/core/mastra';
+
+const mastra = new Mastra({
+  ...,
+  observability: {
+    configs: {
+      arize: {
+        serviceName: 'my-service',
         exporters: [
           new ArizeExporter({
-            apiKey: process.env.ARIZE_API_KEY!,
-            spaceId: SPACE_ID,
-            projectName: PROJECT_NAME,
+            spaceId: 'your-space-id',
+            apiKey: 'your-api-key',
+            projectName: 'my-project', // Optional
           }),
         ],
       },
@@ -99,7 +148,7 @@ You can configure the `ArizeExporter` to tweak the underlying OpenTelemetry `Bat
 
 ```typescript
 import { ArizeExporter } from '@mastra/arize';
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core/mastra';
 
 const mastra = new Mastra({
   ...,
@@ -130,6 +179,20 @@ const mastra = new Mastra({
           })
         ],
       },
+    },
+  },
+});
+```
+
+### Custom metadata
+
+Any custom span attributes that are not part of the standard Mastra/OpenInference fields are serialized into the OpenInference `metadata` payload and shown in Arize/Phoenix. An easy way to add them is through `tracingOptions.metadata`:
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      companyId: 'acme-co',
     },
   },
 });
