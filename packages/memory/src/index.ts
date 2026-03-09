@@ -169,6 +169,12 @@ export class Memory extends MastraMemory {
     // Use perPage from args if provided, otherwise use threadConfig.lastMessages
     const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
 
+    // lastMessages: false means "disable conversation history entirely".
+    // When the resolved perPage is false from config (not an explicit caller override),
+    // return empty messages. This prevents recall() from treating false as "no limit"
+    // and returning ALL messages when the user intended to disable history.
+    const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
+
     // When limiting messages (perPage !== false) without explicit orderBy, we need to:
     // 1. Query DESC to get the NEWEST messages (not oldest)
     // 2. Reverse results to restore chronological order for the LLM
@@ -194,6 +200,7 @@ export class Memory extends MastraMemory {
       hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
       workingMemoryEnabled: config.workingMemory?.enabled,
       semanticRecallEnabled: Boolean(config.semanticRecall),
+      historyDisabledByConfig,
     });
 
     const defaultRange = DEFAULT_MESSAGE_RANGE;
@@ -223,6 +230,11 @@ export class Memory extends MastraMemory {
     }
 
     let usage: { tokens: number } | undefined;
+
+    // If history is disabled and there's no semantic recall to perform, return empty immediately
+    if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
+      return { messages: [], usage: undefined, total: 0, page: page ?? 0, perPage: 0, hasMore: false };
+    }
 
     if (config?.semanticRecall && vectorSearchString && this.vector) {
       const result = await this.embedMessageContent(vectorSearchString!);
@@ -258,10 +270,15 @@ export class Memory extends MastraMemory {
 
     // Get raw messages from storage
     const memoryStore = await this.getMemoryStore();
+
+    // When history is disabled by config, use perPage: 0 so only semantic recall
+    // include results are returned (not the full message history)
+    const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+
     const paginatedResult = await memoryStore.listMessages({
       threadId,
       resourceId,
-      perPage,
+      perPage: effectivePerPage,
       page,
       orderBy: effectiveOrderBy,
       filter,
@@ -1963,6 +1980,12 @@ Notes:
         'Observational memory async buffering is enabled by default but the installed version of @mastra/core does not support it. ' +
           'Either upgrade @mastra/core, @mastra/memory, and your storage adapter (@mastra/libsql, @mastra/pg, or @mastra/mongodb) to the latest version, ' +
           'or explicitly disable async buffering by setting `observation: { bufferTokens: false }` in your observationalMemory config.',
+      );
+    }
+
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
       );
     }
 

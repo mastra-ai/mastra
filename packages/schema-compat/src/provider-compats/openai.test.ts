@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ModelInformation } from '../types';
+import { isZodType } from '../utils';
+import { zodToJsonSchema } from '../zod-to-json';
 import { OpenAISchemaCompatLayer } from './openai';
+import { OpenAIReasoningSchemaCompatLayer } from './openai-reasoning';
 
 describe('OpenAISchemaCompatLayer - Basic Transformations', () => {
   const modelInfo: ModelInformation = {
@@ -945,5 +948,354 @@ describe('OpenAISchemaCompatLayer - Passthrough/LooseObject Schemas', () => {
     } else {
       expect(typeof additionalProps === 'boolean' || additionalProps === undefined).toBe(true);
     }
+  });
+});
+
+// =============================================================================
+// OpenAI strict mode: all properties must be in the `required` array.
+//
+// Two bugs fixed:
+//   1. agent.ts guard skipped compat layer when modelId was falsy
+//   2. processToJSONSchema() didn't ensure all properties were required
+// =============================================================================
+
+/** processZodType (structured output path) -> zodToJsonSchema */
+function toJsonViaCompat(schema: any) {
+  const compat = new OpenAISchemaCompatLayer({
+    provider: 'openai.responses',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  });
+  const transformed = compat.processZodType(schema);
+  return zodToJsonSchema(transformed);
+}
+
+/** Check if all properties are in the required array (OpenAI strict mode requirement) */
+function allPropsRequired(jsonSchema: any): { valid: boolean; missing: string[] } {
+  if (!jsonSchema.properties) return { valid: true, missing: [] };
+  const propKeys = Object.keys(jsonSchema.properties);
+  const required = jsonSchema.required || [];
+  const missing = propKeys.filter(k => !required.includes(k));
+  return { valid: missing.length === 0, missing };
+}
+
+/** Exact schema from packages/core/src/loop/network/validation.ts:361-368 */
+const defaultCompletionSchema = z.object({
+  isComplete: z.boolean().describe('Whether the task is complete'),
+  completionReason: z.string().describe('Explanation of why the task is or is not complete'),
+  finalResult: z.string().optional().describe('The final result text to return to the user'),
+});
+
+describe('OpenAISchemaCompatLayer - defaultCompletionSchema', () => {
+  it('processZodType should put all properties in required', () => {
+    const json = toJsonViaCompat(defaultCompletionSchema);
+    const check = allPropsRequired(json);
+    expect(check.valid).toBe(true);
+  });
+
+  it('processZodType should make finalResult accept null', () => {
+    const json = toJsonViaCompat(defaultCompletionSchema);
+    const finalResult = json.properties!['finalResult'] as any;
+    const acceptsNull =
+      (Array.isArray(finalResult.type) && finalResult.type.includes('null')) ||
+      (finalResult.anyOf && finalResult.anyOf.some((s: any) => s.type === 'null'));
+    expect(acceptsNull).toBe(true);
+  });
+});
+
+describe('OpenAISchemaCompatLayer - shouldApply with undefined modelId', () => {
+  it('should not crash and should apply when provider is OpenAI', () => {
+    const compat = new OpenAISchemaCompatLayer({
+      provider: 'openai.responses',
+      modelId: undefined as any,
+      supportsStructuredOutputs: false,
+    });
+    expect(compat.shouldApply()).toBe(true);
+  });
+
+  it('should not crash and should return false for non-OpenAI provider', () => {
+    const compat = new OpenAISchemaCompatLayer({
+      provider: 'anthropic.messages',
+      modelId: undefined as any,
+      supportsStructuredOutputs: false,
+    });
+    expect(compat.shouldApply()).toBe(false);
+  });
+});
+
+describe('OpenAISchemaCompatLayer - processToJSONSchema should put all props in required', () => {
+  const openaiCompat = new OpenAISchemaCompatLayer({
+    provider: 'openai.responses',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  });
+
+  it('optional, optionalWithDefault, and nullish fields should be in required', () => {
+    const schema = z.object({
+      required: z.string(),
+      optional: z.string().optional(),
+      optionalWithDefault: z.string().optional().default('test'),
+      nullish: z.string().nullish(),
+    });
+
+    const json = openaiCompat.processToJSONSchema(schema);
+    const check = allPropsRequired(json);
+    expect(check.valid).toBe(true);
+  });
+
+  it('list_files-like schema should have all fields in required', () => {
+    const schema = z.object({
+      path: z.string().default('./'),
+      maxDepth: z.number().optional().default(3),
+      exclude: z.string().optional(),
+      pattern: z.union([z.string(), z.array(z.string())]).optional(),
+    });
+
+    const json = openaiCompat.processToJSONSchema(schema);
+    const check = allPropsRequired(json);
+    expect(check.valid).toBe(true);
+  });
+
+  it('execute_command-like schema with nullish should have all fields in required', () => {
+    const schema = z.object({
+      command: z.string(),
+      timeout: z.number().nullish(),
+      cwd: z.string().nullish(),
+      background: z.boolean().optional(),
+    });
+
+    const json = openaiCompat.processToJSONSchema(schema);
+    const check = allPropsRequired(json);
+    expect(check.valid).toBe(true);
+  });
+});
+
+describe('OpenAISchemaCompatLayer - Workspace tool schemas', () => {
+  it('file_stat - no optional fields', () => {
+    const schema = z.object({ path: z.string() });
+    expect(allPropsRequired(toJsonViaCompat(schema)).valid).toBe(true);
+  });
+
+  it('write_file - .optional().default()', () => {
+    const schema = z.object({
+      path: z.string(),
+      content: z.string(),
+      overwrite: z.boolean().optional().default(true),
+    });
+    expect(allPropsRequired(toJsonViaCompat(schema)).valid).toBe(true);
+  });
+
+  it('list_files - mixed optional patterns', () => {
+    const schema = z.object({
+      path: z.string().default('./'),
+      maxDepth: z.number().optional().default(3),
+      showHidden: z.boolean().optional().default(false),
+      dirsOnly: z.boolean().optional().default(false),
+      exclude: z.string().optional(),
+      extension: z.string().optional(),
+      pattern: z.union([z.string(), z.array(z.string())]).optional(),
+    });
+    expect(allPropsRequired(toJsonViaCompat(schema)).valid).toBe(true);
+  });
+
+  it('grep - .optional() and .optional().default() mix', () => {
+    const schema = z.object({
+      pattern: z.string(),
+      path: z.string().optional().default('./'),
+      contextLines: z.number().optional().default(0),
+      maxCount: z.number().optional(),
+      caseSensitive: z.boolean().optional().default(true),
+      includeHidden: z.boolean().optional().default(false),
+    });
+    expect(allPropsRequired(toJsonViaCompat(schema)).valid).toBe(true);
+  });
+
+  it('execute_command - .nullish() and .optional()', () => {
+    const schema = z.object({
+      command: z.string(),
+      timeout: z.number().nullish(),
+      cwd: z.string().nullish(),
+      tail: z.number().nullish(),
+      background: z.boolean().optional(),
+    });
+    expect(allPropsRequired(toJsonViaCompat(schema)).valid).toBe(true);
+  });
+
+  it('index - .record().optional()', () => {
+    const schema = z.object({
+      path: z.string(),
+      content: z.string(),
+      metadata: z.record(z.unknown()).optional(),
+    });
+    expect(allPropsRequired(toJsonViaCompat(schema)).valid).toBe(true);
+  });
+});
+
+describe('OpenAISchemaCompatLayer - Zod pattern coverage', () => {
+  const patterns: Array<{ name: string; schema: any }> = [
+    { name: '.optional()', schema: z.object({ f: z.string().optional() }) },
+    { name: '.default()', schema: z.object({ f: z.string().default('x') }) },
+    { name: '.optional().default()', schema: z.object({ f: z.string().optional().default('x') }) },
+    { name: '.nullable()', schema: z.object({ f: z.string().nullable() }) },
+    { name: '.nullish()', schema: z.object({ f: z.string().nullish() }) },
+    { name: '.optional() on number', schema: z.object({ f: z.number().optional() }) },
+    { name: '.optional() on boolean', schema: z.object({ f: z.boolean().optional() }) },
+    { name: '.optional() on enum', schema: z.object({ f: z.enum(['a', 'b']).optional() }) },
+    { name: '.optional() on array', schema: z.object({ f: z.array(z.string()).optional() }) },
+    { name: '.optional() on object', schema: z.object({ f: z.object({ n: z.string() }).optional() }) },
+    { name: '.optional() on union', schema: z.object({ f: z.union([z.string(), z.array(z.string())]).optional() }) },
+    { name: '.optional() on record', schema: z.object({ f: z.record(z.unknown()).optional() }) },
+  ];
+
+  patterns.forEach(({ name, schema }) => {
+    it(`${name}: all fields in required after compat`, () => {
+      const check = allPropsRequired(toJsonViaCompat(schema));
+      expect(check.valid).toBe(true);
+    });
+  });
+});
+
+describe('OpenAISchemaCompatLayer - Responses API via LiteLLM proxy', () => {
+  it('compat layer applies for openai.responses provider', () => {
+    const compat = new OpenAISchemaCompatLayer({
+      provider: 'openai.responses',
+      modelId: 'codex-mini',
+      supportsStructuredOutputs: false,
+    });
+    expect(compat.shouldApply()).toBe(true);
+  });
+
+  it('compat layer applies when modelId contains openai (LiteLLM proxy)', () => {
+    const compat = new OpenAISchemaCompatLayer({
+      provider: 'litellm.chat',
+      modelId: 'openai/codex-mini',
+      supportsStructuredOutputs: false,
+    });
+    expect(compat.shouldApply()).toBe(true);
+  });
+
+  it('processZodType fixes optional fields for Responses API', () => {
+    const schema = z.object({
+      result: z.string(),
+      confidence: z.number().optional(),
+      reasoning: z.string().optional(),
+    });
+
+    const compat = new OpenAISchemaCompatLayer({
+      provider: 'openai.responses',
+      modelId: 'codex-mini',
+      supportsStructuredOutputs: false,
+    });
+    const transformed = compat.processZodType(schema);
+    const fixed = allPropsRequired(zodToJsonSchema(transformed));
+    expect(fixed.valid).toBe(true);
+  });
+
+  it('processToJSONSchema should also produce valid schemas for tool schemas', () => {
+    const schema = z.object({
+      query: z.string(),
+      limit: z.number().optional(),
+      tags: z.array(z.string()).optional(),
+    });
+
+    const compat = new OpenAISchemaCompatLayer({
+      provider: 'openai.responses',
+      modelId: 'codex-mini',
+      supportsStructuredOutputs: false,
+    });
+    const json = compat.processToJSONSchema(schema);
+    const check = allPropsRequired(json);
+    expect(check.valid).toBe(true);
+  });
+});
+
+// =============================================================================
+// Agent network structured output flow simulation
+//
+// When modelId is falsy (e.g., agent networks), the compat layer must still run.
+// execute.ts enables strictJsonSchema independently, so unprocessed schemas get rejected.
+// =============================================================================
+
+describe('OpenAISchemaCompatLayer - agent network defaultCompletionSchema with falsy modelId', () => {
+  // Exact schema from packages/core/src/loop/network/validation.ts:370-377
+  const defaultCompletionSchemaNetwork = z.object({
+    isComplete: z.boolean().describe('Whether the task is complete'),
+    completionReason: z.string().describe('Explanation of why the task is or is not complete'),
+    finalResult: z
+      .string()
+      .optional()
+      .describe('The final result text to return to the user. omit if primitive result is sufficient'),
+  });
+
+  /**
+   * Simulates the agent.ts structured output flow:
+   *   1. Check if provider/modelId includes 'openai'
+   *   2. Check isZodType(schema)
+   *   3. Construct compat layer, call processZodType()
+   *   4. zodToJsonSchema() converts the (possibly transformed) schema
+   *   5. strict mode enabled if provider.startsWith('openai')
+   */
+  function simulateAgentStructuredOutputFlow(schema: any, targetProvider: string, targetModelId: string | undefined) {
+    let processedSchema = schema;
+
+    // Optional chaining on targetModelId
+    if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
+      // Compat runs even with falsy modelId (no targetModelId guard)
+      if (isZodType(schema)) {
+        const modelInfo = {
+          provider: targetProvider,
+          modelId: targetModelId ?? '',
+          supportsStructuredOutputs: false,
+        };
+        const isReasoningModel = /^o[1-5]/.test(targetModelId ?? '');
+        const compat = isReasoningModel
+          ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+          : new OpenAISchemaCompatLayer(modelInfo);
+        if (compat.shouldApply()) {
+          processedSchema = compat.processZodType(schema);
+        }
+      }
+    }
+
+    // zodToJsonSchema runs regardless
+    const jsonSchema = zodToJsonSchema(processedSchema);
+
+    // Strict mode check is independent of compat layer
+    const strictModeEnabled = targetProvider.startsWith('openai');
+
+    return { jsonSchema, strictModeEnabled };
+  }
+
+  it('happy path: valid modelId → compat layer runs → schema is strict-mode compliant', () => {
+    const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+      defaultCompletionSchemaNetwork,
+      'openai.responses',
+      'gpt-4o',
+    );
+    expect(strictModeEnabled).toBe(true);
+    expect(allPropsRequired(jsonSchema).valid).toBe(true);
+  });
+
+  it('undefined modelId → compat layer still runs → schema is strict-mode compliant', () => {
+    // Agent network with OpenAI, modelId is falsy.
+    const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+      defaultCompletionSchemaNetwork,
+      'openai.responses',
+      undefined,
+    );
+
+    expect(strictModeEnabled).toBe(true);
+    expect(allPropsRequired(jsonSchema).valid).toBe(true);
+  });
+
+  it('empty string modelId → compat layer still runs → schema is strict-mode compliant', () => {
+    const { jsonSchema, strictModeEnabled } = simulateAgentStructuredOutputFlow(
+      defaultCompletionSchemaNetwork,
+      'openai.responses',
+      '',
+    );
+
+    expect(strictModeEnabled).toBe(true);
+    expect(allPropsRequired(jsonSchema).valid).toBe(true);
   });
 });

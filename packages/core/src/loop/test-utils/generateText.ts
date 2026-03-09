@@ -737,6 +737,23 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         expect(result.steps?.[0]?.response).toMatchInlineSnapshot(`
           {
             "body": "test body",
+            "dbMessages": [
+              {
+                "content": {
+                  "content": "Hello, world!",
+                  "format": 2,
+                  "parts": [
+                    {
+                      "text": "Hello, world!",
+                      "type": "text",
+                    },
+                  ],
+                },
+                "createdAt": 2024-01-01T00:00:00.001Z,
+                "id": "1234",
+                "role": "assistant",
+              },
+            ],
             "headers": {
               "custom-response-header": "response-header-value",
             },

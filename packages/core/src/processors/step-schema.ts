@@ -125,6 +125,8 @@ export type ProcessorInputStepPhaseType = {
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
 };
 
 export type ProcessorOutputStreamPhaseType = {
@@ -183,6 +185,8 @@ export type ProcessorStepOutputType = {
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
   steps?: Array<StepResult<ToolSet>>;
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
 };
 
 // =========================================================================
@@ -509,6 +513,11 @@ export const ProcessorInputStepPhaseSchema = z.object({
   stepNumber: z.number().describe('The current step number (0-indexed)'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
+  messageId: z.string().optional().describe('The active assistant response message ID for this step'),
+  rotateResponseMessageId: z
+    .custom<() => string>()
+    .optional()
+    .describe('Rotate the active assistant response message ID when supported by the caller'),
   // Model and tools configuration (can be modified by processors)
   model: z.custom<ProcessorStepModelConfig>().optional().describe('Current model for this step'),
   tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Current tools available for this step'),
@@ -622,20 +631,16 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   retryCount: z.number().optional(),
 
   // Model and tools configuration (for inputStep phase)
-  model: z.custom<MastraLanguageModel>().optional().describe('Language model instance'),
-  tools: z.custom<ProcessorStepToolsConfig>().optional().describe('Tools configuration'),
-  toolChoice: z.custom<ToolChoice<ToolSet>>().optional().describe('Tool choice setting'),
-  activeTools: z.array(z.string()).optional().describe('Active tool names'),
-  providerOptions: z.custom<SharedProviderOptions>().optional().describe('Provider-specific options'),
-  modelSettings: z
-    .custom<Omit<CallSettings, 'abortSignal'>>()
-    .optional()
-    .describe('Model settings (temperature, etc.)'),
-  structuredOutput: z
-    .custom<StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>>()
-    .optional()
-    .describe('Structured output configuration'),
-  steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
+  model: z.custom<MastraLanguageModel>().optional(),
+  tools: z.custom<ProcessorStepToolsConfig>().optional(),
+  toolChoice: z.custom<ToolChoice<ToolSet>>().optional(),
+  activeTools: z.array(z.string()).optional(),
+  providerOptions: z.custom<SharedProviderOptions>().optional(),
+  modelSettings: z.custom<Omit<CallSettings, 'abortSignal'>>().optional(),
+  structuredOutput: z.custom<StructuredOutputOptions<InferSchemaOutput<OutputSchema>>>().optional(),
+  steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
+  messageId: z.string().optional(),
+  rotateResponseMessageId: z.custom<() => string>().optional(),
 });
 
 /**

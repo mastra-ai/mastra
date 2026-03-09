@@ -42,7 +42,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

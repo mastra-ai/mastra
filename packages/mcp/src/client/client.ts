@@ -725,7 +725,10 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async (input: any, context?: { requestContext?: RequestContext | null; runId?: string }) => {
+          execute: async (
+            input: any,
+            context?: { requestContext?: RequestContext | null; runId?: string; abortSignal?: AbortSignal },
+          ) => {
             const operationContext = context?.requestContext ?? null;
 
             return this.operationContextStore.run(operationContext, async () => {
@@ -743,6 +746,7 @@ export class InternalMastraMCPClient extends MastraBase {
                   CallToolResultSchema,
                   {
                     timeout: this.timeout,
+                    signal: context?.abortSignal,
                   },
                 );
 

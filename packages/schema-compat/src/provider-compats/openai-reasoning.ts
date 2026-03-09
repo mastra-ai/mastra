@@ -3,7 +3,9 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
+import { isArraySchema, isNumberSchema, isObjectSchema, isStringSchema } from '../json-schema/utils';
 import type { ZodType } from '../schema.types';
+import { ensureAllPropertiesRequired } from '../zod-to-json';
 import {
   isOptional,
   isObj,
@@ -24,10 +26,8 @@ export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
   }
 
   shouldApply(): boolean {
-    if (
-      this.isReasoningModel() &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
-    ) {
+    const model = this.getModel();
+    if (this.isReasoningModel() && (model.provider.includes(`openai`) || model.modelId?.includes(`openai`))) {
       return true;
     }
 
@@ -116,6 +116,24 @@ export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
     }
 
     return this.defaultUnsupportedZodTypeHandler(value as ZodObjectV4<any> | ZodObjectV3<any>);
+  }
+
+  processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
+    const jsonSchema = super.processToJSONSchema(zodSchema);
+    return ensureAllPropertiesRequired(jsonSchema);
+  }
+
+  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    // Process based on schema type
+    if (isObjectSchema(schema)) {
+      this.defaultObjectHandler(schema);
+    } else if (isArraySchema(schema)) {
+      this.defaultArrayHandler(schema);
+    } else if (isNumberSchema(schema)) {
+      this.defaultNumberHandler(schema);
+    } else if (isStringSchema(schema)) {
+      this.defaultStringHandler(schema);
+    }
   }
 
   postProcessJSONNode(schema: JSONSchema7): void {

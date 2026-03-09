@@ -274,16 +274,18 @@ abstract class BaseFormatHandler<OUTPUT = undefined> {
       }
     }
 
-    // Some LLMs wrap the JSON response in code blocks.
-    // In that case, first try to extract content from complete code blocks
-    if (processedText.includes('```json')) {
-      const match = processedText.match(/```json\s*\n?([\s\S]*?)\n?\s*```/);
+    // Some LLMs wrap the entire JSON response in a ```json code block.
+    // Only unwrap when the accumulated text itself starts with that fence so
+    // embedded examples inside valid JSON string values are preserved.
+    const trimmedStart = processedText.trimStart();
+    if (/^```json\b/.test(trimmedStart)) {
+      const match = trimmedStart.match(/^```json\s*\n?([\s\S]*?)\n?\s*```\s*$/);
       if (match && match[1]) {
         // Complete code block found - use content between tags
         processedText = match[1].trim();
       } else {
-        // No complete code block - just remove the opening ```json
-        processedText = processedText.replace(/^```json\s*\n?/, '');
+        // No complete code block yet - just remove the opening ```json prefix
+        processedText = trimmedStart.replace(/^```json\s*\n?/, '');
       }
     }
 

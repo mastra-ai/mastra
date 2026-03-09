@@ -2417,7 +2417,10 @@ export class Agent<
     return memory.recall({
       threadId,
       resourceId,
-      perPage: threadConfig.lastMessages,
+      // When lastMessages is false (disabled), don't pass perPage so recall()
+      // can detect the disabled state from config and return empty history.
+      // When lastMessages is a number, pass it as perPage to limit results.
+      ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
@@ -2658,6 +2661,18 @@ export class Agent<
           text: z.string().describe('The response from the agent'),
           subAgentThreadId: z.string().describe('The thread ID of the agent').optional(),
           subAgentResourceId: z.string().describe('The resource ID of the agent').optional(),
+          subAgentToolResults: z
+            .array(
+              z.object({
+                toolName: z.string().describe('The name of the tool'),
+                toolCallId: z.string().describe('The ID of the tool call'),
+                result: z.any().describe('The result of the tool call'),
+                args: z.any().describe('The arguments of the tool call').optional(),
+                isError: z.boolean().describe('Whether the tool call resulted in an error').optional(),
+              }),
+            )
+            .describe("The results from the agent's tool calls")
+            .optional(),
         });
 
         const modelVersion = (await agent.getModel({ requestContext })).specificationVersion;
@@ -2948,6 +2963,13 @@ export class Agent<
                     });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
+                const subAgentToolResults = generateResult.toolResults?.map(toolResult => ({
+                  toolName: toolResult.payload.toolName,
+                  toolCallId: toolResult.payload.toolCallId,
+                  result: toolResult.payload.result,
+                  args: toolResult.payload.args,
+                  isError: toolResult.payload.isError,
+                }));
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
                   id: this.#mastra?.generateId() || randomUUID(),
@@ -2996,7 +3018,7 @@ export class Agent<
                   });
                 }
 
-                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId };
+                result = { text: generateResult.text, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else if (methodType === 'generate' && modelVersion === 'v1') {
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
@@ -3082,6 +3104,13 @@ export class Agent<
                   }
                 }
 
+                const subAgentToolResults = (await streamResult.toolResults)?.map(toolResult => ({
+                  toolName: toolResult.payload.toolName,
+                  toolCallId: toolResult.payload.toolCallId,
+                  result: toolResult.payload.result,
+                  args: toolResult.payload.args,
+                  isError: toolResult.payload.isError,
+                }));
                 const agentResponseMessages = streamResult.messageList.get.response.db();
                 // Create user message with the original prompt
                 const userMessage: MastraDBMessage = {
@@ -3132,7 +3161,7 @@ export class Agent<
                   });
                 }
 
-                result = { text: fullText, subAgentThreadId, subAgentResourceId };
+                result = { text: fullText, subAgentThreadId, subAgentResourceId, subAgentToolResults };
               } else {
                 const streamResult = await agent.streamLegacy(effectivePrompt, {
                   requestContext,
@@ -3813,7 +3842,14 @@ export class Agent<
     runId?: string;
   }) {
     try {
-      messageList.add(result.response.messages, 'response');
+      // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+      // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+      const stepResponseMessages = result.response.dbMessages?.length
+        ? result.response.dbMessages
+        : result.response.messages;
+      if (stepResponseMessages?.length) {
+        messageList.add(stepResponseMessages, 'response');
+      }
       // Message saving is now handled by MessageHistory output processor
     } catch (e) {
       this.logger.error('Error adding messages on step finish', {
@@ -4254,29 +4290,33 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
     const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
 
+    // Add LLM response messages to the list
+    // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+    // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+    let responseMessages: MessageInput[] | undefined = result.response.dbMessages?.length
+      ? result.response.dbMessages
+      : result.response.messages;
+    if ((!responseMessages || responseMessages.length === 0) && result.object) {
+      responseMessages = [
+        {
+          id: result.response.id,
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: outputText, // outputText contains the stringified object
+            },
+          ],
+        },
+      ];
+    }
+
+    if (responseMessages?.length) {
+      messageList.add(responseMessages, 'response');
+    }
+
     if (memory && resourceId && thread && !readOnlyMemory) {
       try {
-        // Add LLM response messages to the list
-        let responseMessages = result.response.messages;
-        if (!responseMessages && result.object) {
-          responseMessages = [
-            {
-              id: result.response.id,
-              role: 'assistant',
-              content: [
-                {
-                  type: 'text',
-                  text: outputText, // outputText contains the stringified object
-                },
-              ],
-            },
-          ];
-        }
-
-        if (responseMessages) {
-          messageList.add(responseMessages, 'response');
-        }
-
         if (!threadExists) {
           await memory.createThread({
             threadId: thread.id,
@@ -4340,25 +4380,6 @@ export class Agent<
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
         throw mastraError;
-      }
-    } else {
-      let responseMessages = result.response.messages;
-      if (!responseMessages && result.object) {
-        responseMessages = [
-          {
-            id: result.response.id,
-            role: 'assistant',
-            content: [
-              {
-                type: 'text',
-                text: outputText, // outputText contains the stringified object
-              },
-            ],
-          },
-        ];
-      }
-      if (responseMessages) {
-        messageList.add(responseMessages, 'response');
       }
     }
 

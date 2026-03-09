@@ -437,7 +437,57 @@ Added when a sandbox is configured:
 
 | Tool | Description |
 | - | - |
-| `mastra_workspace_execute_command` | Execute a shell command with arguments. Returns stdout, stderr, and exit code. Supports timeouts and streaming output. |
+| `mastra_workspace_execute_command` | Execute a shell command. Returns stdout, stderr, and exit code. When the sandbox has a process manager, accepts `background: true` to spawn a long-running process and return a PID. |
+| `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
+| `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
+
+The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'backgroundProcesses',
+    type: 'BackgroundProcessesConfig',
+    description:
+      'Configuration for handling background processes. Only applicable if the sandbox supports background execution.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'BackgroundProcessesConfig',
+        parameters: [
+          {
+            name: 'onStdout',
+            type: '(data: string, meta: BackgroundProcessMeta) => void',
+            description: 'Callback for stdout chunks from background processes.',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string, meta: BackgroundProcessMeta) => void',
+            description: 'Callback for stderr chunks from background processes.',
+            isOptional: true,
+          },
+          {
+            name: 'onExit',
+            type: '(meta: BackgroundProcessExitMeta) => void',
+            description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
+            isOptional: true,
+          },
+          {
+            name: 'abortSignal',
+            type: 'AbortSignal | null | false',
+            description:
+              "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+See [Background process callbacks](/docs/workspace/sandbox#background-process-callbacks) for usage examples.
 
 ### Search tools
 
