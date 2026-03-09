@@ -2,6 +2,4 @@
 "@mastra/mcp": patch
 ---
 
-fix: add SIGHUP handler to prevent stdio child process leaks on terminal disconnect
-
-MCPClient now handles SIGHUP alongside SIGINT, SIGTERM, and beforeExit. When a terminal session closes (tmux pane, SSH disconnect, terminal emulator close), the SIGHUP handler triggers graceful shutdown and kills the stdio child process instead of leaving it running as an orphan.
+Fixed stdio child processes leaking when a terminal session closes. MCPClient now handles SIGHUP alongside SIGINT, SIGTERM, and beforeExit, so closing a tmux pane, SSH session, or terminal emulator properly shuts down child processes instead of leaving them as orphans.
