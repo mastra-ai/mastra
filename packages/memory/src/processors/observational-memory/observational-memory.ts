@@ -3185,7 +3185,17 @@ ${suggestedResponse}
       );
 
       // Persist the computed token count so the UI can display it on page load
-      this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
+      await this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens);
+
+      let postCaptureRecord = freshRecord;
+      if (reproCaptureEnabled) {
+        const captureStorageIds = this.getStorageIds(threadId, resourceId);
+        const captureRecordHistory = await this.storage.getObservationalMemoryHistory(
+          captureStorageIds.threadId,
+          captureStorageIds.resourceId,
+        );
+        postCaptureRecord = captureRecordHistory.find(record => record.id === freshRecord.id) ?? freshRecord;
+      }
 
       if (reproCaptureEnabled && preRecordSnapshot && preMessagesSnapshot && preSerializedMessageList) {
         writeProcessInputStepReproCapture({
@@ -3194,12 +3204,12 @@ ${suggestedResponse}
           stepNumber,
           args,
           preRecord: preRecordSnapshot,
-          postRecord: freshRecord,
+          postRecord: postCaptureRecord,
           preMessages: preMessagesSnapshot,
           preBufferedChunks: this.getBufferedChunks(preRecordSnapshot),
           preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
           preSerializedMessageList,
-          postBufferedChunks: this.getBufferedChunks(freshRecord),
+          postBufferedChunks: this.getBufferedChunks(postCaptureRecord),
           postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
           messageList,
           details: {

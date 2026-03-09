@@ -157,7 +157,7 @@ const result = await sandbox2.executeCommand('cat', ['/tmp/state.txt'])
 console.log(result.stdout) // "session 1"
 ```
 
-If the sandbox is in a stopped or archived state, it is restarted automatically. If it is in a dead state (destroyed, errored), a fresh sandbox is created instead.
+If the sandbox is in a stopped or archived state, it's restarted automatically. If it's in a dead state (destroyed, errored), a fresh sandbox is created instead.
 
 ### Filesystem mounting
 
@@ -774,7 +774,7 @@ await daytonaSandbox.fs.uploadFile(Buffer.from('hello'), '/tmp/hello.txt')
 await daytonaSandbox.git.clone('https://github.com/org/repo', '/workspace/repo')
 ```
 
-The `instance` getter throws `SandboxNotReadyError` if the sandbox has not been started yet.
+The `instance` getter throws `SandboxNotReadyError` if the sandbox hasn't been started yet.
 
 ## Sandbox creation modes
 
