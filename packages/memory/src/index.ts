@@ -8,12 +8,12 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
 import { MastraMemory, extractWorkingMemoryContent, removeWorkingMemoryTags } from '@mastra/core/memory';
 import type {
-  MemoryConfig,
   SharedMemoryConfig,
   StorageThreadType,
   WorkingMemoryTemplate,
   MessageDeleteInput,
   ObservationalMemoryOptions,
+  MemoryConfig,
 } from '@mastra/core/memory';
 
 /**
@@ -49,11 +49,10 @@ import type {
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
+import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
-import type { ZodTypeAny } from 'zod';
 import {
   updateWorkingMemoryTool,
   __experimental_updateWorkingMemoryToolVNext,
@@ -70,15 +69,6 @@ const CHARS_PER_TOKEN = 4;
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
-
-const isZodObject = (v: unknown): v is ZodTypeAny => {
-  if (!v || typeof v !== 'object') {
-    return false;
-  }
-
-  const candidate = v as { _def?: { typeName?: string }; _zod?: { def?: { type?: string } } };
-  return candidate._def?.typeName === 'ZodObject' || candidate._zod?.def?.type === 'object';
-};
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -967,13 +957,15 @@ ${workingMemory}`;
     if (config.workingMemory?.schema) {
       try {
         const schema = config.workingMemory.schema;
-        const zodSchema = schema as unknown as ZodTypeAny;
         let convertedSchema: JSONSchema7;
 
-        if (isZodObject(zodSchema)) {
-          convertedSchema = zodToJsonSchema(zodSchema);
+        // Convert any PublicSchema to StandardSchemaWithJSON, then extract JSON Schema
+        if (isStandardSchemaWithJSON(schema)) {
+          convertedSchema = schema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
         } else {
-          convertedSchema = schema as unknown as JSONSchema7;
+          // Convert to standard schema first, then get JSON Schema
+          const standardSchema = toStandardSchema(schema);
+          convertedSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' }) as JSONSchema7;
         }
 
         return { format: 'json', content: JSON.stringify(convertedSchema) };
