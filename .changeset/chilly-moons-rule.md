@@ -4,4 +4,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Fixed slow semantic recall on large threads in the libsql, Cloudflare D1, and ClickHouse memory stores. Query performance no longer degrades linearly with thread size. (Fixes #11702)
+Fixed slow semantic recall in the libsql, Cloudflare D1, and ClickHouse storage adapters. Recall performance no longer degrades as threads grow larger. (Fixes #11702)

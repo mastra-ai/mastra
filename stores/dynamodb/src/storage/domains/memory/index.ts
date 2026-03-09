@@ -467,8 +467,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
 
       if (include && include.length > 0) {
         // Use the existing _getIncludedMessages helper, but adapt it for listMessages format
-        const selectBy = { include };
-        includeMessages = await this._getIncludedMessages(selectBy);
+        includeMessages = await this._getIncludedMessages({ include });
 
         // Deduplicate: only add messages that aren't already in the paginated results
         for (const includeMsg of includeMessages) {
@@ -735,19 +734,23 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
   }
 
   // Helper method to get included messages with context
-  private async _getIncludedMessages(selectBy: any): Promise<MastraDBMessage[]> {
-    if (!selectBy?.include?.length) {
+  private async _getIncludedMessages({
+    include,
+  }: {
+    include: StorageListMessagesInput['include'];
+  }): Promise<MastraDBMessage[]> {
+    if (!include?.length) {
       return [];
     }
 
     // Phase 1: Batch-fetch target message metadata in parallel.
     // This replaces sequential per-include get() + full thread load.
     const targetResults = await Promise.all(
-      selectBy.include.map((inc: any) =>
+      include.map(inc =>
         this.service.entities.message
           .get({ entity: 'message', id: inc.id })
           .go()
-          .then((r: any) => ({ id: inc.id, data: r.data }))
+          .then((r: { data: any }) => ({ id: inc.id, data: r.data }))
           .catch(() => ({ id: inc.id, data: null })),
       ),
     );
@@ -773,7 +776,10 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
           const results = await query.go();
           const messages = results.data
             .map((data: any) => this.parseMessageData(data))
-            .filter((msg: any): msg is MastraDBMessage => 'content' in msg && typeof msg.content === 'object');
+            .filter(
+              (msg: MastraDBMessage | MastraMessageV1): msg is MastraDBMessage =>
+                'content' in msg && typeof msg.content === 'object',
+            );
 
           // Sort by createdAt ASC with ID tiebreaker for stable ordering
           messages.sort((a: MastraDBMessage, b: MastraDBMessage) => {
@@ -793,7 +799,7 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
     // Phase 3: Slice context windows from cached thread data.
     const includeMessages: MastraDBMessage[] = [];
 
-    for (const includeItem of selectBy.include) {
+    for (const includeItem of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = includeItem;
       const target = targetMap.get(id);
       if (!target) continue;
