@@ -6,129 +6,129 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
   "additionalProperties": false,
   "properties": {
     "data": {
-      "additionalProperties": false,
       "anyOf": [
         {
-          "type": "object",
-        },
-        {
-          "type": "null",
-        },
-      ],
-      "properties": {
-        "items": {
-          "items": {
-            "additionalProperties": false,
-            "properties": {
-              "createdAt": {
-                "type": "string",
-              },
-              "id": {
-                "type": "string",
-              },
-              "metadata": {
-                "additionalProperties": {
-                  "type": "string",
-                },
-                "anyOf": [
-                  {
-                    "type": "object",
-                  },
-                  {
-                    "type": "null",
-                  },
-                ],
-              },
-              "name": {
-                "type": "string",
-              },
-              "updatedAt": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                  },
-                  {
-                    "type": "null",
-                  },
-                ],
-              },
-            },
-            "required": [
-              "id",
-              "name",
-              "createdAt",
-              "updatedAt",
-              "metadata",
-            ],
-            "type": "object",
-          },
-          "type": "array",
-        },
-        "pagination": {
           "additionalProperties": false,
           "properties": {
-            "page": {
-              "type": "number",
+            "items": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "createdAt": {
+                    "type": "string",
+                  },
+                  "id": {
+                    "type": "string",
+                  },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": {
+                          "type": "string",
+                        },
+                        "type": "object",
+                      },
+                      {
+                        "type": "null",
+                      },
+                    ],
+                  },
+                  "name": {
+                    "type": "string",
+                  },
+                  "updatedAt": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                      },
+                      {
+                        "type": "null",
+                      },
+                    ],
+                  },
+                },
+                "required": [
+                  "id",
+                  "name",
+                  "createdAt",
+                  "updatedAt",
+                  "metadata",
+                ],
+                "type": "object",
+              },
+              "type": "array",
             },
-            "pageSize": {
-              "type": "number",
-            },
-            "totalItems": {
-              "type": "number",
-            },
-            "totalPages": {
-              "type": "number",
+            "pagination": {
+              "additionalProperties": false,
+              "properties": {
+                "page": {
+                  "type": "number",
+                },
+                "pageSize": {
+                  "type": "number",
+                },
+                "totalItems": {
+                  "type": "number",
+                },
+                "totalPages": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "page",
+                "pageSize",
+                "totalPages",
+                "totalItems",
+              ],
+              "type": "object",
             },
           },
           "required": [
-            "page",
-            "pageSize",
-            "totalPages",
-            "totalItems",
+            "items",
+            "pagination",
           ],
-          "type": "object",
-        },
-      },
-      "required": [
-        "items",
-        "pagination",
-      ],
-    },
-    "error": {
-      "additionalProperties": false,
-      "anyOf": [
-        {
           "type": "object",
         },
         {
           "type": "null",
         },
       ],
-      "properties": {
-        "code": {
-          "type": "string",
-        },
-        "details": {
-          "anyOf": [
-            {
-              "type": "array",
+    },
+    "error": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string",
             },
-            {
-              "type": "null",
+            "details": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string",
+                  },
+                  "type": "array",
+                },
+                {
+                  "type": "null",
+                },
+              ],
             },
-          ],
-          "items": {
-            "type": "string",
+            "message": {
+              "type": "string",
+            },
           },
+          "required": [
+            "code",
+            "message",
+            "details",
+          ],
+          "type": "object",
         },
-        "message": {
-          "type": "string",
+        {
+          "type": "null",
         },
-      },
-      "required": [
-        "code",
-        "message",
-        "details",
       ],
     },
     "status": {
@@ -267,33 +267,33 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
       "type": "object",
     },
     "settings": {
-      "additionalProperties": false,
       "anyOf": [
         {
+          "additionalProperties": false,
+          "properties": {
+            "featured": {
+              "anyOf": [
+                {
+                  "type": "boolean",
+                },
+                {
+                  "type": "null",
+                },
+              ],
+            },
+            "public": {
+              "type": "boolean",
+            },
+          },
+          "required": [
+            "public",
+            "featured",
+          ],
           "type": "object",
         },
         {
           "type": "null",
         },
-      ],
-      "properties": {
-        "featured": {
-          "anyOf": [
-            {
-              "type": "boolean",
-            },
-            {
-              "type": "null",
-            },
-          ],
-        },
-        "public": {
-          "type": "boolean",
-        },
-      },
-      "required": [
-        "public",
-        "featured",
       ],
     },
     "tags": {
@@ -309,14 +309,14 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > Snapshot Tests - Full JSON Sc
         "age": {
           "anyOf": [
             {
+              "maximum": 120,
+              "minimum": 0,
               "type": "number",
             },
             {
               "type": "null",
             },
           ],
-          "maximum": 120,
-          "minimum": 0,
         },
         "email": {
           "description": "Email address
@@ -444,15 +444,15 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Arrays > sho
     "tags": {
       "anyOf": [
         {
+          "items": {
+            "type": "string",
+          },
           "type": "array",
         },
         {
           "type": "null",
         },
       ],
-      "items": {
-        "type": "string",
-      },
     },
   },
   "required": [
@@ -603,47 +603,47 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Complex Sche
       "type": "string",
     },
     "settings": {
-      "additionalProperties": false,
       "anyOf": [
         {
+          "additionalProperties": false,
+          "properties": {
+            "notifications": {
+              "type": "boolean",
+            },
+            "theme": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "type": "null",
+                },
+              ],
+            },
+          },
+          "required": [
+            "theme",
+            "notifications",
+          ],
           "type": "object",
         },
         {
           "type": "null",
         },
       ],
-      "properties": {
-        "notifications": {
-          "type": "boolean",
-        },
-        "theme": {
-          "anyOf": [
-            {
-              "type": "string",
-            },
-            {
-              "type": "null",
-            },
-          ],
-        },
-      },
-      "required": [
-        "theme",
-        "notifications",
-      ],
     },
     "tags": {
       "anyOf": [
         {
+          "items": {
+            "type": "string",
+          },
           "type": "array",
         },
         {
           "type": "null",
         },
       ],
-      "items": {
-        "type": "string",
-      },
     },
   },
   "required": [
@@ -802,16 +802,16 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
     "tags": {
       "anyOf": [
         {
+          "default": [],
+          "items": {
+            "type": "string",
+          },
           "type": "array",
         },
         {
           "type": "null",
         },
       ],
-      "default": [],
-      "items": {
-        "type": "string",
-      },
     },
   },
   "required": [
@@ -830,24 +830,24 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
     "active": {
       "anyOf": [
         {
+          "default": true,
           "type": "boolean",
         },
         {
           "type": "null",
         },
       ],
-      "default": true,
     },
     "enabled": {
       "anyOf": [
         {
+          "default": false,
           "type": "boolean",
         },
         {
           "type": "null",
         },
       ],
-      "default": false,
     },
     "name": {
       "type": "string",
@@ -870,13 +870,13 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
     "confidence": {
       "anyOf": [
         {
+          "default": 1,
           "type": "number",
         },
         {
           "type": "null",
         },
       ],
-      "default": 1,
     },
     "name": {
       "type": "string",
@@ -898,13 +898,13 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Default Valu
     "explanation": {
       "anyOf": [
         {
+          "default": "",
           "type": "string",
         },
         {
           "type": "null",
         },
       ],
-      "default": "",
     },
     "name": {
       "type": "string",
@@ -1019,16 +1019,16 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Enums > shou
     "status": {
       "anyOf": [
         {
+          "enum": [
+            "pending",
+            "active",
+            "completed",
+          ],
           "type": "string",
         },
         {
           "type": "null",
         },
-      ],
-      "enum": [
-        "pending",
-        "active",
-        "completed",
       ],
     },
   },
@@ -1140,33 +1140,33 @@ exports[`OpenAISchemaCompatLayer - Groq Provider > processZodType - Nested Objec
   "additionalProperties": false,
   "properties": {
     "address": {
-      "additionalProperties": false,
       "anyOf": [
         {
+          "additionalProperties": false,
+          "properties": {
+            "city": {
+              "anyOf": [
+                {
+                  "type": "string",
+                },
+                {
+                  "type": "null",
+                },
+              ],
+            },
+            "street": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "street",
+            "city",
+          ],
           "type": "object",
         },
         {
           "type": "null",
         },
-      ],
-      "properties": {
-        "city": {
-          "anyOf": [
-            {
-              "type": "string",
-            },
-            {
-              "type": "null",
-            },
-          ],
-        },
-        "street": {
-          "type": "string",
-        },
-      },
-      "required": [
-        "street",
-        "city",
       ],
     },
     "name": {

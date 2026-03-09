@@ -1,13 +1,16 @@
 import type { JSONSchema7 } from 'json-schema';
+import traverse from 'json-schema-traverse';
 import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
+import type { Schema } from '../json-schema';
+import { jsonSchema } from '../json-schema';
 import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
-import { ensureAllPropertiesRequired } from '../zod-to-json';
+import { ensureAllPropertiesRequired, zodToJsonSchema } from '../zod-to-json';
 import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
@@ -133,6 +136,42 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     return ensureAllPropertiesRequired(fixedSchema);
   }
 
+  /**
+   * Override to apply the same JSON Schema fixes (additionalProperties, required fields)
+   * that processToJSONSchema applies. The base implementation skips JSON Schema traversal,
+   * which causes OpenAI strict mode to reject tool schemas missing additionalProperties: false.
+   */
+  processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
+    // Process Zod type for runtime validation (optional → nullable transform)
+    const processedSchema = this.processZodType(zodSchema);
+
+    // Convert original schema to JSON Schema (before processZodType transforms which
+    // introduce ZodTransform/ZodPipe that zodToJsonSchema can't serialize properly)
+    const jsonSchemaResult = zodToJsonSchema(zodSchema, this.getSchemaTarget());
+
+    // Apply the same JSON Schema fixes as processToJSONSchema
+    traverse(jsonSchemaResult, {
+      cb: {
+        pre: (schema: JSONSchema7) => {
+          this.preProcessJSONNode(schema);
+        },
+        post: (schema: JSONSchema7) => {
+          this.postProcessJSONNode(schema);
+        },
+      },
+    });
+
+    const fixedSchema = this.fixAdditionalProperties(jsonSchemaResult);
+    const finalSchema = ensureAllPropertiesRequired(fixedSchema);
+
+    return jsonSchema(finalSchema, {
+      validate: value => {
+        const result = processedSchema.safeParse(value);
+        return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
+      },
+    });
+  }
+
   preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
     if (isObjectSchema(schema)) {
       this.defaultObjectHandler(schema);
@@ -183,6 +222,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       ];
     }
 
+    // Ensure bare {"type":"object"} nodes (e.g., inside anyOf) have additionalProperties: false.
+    // OpenAI strict mode requires this on every object-type node, even without properties.
+    if (schema.type === 'object' && schema.additionalProperties === undefined) {
+      schema.additionalProperties = false;
+    }
+
     // Fix v4-specific issues in post-processing
     if (isObjectSchema(schema)) {
       // force all keys to be required
@@ -191,10 +236,23 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
         for (const key of keys) {
           // @ts-expect-error - type is a valid property for JSON Schema
           if (!schema.required?.includes(key) && schema.properties?.[key]?.type) {
-            // @ts-expect-error - nullable is a valid property for JSON Schema-
-            schema.properties[key]!.anyOf = [{ type: schema.properties[key]!.type }, { type: 'null' }];
-            // @ts-expect-error - nullable is a valid property for JSON Schema-
-            delete schema.properties[key]!.type;
+            const prop = schema.properties[key]!;
+            // Move the entire property schema into anyOf (not just type),
+            // preserving additionalProperties, properties, items, etc.
+            const subSchema: Record<string, unknown> = {};
+            for (const propKey of Object.keys(prop)) {
+              if (propKey !== 'anyOf') {
+                // @ts-expect-error - copying all props
+                subSchema[propKey] = prop[propKey];
+              }
+            }
+            // @ts-expect-error - nullable is a valid property for JSON Schema
+            prop.anyOf = [subSchema, { type: 'null' }];
+            // Remove moved properties from the parent prop (keep only anyOf and non-type metadata)
+            for (const propKey of Object.keys(subSchema)) {
+              // @ts-expect-error - deleting copied props
+              delete prop[propKey];
+            }
           }
         }
         schema.required = keys;
