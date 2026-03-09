@@ -206,6 +206,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
@@ -361,6 +362,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {
@@ -537,6 +539,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     // make json schema a ai sdk schema
@@ -769,6 +772,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {
