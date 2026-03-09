@@ -272,6 +272,9 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
+  /** When true, this processor will also receive `data-*` chunks in processOutputStream. Default: false. */
+  processDataParts?: boolean;
+
   /**
    * Process input messages before they are sent to the LLM
    *
