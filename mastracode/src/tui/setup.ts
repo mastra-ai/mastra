@@ -145,6 +145,17 @@ export function setupKeyboardShortcuts(
     showInfo(state, current ? 'YOLO mode off' : 'YOLO mode on');
   });
 
+  // Ctrl+Q - toggle interrupt/queue delivery mode
+  state.editor.onAction('toggleQueueMode', () => {
+    const current = state.harness.getMessageDeliveryMode();
+    const next = current === 'interrupt' ? 'queue' : 'interrupt';
+    state.harness.setMessageDeliveryMode({ mode: next });
+    showInfo(
+      state,
+      next === 'queue' ? 'Queue mode on — new messages are queued' : 'Interrupt mode on — new messages interrupt',
+    );
+  });
+
   // Ctrl+F - queue follow-up message while streaming
   state.editor.onAction('followUp', () => {
     const text = state.editor.getText().trim();

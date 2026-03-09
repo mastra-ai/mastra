@@ -206,12 +206,12 @@ export class MastraTUI {
         this.state.ui.requestRender();
 
         if (this.state.harness.isRunning()) {
-          // Agent is streaming → steer (abort + resend)
-          // Clear follow-up tracking since steer replaces the current response
-          this.state.followUpComponents = [];
-          this.state.pendingSlashCommands = [];
-          this.state.harness.steer({ content: userInput }).catch(error => {
-            showError(this.state, error instanceof Error ? error.message : 'Steer failed');
+          if (this.state.harness.getMessageDeliveryMode() === 'interrupt') {
+            this.state.followUpComponents = [];
+            this.state.pendingSlashCommands = [];
+          }
+          this.state.harness.send({ content: userInput }).catch(error => {
+            showError(this.state, error instanceof Error ? error.message : 'Send failed');
           });
         } else {
           // Normal send — fire and forget; events handle the rest
