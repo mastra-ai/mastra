@@ -662,7 +662,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               for (const [name, tool] of Object.entries(currentStep.tools)) {
                 if (isMastraTool(tool)) {
                   convertedTools[name] = makeCoreTool(
-                    tool as ToolToConvert,
+                    tool as unknown as ToolToConvert,
                     {
                       name,
                       runId,
