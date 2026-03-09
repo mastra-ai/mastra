@@ -9,6 +9,7 @@ type ExtractSchemas<R> =
 
 /**
  * Infer the path parameter types from a route's pathParamSchema.
+ * Works on any route created via `createRoute()`, not just built-in routes.
  *
  * @example
  * ```typescript
@@ -16,7 +17,7 @@ type ExtractSchemas<R> =
  * // => { agentId: string }
  * ```
  */
-export type InferPathParams<R extends ServerRoutes[number]> =
+export type InferPathParams<R extends ServerRoute> =
   ExtractSchemas<R> extends RouteSchemas<infer TPath, infer _Q, infer _B, infer _R>
     ? TPath extends z.ZodTypeAny
       ? z.infer<TPath>
@@ -25,6 +26,7 @@ export type InferPathParams<R extends ServerRoutes[number]> =
 
 /**
  * Infer the query parameter types from a route's queryParamSchema.
+ * Works on any route created via `createRoute()`, not just built-in routes.
  *
  * @example
  * ```typescript
@@ -32,7 +34,7 @@ export type InferPathParams<R extends ServerRoutes[number]> =
  * // => { partial?: string }
  * ```
  */
-export type InferQueryParams<R extends ServerRoutes[number]> =
+export type InferQueryParams<R extends ServerRoute> =
   ExtractSchemas<R> extends RouteSchemas<infer _P, infer TQuery, infer _B, infer _R>
     ? TQuery extends z.ZodTypeAny
       ? z.infer<TQuery>
@@ -41,6 +43,7 @@ export type InferQueryParams<R extends ServerRoutes[number]> =
 
 /**
  * Infer the request body types from a route's bodySchema.
+ * Works on any route created via `createRoute()`, not just built-in routes.
  *
  * @example
  * ```typescript
@@ -48,7 +51,7 @@ export type InferQueryParams<R extends ServerRoutes[number]> =
  * // => { messages: CoreMessage[], ... }
  * ```
  */
-export type InferBody<R extends ServerRoutes[number]> =
+export type InferBody<R extends ServerRoute> =
   ExtractSchemas<R> extends RouteSchemas<infer _P, infer _Q, infer TBody, infer _R>
     ? TBody extends z.ZodTypeAny
       ? z.infer<TBody>
@@ -57,6 +60,7 @@ export type InferBody<R extends ServerRoutes[number]> =
 
 /**
  * Infer the response types from a route's responseSchema.
+ * Works on any route created via `createRoute()`, not just built-in routes.
  *
  * @example
  * ```typescript
@@ -64,7 +68,7 @@ export type InferBody<R extends ServerRoutes[number]> =
  * // => { name: string, tools: ..., ... }
  * ```
  */
-export type InferResponse<R extends ServerRoutes[number]> =
+export type InferResponse<R extends ServerRoute> =
   ExtractSchemas<R> extends RouteSchemas<infer _P, infer _Q, infer _B, infer TResp>
     ? TResp extends z.ZodTypeAny
       ? z.infer<TResp>

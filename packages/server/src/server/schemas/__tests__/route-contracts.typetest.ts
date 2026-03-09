@@ -6,6 +6,9 @@
  * This file is NOT executed — it's only type-checked by `tsc --noEmit`.
  * If this file compiles without errors, the route contract types work correctly.
  */
+import { z } from 'zod';
+
+import { createRoute } from '../../server-adapter/routes/route-builder';
 import type {
   RouteMap,
   RouteContract,
@@ -112,3 +115,29 @@ type _TestListAgentsQueryHasPartial = Expect<ListAgentsQuery extends { partial?:
 type GetAgentRoute = RouteMap['GET /agents/:agentId'];
 type _TestGetAgentMethod = Expect<Equal<GetAgentRoute['method'], 'GET'>>;
 type _TestGetAgentPath = Expect<Equal<GetAgentRoute['path'], '/agents/:agentId'>>;
+
+// ============================================================================
+// Custom route tests — Infer* helpers work on routes outside SERVER_ROUTES
+// ============================================================================
+
+const _CUSTOM_ROUTE = createRoute({
+  method: 'POST',
+  path: '/custom/:itemId',
+  responseType: 'json',
+  pathParamSchema: z.object({ itemId: z.string() }),
+  bodySchema: z.object({ title: z.string(), count: z.number() }),
+  responseSchema: z.object({ ok: z.boolean() }),
+  handler: async () => ({ ok: true }),
+});
+
+type CustomPathParams = InferPathParams<typeof _CUSTOM_ROUTE>;
+type _TestCustomPath = Expect<Equal<CustomPathParams, { itemId: string }>>;
+
+type CustomBody = InferBody<typeof _CUSTOM_ROUTE>;
+type _TestCustomBody = Expect<Equal<CustomBody, { title: string; count: number }>>;
+
+type CustomResponse = InferResponse<typeof _CUSTOM_ROUTE>;
+type _TestCustomResponse = Expect<Equal<CustomResponse, { ok: boolean }>>;
+
+type CustomQuery = InferQueryParams<typeof _CUSTOM_ROUTE>;
+type _TestCustomQueryNever = Expect<IsNever<CustomQuery>>;
