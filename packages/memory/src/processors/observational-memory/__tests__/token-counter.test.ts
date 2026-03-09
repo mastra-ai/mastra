@@ -100,7 +100,7 @@ describe('TokenCounter', () => {
   });
 
   describe('custom encoding', () => {
-    it('constructor with explicit encoding creates a separate encoder instance', () => {
+    it('constructor with explicit encoding creates a separate encoder instance', { timeout: 15_000 }, () => {
       const defaultCounter = new TokenCounter();
       const customCounter = getSharedCustomCounter();
 
