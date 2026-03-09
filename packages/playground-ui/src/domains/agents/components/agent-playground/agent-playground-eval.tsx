@@ -130,12 +130,12 @@ function normalizeToolCalls(raw: unknown): ParsedOutput['toolCalls'] {
   return raw.flatMap(call => {
     if (!call || typeof call !== 'object') return [];
     const c = call as Record<string, unknown>;
-    return [{
-      toolName: typeof c.toolName === 'string' ? c.toolName : 'Unknown tool',
-      args: c.args && typeof c.args === 'object' && !Array.isArray(c.args)
-        ? (c.args as Record<string, unknown>)
-        : {},
-    }];
+    return [
+      {
+        toolName: typeof c.toolName === 'string' ? c.toolName : 'Unknown tool',
+        args: c.args && typeof c.args === 'object' && !Array.isArray(c.args) ? (c.args as Record<string, unknown>) : {},
+      },
+    ];
   });
 }
 
@@ -465,7 +465,11 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
         </div>
 
         {/* Scorer selector */}
-        <ScorerSelector selectedScorers={selectedScorers} setSelectedScorers={setSelectedScorers} disabled={isRunning} />
+        <ScorerSelector
+          selectedScorers={selectedScorers}
+          setSelectedScorers={setSelectedScorers}
+          disabled={isRunning}
+        />
 
         {/* Run button */}
         <Button

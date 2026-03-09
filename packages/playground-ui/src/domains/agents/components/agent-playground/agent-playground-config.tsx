@@ -122,14 +122,16 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
   const prevBlocksArr = Array.isArray(previousBlocks) ? previousBlocks : [];
   const currBlocksArr = Array.isArray(currentBlocks) ? currentBlocks : [];
 
-  const { data: prevText, isLoading: isLoadingPrev, isError: isPrevError } = usePreviewInstructions(
-    prevBlocksArr.length > 0 ? prevBlocksArr : undefined,
-    prevBlocksArr.length > 0,
-  );
-  const { data: currText, isLoading: isLoadingCurr, isError: isCurrError } = usePreviewInstructions(
-    currBlocksArr.length > 0 ? currBlocksArr : undefined,
-    currBlocksArr.length > 0,
-  );
+  const {
+    data: prevText,
+    isLoading: isLoadingPrev,
+    isError: isPrevError,
+  } = usePreviewInstructions(prevBlocksArr.length > 0 ? prevBlocksArr : undefined, prevBlocksArr.length > 0);
+  const {
+    data: currText,
+    isLoading: isLoadingCurr,
+    isError: isCurrError,
+  } = usePreviewInstructions(currBlocksArr.length > 0 ? currBlocksArr : undefined, currBlocksArr.length > 0);
 
   if (isLoadingPrev || isLoadingCurr) {
     return (
@@ -540,7 +542,9 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     }}
                     className={cn(
                       'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
-                      showPreview ? 'bg-accent1/10 text-accent1' : 'text-neutral3 hover:text-neutral5 hover:bg-surface3',
+                      showPreview
+                        ? 'bg-accent1/10 text-accent1'
+                        : 'text-neutral3 hover:text-neutral5 hover:bg-surface3',
                     )}
                   >
                     <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
@@ -549,7 +553,11 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                 )
               }
             >
-              {readOnly || showPreview ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
+              {readOnly || showPreview ? (
+                <ReadOnlyInstructions blocks={instructionBlocks} />
+              ) : (
+                <InstructionBlocksPage />
+              )}
             </CollapsibleSection>
 
             <CollapsibleSection
