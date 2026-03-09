@@ -432,15 +432,9 @@ exports[`GoogleSchemaCompatLayer > processZodType - Basic Transformations > shou
   "$schema": "http://json-schema.org/draft-07/schema#",
   "properties": {
     "deletedAt": {
-      "anyOf": [
-        {
-          "format": "date-time",
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
+      "format": "date-time",
+      "nullable": true,
+      "type": "string",
     },
     "name": {
       "type": "string",
@@ -449,6 +443,29 @@ exports[`GoogleSchemaCompatLayer > processZodType - Basic Transformations > shou
   "required": [
     "name",
     "deletedAt",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`GoogleSchemaCompatLayer > processZodType - Basic Transformations > should handle nullish fields (optional + nullable) 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "maxSteps": {
+      "nullable": true,
+      "type": "number",
+    },
+    "name": {
+      "type": "string",
+    },
+    "threadId": {
+      "nullable": true,
+      "type": "string",
+    },
+  },
+  "required": [
+    "name",
   ],
   "type": "object",
 }
@@ -502,15 +519,9 @@ exports[`GoogleSchemaCompatLayer > processZodType - Complex Schemas > should han
       "type": "string",
     },
     "deletedAt": {
-      "anyOf": [
-        {
-          "format": "date-time",
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
-      ],
+      "format": "date-time",
+      "nullable": true,
+      "type": "string",
     },
     "email": {
       "type": "string",
