@@ -541,18 +541,22 @@ export class MemoryConvex extends MemoryStorage {
     const messages: MastraDBMessage[] = [];
     const messageIds = new Set<string>();
     const threadMessagesCache = new Map<string, StoredMessage[]>(preloadedThreads ?? []);
+    const cachedTargets = new Map<string, { threadId: string; row: StoredMessage }>();
+
+    for (const [threadId, rows] of threadMessagesCache) {
+      for (const row of rows) {
+        cachedTargets.set(row.id, { threadId, row });
+      }
+    }
 
     for (const includeItem of include) {
       let targetThreadId: string | undefined;
       let target: StoredMessage | undefined;
 
-      // Check in cached threads first
-      for (const [tid, cachedRows] of threadMessagesCache) {
-        target = cachedRows.find(row => row.id === includeItem.id);
-        if (target) {
-          targetThreadId = tid;
-          break;
-        }
+      const cached = cachedTargets.get(includeItem.id);
+      if (cached) {
+        target = cached.row;
+        targetThreadId = cached.threadId;
       }
 
       // If not found, query by message ID directly
@@ -569,6 +573,9 @@ export class MemoryConvex extends MemoryStorage {
               { field: 'thread_id', value: targetThreadId },
             ]);
             threadMessagesCache.set(targetThreadId, otherThreadRows);
+            for (const row of otherThreadRows) {
+              cachedTargets.set(row.id, { threadId: targetThreadId, row });
+            }
           }
         }
       }
