@@ -368,16 +368,18 @@ describe('PgVector', () => {
             metadataIndexes: ['thread_id', 'resource_id'],
           });
 
-          // Verify the metadata indexes were created
+          // Verify the metadata indexes were created (index names use _md_{hash}_idx pattern)
           const client = await vectorDB.pool.connect();
           try {
             const result = await client.query(
-              `SELECT indexname FROM pg_indexes WHERE tablename = $1 AND indexname LIKE '%metadata%'`,
+              `SELECT indexname FROM pg_indexes WHERE tablename = $1 AND indexname LIKE '%_md_%_idx'`,
               [metadataIdxTestIndex],
             );
             const indexNames = result.rows.map((r: { indexname: string }) => r.indexname);
-            expect(indexNames).toContain(`${metadataIdxTestIndex}_metadata_thread_id_idx`);
-            expect(indexNames).toContain(`${metadataIdxTestIndex}_metadata_resource_id_idx`);
+            expect(indexNames).toHaveLength(2);
+            // Index names are deterministic hashes: test_metadata_idx_md_{hash}_idx
+            expect(indexNames).toContain(`${metadataIdxTestIndex}_md_57d95f6b_idx`);
+            expect(indexNames).toContain(`${metadataIdxTestIndex}_md_5a823b81_idx`);
           } finally {
             client.release();
             await vectorDB.deleteIndex({ indexName: metadataIdxTestIndex });

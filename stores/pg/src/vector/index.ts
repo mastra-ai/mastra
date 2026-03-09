@@ -1118,14 +1118,21 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     metadataFields: string[],
     client: pg.PoolClient,
   ) {
-    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    const hasher = await this.hasher;
     for (const field of metadataFields) {
-      const parsedField = parseSqlIdentifier(field, 'metadata field name');
-      const metadataIdxName = `"${parsedIndexName}_metadata_${parsedField}_idx"`;
-      await client.query(`
+      // Hash the field to produce a safe, fixed-length suffix for the index name.
+      // This avoids issues with fields containing characters invalid in SQL identifiers
+      // (e.g. "user-id") and keeps the total index name under PostgreSQL's 63-char limit.
+      const fieldHash = hasher.h32(field).toString(16);
+      const prefix = indexName.slice(0, 63 - '_md__idx'.length - fieldHash.length);
+      const metadataIdxName = `"${prefix}_md_${fieldHash}_idx"`;
+      await client.query(
+        `
         CREATE INDEX IF NOT EXISTS ${metadataIdxName}
-        ON ${tableName} ((metadata->>'${parsedField}'))
-      `);
+        ON ${tableName} ((metadata->>$1))
+      `,
+        [field],
+      );
     }
   }
 
