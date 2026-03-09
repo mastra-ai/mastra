@@ -1,12 +1,16 @@
 declare module 'probe-image-size' {
-  type ProbeImageSizeResult = {
-    width?: number;
-    height?: number;
-    type?: string;
-    mime?: string;
+  interface ProbeResult {
+    width: number;
+    height: number;
+    type: string;
+    mime: string;
+    wUnits: string;
+    hUnits: string;
     url?: string;
-    orientation?: number;
-  };
+  }
 
-  export default function probeImageSize(src: string, options?: Record<string, unknown>): Promise<ProbeImageSizeResult>;
+  function probeImageSize(src: string, options?: Record<string, unknown>): Promise<ProbeResult>;
+  function probeImageSize(src: NodeJS.ReadableStream): Promise<ProbeResult>;
+
+  export default probeImageSize;
 }

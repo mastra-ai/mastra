@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import imageSize from 'image-size';
@@ -110,6 +111,66 @@ const PROVIDER_API_KEY_ENV_VARS: Record<string, string[]> = {
 
 type CacheablePart = any;
 
+type MastraTokenEstimateMetadata = {
+  mastra?: {
+    tokenEstimate?: unknown;
+    imageDimensions?: { width?: number; height?: number };
+  };
+};
+
+type PartWithMastraMetadata = {
+  providerMetadata?: MastraTokenEstimateMetadata & Record<string, unknown>;
+};
+
+type ContentWithMastraMetadata = {
+  metadata?: MastraTokenEstimateMetadata & Record<string, unknown>;
+};
+
+type MessageWithMastraMetadata = {
+  metadata?: MastraTokenEstimateMetadata & Record<string, unknown>;
+};
+
+function getPartMastraMetadata(part: CacheablePart): MastraTokenEstimateMetadata['mastra'] | undefined {
+  return (part as PartWithMastraMetadata).providerMetadata?.mastra;
+}
+
+function ensurePartMastraMetadata(part: CacheablePart): NonNullable<MastraTokenEstimateMetadata['mastra']> {
+  const typedPart = part as PartWithMastraMetadata;
+  typedPart.providerMetadata ??= {};
+  typedPart.providerMetadata.mastra ??= {};
+  return typedPart.providerMetadata.mastra;
+}
+
+function getContentMastraMetadata(content: unknown): MastraTokenEstimateMetadata['mastra'] | undefined {
+  if (!content || typeof content !== 'object') {
+    return undefined;
+  }
+
+  return (content as ContentWithMastraMetadata).metadata?.mastra;
+}
+
+function ensureContentMastraMetadata(content: unknown): NonNullable<MastraTokenEstimateMetadata['mastra']> | undefined {
+  if (!content || typeof content !== 'object') {
+    return undefined;
+  }
+
+  const typedContent = content as ContentWithMastraMetadata;
+  typedContent.metadata ??= {};
+  typedContent.metadata.mastra ??= {};
+  return typedContent.metadata.mastra;
+}
+
+function getMessageMastraMetadata(message: MastraDBMessage): MastraTokenEstimateMetadata['mastra'] | undefined {
+  return (message as MessageWithMastraMetadata).metadata?.mastra;
+}
+
+function ensureMessageMastraMetadata(message: MastraDBMessage): NonNullable<MastraTokenEstimateMetadata['mastra']> {
+  const typedMessage = message as MessageWithMastraMetadata;
+  typedMessage.metadata ??= {};
+  typedMessage.metadata.mastra ??= {};
+  return typedMessage.metadata.mastra;
+}
+
 function buildEstimateKey(kind: string, text: string): string {
   const payloadHash = createHash('sha1').update(text).digest('hex');
   return `${kind}:${payloadHash}`;
@@ -173,67 +234,45 @@ function mergeCacheEntry(
 }
 
 function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCacheEntry | undefined {
-  const cache = (part as any)?.providerMetadata?.mastra?.tokenEstimate;
-  return getCacheEntry(cache, key);
+  return getCacheEntry(getPartMastraMetadata(part)?.tokenEstimate, key);
 }
 
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
-  const mutablePart = part as any;
-  mutablePart.providerMetadata ??= {};
-  mutablePart.providerMetadata.mastra ??= {};
-  mutablePart.providerMetadata.mastra.tokenEstimate = mergeCacheEntry(
-    mutablePart.providerMetadata.mastra.tokenEstimate,
-    key,
-    entry,
-  );
+  const mastraMetadata = ensurePartMastraMetadata(part);
+  mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
 }
 
 function getMessageCacheEntry(message: MastraDBMessage, key: string): TokenEstimateCacheEntry | undefined {
-  const content = message.content as any;
-  if (content && typeof content === 'object') {
-    const contentLevelCache = content.metadata?.mastra?.tokenEstimate;
-    const contentLevelEntry = getCacheEntry(contentLevelCache, key);
-    if (contentLevelEntry) return contentLevelEntry;
-  }
+  const contentLevelEntry = getCacheEntry(getContentMastraMetadata(message.content)?.tokenEstimate, key);
+  if (contentLevelEntry) return contentLevelEntry;
 
-  const messageLevelCache = (message as any)?.metadata?.mastra?.tokenEstimate;
-  return getCacheEntry(messageLevelCache, key);
+  return getCacheEntry(getMessageMastraMetadata(message)?.tokenEstimate, key);
 }
 
 function setMessageCacheEntry(message: MastraDBMessage, key: string, entry: TokenEstimateCacheEntry): void {
-  const content = message.content as any;
-  if (content && typeof content === 'object') {
-    content.metadata ??= {};
-    (content.metadata as any).mastra ??= {};
-    (content.metadata as any).mastra.tokenEstimate = mergeCacheEntry(
-      (content.metadata as any).mastra.tokenEstimate,
-      key,
-      entry,
-    );
+  const contentMastraMetadata = ensureContentMastraMetadata(message.content);
+  if (contentMastraMetadata) {
+    contentMastraMetadata.tokenEstimate = mergeCacheEntry(contentMastraMetadata.tokenEstimate, key, entry);
     return;
   }
 
-  (message as any).metadata ??= {};
-  (message as any).metadata.mastra ??= {};
-  (message as any).metadata.mastra.tokenEstimate = mergeCacheEntry(
-    (message as any).metadata.mastra.tokenEstimate,
-    key,
-    entry,
-  );
+  const messageMastraMetadata = ensureMessageMastraMetadata(message);
+  messageMastraMetadata.tokenEstimate = mergeCacheEntry(messageMastraMetadata.tokenEstimate, key, entry);
 }
 
 function serializePartForTokenCounting(part: CacheablePart): string {
-  const hasTokenEstimate = Boolean((part as any)?.providerMetadata?.mastra?.tokenEstimate);
+  const typedPart = part as PartWithMastraMetadata & Record<string, unknown>;
+  const hasTokenEstimate = Boolean(typedPart.providerMetadata?.mastra?.tokenEstimate);
   if (!hasTokenEstimate) {
     return JSON.stringify(part);
   }
 
-  const clonedPart = {
-    ...(part as any),
+  const clonedPart: Record<string, any> = {
+    ...typedPart,
     providerMetadata: {
-      ...((part as any).providerMetadata ?? {}),
+      ...(typedPart.providerMetadata ?? {}),
       mastra: {
-        ...((part as any).providerMetadata?.mastra ?? {}),
+        ...(typedPart.providerMetadata?.mastra ?? {}),
       },
     },
   };
@@ -365,6 +404,25 @@ function isHttpUrlString(value: unknown): boolean {
   return typeof value === 'string' && /^https?:\/\//i.test(value);
 }
 
+function isLikelyFilesystemPath(value: string): boolean {
+  return (
+    value.startsWith('/') ||
+    value.startsWith('./') ||
+    value.startsWith('../') ||
+    value.startsWith('~/') ||
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    value.includes('\\')
+  );
+}
+
+function isLikelyBase64Content(value: string): boolean {
+  if (value.length < 16 || value.length % 4 !== 0 || /\s/.test(value) || isLikelyFilesystemPath(value)) {
+    return false;
+  }
+
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+}
+
 function decodeImageBuffer(value: unknown): Buffer | undefined {
   if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value)) {
     return value;
@@ -399,14 +457,16 @@ function decodeImageBuffer(value: unknown): Buffer | undefined {
     return Buffer.from(decodeURIComponent(payload), 'utf8');
   }
 
+  if (!isLikelyBase64Content(value)) {
+    return undefined;
+  }
+
   return Buffer.from(value, 'base64');
 }
 
 function persistImageDimensions(part: CacheablePart, dimensions: { width: number; height: number }): void {
-  const mutablePart = part as any;
-  mutablePart.providerMetadata ??= {};
-  mutablePart.providerMetadata.mastra ??= {};
-  mutablePart.providerMetadata.mastra.imageDimensions = dimensions;
+  const mastraMetadata = ensurePartMastraMetadata(part);
+  mastraMetadata.imageDimensions = dimensions;
 }
 
 function resolveHttpAssetUrl(value: unknown): string | undefined {
@@ -627,7 +687,7 @@ function scaleDimensionsForOpenAIHighDetail(width: number, height: number): { wi
   }
 
   const shortestSide = Math.min(scaledWidth, scaledHeight);
-  if (shortestSide > 0 && shortestSide !== 768) {
+  if (shortestSide > 768) {
     const ratio = 768 / shortestSide;
     scaledWidth *= ratio;
     scaledHeight *= ratio;
@@ -960,7 +1020,7 @@ async function fetchOpenAIAttachmentTokenEstimate(modelId: string, part: Cacheab
     },
     body: JSON.stringify({
       model: modelId,
-      input: [{ role: 'user', content: [inputPart] }],
+      input: [{ type: 'message', role: 'user', content: [inputPart] }],
     }),
     signal: createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS),
   });
@@ -1033,7 +1093,8 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
 export class TokenCounter {
   private encoder: Tiktoken;
   private readonly cacheSource: string;
-  private modelContext?: TokenCounterModelContext;
+  private readonly defaultModelContext?: TokenCounterModelContext;
+  private readonly modelContextStorage = new AsyncLocalStorage<TokenCounterModelContext | undefined>();
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
@@ -1046,11 +1107,15 @@ export class TokenCounter {
   constructor(encoding?: TiktokenBPE, options?: TokenCounterOptions) {
     this.encoder = encoding ? new Tiktoken(encoding) : getDefaultEncoder();
     this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEncodingId(encoding)}`;
-    this.modelContext = parseModelContext(options?.model);
+    this.defaultModelContext = parseModelContext(options?.model);
   }
 
-  setModelContext(model?: string | TokenCounterModelContext): void {
-    this.modelContext = parseModelContext(model);
+  runWithModelContext<T>(model: string | TokenCounterModelContext | undefined, fn: () => T): T {
+    return this.modelContextStorage.run(parseModelContext(model), fn);
+  }
+
+  private getModelContext(): TokenCounterModelContext | undefined {
+    return this.modelContextStorage.getStore() ?? this.defaultModelContext;
   }
 
   /**
@@ -1134,21 +1199,22 @@ export class TokenCounter {
   }
 
   private estimateImageAssetTokens(part: CacheablePart, asset: unknown, kind: 'image' | 'file'): ImageTokenEstimate {
-    const provider = resolveProviderId(this.modelContext);
-    const modelId = this.modelContext?.modelId ?? null;
+    const modelContext = this.getModelContext();
+    const provider = resolveProviderId(modelContext);
+    const modelId = modelContext?.modelId ?? null;
     const detail = resolveImageDetail(part);
     const dimensions = resolveImageDimensions(part);
     const sourceStats = resolveImageSourceStats(asset);
 
     if (provider === 'google') {
-      const googleEstimate = estimateGoogleImageTokens(this.modelContext, part, dimensions);
+      const googleEstimate = estimateGoogleImageTokens(modelContext, part, dimensions);
       return {
         tokens: googleEstimate.tokens,
         cachePayload: JSON.stringify({
           kind,
           provider,
           modelId,
-          estimator: isGoogleGemini3Model(this.modelContext) ? 'google-gemini-3' : 'google-legacy',
+          estimator: isGoogleGemini3Model(modelContext) ? 'google-gemini-3' : 'google-legacy',
           mediaResolution: googleEstimate.mediaResolution,
           width: dimensions.width ?? null,
           height: dimensions.height ?? null,
@@ -1178,7 +1244,7 @@ export class TokenCounter {
       };
     }
 
-    const estimator = resolveOpenAIImageEstimatorConfig(this.modelContext);
+    const estimator = resolveOpenAIImageEstimatorConfig(modelContext);
     const effectiveDetail = resolveEffectiveOpenAIImageDetail(detail, dimensions, sourceStats);
     const tiles = effectiveDetail === 'high' ? estimateOpenAIHighDetailTiles(dimensions, sourceStats, estimator) : 0;
     const tokens = estimator.baseTokens + tiles * estimator.tileTokens;
@@ -1235,8 +1301,9 @@ export class TokenCounter {
       return undefined;
     }
 
-    const provider = resolveProviderId(this.modelContext);
-    const modelId = this.modelContext?.modelId ?? null;
+    const modelContext = this.getModelContext();
+    const provider = resolveProviderId(modelContext);
+    const modelId = modelContext?.modelId ?? null;
     if (!provider || !modelId || !['openai', 'google', 'anthropic'].includes(provider)) {
       return undefined;
     }
@@ -1261,8 +1328,9 @@ export class TokenCounter {
   }
 
   private async fetchProviderAttachmentTokenEstimate(part: CacheablePart): Promise<number | undefined> {
-    const provider = resolveProviderId(this.modelContext);
-    const modelId = this.modelContext?.modelId;
+    const modelContext = this.getModelContext();
+    const provider = resolveProviderId(modelContext);
+    const modelId = modelContext?.modelId;
     if (!provider || !modelId) return undefined;
 
     try {
@@ -1533,11 +1601,8 @@ export class TokenCounter {
   async countMessagesAsync(messages: MastraDBMessage[]): Promise<number> {
     if (!messages || messages.length === 0) return 0;
 
-    let total = TokenCounter.TOKENS_PER_CONVERSATION;
-    for (const message of messages) {
-      total += await this.countMessageAsync(message);
-    }
-    return total;
+    const messageTotals = await Promise.all(messages.map(message => this.countMessageAsync(message)));
+    return TokenCounter.TOKENS_PER_CONVERSATION + messageTotals.reduce((sum, count) => sum + count, 0);
   }
 
   /**

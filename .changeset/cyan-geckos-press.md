@@ -2,4 +2,4 @@
 '@mastra/memory': patch
 ---
 
-Improve observational memory multimodal handling by letting the observer inspect image and file attachments, counting image and image-like file parts more accurately, fixing inflated non-image file token counts, and preferring cached provider attachment token-count endpoints with local fallback estimates.
+Add image and file attachment support to Observational Memory. The observer can now see and reason about images and files in conversation history, and attachment token counts are included in observation thresholds. Provider-backed token counting is used when available, with results cached for faster subsequent runs.

@@ -1718,20 +1718,37 @@ describe('ObservationalMemory Integration', () => {
         scope: 'thread',
       });
 
-      const makeContext = () => {
+      const makeContext = (observerModel: string) => {
         const requestContext = new RequestContext();
         requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
-        requestContext.set('observerModel', 'openai/gpt-4o');
+        requestContext.set('observerModel', observerModel);
         return requestContext;
       };
+
+      const imageMessage = {
+        id: 'image-message',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'image',
+              image: 'https://example.com/cat.png',
+              providerOptions: { openai: { detail: 'low' } },
+            },
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      } as unknown as MastraDBMessage;
 
       const countImageForModel = async (actorModel: string) => {
         const [provider, modelId] = actorModel.split('/');
 
         await omWithDynamicObserverModel.processInputStep({
           messageList: new MessageList({ threadId, resourceId }),
-          messages: [],
-          requestContext: makeContext(),
+          messages: [imageMessage],
+          requestContext: makeContext(actorModel),
           stepNumber: 0,
           state: {},
           steps: [],
@@ -1743,21 +1760,9 @@ describe('ObservationalMemory Integration', () => {
           }) as any,
         });
 
-        return omWithDynamicObserverModel.getTokenCounter().countMessage({
-          role: 'user',
-          content: {
-            format: 2,
-            parts: [
-              {
-                type: 'image',
-                image: 'https://example.com/cat.png',
-                providerOptions: { openai: { detail: 'low' } },
-              },
-            ],
-          },
-          type: 'text',
-          createdAt: new Date(),
-        } as MastraDBMessage);
+        return omWithDynamicObserverModel.getTokenCounter().runWithModelContext({ provider, modelId }, () => {
+          return omWithDynamicObserverModel.getTokenCounter().countMessage(imageMessage);
+        });
       };
 
       const gpt4oTokens = await countImageForModel('openai/gpt-4o');
@@ -1822,7 +1827,7 @@ describe('ObservationalMemory Integration', () => {
 
     await multimodalOm.processInputStep({
       messageList,
-      messages: [],
+      messages: [imageMessage as any],
       requestContext,
       stepNumber: 0,
       state: {},
@@ -1892,7 +1897,7 @@ describe('ObservationalMemory Integration', () => {
 
     await multimodalOm.processInputStep({
       messageList,
-      messages: [],
+      messages: [imageLikeFileMessage as any],
       requestContext,
       stepNumber: 0,
       state: {},

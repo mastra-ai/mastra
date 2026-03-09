@@ -53,7 +53,6 @@ import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import xxhash from 'xxhash-wasm';
-import { ZodObject } from 'zod';
 import type { ZodTypeAny } from 'zod';
 import {
   updateWorkingMemoryTool,
@@ -72,7 +71,14 @@ const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
 
-const isZodObject = (v: ZodTypeAny): v is ZodObject<any> => v instanceof ZodObject;
+const isZodObject = (v: unknown): v is ZodTypeAny => {
+  if (!v || typeof v !== 'object') {
+    return false;
+  }
+
+  const candidate = v as { _def?: { typeName?: string }; _zod?: { def?: { type?: string } } };
+  return candidate._def?.typeName === 'ZodObject' || candidate._zod?.def?.type === 'object';
+};
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration

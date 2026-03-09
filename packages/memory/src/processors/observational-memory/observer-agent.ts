@@ -519,6 +519,17 @@ function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
     return true;
   }
 
+  if (typeof part.data === 'string') {
+    try {
+      const url = new URL(part.data);
+      if ((url.protocol === 'http:' || url.protocol === 'https:') && hasObserverImageFilenameExtension(url.pathname)) {
+        return true;
+      }
+    } catch {
+      // ignore invalid URL string
+    }
+  }
+
   return hasObserverImageFilenameExtension(part.filename);
 }
 

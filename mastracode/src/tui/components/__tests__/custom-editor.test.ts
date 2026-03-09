@@ -49,7 +49,9 @@ const PASTE_END = '\x1b[201~';
 
 describe('CustomEditor image paste handling', () => {
   beforeEach(() => {
-    Object.values(mocks).forEach(mock => mock.mockReset());
+    for (const mock of Object.values(mocks)) {
+      mock.mockReset();
+    }
     mocks.matchesKey.mockImplementation((_data: string, _key: string) => false);
     mocks.statSync.mockReturnValue({ isFile: () => true });
     mocks.readFileSync.mockReturnValue(Buffer.from('dragged-image-binary'));
