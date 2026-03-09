@@ -1,4 +1,11 @@
-import type { MastraVector, MastraEmbeddingModel, QueryResult, QueryVectorParams } from '@mastra/core/vector';
+import type {
+  MastraVector,
+  MastraEmbeddingModel,
+  QueryResult,
+  QueryVectorParams,
+  SearchMode,
+  HybridConfig,
+} from '@mastra/core/vector';
 import { embedV1, embedV2, embedV3 } from '@mastra/core/vector';
 import type { VectorFilter } from '@mastra/core/vector/filter';
 import type { DatabaseConfig, ProviderOptions } from '../tools/types';
@@ -14,6 +21,10 @@ type VectorQuerySearchParams = {
   maxRetries?: number;
   /** Database-specific configuration options */
   databaseConfig?: DatabaseConfig;
+  /** Search strategy: 'vector' (default), 'fulltext', or 'hybrid' */
+  searchMode?: SearchMode;
+  /** Configuration for hybrid search score fusion weights */
+  hybridConfig?: HybridConfig;
 } & ProviderOptions;
 
 interface VectorQuerySearchResult {
@@ -41,34 +52,46 @@ export const vectorQuerySearch = async ({
   maxRetries = 2,
   databaseConfig = {},
   providerOptions,
+  searchMode,
+  hybridConfig,
 }: VectorQuerySearchParams): Promise<VectorQuerySearchResult> => {
-  let embeddingResult;
+  const mode = searchMode ?? 'vector';
 
-  if (model.specificationVersion === 'v3') {
-    embeddingResult = await embedV3({
-      model: model,
-      value: queryText,
-      maxRetries,
-      // Type assertion needed: providerOptions type is a union, but embedV3 expects specific version
-      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV3>[0]['providerOptions'] }),
-    });
-  } else if (model.specificationVersion === 'v2') {
-    embeddingResult = await embedV2({
-      model: model,
-      value: queryText,
-      maxRetries,
-      // Type assertion needed: providerOptions type is a union, but embedV2 expects specific version
-      ...(providerOptions && { providerOptions: providerOptions as Parameters<typeof embedV2>[0]['providerOptions'] }),
-    });
-  } else {
-    embeddingResult = await embedV1({
-      value: queryText,
-      model: model,
-      maxRetries,
-    });
+  // For fulltext-only mode, skip the embedding step (optimization)
+  let embedding: number[] = [];
+  if (mode !== 'fulltext') {
+    let embeddingResult;
+
+    if (model.specificationVersion === 'v3') {
+      embeddingResult = await embedV3({
+        model: model,
+        value: queryText,
+        maxRetries,
+        // Type assertion needed: providerOptions type is a union, but embedV3 expects specific version
+        ...(providerOptions && {
+          providerOptions: providerOptions as Parameters<typeof embedV3>[0]['providerOptions'],
+        }),
+      });
+    } else if (model.specificationVersion === 'v2') {
+      embeddingResult = await embedV2({
+        model: model,
+        value: queryText,
+        maxRetries,
+        // Type assertion needed: providerOptions type is a union, but embedV2 expects specific version
+        ...(providerOptions && {
+          providerOptions: providerOptions as Parameters<typeof embedV2>[0]['providerOptions'],
+        }),
+      });
+    } else {
+      embeddingResult = await embedV1({
+        value: queryText,
+        model: model,
+        maxRetries,
+      });
+    }
+
+    embedding = embeddingResult.embedding;
   }
-
-  const embedding = embeddingResult.embedding;
 
   // Build query parameters with database-specific configurations
   const queryParams: QueryVectorParams = {
@@ -77,6 +100,9 @@ export const vectorQuerySearch = async ({
     topK,
     filter: queryFilter,
     includeVector: includeVectors,
+    // Pass search mode and text through to the vector store
+    ...(mode !== 'vector' && { searchMode: mode, queryText }),
+    ...(hybridConfig && { hybridConfig }),
   };
 
   // Get relevant chunks from the vector database
