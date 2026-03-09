@@ -275,6 +275,8 @@
     "@internal/ai-v6": "workspace:*",
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
+    "@internal/llm-recorder": "workspace:*",
+    "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.6",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.2.3",
@@ -293,7 +295,7 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "vscode-jsonrpc": "^8.2.0",
+    "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.0",
     "zod": "^3.25.76"
   },
