@@ -10,21 +10,21 @@ import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
 
 # Get Started
 
-Mastra is a TypeScript framework for building AI agents, workflows, and tools. Create your first project in seconds and start building.
+Build AI agents your users actually depend on. Mastra is a TypeScript framework that gives you everything you need to prototype fast and ship with confidence. Create your first agent with a single command and start building.
 
 ## Quickstart
 
-Run the command below to create a new Mastra project with an example agent:
+Run this command to create a new project you can test immediately in [Studio](/docs/getting-started/studio):
 
 ```bash npm2yarn
 npm create mastra@latest
 ```
 
-This sets up a project you can test immediately in [Studio](/docs/getting-started/studio). See the [quickstart guide](/guides/getting-started/quickstart) for a full walkthrough.
+See the [quickstart guide](/guides/getting-started/quickstart) for a full walkthrough.
 
 ## Integrate with your framework
 
-Add Mastra to an existing project or create a new app with your preferred framework.
+Add Mastra to an existing project, or create a new app with your preferred framework:
 
 <CardGrid columns={3}>
   <CardGridItem
@@ -161,40 +161,84 @@ Add Mastra to an existing project or create a new app with your preferred framew
 
 For other frameworks, see the [framework integration guides](/guides/getting-started/next-js).
 
-## What you can do
+## What you can build
+
+Here are some of the ways you can use Mastra:
 
 <div class="accordion-group">
   <details>
-    <summary>Conversational agents</summary>
+    <summary>Embed agents in your product</summary>
 
-    Customer support, onboarding, or internal query bots. Agents maintain context across sessions with thread-based message history and observational memory — background agents that compress conversation history into dense observation logs, keeping the context window small while preserving long-term recall. Stream responses token-by-token for responsive chat UIs. Attach tools so agents can look up orders, create tickets, or call APIs mid-conversation.
+    Add AI capabilities to your platform so your users can build or interact with agents.
+
+    Used by [Replit](https://mastra.ai/blog/replitagent3), [Fireworks](https://mastra.ai/blog/fireworks-xml-prompting), [Medusa](https://mastra.ai/blog/medusa-ecommerce)
   </details>
 
   <details>
-    <summary>Domain-specific copilots</summary>
+    <summary>Customer-facing assistants</summary>
 
-    Assistants for coding, legal, finance, research, or creative work. Ground agents in your own data with a full RAG pipeline — chunking, embedding, vector storage across 12+ providers, metadata filtering, and re-ranking. Customize behavior with dynamic instructions that adapt per user or request. Connect to external services through typed tools and MCP servers. Add voice interaction with 12+ speech providers, and measure output quality with built-in evaluation scorers.
+    Build agents that handle inquiries, schedule appointments, send reminders, and answer questions via chat, WhatsApp, or voice.
+
+    Used by [Vetnio](https://mastra.ai/blog/vetnio), [Lua](https://mastra.ai/blog/lua-scaling)
+
+    Templates: [Docs Chatbot](https://mastra.ai/templates/docs-chatbot), [Slack Agent](https://mastra.ai/templates/slack-agent)
   </details>
 
   <details>
-    <summary>Workflow automations</summary>
+    <summary>Internal copilots</summary>
 
-    Multi-step processes that trigger, route, and complete tasks. Define type-safe steps with Zod-validated inputs and outputs, then compose them with sequential chaining, parallel fan-out, conditional branching, loops, and iteration with concurrency control. Suspend workflows mid-execution to wait for human approval or external events, then resume from where they left off. Nest workflows inside other workflows for reusable sub-pipelines.
+    Help employees work faster with AI that understands your domain—HR queries, clinical documentation, sales prep, or document generation.
+
+    Used by [Factorial](https://mastra.ai/blog/factorial-case-study), [Counsel Health](https://mastra.ai/blog/counsel-health), [Cedar](https://mastra.ai/blog/cedar-case-study), [SoftBank](https://mastra.ai/blog/softbank-productivity-mastra-2025-08-20)
+
+    Templates: [Chat with PDF](https://mastra.ai/templates/chat-with-pdf), [Google Sheet Analysis](https://mastra.ai/templates/google-sheets-analysis)
   </details>
 
   <details>
-    <summary>Decision-support tools</summary>
+    <summary>Data analysis agents</summary>
 
-    Systems that analyze data and provide actionable recommendations. Compose multiple tools so agents can query databases, call APIs, and run analysis functions in a single interaction. Use structured output with Zod schemas to return validated, typed results. Coordinate specialist agents through supervisor patterns, with task-completion scoring to verify recommendation quality before finalizing. Add human-in-the-loop gates for high-stakes decisions.
+    Let users query databases and dashboards in natural language. Connect to your data sources and return answers, charts, or reports.
+
+    Used by [Index](https://mastra.ai/blog/index-case-study), [PLAID Japan](https://mastra.ai/blog/plaid-jpn-gcp-agents)
+
+    Templates: [Chat with Database](https://mastra.ai/templates/text-to-sql), [CSV to Questions](https://mastra.ai/templates/csv-to-questions)
   </details>
 
   <details>
-    <summary>AI-powered applications</summary>
+    <summary>Content automation</summary>
 
-    Products that combine language understanding, reasoning, and action. Orchestrate multiple agents with supervisor delegation and multi-agent networks. Deploy to any Node.js runtime, cloud provider, or framework — Vercel, Cloudflare, Next.js, Astro, and more. Monitor production behavior with AI-specific tracing that captures token usage, latency, and decision paths. Choose from 10+ storage providers and configure composite backends optimized per workload. Test everything interactively in Studio before shipping.
+    Generate, transform, and manage structured content at scale—whether for a CMS, knowledge base, or documentation system.
+
+    Used by [Sanity](https://mastra.ai/blog/sanity)
+
+    Templates: [Chat with YouTube](https://mastra.ai/templates/chat-with-youtube), [Flash Cards from PDF](https://mastra.ai/templates/flash-cards-from-pdf)
+  </details>
+
+  <details>
+    <summary>DevOps & engineering automation</summary>
+
+    Automate deployments, debug production issues, manage infrastructure, and handle on-call workflows.
+
+    Used by [StarSling](https://mastra.ai/blog/starsling)
+
+    Templates: [GitHub PR Code Review](https://mastra.ai/templates/github-pr-code-review-agent), [Browser Agent](https://mastra.ai/templates/browsing-agent)
+  </details>
+
+  <details>
+    <summary>Sales & GTM workflows</summary>
+
+    Turn customer conversations into structured tasks, generate investment memos, or automate outreach sequences.
+
+    Used by [Kestral](https://mastra.ai/blog/kestral), [Orange Collective](https://mastra.ai/blog/orange-collective-vc-operating-system), [WorkOS](https://mastra.ai/blog/workos-teaching-mastra)
+
+    Templates: [Customer Feedback Summarization](https://mastra.ai/templates/customer-feedback-summarization)
   </details>
 </div>
 
-Browse [templates](https://mastra.ai/templates) from Mastra and the community to see working examples of these use cases.
+Browse [templates](https://mastra.ai/templates) for working examples.
+
+## Not ready to build yet?
+
+Watch this quick introduction:
 
 <YouTube id="1qnmnRICX50" />

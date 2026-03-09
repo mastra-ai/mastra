@@ -52,6 +52,8 @@ export type StreamInternal = {
   threadExists?: boolean;
   // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
   stepTools?: ToolSet;
+  // Active tools from prepareStep - used by toolCallStep to reject calls to hidden tools
+  stepActiveTools?: string[];
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
   stepWorkspace?: Workspace;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop

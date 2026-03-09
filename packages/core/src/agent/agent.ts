@@ -2415,7 +2415,10 @@ export class Agent<
     return memory.recall({
       threadId,
       resourceId,
-      perPage: threadConfig.lastMessages,
+      // When lastMessages is false (disabled), don't pass perPage so recall()
+      // can detect the disabled state from config and return empty history.
+      // When lastMessages is a number, pass it as perPage to limit results.
+      ...(typeof threadConfig.lastMessages === 'number' ? { perPage: threadConfig.lastMessages } : {}),
       threadConfig: memoryConfig,
       // The new user messages aren't in the list yet cause we add memory messages first to try to make sure ordering is correct (memory comes before new user messages)
       vectorSearchString: threadConfig.semanticRecall && vectorMessageSearch ? vectorMessageSearch : undefined,
@@ -2609,6 +2612,43 @@ export class Agent<
   }
 
   /**
+   * Strips tool parts from messages.
+   *
+   * When a supervisor delegates to a sub-agent, the parent's conversation
+   * history may include tool_call parts for its own delegation tools
+   * (agent-* and workflow-*) and other tools. The sub-agent doesn't have these tools,
+   * so sending references to them causes model providers to reject or
+   * mishandle the request.
+   *
+   * This function removes those parts while preserving all other
+   * conversation context (user messages, assistant text, etc.).
+   * @internal
+   */
+  private stripParentToolParts(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages
+      .map(message => {
+        if (message.role === 'assistant') {
+          const content = message.content;
+          const parts = Array.isArray(content) ? content : content?.parts;
+          if (!Array.isArray(parts)) return message;
+          const filtered = parts.filter((part: any) => part?.type !== 'tool-call');
+          if (filtered.length === 0) return null;
+          if (Array.isArray(content)) {
+            return { ...message, content: filtered };
+          }
+          return { ...message, content: { ...content, parts: filtered } };
+        }
+
+        if ((message as any).role === 'tool') {
+          return null;
+        }
+
+        return message;
+      })
+      .filter((message): message is MastraDBMessage => Boolean(message));
+  }
+
+  /**
    * Retrieves and converts agent tools to CoreTool format.
    * @internal
    */
@@ -2687,11 +2727,14 @@ export class Agent<
             // Get messages from context - available at tool execution time
             const contextMessages = (context?.agent?.messages || []) as MastraDBMessage[];
 
-            let fullSubAgentMessages: MastraDBMessage[] = contextMessages;
+            // Strip tool call/result parts from the context.
+            const sanitizedMessages = this.stripParentToolParts(contextMessages);
+
+            let fullSubAgentMessages: MastraDBMessage[] = sanitizedMessages;
 
             // Derive iteration from the number of assistant messages (rough approximation)
             // Each iteration typically produces an assistant message
-            const derivedIteration = Math.max(1, contextMessages.filter(m => m.role === 'assistant').length);
+            const derivedIteration = Math.max(1, sanitizedMessages.filter(m => m.role === 'assistant').length);
 
             // Build delegation start context
             const delegationStartContext: DelegationStartContext = {
@@ -2711,7 +2754,7 @@ export class Agent<
               parentAgentId: this.id,
               parentAgentName: this.name,
               toolCallId,
-              messages: contextMessages,
+              messages: sanitizedMessages,
             };
 
             // Generate sub-agent thread and resource IDs early (before any rejection)
@@ -2891,11 +2934,11 @@ export class Agent<
 
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
-              let filteredContextMessages = contextMessages;
+              let filteredContextMessages = sanitizedMessages;
               if (delegation?.messageFilter) {
                 try {
                   filteredContextMessages = await delegation.messageFilter({
-                    messages: contextMessages,
+                    messages: sanitizedMessages,
                     primitiveId: agent.id,
                     primitiveType: 'agent',
                     prompt: effectivePrompt,
@@ -3803,7 +3846,14 @@ export class Agent<
     runId?: string;
   }) {
     try {
-      messageList.add(result.response.messages, 'response');
+      // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+      // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+      const stepResponseMessages = result.response.dbMessages?.length
+        ? result.response.dbMessages
+        : result.response.messages;
+      if (stepResponseMessages?.length) {
+        messageList.add(stepResponseMessages, 'response');
+      }
       // Message saving is now handled by MessageHistory output processor
     } catch (e) {
       this.logger.error('Error adding messages on step finish', {
@@ -4054,17 +4104,17 @@ export class Agent<
       // Only transform Zod schemas for OpenAI models, OpenAI is the most common and there is a huge issue that so many users run into
       // We transform all .optional() to .nullable().transform(v => v === null ? undefined : v)
       // OpenAI can't handle optional fields, we turn them to nullable and then transform the data received back so the types match the users schema
-      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
-        if (isZodType(options.structuredOutput.schema) && targetModelId) {
+      if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
+        if (isZodType(options.structuredOutput.schema)) {
           const modelInfo: ModelInformation = {
             provider: targetProvider,
-            modelId: targetModelId,
+            modelId: targetModelId ?? '',
             supportsStructuredOutputs: false, // Set to false to enable transform
           };
 
-          const isReasoningModel = /^o[1-5]/.test(targetModelId);
-          const compatLayer = isReasoningModel
-            ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
+          const reasoningLayer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+          const compatLayer = reasoningLayer.isReasoningModel()
+            ? reasoningLayer
             : new OpenAISchemaCompatLayer(modelInfo);
 
           if (compatLayer.shouldApply() && options.structuredOutput.schema) {
@@ -4241,29 +4291,33 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
     const thread = usedWorkingMemory ? (threadId ? await memory?.getThreadById({ threadId }) : undefined) : threadAfter;
 
+    // Add LLM response messages to the list
+    // Prefer dbMessages (MastraDBMessage[] with original IDs) over response.messages
+    // (ModelMessage[] without IDs) to avoid generating new IDs during format conversion
+    let responseMessages: MessageInput[] | undefined = result.response.dbMessages?.length
+      ? result.response.dbMessages
+      : result.response.messages;
+    if ((!responseMessages || responseMessages.length === 0) && result.object) {
+      responseMessages = [
+        {
+          id: result.response.id,
+          role: 'assistant',
+          content: [
+            {
+              type: 'text',
+              text: outputText, // outputText contains the stringified object
+            },
+          ],
+        },
+      ];
+    }
+
+    if (responseMessages?.length) {
+      messageList.add(responseMessages, 'response');
+    }
+
     if (memory && resourceId && thread && !readOnlyMemory) {
       try {
-        // Add LLM response messages to the list
-        let responseMessages = result.response.messages;
-        if (!responseMessages && result.object) {
-          responseMessages = [
-            {
-              id: result.response.id,
-              role: 'assistant',
-              content: [
-                {
-                  type: 'text',
-                  text: outputText, // outputText contains the stringified object
-                },
-              ],
-            },
-          ];
-        }
-
-        if (responseMessages) {
-          messageList.add(responseMessages, 'response');
-        }
-
         if (!threadExists) {
           await memory.createThread({
             threadId: thread.id,
@@ -4327,25 +4381,6 @@ export class Agent<
         this.logger.trackException(mastraError);
         this.logger.error(mastraError.toString());
         throw mastraError;
-      }
-    } else {
-      let responseMessages = result.response.messages;
-      if (!responseMessages && result.object) {
-        responseMessages = [
-          {
-            id: result.response.id,
-            role: 'assistant',
-            content: [
-              {
-                type: 'text',
-                text: outputText, // outputText contains the stringified object
-              },
-            ],
-          },
-        ];
-      }
-      if (responseMessages) {
-        messageList.add(responseMessages, 'response');
       }
     }
 

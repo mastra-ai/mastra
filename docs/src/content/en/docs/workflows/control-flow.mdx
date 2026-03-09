@@ -345,7 +345,7 @@ export const testWorkflow = createWorkflow({
 
 ## Input data mapping
 
-When using `.then()`, `.parallel()`, or `.branch()`, it is sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
+When using `.then()`, `.parallel()`, or `.branch()`, it's sometimes necessary to transform the output of a previous step to match the input of the next. In these cases you can use `.map()` to access the `inputData` and transform it to create a suitable data shape for the next step.
 
 ![Mapping with .map()](/img/workflows/workflows-data-mapping-map.jpg)
 
@@ -830,7 +830,7 @@ This means:
 
 - `.parallel()` collects all branch outputs into an object, then passes it to the next step
 - `.foreach()` collects all iteration outputs into an array, then passes it to the next step
-- There is no way to "stream" results to the next step as they complete
+- Results can't be "streamed" to the next step as they complete
 
 ### Concurrency behavior
 
