@@ -582,7 +582,7 @@ jobs:
   merge-reports:
     name: Merge Test Reports
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [test, e2e-test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     # Minimal permissions - read-only access
     permissions:
@@ -623,7 +623,7 @@ jobs:
   pr-status:
     name: PR Status
     runs-on: ubuntu-latest
-    needs: [test]
+    needs: [test, e2e-test]
     if: always() && github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
