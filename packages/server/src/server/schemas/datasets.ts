@@ -88,6 +88,7 @@ export const updateItemBodySchema = z.object({
 export const triggerExperimentBodySchema = z.object({
   targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
   targetId: z.string().describe('ID of the target'),
+  targetVersionId: z.string().optional().describe('Pin to specific target version snapshot'),
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),

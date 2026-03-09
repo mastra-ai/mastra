@@ -34,6 +34,7 @@ export function ExperimentTriggerDialog({
   const contentRef = useRef<HTMLDivElement>(null);
   const [targetType, setTargetType] = useState<TargetType | ''>('');
   const [targetId, setTargetId] = useState<string>('');
+  const [targetVersionId, setTargetVersionId] = useState<string>('');
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
 
   const { triggerExperiment } = useDatasetMutations();
@@ -51,6 +52,7 @@ export function ExperimentTriggerDialog({
         targetId,
         scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
         version,
+        targetVersionId: targetVersionId || undefined,
       });
 
       toast.success('Experiment triggered successfully');
@@ -60,6 +62,7 @@ export function ExperimentTriggerDialog({
       // Reset state
       setTargetType('');
       setTargetId('');
+      setTargetVersionId('');
       setSelectedScorers([]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to trigger experiment';
@@ -73,6 +76,7 @@ export function ExperimentTriggerDialog({
       // Reset state on close
       setTargetType('');
       setTargetId('');
+      setTargetVersionId('');
       setSelectedScorers([]);
     }
   };
@@ -95,6 +99,8 @@ export function ExperimentTriggerDialog({
             setTargetType={setTargetType}
             targetId={targetId}
             setTargetId={setTargetId}
+            targetVersionId={targetVersionId}
+            setTargetVersionId={setTargetVersionId}
             container={contentRef}
           />
 
