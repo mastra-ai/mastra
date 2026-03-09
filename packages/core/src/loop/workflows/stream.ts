@@ -48,45 +48,68 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
-        if (chunk.type.startsWith('data-') && messageId && !('transient' in chunk && chunk.transient)) {
-          const dataPart = {
-            type: chunk.type as `data-${string}`,
-            data: 'data' in chunk ? chunk.data : undefined,
-          };
-          const message: MastraDBMessage = {
-            id: messageId,
-            role: 'assistant',
-            content: {
-              format: 2,
-              parts: [dataPart],
-            },
-            createdAt: new Date(),
-            threadId: _internal?.threadId,
-            resourceId: _internal?.resourceId,
-          };
-          messageList.add(message, 'response');
-
-          // Run data-* chunks through output processors (fixes #13341)
+        if (chunk.type.startsWith('data-')) {
+          // Run data-* chunks through output processors before persisting (fixes #13341)
+          let processedChunk = chunk;
           if (dataChunkProcessorRunner) {
-            const streamWriter = {
-              custom: async (data: { type: string }) => {
-                safeEnqueue(controller, data as ChunkType<OUTPUT>);
-              },
-            };
-            const { part: processed, blocked } = await dataChunkProcessorRunner.processPart(
+            const {
+              part: processed,
+              blocked,
+              reason,
+              tripwireOptions,
+              processorId,
+            } = await dataChunkProcessorRunner.processPart(
               chunk,
-              dataChunkProcessorStates!,
+              (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
               undefined, // observabilityContext
               rest.requestContext,
               messageList,
               0,
-              streamWriter,
             );
-            if (!blocked && processed) {
-              safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+
+            if (blocked) {
+              safeEnqueue(controller, {
+                type: 'tripwire',
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  reason: reason || 'Output processor blocked content',
+                  retry: tripwireOptions?.retry,
+                  metadata: tripwireOptions?.metadata,
+                  processorId,
+                },
+              } as ChunkType<OUTPUT>);
+              return;
             }
-            return;
+
+            if (processed) {
+              processedChunk = processed as ChunkType<OUTPUT>;
+            } else {
+              return;
+            }
           }
+
+          if (messageId && !('transient' in processedChunk && processedChunk.transient)) {
+            const dataPart = {
+              type: processedChunk.type as `data-${string}`,
+              data: 'data' in processedChunk ? processedChunk.data : undefined,
+            };
+            const message: MastraDBMessage = {
+              id: messageId,
+              role: 'assistant',
+              content: {
+                format: 2,
+                parts: [dataPart],
+              },
+              createdAt: new Date(),
+              threadId: _internal?.threadId,
+              resourceId: _internal?.resourceId,
+            };
+            messageList.add(message, 'response');
+          }
+
+          safeEnqueue(controller, processedChunk);
+          return;
         }
         safeEnqueue(controller, chunk);
       };
