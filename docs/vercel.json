@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/docs/getting-started/start",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/docs/index",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/:path*",
       "destination": "/docs/:path*",
       "permanent": true
@@ -132,7 +142,7 @@
     },
     {
       "source": "/docs/getting-started/templates",
-      "destination": "/docs/getting-started/start",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -437,7 +447,7 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare-deployer",
+      "destination": "/guides/deployment/cloudflare",
       "permanent": true
     },
     {
@@ -447,12 +457,12 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/netlify-deployer",
-      "destination": "/guides/deployment/netlify-deployer",
+      "destination": "/guides/deployment/netlify",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/vercel-deployer",
-      "destination": "/guides/deployment/vercel-deployer",
+      "destination": "/guides/deployment/vercel",
       "permanent": true
     },
     {
@@ -542,7 +552,7 @@
     },
     {
       "source": "/examples/v1",
-      "destination": "/docs/getting-started/start",
+      "destination": "/docs",
       "permanent": true
     },
     {
@@ -568,6 +578,81 @@
     {
       "source": "/docs/scorers/overview",
       "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/mcp-docs-server",
+      "destination": "/docs/build-with-ai/mcp-docs-server",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/netlify-deployer",
+      "destination": "/guides/deployment/netlify",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/vercel-deployer",
+      "destination": "/guides/deployment/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/advanced-usage",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/mcp-overview",
+      "destination": "/docs/mcp/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools-mcp/overview",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/input-data-mapping",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/reference/tools/client",
+      "destination": "/reference/tools/mcp-client",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/cloudflare-deployer",
+      "destination": "/guides/deployment/cloudflare",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/overview",
+      "destination": "https://code.mastra.ai/",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/modes",
+      "destination": "https://code.mastra.ai/modes",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/tools",
+      "destination": "https://code.mastra.ai/tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/configuration",
+      "destination": "https://code.mastra.ai/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-code/customization",
+      "destination": "https://code.mastra.ai/customization",
+      "permanent": true
+    },
+    {
+      "source": "/reference/mastra-code/createMastraCode",
+      "destination": "https://code.mastra.ai/",
       "permanent": true
     }
   ]

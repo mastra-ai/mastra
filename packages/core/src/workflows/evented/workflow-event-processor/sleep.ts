@@ -1,4 +1,3 @@
-import EventEmitter from 'node:events';
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
@@ -88,13 +87,15 @@ export async function processWorkflowSleep(
     },
   });
 
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+
   const duration = await stepExecutor.resolveSleep({
     workflowId,
     step,
     runId,
     stepResults,
-    emitter: new EventEmitter() as any, // TODO
-    requestContext: new RequestContext(), // TODO
+    requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });
@@ -178,13 +179,16 @@ export async function processWorkflowSleepUntil(
   },
 ) {
   const startedAt = Date.now();
+
+  // Create a proper RequestContext from the plain object passed in ProcessorArgs
+  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
+
   const duration = await stepExecutor.resolveSleepUntil({
     workflowId,
     step,
     runId,
     stepResults,
-    emitter: new EventEmitter() as any, // TODO
-    requestContext: new RequestContext(), // TODO
+    requestContext: reqContext,
     input: prevResult?.status === 'success' ? prevResult.output : undefined,
     resumeData,
   });

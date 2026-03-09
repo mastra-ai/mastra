@@ -3,8 +3,11 @@ import { z } from 'zod';
 import type { ZodType as ZodTypeV3, ZodObject as ZodObjectV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4, ZodObject as ZodObjectV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
+import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
+import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
+import { ensureAllPropertiesRequired } from '../zod-to-json';
 import { isOptional, isObj, isUnion, isArr, isString, isNullable, isDefault } from '../zodTypes';
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
@@ -17,9 +20,10 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   shouldApply(): boolean {
+    const model = this.getModel();
     if (
-      !this.getModel().supportsStructuredOutputs &&
-      (this.getModel().provider.includes(`openai`) || this.getModel().modelId.includes(`openai`))
+      !model.supportsStructuredOutputs &&
+      (model.provider.includes(`openai`) || model.modelId?.includes(`openai`) || model.provider.includes(`groq`))
     ) {
       return true;
     }
@@ -27,9 +31,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     return false;
   }
 
-  processZodType(value: ZodTypeV3): ZodTypeV3;
-  processZodType(value: ZodTypeV4): ZodTypeV4;
-  processZodType(value: ZodTypeV3 | ZodTypeV4): ZodTypeV3 | ZodTypeV4 {
+  processZodType(value: ZodType): ZodType {
     if (isOptional(z)(value)) {
       // For OpenAI strict mode, convert .optional() to .nullable() with transform
       // This ensures all fields are in the required array but can accept null values
@@ -99,7 +101,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       const model = this.getModel();
       const checks = ['emoji'] as const;
 
-      if (model.modelId.includes('gpt-4o-mini')) {
+      if (model.modelId?.includes('gpt-4o-mini')) {
         return this.defaultZodStringHandler(value, ['emoji', 'regex']);
       }
 
@@ -119,7 +121,60 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
    */
   processToJSONSchema(zodSchema: ZodTypeV3 | ZodTypeV4): JSONSchema7 {
     const jsonSchema = super.processToJSONSchema(zodSchema);
-    return this.fixAdditionalProperties(jsonSchema);
+    const fixedSchema = this.fixAdditionalProperties(jsonSchema);
+    return ensureAllPropertiesRequired(fixedSchema);
+  }
+
+  preProcessJSONNode(schema: JSONSchema7, _parentSchema?: JSONSchema7): void {
+    // Process based on schema type
+    if (isObjectSchema(schema)) {
+      this.defaultObjectHandler(schema);
+    } else if (isArraySchema(schema)) {
+      this.defaultArrayHandler(schema);
+    } else if (isStringSchema(schema)) {
+      const model = this.getModel();
+      // gpt-4o-mini doesn't respect emoji and regex constraints
+      if (model.modelId?.includes('gpt-4o-mini')) {
+        // Remove emoji format if present
+        if (schema.format === 'emoji') {
+          delete schema.format;
+        }
+        // Remove pattern (regex) if present
+        if (schema.pattern) {
+          delete schema.pattern;
+        }
+      } else {
+        // Other OpenAI models only have issues with emoji
+        if (schema.format === 'emoji') {
+          delete schema.format;
+        }
+      }
+    }
+  }
+
+  postProcessJSONNode(schema: JSONSchema7): void {
+    // Handle union schemas in post-processing (after children are processed)
+    if (isUnionSchema(schema)) {
+      this.defaultUnionHandler(schema);
+    }
+
+    // Fix v4-specific issues in post-processing
+    if (isObjectSchema(schema)) {
+      // Fix passthrough objects: convert additionalProperties: {} to additionalProperties: true
+      if (
+        schema.additionalProperties !== undefined &&
+        typeof schema.additionalProperties === 'object' &&
+        schema.additionalProperties !== null &&
+        Object.keys(schema.additionalProperties).length === 0
+      ) {
+        schema.additionalProperties = true;
+      }
+
+      // Fix record schemas: remove propertyNames (v4 adds this but it's not needed)
+      if ('propertyNames' in schema) {
+        delete (schema as Record<string, unknown>).propertyNames;
+      }
+    }
   }
 
   /**

@@ -1,5 +1,3 @@
-import { Link, useParams } from 'react-router';
-
 import {
   Header,
   Crumb,
@@ -12,6 +10,7 @@ import {
   DocsIcon,
   AgentToolPanel,
 } from '@mastra/playground-ui';
+import { Link, useParams } from 'react-router';
 
 const AgentTool = () => {
   const { toolId, agentId } = useParams();

@@ -17,6 +17,7 @@ import {
 } from '../schemas/scores';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 
 async function listScorersFromSystem({
@@ -70,14 +71,39 @@ async function listScorersFromSystem({
 
   // Process stored agents (database-backed agents)
   try {
-    const storedAgentsResult = await mastra.listStoredAgents();
+    const editor = mastra.getEditor();
+    const storedAgentsResult = await editor?.agent.list();
     if (storedAgentsResult?.agents) {
-      for (const storedAgent of storedAgentsResult.agents) {
-        await processAgentScorers(storedAgent);
+      for (const storedAgentConfig of storedAgentsResult.agents) {
+        try {
+          const agent = await editor?.agent.getById(storedAgentConfig.id);
+          if (agent) {
+            await processAgentScorers(agent);
+          }
+        } catch {
+          // Skip individual agents that fail to hydrate
+        }
       }
     }
   } catch {
     // Silently ignore if storage is not configured - not all setups have storage
+  }
+
+  // Process stored scorers (standalone CMS-created scorers)
+  try {
+    const editor = mastra.getEditor();
+    const storedScorersResult = await editor?.scorer.list();
+    if (storedScorersResult?.scorerDefinitions) {
+      for (const storedScorerConfig of storedScorersResult.scorerDefinitions) {
+        try {
+          await editor?.scorer.getById(storedScorerConfig.id);
+        } catch {
+          // Skip individual scorers that fail to hydrate
+        }
+      }
+    }
+  } catch {
+    // Silently ignore if storage is not configured
   }
 
   for (const [workflowId, workflow] of Object.entries(workflows)) {
@@ -266,7 +292,7 @@ export const LIST_SCORES_BY_ENTITY_ID_ROUTE = createRoute({
       let entityIdToUse = entityId;
 
       if (entityType === 'AGENT') {
-        const agent = mastra.getAgentById(entityId);
+        const agent = await getAgentFromSystem({ mastra, agentId: entityId });
         entityIdToUse = agent.id;
       } else if (entityType === 'WORKFLOW') {
         const workflow = mastra.getWorkflowById(entityId);

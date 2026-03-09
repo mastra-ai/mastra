@@ -1,5 +1,189 @@
 # @mastra/rag
 
+## 2.1.2
+
+### Patch Changes
+
+- Improved token-based chunking performance in `token` and `semantic-markdown` strategies. Markdown knowledge bases now chunk significantly faster with lower tokenization overhead. ([#13495](https://github.com/mastra-ai/mastra/pull/13495))
+
+- Updated dependencies [[`df170fd`](https://github.com/mastra-ai/mastra/commit/df170fd139b55f845bfd2de8488b16435bd3d0da), [`ae55343`](https://github.com/mastra-ai/mastra/commit/ae5534397fc006fd6eef3e4f80c235bcdc9289ef), [`c290cec`](https://github.com/mastra-ai/mastra/commit/c290cec5bf9107225de42942b56b487107aa9dce), [`f03e794`](https://github.com/mastra-ai/mastra/commit/f03e794630f812b56e95aad54f7b1993dc003add), [`aa4a5ae`](https://github.com/mastra-ai/mastra/commit/aa4a5aedb80d8d6837bab8cbb2e301215d1ba3e9), [`de3f584`](https://github.com/mastra-ai/mastra/commit/de3f58408752a8d80a295275c7f23fc306cf7f4f), [`d3fb010`](https://github.com/mastra-ai/mastra/commit/d3fb010c98f575f1c0614452667396e2653815f6), [`702ee1c`](https://github.com/mastra-ai/mastra/commit/702ee1c41be67cc532b4dbe89bcb62143508f6f0), [`f495051`](https://github.com/mastra-ai/mastra/commit/f495051eb6496a720f637fc85b6d69941c12554c), [`e622f1d`](https://github.com/mastra-ai/mastra/commit/e622f1d3ab346a8e6aca6d1fe2eac99bd961e50b), [`861f111`](https://github.com/mastra-ai/mastra/commit/861f11189211b20ddb70d8df81a6b901fc78d11e), [`00f43e8`](https://github.com/mastra-ai/mastra/commit/00f43e8e97a80c82b27d5bd30494f10a715a1df9), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`96a1702`](https://github.com/mastra-ai/mastra/commit/96a1702ce362c50dda20c8b4a228b4ad1a36a17a), [`cb9f921`](https://github.com/mastra-ai/mastra/commit/cb9f921320913975657abb1404855d8c510f7ac5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`72df4a8`](https://github.com/mastra-ai/mastra/commit/72df4a8f9bf1a20cfd3d9006a4fdb597ad56d10a)]:
+  - @mastra/core@1.8.0
+
+## 2.1.2-alpha.0
+
+### Patch Changes
+
+- Improved token-based chunking performance in `token` and `semantic-markdown` strategies. Markdown knowledge bases now chunk significantly faster with lower tokenization overhead. ([#13495](https://github.com/mastra-ai/mastra/pull/13495))
+
+- Updated dependencies [[`df170fd`](https://github.com/mastra-ai/mastra/commit/df170fd139b55f845bfd2de8488b16435bd3d0da), [`ae55343`](https://github.com/mastra-ai/mastra/commit/ae5534397fc006fd6eef3e4f80c235bcdc9289ef), [`c290cec`](https://github.com/mastra-ai/mastra/commit/c290cec5bf9107225de42942b56b487107aa9dce), [`f03e794`](https://github.com/mastra-ai/mastra/commit/f03e794630f812b56e95aad54f7b1993dc003add), [`aa4a5ae`](https://github.com/mastra-ai/mastra/commit/aa4a5aedb80d8d6837bab8cbb2e301215d1ba3e9), [`de3f584`](https://github.com/mastra-ai/mastra/commit/de3f58408752a8d80a295275c7f23fc306cf7f4f), [`d3fb010`](https://github.com/mastra-ai/mastra/commit/d3fb010c98f575f1c0614452667396e2653815f6), [`702ee1c`](https://github.com/mastra-ai/mastra/commit/702ee1c41be67cc532b4dbe89bcb62143508f6f0), [`f495051`](https://github.com/mastra-ai/mastra/commit/f495051eb6496a720f637fc85b6d69941c12554c), [`e622f1d`](https://github.com/mastra-ai/mastra/commit/e622f1d3ab346a8e6aca6d1fe2eac99bd961e50b), [`861f111`](https://github.com/mastra-ai/mastra/commit/861f11189211b20ddb70d8df81a6b901fc78d11e), [`00f43e8`](https://github.com/mastra-ai/mastra/commit/00f43e8e97a80c82b27d5bd30494f10a715a1df9), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`96a1702`](https://github.com/mastra-ai/mastra/commit/96a1702ce362c50dda20c8b4a228b4ad1a36a17a), [`cb9f921`](https://github.com/mastra-ai/mastra/commit/cb9f921320913975657abb1404855d8c510f7ac5), [`114e7c1`](https://github.com/mastra-ai/mastra/commit/114e7c146ac682925f0fb37376c1be70e5d6e6e5), [`1b6f651`](https://github.com/mastra-ai/mastra/commit/1b6f65127d4a0d6c38d0a1055cb84527db529d6b), [`72df4a8`](https://github.com/mastra-ai/mastra/commit/72df4a8f9bf1a20cfd3d9006a4fdb597ad56d10a)]:
+  - @mastra/core@1.8.0-alpha.0
+
+## 2.1.1
+
+### Patch Changes
+
+- dependencies updates: ([#13318](https://github.com/mastra-ai/mastra/pull/13318))
+  - Updated dependency [`zeroentropy@0.1.0-alpha.7` ↗︎](https://www.npmjs.com/package/zeroentropy/v/0.1.0) (from `0.1.0-alpha.6`, in `dependencies`)
+- Updated dependencies [[`24284ff`](https://github.com/mastra-ai/mastra/commit/24284ffae306ddf0ab83273e13f033520839ef40), [`f5097cc`](https://github.com/mastra-ai/mastra/commit/f5097cc8a813c82c3378882c31178320cadeb655), [`71e237f`](https://github.com/mastra-ai/mastra/commit/71e237fa852a3ad9a50a3ddb3b5f3b20b9a8181c), [`13a291e`](https://github.com/mastra-ai/mastra/commit/13a291ebb9f9bca80befa0d9166b916bb348e8e9), [`397af5a`](https://github.com/mastra-ai/mastra/commit/397af5a69f34d4157f51a7c8da3f1ded1e1d611c), [`d4701f7`](https://github.com/mastra-ai/mastra/commit/d4701f7e24822b081b70f9c806c39411b1a712e7), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`6184727`](https://github.com/mastra-ai/mastra/commit/6184727e812bf7a65cee209bacec3a2f5a16e923), [`0c338b8`](https://github.com/mastra-ai/mastra/commit/0c338b87362dcd95ff8191ca00df645b6953f534), [`6f6385b`](https://github.com/mastra-ai/mastra/commit/6f6385be5b33687cd21e71fc27e972e6928bb34c), [`14aba61`](https://github.com/mastra-ai/mastra/commit/14aba61b9cff76d72bc7ef6f3a83ae2c5d059193), [`dd9dd1c`](https://github.com/mastra-ai/mastra/commit/dd9dd1c9ae32ae79093f8c4adde1732ac6357233)]:
+  - @mastra/core@1.7.0
+
+## 2.1.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#13318](https://github.com/mastra-ai/mastra/pull/13318))
+  - Updated dependency [`zeroentropy@0.1.0-alpha.7` ↗︎](https://www.npmjs.com/package/zeroentropy/v/0.1.0) (from `0.1.0-alpha.6`, in `dependencies`)
+- Updated dependencies [[`24284ff`](https://github.com/mastra-ai/mastra/commit/24284ffae306ddf0ab83273e13f033520839ef40), [`f5097cc`](https://github.com/mastra-ai/mastra/commit/f5097cc8a813c82c3378882c31178320cadeb655), [`71e237f`](https://github.com/mastra-ai/mastra/commit/71e237fa852a3ad9a50a3ddb3b5f3b20b9a8181c), [`13a291e`](https://github.com/mastra-ai/mastra/commit/13a291ebb9f9bca80befa0d9166b916bb348e8e9), [`397af5a`](https://github.com/mastra-ai/mastra/commit/397af5a69f34d4157f51a7c8da3f1ded1e1d611c), [`d4701f7`](https://github.com/mastra-ai/mastra/commit/d4701f7e24822b081b70f9c806c39411b1a712e7), [`2b40831`](https://github.com/mastra-ai/mastra/commit/2b40831dcca2275c9570ddf09b7f25ba3e8dc7fc), [`6184727`](https://github.com/mastra-ai/mastra/commit/6184727e812bf7a65cee209bacec3a2f5a16e923), [`6f6385b`](https://github.com/mastra-ai/mastra/commit/6f6385be5b33687cd21e71fc27e972e6928bb34c), [`14aba61`](https://github.com/mastra-ai/mastra/commit/14aba61b9cff76d72bc7ef6f3a83ae2c5d059193), [`dd9dd1c`](https://github.com/mastra-ai/mastra/commit/dd9dd1c9ae32ae79093f8c4adde1732ac6357233)]:
+  - @mastra/core@1.7.0-alpha.0
+
+## 2.1.0
+
+### Minor Changes
+
+- Added support for 20 additional languages in code chunking ([#12154](https://github.com/mastra-ai/mastra/pull/12154))
+
+  Extended RecursiveCharacterTransformer to support all languages defined in the Language enum. Previously, only 6 languages were supported (CPP, C, TS, MARKDOWN, LATEX, PHP), causing runtime errors for other defined languages.
+
+  **Newly supported languages:**
+  - GO, JAVA, KOTLIN, JS, PYTHON, RUBY, RUST, SCALA, SWIFT (popular programming languages)
+  - HTML, SOL (Solidity), CSHARP, COBOL, LUA, PERL, HASKELL, ELIXIR, POWERSHELL (additional languages)
+  - PROTO (Protocol Buffers), RST (reStructuredText) (data/documentation formats)
+
+  Each language has been configured with appropriate separators based on its syntax patterns (modules, classes, functions, control structures) to enable semantic code chunking.
+
+  **Before:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  // These would all throw "Language X is not supported!" errors
+  const goTransformer = RecursiveCharacterTransformer.fromLanguage(Language.GO);
+  const pythonTransformer = RecursiveCharacterTransformer.fromLanguage(Language.PYTHON);
+  const rustTransformer = RecursiveCharacterTransformer.fromLanguage(Language.RUST);
+  ```
+
+  **After:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  // All languages now work seamlessly
+  const goTransformer = RecursiveCharacterTransformer.fromLanguage(Language.GO);
+  const goChunks = goTransformer.transform(goCodeDocument);
+
+  const pythonTransformer = RecursiveCharacterTransformer.fromLanguage(Language.PYTHON);
+  const pythonChunks = pythonTransformer.transform(pythonCodeDocument);
+
+  const rustTransformer = RecursiveCharacterTransformer.fromLanguage(Language.RUST);
+  const rustChunks = rustTransformer.transform(rustCodeDocument);
+  // All languages in the Language enum are now fully supported
+  ```
+
+### Patch Changes
+
+- Add support for PHP in Language enum
+  ([#12124](https://github.com/mastra-ai/mastra/pull/12124))
+  Previously, the Language enum defined PHP, but it was not supported in the `getSeparatorsForLanguage` method. This caused runtime errors when trying to use PHP for code chunking.
+  This change adds proper separator definitions for PHP, ensuring that PHP defined in the Language enum is now fully supported. PHP has been configured with appropriate separators based on its syntax and common programming patterns (classes, functions, control structures, etc.).
+  **Before:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  const transformer = RecursiveCharacterTransformer.fromLanguage(Language.PHP);
+  const chunks = transformer.transform(phpCodeDocument);
+  // Throws: "Language PHP is not supported!"
+  ```
+
+  **After:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  const transformer = RecursiveCharacterTransformer.fromLanguage(Language.PHP);
+  const chunks = transformer.transform(phpCodeDocument);
+  // Successfully chunks PHP code at namespace, class, function boundaries
+  ```
+
+  Fixes the issue where using `Language.PHP` would throw "Language PHP is not supported!" error.
+
+- Updated dependencies [[`90fc0e5`](https://github.com/mastra-ai/mastra/commit/90fc0e5717cb280c2d4acf4f0410b510bb4c0a72), [`1cf5d2e`](https://github.com/mastra-ai/mastra/commit/1cf5d2ea1b085be23e34fb506c80c80a4e6d9c2b), [`b99ceac`](https://github.com/mastra-ai/mastra/commit/b99ceace2c830dbdef47c8692d56a91954aefea2), [`deea43e`](https://github.com/mastra-ai/mastra/commit/deea43eb1366d03a864c5e597d16a48592b9893f), [`833ae96`](https://github.com/mastra-ai/mastra/commit/833ae96c3e34370e58a1e979571c41f39a720592), [`943772b`](https://github.com/mastra-ai/mastra/commit/943772b4378f625f0f4e19ea2b7c392bd8e71786), [`b5c711b`](https://github.com/mastra-ai/mastra/commit/b5c711b281dd1fb81a399a766bc9f86c55efc13e), [`3efbe5a`](https://github.com/mastra-ai/mastra/commit/3efbe5ae20864c4f3143457f4f3ee7dc2fa5ca76), [`1e49e7a`](https://github.com/mastra-ai/mastra/commit/1e49e7ab5f173582154cb26b29d424de67d09aef), [`751eaab`](https://github.com/mastra-ai/mastra/commit/751eaab4e0d3820a94e4c3d39a2ff2663ded3d91), [`69d8156`](https://github.com/mastra-ai/mastra/commit/69d81568bcf062557c24471ce26812446bec465d), [`60d9d89`](https://github.com/mastra-ai/mastra/commit/60d9d899e44b35bc43f1bcd967a74e0ce010b1af), [`5c544c8`](https://github.com/mastra-ai/mastra/commit/5c544c8d12b08ab40d64d8f37b3c4215bee95b87), [`771ad96`](https://github.com/mastra-ai/mastra/commit/771ad962441996b5c43549391a3e6a02c6ddedc2), [`2b0936b`](https://github.com/mastra-ai/mastra/commit/2b0936b0c9a43eeed9bef63e614d7e02ee803f7e), [`3b04f30`](https://github.com/mastra-ai/mastra/commit/3b04f3010604f3cdfc8a0674731700ad66471cee), [`97e26de`](https://github.com/mastra-ai/mastra/commit/97e26deaebd9836647a67b96423281d66421ca07), [`ac9ec66`](https://github.com/mastra-ai/mastra/commit/ac9ec6672779b2e6d4344e415481d1a6a7d4911a), [`10523f4`](https://github.com/mastra-ai/mastra/commit/10523f4882d9b874b40ce6e3715f66dbcd4947d2), [`cb72d20`](https://github.com/mastra-ai/mastra/commit/cb72d2069d7339bda8a0e76d4f35615debb07b84), [`42856b1`](https://github.com/mastra-ai/mastra/commit/42856b1c8aeea6371c9ee77ae2f5f5fe34400933), [`66f33ff`](https://github.com/mastra-ai/mastra/commit/66f33ff68620018513e499c394411d1d39b3aa5c), [`ab3c190`](https://github.com/mastra-ai/mastra/commit/ab3c1901980a99910ca9b96a7090c22e24060113), [`d4f06c8`](https://github.com/mastra-ai/mastra/commit/d4f06c85ffa5bb0da38fb82ebf3b040cc6b4ec4e), [`0350626`](https://github.com/mastra-ai/mastra/commit/03506267ec41b67add80d994c0c0fcce93bbc75f), [`bc9fa00`](https://github.com/mastra-ai/mastra/commit/bc9fa00859c5c4a796d53a0a5cae46ab4a3072e4), [`f46a478`](https://github.com/mastra-ai/mastra/commit/f46a4782f595949c696569e891f81c8d26338508), [`90fc0e5`](https://github.com/mastra-ai/mastra/commit/90fc0e5717cb280c2d4acf4f0410b510bb4c0a72), [`f05a3a5`](https://github.com/mastra-ai/mastra/commit/f05a3a5cf2b9a9c2d40c09cb8c762a4b6cd5d565), [`a291da9`](https://github.com/mastra-ai/mastra/commit/a291da9363efd92dafd8775dccb4f2d0511ece7a), [`c5d71da`](https://github.com/mastra-ai/mastra/commit/c5d71da1c680ce5640b1a7f8ca0e024a4ab1cfed), [`07042f9`](https://github.com/mastra-ai/mastra/commit/07042f9f89080f38b8f72713ba1c972d5b1905b8), [`0423442`](https://github.com/mastra-ai/mastra/commit/0423442b7be2dfacba95890bea8f4a810db4d603)]:
+  - @mastra/core@1.1.0
+
+## 2.1.0-alpha.0
+
+### Minor Changes
+
+- Added support for 20 additional languages in code chunking ([#12154](https://github.com/mastra-ai/mastra/pull/12154))
+
+  Extended RecursiveCharacterTransformer to support all languages defined in the Language enum. Previously, only 6 languages were supported (CPP, C, TS, MARKDOWN, LATEX, PHP), causing runtime errors for other defined languages.
+
+  **Newly supported languages:**
+  - GO, JAVA, KOTLIN, JS, PYTHON, RUBY, RUST, SCALA, SWIFT (popular programming languages)
+  - HTML, SOL (Solidity), CSHARP, COBOL, LUA, PERL, HASKELL, ELIXIR, POWERSHELL (additional languages)
+  - PROTO (Protocol Buffers), RST (reStructuredText) (data/documentation formats)
+
+  Each language has been configured with appropriate separators based on its syntax patterns (modules, classes, functions, control structures) to enable semantic code chunking.
+
+  **Before:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  // These would all throw "Language X is not supported!" errors
+  const goTransformer = RecursiveCharacterTransformer.fromLanguage(Language.GO);
+  const pythonTransformer = RecursiveCharacterTransformer.fromLanguage(Language.PYTHON);
+  const rustTransformer = RecursiveCharacterTransformer.fromLanguage(Language.RUST);
+  ```
+
+  **After:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  // All languages now work seamlessly
+  const goTransformer = RecursiveCharacterTransformer.fromLanguage(Language.GO);
+  const goChunks = goTransformer.transform(goCodeDocument);
+
+  const pythonTransformer = RecursiveCharacterTransformer.fromLanguage(Language.PYTHON);
+  const pythonChunks = pythonTransformer.transform(pythonCodeDocument);
+
+  const rustTransformer = RecursiveCharacterTransformer.fromLanguage(Language.RUST);
+  const rustChunks = rustTransformer.transform(rustCodeDocument);
+  // All languages in the Language enum are now fully supported
+  ```
+
+### Patch Changes
+
+- Add support for PHP in Language enum
+  ([#12124](https://github.com/mastra-ai/mastra/pull/12124))
+  Previously, the Language enum defined PHP, but it was not supported in the `getSeparatorsForLanguage` method. This caused runtime errors when trying to use PHP for code chunking.
+  This change adds proper separator definitions for PHP, ensuring that PHP defined in the Language enum is now fully supported. PHP has been configured with appropriate separators based on its syntax and common programming patterns (classes, functions, control structures, etc.).
+  **Before:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  const transformer = RecursiveCharacterTransformer.fromLanguage(Language.PHP);
+  const chunks = transformer.transform(phpCodeDocument);
+  // Throws: "Language PHP is not supported!"
+  ```
+
+  **After:**
+
+  ```typescript
+  import { RecursiveCharacterTransformer, Language } from '@mastra/rag';
+
+  const transformer = RecursiveCharacterTransformer.fromLanguage(Language.PHP);
+  const chunks = transformer.transform(phpCodeDocument);
+  // Successfully chunks PHP code at namespace, class, function boundaries
+  ```
+
+  Fixes the issue where using `Language.PHP` would throw "Language PHP is not supported!" error.
+
+- Updated dependencies [[`90fc0e5`](https://github.com/mastra-ai/mastra/commit/90fc0e5717cb280c2d4acf4f0410b510bb4c0a72), [`1cf5d2e`](https://github.com/mastra-ai/mastra/commit/1cf5d2ea1b085be23e34fb506c80c80a4e6d9c2b), [`833ae96`](https://github.com/mastra-ai/mastra/commit/833ae96c3e34370e58a1e979571c41f39a720592), [`943772b`](https://github.com/mastra-ai/mastra/commit/943772b4378f625f0f4e19ea2b7c392bd8e71786), [`b5c711b`](https://github.com/mastra-ai/mastra/commit/b5c711b281dd1fb81a399a766bc9f86c55efc13e), [`3efbe5a`](https://github.com/mastra-ai/mastra/commit/3efbe5ae20864c4f3143457f4f3ee7dc2fa5ca76), [`1e49e7a`](https://github.com/mastra-ai/mastra/commit/1e49e7ab5f173582154cb26b29d424de67d09aef), [`751eaab`](https://github.com/mastra-ai/mastra/commit/751eaab4e0d3820a94e4c3d39a2ff2663ded3d91), [`69d8156`](https://github.com/mastra-ai/mastra/commit/69d81568bcf062557c24471ce26812446bec465d), [`60d9d89`](https://github.com/mastra-ai/mastra/commit/60d9d899e44b35bc43f1bcd967a74e0ce010b1af), [`5c544c8`](https://github.com/mastra-ai/mastra/commit/5c544c8d12b08ab40d64d8f37b3c4215bee95b87), [`771ad96`](https://github.com/mastra-ai/mastra/commit/771ad962441996b5c43549391a3e6a02c6ddedc2), [`2b0936b`](https://github.com/mastra-ai/mastra/commit/2b0936b0c9a43eeed9bef63e614d7e02ee803f7e), [`3b04f30`](https://github.com/mastra-ai/mastra/commit/3b04f3010604f3cdfc8a0674731700ad66471cee), [`97e26de`](https://github.com/mastra-ai/mastra/commit/97e26deaebd9836647a67b96423281d66421ca07), [`10523f4`](https://github.com/mastra-ai/mastra/commit/10523f4882d9b874b40ce6e3715f66dbcd4947d2), [`cb72d20`](https://github.com/mastra-ai/mastra/commit/cb72d2069d7339bda8a0e76d4f35615debb07b84), [`42856b1`](https://github.com/mastra-ai/mastra/commit/42856b1c8aeea6371c9ee77ae2f5f5fe34400933), [`66f33ff`](https://github.com/mastra-ai/mastra/commit/66f33ff68620018513e499c394411d1d39b3aa5c), [`ab3c190`](https://github.com/mastra-ai/mastra/commit/ab3c1901980a99910ca9b96a7090c22e24060113), [`d4f06c8`](https://github.com/mastra-ai/mastra/commit/d4f06c85ffa5bb0da38fb82ebf3b040cc6b4ec4e), [`0350626`](https://github.com/mastra-ai/mastra/commit/03506267ec41b67add80d994c0c0fcce93bbc75f), [`bc9fa00`](https://github.com/mastra-ai/mastra/commit/bc9fa00859c5c4a796d53a0a5cae46ab4a3072e4), [`f46a478`](https://github.com/mastra-ai/mastra/commit/f46a4782f595949c696569e891f81c8d26338508), [`90fc0e5`](https://github.com/mastra-ai/mastra/commit/90fc0e5717cb280c2d4acf4f0410b510bb4c0a72), [`f05a3a5`](https://github.com/mastra-ai/mastra/commit/f05a3a5cf2b9a9c2d40c09cb8c762a4b6cd5d565), [`a291da9`](https://github.com/mastra-ai/mastra/commit/a291da9363efd92dafd8775dccb4f2d0511ece7a), [`c5d71da`](https://github.com/mastra-ai/mastra/commit/c5d71da1c680ce5640b1a7f8ca0e024a4ab1cfed), [`07042f9`](https://github.com/mastra-ai/mastra/commit/07042f9f89080f38b8f72713ba1c972d5b1905b8), [`0423442`](https://github.com/mastra-ai/mastra/commit/0423442b7be2dfacba95890bea8f4a810db4d603)]:
+  - @mastra/core@1.1.0-alpha.0
+
 ## 2.0.0
 
 ### Major Changes

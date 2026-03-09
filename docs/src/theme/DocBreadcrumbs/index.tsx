@@ -8,9 +8,8 @@ import HomeBreadcrumbItem from '@theme/DocBreadcrumbs/Items/Home'
 import DocBreadcrumbsStructuredData from '@theme/DocBreadcrumbs/StructuredData'
 import { BreadcrumbsItemLink, BreadcrumbsItem } from '@site/src/components/ui/breadcrumbs'
 import BrowserOnly from '@docusaurus/BrowserOnly'
-
+import { CopyOpenInButton } from '@site/src/components/copy-page-button'
 import styles from './styles.module.css'
-import { CopyPageButton } from '@site/src/components/copy-page-button'
 
 export default function DocBreadcrumbs(): ReactNode {
   const breadcrumbs = useSidebarBreadcrumbs()
@@ -46,7 +45,7 @@ export default function DocBreadcrumbs(): ReactNode {
           })}
         </ul>
       </nav>
-      <BrowserOnly fallback={<div />}>{() => <CopyPageButton />}</BrowserOnly>
+      <BrowserOnly fallback={<div />}>{() => <CopyOpenInButton />}</BrowserOnly>
     </div>
   )
 }

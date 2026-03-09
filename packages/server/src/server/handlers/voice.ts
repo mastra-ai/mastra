@@ -12,6 +12,7 @@ import {
 } from '../schemas/agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { validateBody } from './utils';
 
@@ -35,11 +36,7 @@ export const GET_SPEAKERS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Agent ID is required' });
       }
 
-      const agent = mastra.getAgentById(agentId);
-
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
       const voice = await agent.getVoice({ requestContext });
 
@@ -92,11 +89,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
 
       validateBody({ text });
 
-      const agent = mastra.getAgentById(agentId);
-
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
       const voice = await agent.getVoice({ requestContext });
 
@@ -161,11 +154,7 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Audio data is required' });
       }
 
-      const agent = mastra.getAgentById(agentId);
-
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const agent = await getAgentFromSystem({ mastra, agentId });
 
       const voice = await agent.getVoice({ requestContext });
 

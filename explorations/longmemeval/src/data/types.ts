@@ -14,10 +14,25 @@ export interface Turn {
   has_answer?: boolean;
 }
 
+export type FailureCategory =
+  | 'observer-miss'
+  | 'reflector-loss'
+  | 'agent-reasoning'
+  | 'dataset-error'
+  | 'data-freshness'
+  | 'knowledge-update'
+  | 'rag-miss'
+  | 'other';
+
 export interface LongMemEvalQuestion {
   question_id: string;
   question_type: QuestionType;
   question: string;
+  improved_question?: string; // Clarified version for vague/ambiguous questions
+  improved_answer?: string; // Updated answer for the clarified question (if different)
+  improvement_note?: string; // Notes about why this question failed (for tracking investigated failures)
+  failure_category?: FailureCategory; // Category of failure from investigation
+  requires_retry?: boolean; // Eval agent sometimes fails due to poor reasoning, retry once on failure
   answer: string;
   question_date: string;
   haystack_session_ids: string[];
@@ -26,22 +41,39 @@ export interface LongMemEvalQuestion {
   answer_session_ids: string[];
 }
 
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 export interface EvaluationResult {
   question_id: string;
+  question: string; // The original question asked
+  expected_answer: string; // The expected answer
   hypothesis: string;
   autoeval_label?: boolean;
   question_type?: QuestionType;
   is_correct?: boolean;
+  // For improved_question support
+  improved_question?: string;
+  improved_hypothesis?: string;
+  improved_is_correct?: boolean;
+  // Track if this question has any improvement info (for filtering uninvestigated failures)
+  has_improvement_info?: boolean;
+  // Track when improved version performs worse than original (original ✓, improved ✗)
+  improved_regression?: boolean;
+  // Token usage for the agent response
+  usage?: TokenUsage;
+  // Token usage for improved question evaluation (if applicable)
+  improved_usage?: TokenUsage;
 }
 
 export type DatasetType = 'longmemeval_s' | 'longmemeval_m' | 'longmemeval_oracle';
 
-export type MemoryConfigType =
-  | 'semantic-recall'
-  | 'working-memory'
-  | 'working-memory-tailored'
-  | 'combined'
-  | 'combined-tailored';
+// MemoryConfigType is derived from MEMORY_CONFIGS keys in config.ts
+// This is a placeholder that gets properly typed via the config module
+export type MemoryConfigType = string;
 
 export interface MemoryConfigOptions {
   type: MemoryConfigType;
@@ -58,4 +90,14 @@ export interface BenchmarkMetrics {
   correct_answers: number;
   abstention_correct?: number;
   abstention_total?: number;
+  // For improved_question support
+  improved_accuracy?: number;
+  improved_correct?: number;
+  improved_total?: number;
+  // "Fixed" metrics - full results with improved questions replacing originals where available
+  fixed_accuracy_by_type?: Record<QuestionType, { correct: number; total: number; accuracy: number }>;
+  fixed_overall_accuracy?: number;
+  // Token usage aggregates
+  total_usage?: TokenUsage;
+  improved_total_usage?: TokenUsage;
 }

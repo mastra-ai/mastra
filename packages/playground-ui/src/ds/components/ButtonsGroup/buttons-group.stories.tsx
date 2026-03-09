@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ButtonsGroup } from './buttons-group';
 import { Button } from '../Button';
+import { ChevronDown, ChevronDownIcon } from 'lucide-react';
 
 const meta: Meta<typeof ButtonsGroup> = {
   title: 'Composite/ButtonsGroup',
@@ -17,39 +18,54 @@ type Story = StoryObj<typeof ButtonsGroup>;
 export const Default: Story = {
   render: () => (
     <ButtonsGroup>
-      <Button>Button 1</Button>
-      <Button>Button 2</Button>
-      <Button>Button 3</Button>
+      <Button size="default" variant="cta">
+        Button 1
+      </Button>
+      <Button size="default" variant="cta">
+        Button 2
+      </Button>
+      <Button size="default" variant="cta">
+        Button 3
+      </Button>
     </ButtonsGroup>
   ),
 };
 
-export const TwoButtons: Story = {
+export const DefaultSpacing: Story = {
   render: () => (
     <ButtonsGroup>
-      <Button variant="outline">Cancel</Button>
-      <Button>Save</Button>
+      <Button size="default" variant="cta">
+        Cancel
+      </Button>
+      <Button size="default" variant="cta">
+        Save
+      </Button>
     </ButtonsGroup>
   ),
 };
 
-export const ManyButtons: Story = {
+export const CloseSpacing: Story = {
   render: () => (
-    <ButtonsGroup>
-      <Button variant="ghost">Reset</Button>
-      <Button variant="outline">Cancel</Button>
-      <Button variant="light">Draft</Button>
-      <Button>Submit</Button>
+    <ButtonsGroup spacing="close">
+      <Button size="default" variant="cta">
+        Cancel
+      </Button>
+      <Button size="default" variant="cta">
+        Save
+      </Button>
     </ButtonsGroup>
   ),
 };
 
-export const ActionButtons: Story = {
+export const AsSplitButton: Story = {
   render: () => (
-    <ButtonsGroup>
-      <Button variant="outline">Edit</Button>
-      <Button variant="outline">Duplicate</Button>
-      <Button>Run</Button>
+    <ButtonsGroup spacing="close">
+      <Button size="default" variant="cta">
+        Cancel
+      </Button>
+      <Button size="default" variant="cta" aria-label="Open Menu">
+        <ChevronDownIcon />
+      </Button>
     </ButtonsGroup>
   ),
 };

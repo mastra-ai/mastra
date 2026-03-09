@@ -41,6 +41,12 @@ const CommandDialog = ({
     return matches ? 1 : 0;
   }, []);
 
+  // Stop propagation to prevent keyboard events from reaching
+  // global document-level listeners (e.g., table keyboard nav)
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  }, []);
+
   return (
     <Dialog {...props}>
       <DialogContent className="overflow-hidden p-0">
@@ -48,6 +54,7 @@ const CommandDialog = ({
         <DialogDescription className="sr-only">{description}</DialogDescription>
         <Command
           filter={filter}
+          onKeyDown={handleKeyDown}
           className={cn(
             '[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-neutral3',
             '[&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2',

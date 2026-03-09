@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { copy } from 'fs-extra';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock fs-extra/esm - parent Bundler uses this import path
 vi.mock('fs-extra/esm', () => ({

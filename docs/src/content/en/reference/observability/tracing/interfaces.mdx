@@ -18,27 +18,25 @@ Primary interface for observability.
 ```typescript
 interface ObservabilityInstance {
   /** Get current configuration */
-  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>;
+  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
 
   /** Get all exporters */
-  getExporters(): readonly ObservabilityExporter[];
+  getExporters(): readonly ObservabilityExporter[]
 
   /** Get all span output processors */
-  getSpanOutputProcessors(): readonly SpanOutputProcessor[];
+  getSpanOutputProcessors(): readonly SpanOutputProcessor[]
 
   /** Get the logger instance (for exporters and other components) */
-  getLogger(): IMastraLogger;
+  getLogger(): IMastraLogger
 
   /** Start a new span of a specific SpanType */
-  startSpan<TType extends SpanType>(
-    options: StartSpanOptions<TType>,
-  ): Span<TType>;
+  startSpan<TType extends SpanType>(options: StartSpanOptions<TType>): Span<TType>
 
   /** Force flush any buffered spans without shutting down */
-  flush(): Promise<void>;
+  flush(): Promise<void>
 
   /** Shutdown observability and clean up resources */
-  shutdown(): Promise<void>;
+  shutdown(): Promise<void>
 }
 ```
 
@@ -48,22 +46,22 @@ Mapping of span types to their corresponding attribute interfaces.
 
 ```typescript
 interface SpanTypeMap {
-  AGENT_RUN: AgentRunAttributes;
-  WORKFLOW_RUN: WorkflowRunAttributes;
-  MODEL_GENERATION: ModelGenerationAttributes;
-  MODEL_STEP: ModelStepAttributes;
-  MODEL_CHUNK: ModelChunkAttributes;
-  TOOL_CALL: ToolCallAttributes;
-  MCP_TOOL_CALL: MCPToolCallAttributes;
-  PROCESSOR_RUN: ProcessorRunAttributes;
-  WORKFLOW_STEP: WorkflowStepAttributes;
-  WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes;
-  WORKFLOW_CONDITIONAL_EVAL: WorkflowConditionalEvalAttributes;
-  WORKFLOW_PARALLEL: WorkflowParallelAttributes;
-  WORKFLOW_LOOP: WorkflowLoopAttributes;
-  WORKFLOW_SLEEP: WorkflowSleepAttributes;
-  WORKFLOW_WAIT_EVENT: WorkflowWaitEventAttributes;
-  GENERIC: AIBaseAttributes;
+  AGENT_RUN: AgentRunAttributes
+  WORKFLOW_RUN: WorkflowRunAttributes
+  MODEL_GENERATION: ModelGenerationAttributes
+  MODEL_STEP: ModelStepAttributes
+  MODEL_CHUNK: ModelChunkAttributes
+  TOOL_CALL: ToolCallAttributes
+  MCP_TOOL_CALL: MCPToolCallAttributes
+  PROCESSOR_RUN: ProcessorRunAttributes
+  WORKFLOW_STEP: WorkflowStepAttributes
+  WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes
+  WORKFLOW_CONDITIONAL_EVAL: WorkflowConditionalEvalAttributes
+  WORKFLOW_PARALLEL: WorkflowParallelAttributes
+  WORKFLOW_LOOP: WorkflowLoopAttributes
+  WORKFLOW_SLEEP: WorkflowSleepAttributes
+  WORKFLOW_WAIT_EVENT: WorkflowWaitEventAttributes
+  GENERIC: AIBaseAttributes
 }
 ```
 
@@ -75,53 +73,53 @@ Span interface, used internally for tracing.
 
 ```typescript
 interface Span<TType extends SpanType> {
-  readonly id: string;
-  readonly traceId: string;
-  readonly type: TType;
-  readonly name: string;
+  readonly id: string
+  readonly traceId: string
+  readonly type: TType
+  readonly name: string
 
   /** Is an internal span? (spans internal to the operation of mastra) */
-  isInternal: boolean;
+  isInternal: boolean
 
   /** Parent span reference (undefined for root spans) */
-  parent?: AnySpan;
+  parent?: AnySpan
 
   /** Pointer to the ObservabilityInstance instance */
-  observabilityInstance: ObservabilityInstance;
+  observabilityInstance: ObservabilityInstance
 
-  attributes?: SpanTypeMap[TType];
-  metadata?: Record<string, any>;
-  input?: any;
-  output?: any;
-  errorInfo?: any;
+  attributes?: SpanTypeMap[TType]
+  metadata?: Record<string, any>
+  input?: any
+  output?: any
+  errorInfo?: any
 
   /** Tags for categorizing traces (only present on root spans) */
-  tags?: string[];
+  tags?: string[]
 
   /** End the span */
-  end(options?: EndSpanOptions<TType>): void;
+  end(options?: EndSpanOptions<TType>): void
 
   /** Record an error for the span, optionally end the span as well */
-  error(options: ErrorSpanOptions<TType>): void;
+  error(options: ErrorSpanOptions<TType>): void
 
   /** Update span attributes */
-  update(options: UpdateSpanOptions<TType>): void;
+  update(options: UpdateSpanOptions<TType>): void
 
   /** Create child span - can be any span type independent of parent */
   createChildSpan<TChildType extends SpanType>(
     options: ChildSpanOptions<TChildType>,
-  ): Span<TChildType>;
+  ): Span<TChildType>
 
   /** Create event span - can be any span type independent of parent */
   createEventSpan<TChildType extends SpanType>(
     options: ChildEventOptions<TChildType>,
-  ): Span<TChildType>;
+  ): Span<TChildType>
 
   /** Returns TRUE if the span is the root span of a trace */
-  get isRootSpan(): boolean;
+  get isRootSpan(): boolean
 
   /** Returns TRUE if the span is a valid span (not a NO-OP Span) */
-  get isValid(): boolean;
+  get isValid(): boolean
 }
 ```
 
@@ -132,13 +130,13 @@ Interface for observability exporters.
 ```typescript
 interface ObservabilityExporter {
   /** Exporter name */
-  name: string;
+  name: string
 
   /** Initialize exporter with tracing configuration and/or access to Mastra */
-  init?(options: InitExporterOptions): void;
+  init?(options: InitExporterOptions): void
 
   /** Export tracing events */
-  exportTracingEvent(event: TracingEvent): Promise<void>;
+  exportTracingEvent(event: TracingEvent): Promise<void>
 
   /** Add score to a trace (optional) */
   addScoreToTrace?({
@@ -149,19 +147,19 @@ interface ObservabilityExporter {
     scorerName,
     metadata,
   }: {
-    traceId: string;
-    spanId?: string;
-    score: number;
-    reason?: string;
-    scorerName: string;
-    metadata?: Record<string, any>;
-  }): Promise<void>;
+    traceId: string
+    spanId?: string
+    score: number
+    reason?: string
+    scorerName: string
+    metadata?: Record<string, any>
+  }): Promise<void>
 
   /** Force flush any buffered spans without shutting down */
-  flush(): Promise<void>;
+  flush(): Promise<void>
 
   /** Shutdown exporter */
-  shutdown(): Promise<void>;
+  shutdown(): Promise<void>
 }
 ```
 
@@ -172,13 +170,13 @@ Interface for span output processors.
 ```typescript
 interface SpanOutputProcessor {
   /** Processor name */
-  name: string;
+  name: string
 
   /** Process span before export */
-  process(span?: AnySpan): AnySpan | undefined;
+  process(span?: AnySpan): AnySpan | undefined
 
   /** Shutdown processor */
-  shutdown(): Promise<void>;
+  shutdown(): Promise<void>
 }
 ```
 
@@ -191,52 +189,52 @@ AI-specific span types with their associated metadata.
 ```typescript
 enum SpanType {
   /** Agent run - root span for agent processes */
-  AGENT_RUN = "agent_run",
+  AGENT_RUN = 'agent_run',
 
   /** Generic span for custom operations */
-  GENERIC = "generic",
+  GENERIC = 'generic',
 
   /** Model generation with model calls, token usage, prompts, completions */
-  MODEL_GENERATION = "model_generation",
+  MODEL_GENERATION = 'model_generation',
 
   /** Single model execution step within a generation (one API call) */
-  MODEL_STEP = "model_step",
+  MODEL_STEP = 'model_step',
 
   /** Individual model streaming chunk/event */
-  MODEL_CHUNK = "model_chunk",
+  MODEL_CHUNK = 'model_chunk',
 
   /** MCP (Model Context Protocol) tool execution */
-  MCP_TOOL_CALL = "mcp_tool_call",
+  MCP_TOOL_CALL = 'mcp_tool_call',
 
   /** Input or Output Processor execution */
-  PROCESSOR_RUN = "processor_run",
+  PROCESSOR_RUN = 'processor_run',
 
   /** Function/tool execution with inputs, outputs, errors */
-  TOOL_CALL = "tool_call",
+  TOOL_CALL = 'tool_call',
 
   /** Workflow run - root span for workflow processes */
-  WORKFLOW_RUN = "workflow_run",
+  WORKFLOW_RUN = 'workflow_run',
 
   /** Workflow step execution with step status, data flow */
-  WORKFLOW_STEP = "workflow_step",
+  WORKFLOW_STEP = 'workflow_step',
 
   /** Workflow conditional execution with condition evaluation */
-  WORKFLOW_CONDITIONAL = "workflow_conditional",
+  WORKFLOW_CONDITIONAL = 'workflow_conditional',
 
   /** Individual condition evaluation within conditional */
-  WORKFLOW_CONDITIONAL_EVAL = "workflow_conditional_eval",
+  WORKFLOW_CONDITIONAL_EVAL = 'workflow_conditional_eval',
 
   /** Workflow parallel execution */
-  WORKFLOW_PARALLEL = "workflow_parallel",
+  WORKFLOW_PARALLEL = 'workflow_parallel',
 
   /** Workflow loop execution */
-  WORKFLOW_LOOP = "workflow_loop",
+  WORKFLOW_LOOP = 'workflow_loop',
 
   /** Workflow sleep operation */
-  WORKFLOW_SLEEP = "workflow_sleep",
+  WORKFLOW_SLEEP = 'workflow_sleep',
 
   /** Workflow wait for event operation */
-  WORKFLOW_WAIT_EVENT = "workflow_wait_event",
+  WORKFLOW_WAIT_EVENT = 'workflow_wait_event',
 }
 ```
 
@@ -245,7 +243,7 @@ enum SpanType {
 Union type for cases that need to handle any span.
 
 ```typescript
-type AnySpan = Span<keyof SpanTypeMap>;
+type AnySpan = Span<keyof SpanTypeMap>
 ```
 
 ## Span Attributes
@@ -257,19 +255,19 @@ Agent Run attributes.
 ```typescript
 interface AgentRunAttributes {
   /** Agent identifier */
-  agentId: string;
+  agentId: string
 
   /** Agent Instructions */
-  instructions?: string;
+  instructions?: string
 
   /** Agent Prompt */
-  prompt?: string;
+  prompt?: string
 
   /** Available tools for this execution */
-  availableTools?: string[];
+  availableTools?: string[]
 
   /** Maximum steps allowed */
-  maxSteps?: number;
+  maxSteps?: number
 }
 ```
 
@@ -280,45 +278,41 @@ Model Generation attributes.
 ```typescript
 interface ModelGenerationAttributes {
   /** Model name (e.g., 'gpt-4', 'claude-3') */
-  model?: string;
+  model?: string
 
   /** Model provider (e.g., 'openai', 'anthropic') */
-  provider?: string;
+  provider?: string
 
   /** Type of result/output this model call produced */
-  resultType?:
-    | "tool_selection"
-    | "response_generation"
-    | "reasoning"
-    | "planning";
+  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning'
 
   /** Token usage statistics */
   usage?: {
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-    promptCacheHitTokens?: number;
-    promptCacheMissTokens?: number;
-  };
+    promptTokens?: number
+    completionTokens?: number
+    totalTokens?: number
+    promptCacheHitTokens?: number
+    promptCacheMissTokens?: number
+  }
 
   /** Model parameters */
   parameters?: {
-    maxOutputTokens?: number;
-    temperature?: number;
-    topP?: number;
-    topK?: number;
-    presencePenalty?: number;
-    frequencyPenalty?: number;
-    stopSequences?: string[];
-    seed?: number;
-    maxRetries?: number;
-  };
+    maxOutputTokens?: number
+    temperature?: number
+    topP?: number
+    topK?: number
+    presencePenalty?: number
+    frequencyPenalty?: number
+    stopSequences?: string[]
+    seed?: number
+    maxRetries?: number
+  }
 
   /** Whether this was a streaming response */
-  streaming?: boolean;
+  streaming?: boolean
 
   /** Reason the generation finished */
-  finishReason?: string;
+  finishReason?: string
 }
 ```
 
@@ -329,19 +323,19 @@ Model Step attributes - for a single model execution within a generation.
 ```typescript
 interface ModelStepAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
-  stepIndex?: number;
+  stepIndex?: number
 
   /** Token usage statistics */
-  usage?: UsageStats;
+  usage?: UsageStats
 
   /** Reason this step finished (stop, tool-calls, length, etc.) */
-  finishReason?: string;
+  finishReason?: string
 
   /** Should execution continue */
-  isContinued?: boolean;
+  isContinued?: boolean
 
   /** Result warnings */
-  warnings?: Record<string, any>;
+  warnings?: Record<string, any>
 }
 ```
 
@@ -352,10 +346,10 @@ Model Chunk attributes - for individual streaming chunks/events.
 ```typescript
 interface ModelChunkAttributes {
   /** Type of chunk (text-delta, reasoning-delta, tool-call, etc.) */
-  chunkType?: string;
+  chunkType?: string
 
   /** Sequence number of this chunk in the stream */
-  sequenceNumber?: number;
+  sequenceNumber?: number
 }
 ```
 
@@ -365,10 +359,10 @@ Tool Call attributes.
 
 ```typescript
 interface ToolCallAttributes {
-  toolId?: string;
-  toolType?: string;
-  toolDescription?: string;
-  success?: boolean;
+  toolId?: string
+  toolType?: string
+  toolDescription?: string
+  success?: boolean
 }
 ```
 
@@ -379,16 +373,16 @@ MCP Tool Call attributes.
 ```typescript
 interface MCPToolCallAttributes {
   /** Id of the MCP tool/function */
-  toolId: string;
+  toolId: string
 
   /** MCP server identifier */
-  mcpServer: string;
+  mcpServer: string
 
   /** MCP server version */
-  serverVersion?: string;
+  serverVersion?: string
 
   /** Whether tool execution was successful */
-  success?: boolean;
+  success?: boolean
 }
 ```
 
@@ -399,13 +393,13 @@ Processor attributes.
 ```typescript
 interface ProcessorRunAttributes {
   /** Name of the Processor */
-  processorName: string;
+  processorName: string
 
   /** Processor type (input or output) */
-  processorType: 'input' | 'output';
+  processorType: 'input' | 'output'
 
   /** Processor index in the agent */
-  processorIndex?: number;
+  processorIndex?: number
 }
 ```
 
@@ -416,10 +410,10 @@ Workflow Run attributes.
 ```typescript
 interface WorkflowRunAttributes {
   /** Workflow identifier */
-  workflowId: string;
+  workflowId: string
 
   /** Workflow status */
-  status?: WorkflowRunStatus;
+  status?: WorkflowRunStatus
 }
 ```
 
@@ -430,10 +424,10 @@ Workflow Step attributes.
 ```typescript
 interface WorkflowStepAttributes {
   /** Step identifier */
-  stepId: string;
+  stepId: string
 
   /** Step status */
-  status?: WorkflowStepStatus;
+  status?: WorkflowStepStatus
 }
 ```
 
@@ -446,28 +440,28 @@ Options for starting new spans.
 ```typescript
 interface StartSpanOptions<TType extends SpanType> {
   /** Span type */
-  type: TType;
+  type: TType
 
   /** Span name */
-  name: string;
+  name: string
 
   /** Span attributes */
-  attributes?: SpanTypeMap[TType];
+  attributes?: SpanTypeMap[TType]
 
   /** Span metadata */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>
 
   /** Input data */
-  input?: any;
+  input?: any
 
   /** Parent span */
-  parent?: AnySpan;
+  parent?: AnySpan
 
   /** Policy-level tracing configuration */
-  tracingPolicy?: TracingPolicy;
+  tracingPolicy?: TracingPolicy
 
   /** Options passed when using a custom sampler strategy */
-  customSamplerOptions?: CustomSamplerOptions;
+  customSamplerOptions?: CustomSamplerOptions
 }
 ```
 
@@ -478,16 +472,16 @@ Options for updating spans.
 ```typescript
 interface UpdateSpanOptions<TType extends SpanType> {
   /** Span attributes */
-  attributes?: Partial<SpanTypeMap[TType]>;
+  attributes?: Partial<SpanTypeMap[TType]>
 
   /** Span metadata */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>
 
   /** Input data */
-  input?: any;
+  input?: any
 
   /** Output data */
-  output?: any;
+  output?: any
 }
 ```
 
@@ -498,13 +492,13 @@ Options for ending spans.
 ```typescript
 interface EndSpanOptions<TType extends SpanType> {
   /** Output data */
-  output?: any;
+  output?: any
 
   /** Span metadata */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>
 
   /** Span attributes */
-  attributes?: Partial<SpanTypeMap[TType]>;
+  attributes?: Partial<SpanTypeMap[TType]>
 }
 ```
 
@@ -515,16 +509,16 @@ Options for recording span errors.
 ```typescript
 interface ErrorSpanOptions<TType extends SpanType> {
   /** The error associated with the issue */
-  error: Error;
+  error: Error
 
   /** End the span when true */
-  endSpan?: boolean;
+  endSpan?: boolean
 
   /** Span metadata */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>
 
   /** Span attributes */
-  attributes?: Partial<SpanTypeMap[TType]>;
+  attributes?: Partial<SpanTypeMap[TType]>
 }
 ```
 
@@ -537,7 +531,7 @@ Context for Tracing that flows through workflow and agent execution.
 ```typescript
 interface TracingContext {
   /** Current span for creating child spans and adding metadata */
-  currentSpan?: AnySpan;
+  currentSpan?: AnySpan
 }
 ```
 
@@ -548,8 +542,8 @@ Properties returned to the user for working with traces externally.
 ```typescript
 type TracingProperties = {
   /** Trace ID used on the execution (if the execution was traced) */
-  traceId?: string;
-};
+  traceId?: string
+}
 ```
 
 ### TracingOptions
@@ -559,45 +553,45 @@ Options passed when starting a new agent or workflow execution.
 ```typescript
 interface TracingOptions {
   /** Metadata to add to the root trace span */
-  metadata?: Record<string, any>;
+  metadata?: Record<string, any>
 
   /**
    * Additional RequestContext keys to extract as metadata for this trace.
    * These keys are added to the requestContextKeys config.
    * Supports dot notation for nested values (e.g., 'user.id', 'session.data.experimentId').
    */
-  requestContextKeys?: string[];
+  requestContextKeys?: string[]
 
   /**
    * Trace ID to use for this execution (1-32 hexadecimal characters).
    * If provided, this trace will be part of the specified trace rather than starting a new one.
    */
-  traceId?: string;
+  traceId?: string
 
   /**
    * Parent span ID to use for this execution (1-16 hexadecimal characters).
    * If provided, the root span will be created as a child of this span.
    */
-  parentSpanId?: string;
+  parentSpanId?: string
 
   /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces
    * Note: Tags are only applied to the root span of a trace.
    */
-  tags?: string[];
+  tags?: string[]
 
   /**
    * When true, input data will be hidden from all spans in this trace.
    * Useful for protecting sensitive data from being logged.
    */
-  hideInput?: boolean;
+  hideInput?: boolean
 
   /**
    * When true, output data will be hidden from all spans in this trace.
    * Useful for protecting sensitive data from being logged.
    */
-  hideOutput?: boolean;
+  hideOutput?: boolean
 }
 ```
 
@@ -612,7 +606,7 @@ interface TracingPolicy {
    * a workflow or agent execution. Internal spans are hidden by
    * default in exported traces.
    */
-  internal?: InternalSpans;
+  internal?: InternalSpans
 }
 ```
 
@@ -625,25 +619,25 @@ Configuration for a single observability instance.
 ```typescript
 interface ObservabilityInstanceConfig {
   /** Unique identifier for this config in the observability registry */
-  name: string;
+  name: string
 
   /** Service name for observability */
-  serviceName: string;
+  serviceName: string
 
   /** Sampling strategy - controls whether tracing is collected (defaults to ALWAYS) */
-  sampling?: SamplingStrategy;
+  sampling?: SamplingStrategy
 
   /** Custom exporters */
-  exporters?: ObservabilityExporter[];
+  exporters?: ObservabilityExporter[]
 
   /** Custom span output processors */
-  spanOutputProcessors?: SpanOutputProcessor[];
+  spanOutputProcessors?: SpanOutputProcessor[]
 
   /** Set to true if you want to see spans internal to the operation of mastra */
-  includeInternalSpans?: boolean;
+  includeInternalSpans?: boolean
 
   /** RequestContext keys to automatically extract as metadata for all spans */
-  requestContextKeys?: string[];
+  requestContextKeys?: string[]
 }
 ```
 
@@ -655,14 +649,14 @@ Complete observability registry configuration.
 interface ObservabilityRegistryConfig {
   /** Enables default exporters, with sampling: always, and sensitive data filtering */
   default?: {
-    enabled?: boolean;
-  };
+    enabled?: boolean
+  }
 
   /** Map of tracing instance names to their configurations or pre-instantiated instances */
-  configs?: Record<string, Omit<ObservabilityInstanceConfig, "name"> | ObservabilityInstance>;
+  configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>
 
   /** Optional selector function to choose which tracing instance to use */
-  configSelector?: ConfigSelector;
+  configSelector?: ConfigSelector
 }
 ```
 
@@ -674,10 +668,10 @@ Sampling strategy configuration.
 
 ```typescript
 type SamplingStrategy =
-  | { type: "always" }
-  | { type: "never" }
-  | { type: "ratio"; probability: number }
-  | { type: "custom"; sampler: (options?: CustomSamplerOptions) => boolean };
+  | { type: 'always' }
+  | { type: 'never' }
+  | { type: 'ratio'; probability: number }
+  | { type: 'custom'; sampler: (options?: CustomSamplerOptions) => boolean }
 ```
 
 ### CustomSamplerOptions
@@ -686,8 +680,8 @@ Options passed when using a custom sampler strategy.
 
 ```typescript
 interface CustomSamplerOptions {
-  requestContext?: RequestContext;
-  metadata?: Record<string, any>;
+  requestContext?: RequestContext
+  metadata?: Record<string, any>
 }
 ```
 
@@ -701,7 +695,7 @@ Function to select which observability instance to use for a given span.
 type ConfigSelector = (
   options: ConfigSelectorOptions,
   availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
-) => string | undefined;
+) => string | undefined
 ```
 
 ### ConfigSelectorOptions
@@ -711,7 +705,7 @@ Options passed when using a custom tracing config selector.
 ```typescript
 interface ConfigSelectorOptions {
   /** Request Context */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext
 }
 ```
 

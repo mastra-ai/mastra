@@ -13,11 +13,11 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
-import type { AIV5Type } from '../agent/message-list/types';
+import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -53,6 +53,16 @@ export type JSONArray = JSONValue[];
  * record is keyed by the provider-specific metadata key.
  */
 export type ProviderMetadata = Record<string, Record<string, JSONValue>>;
+
+export type StreamTransport = {
+  type: 'openai-websocket';
+  close: () => void;
+  closeOnFinish: boolean;
+};
+
+export type StreamTransportRef = {
+  current?: StreamTransport;
+};
 
 interface BaseChunkType {
   runId: string;
@@ -342,6 +352,28 @@ interface TripwirePayload<TMetadata = unknown> {
   processorId?: string;
 }
 
+/**
+ * Payload for is-task-complete events emitted during stream/generate scoring.
+ */
+interface IsTaskCompletePayload {
+  /** Current iteration number */
+  iteration: number;
+  /** Whether all/any scorers passed based on strategy */
+  passed: boolean;
+  /** Individual scorer results */
+  results: ScorerResult[];
+  /** Total duration of all scoring checks */
+  duration: number;
+  /** Whether scoring timed out */
+  timedOut: boolean;
+  /** Reason from the relevant scorer */
+  reason?: string;
+  /** Whether the maximum iteration was reached */
+  maxIterationReached: boolean;
+  /** Whether to suppress the completion feedback message */
+  suppressFeedback: boolean;
+}
+
 // Network-specific payload interfaces
 interface RoutingAgentStartPayload {
   agentId: string;
@@ -533,6 +565,27 @@ interface NetworkValidationEndPayload {
   timedOut: boolean;
   reason?: string;
   maxIterationReached: boolean;
+  suppressFeedback: boolean;
+}
+
+interface RoutingAgentAbortPayload {
+  primitiveType: 'routing';
+  primitiveId: string;
+}
+
+interface AgentExecutionAbortPayload {
+  primitiveType: 'agent';
+  primitiveId: string;
+}
+
+interface WorkflowExecutionAbortPayload {
+  primitiveType: 'workflow';
+  primitiveId: string;
+}
+
+interface ToolExecutionAbortPayload {
+  primitiveType: 'tool';
+  primitiveId: string;
 }
 
 interface ToolCallApprovalPayload {
@@ -554,6 +607,8 @@ export type DataChunkType = {
   type: `data-${string}`;
   data: any;
   id?: string;
+  /** When true, the chunk is streamed to the client but not persisted to storage. */
+  transient?: boolean;
 };
 
 export type NetworkChunkType<OUTPUT = undefined> =
@@ -561,17 +616,21 @@ export type NetworkChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'routing-agent-text-delta'; payload: RoutingAgentTextDeltaPayload })
   | (BaseChunkType & { type: 'routing-agent-text-start'; payload: RoutingAgentTextStartPayload })
   | (BaseChunkType & { type: 'routing-agent-end'; payload: RoutingAgentEndPayload })
+  | (BaseChunkType & { type: 'routing-agent-abort'; payload: RoutingAgentAbortPayload })
   | (BaseChunkType & { type: 'agent-execution-start'; payload: AgentExecutionStartPayload })
   | (BaseChunkType & { type: 'agent-execution-approval'; payload: AgentExecutionApprovalPayload })
   | (BaseChunkType & { type: 'agent-execution-suspended'; payload: AgentExecutionSuspendedPayload })
   | (BaseChunkType & { type: 'agent-execution-end'; payload: AgentExecutionEndPayload })
+  | (BaseChunkType & { type: 'agent-execution-abort'; payload: AgentExecutionAbortPayload })
   | (BaseChunkType & { type: 'workflow-execution-start'; payload: WorkflowExecutionStartPayload })
   | (BaseChunkType & { type: 'workflow-execution-end'; payload: WorkflowExecutionEndPayload })
   | (BaseChunkType & { type: 'workflow-execution-suspended'; payload: WorkflowExecutionSuspendPayload })
+  | (BaseChunkType & { type: 'workflow-execution-abort'; payload: WorkflowExecutionAbortPayload })
   | (BaseChunkType & { type: 'tool-execution-start'; payload: ToolExecutionStartPayload })
   | (BaseChunkType & { type: 'tool-execution-end'; payload: ToolExecutionEndPayload })
   | (BaseChunkType & { type: 'tool-execution-approval'; payload: ToolExecutionApprovalPayload })
   | (BaseChunkType & { type: 'tool-execution-suspended'; payload: ToolExecutionSuspendedPayload })
+  | (BaseChunkType & { type: 'tool-execution-abort'; payload: ToolExecutionAbortPayload })
   | (BaseChunkType & { type: 'network-execution-event-step-finish'; payload: NetworkStepFinishPayload })
   | (BaseChunkType & { type: 'network-execution-event-finish'; payload: NetworkFinishPayload<OUTPUT> })
   | (BaseChunkType & { type: 'network-validation-start'; payload: NetworkValidationStartPayload })
@@ -623,7 +682,8 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'tool-output'; payload: DynamicToolOutputPayload })
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
-  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload });
+  | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {
@@ -695,6 +755,22 @@ export type WorkflowStreamEvent =
       };
     })
   | (BaseChunkType & { type: 'workflow-step-output'; payload: StepOutputPayload })
+  | (BaseChunkType & {
+      type: 'workflow-step-progress';
+      payload: {
+        id: string;
+        /** Number of iterations completed so far */
+        completedCount: number;
+        /** Total number of iterations */
+        totalCount: number;
+        /** Index of the iteration that just completed */
+        currentIndex: number;
+        /** Status of the iteration that just completed */
+        iterationStatus: 'success' | 'failed' | 'suspended';
+        /** Output of the iteration that just completed (if successful) */
+        iterationOutput?: Record<string, any>;
+      };
+    })
   | (BaseChunkType & {
       type: 'workflow-step-result';
       payload: {
@@ -796,10 +872,10 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
   returnScorerData?: boolean;
-  tracingContext?: TracingContext;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
-};
+  transportRef?: StreamTransportRef;
+} & Partial<ObservabilityContext>;
 
 /**
  * Tripwire data attached to a step when a processor triggers a tripwire.
@@ -845,6 +921,7 @@ export type LLMStepResult<OUTPUT = undefined> = {
   response: {
     headers?: Record<string, string>;
     messages?: StepResult<ToolSet>['response']['messages'];
+    dbMessages?: MastraDBMessage[];
     uiMessages?: UIMessage<
       [OUTPUT] extends [undefined]
         ? undefined

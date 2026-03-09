@@ -4,10 +4,12 @@ import type {
   TelemetrySettings as TelemetrySettingsV1,
 } from '@internal/ai-sdk-v4';
 import type {
-  EmbeddingModelV2,
+  EmbeddingModel,
   TelemetrySettings as TelemetrySettingsV5,
   ProviderOptions as ProviderOptionsV5,
 } from '@internal/ai-sdk-v5';
+
+type EmbeddingModelV2<T> = Exclude<EmbeddingModel<T>, string>;
 import type {
   EmbeddingModelV3,
   TelemetrySettings as TelemetrySettingsV6,

@@ -9,6 +9,7 @@ import { useAgent } from '../hooks/use-agent';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 import { toast } from '@/lib/toast';
 import { useEffect } from 'react';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface AgentToolPanelProps {
   toolId: string;
@@ -16,6 +17,9 @@ export interface AgentToolPanelProps {
 }
 
 export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
+  const { canExecute } = usePermissions();
+  const canExecuteTool = canExecute('tools');
+
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
 
   const tool = Object.values(agent?.tools ?? {}).find(tool => tool.id === toolId);
@@ -30,14 +34,22 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
     }
   }, [error]);
 
-  const handleExecuteTool = async (data: any) => {
+  const handleExecuteTool = async (data: any, schemaRequestContext?: Record<string, any>) => {
     if (!tool) return;
+
+    // Merge global playground request context with schema request context.
+    // Schema values take precedence and explicitly override global values,
+    // including when schema values are empty strings (user intentionally cleared them).
+    const requestContext = {
+      ...(playgroundRequestContext ?? {}),
+      ...(schemaRequestContext ?? {}),
+    };
 
     await executeTool({
       agentId: agentId!,
       toolId: tool.id,
       input: data,
-      playgroundRequestContext,
+      playgroundRequestContext: requestContext,
     });
   };
 
@@ -56,6 +68,15 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       </div>
     );
 
+  if (!canExecuteTool)
+    return (
+      <div className="py-12 text-center px-6">
+        <Txt variant="ui-sm" className="text-neutral3">
+          You don't have permission to execute tools.
+        </Txt>
+      </div>
+    );
+
   return (
     <ToolExecutor
       executionResult={result}
@@ -64,6 +85,7 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       handleExecuteTool={handleExecuteTool}
       toolDescription={tool.description}
       toolId={tool.id}
+      requestContextSchema={tool.requestContextSchema}
     />
   );
 };

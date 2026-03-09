@@ -109,6 +109,7 @@ describe('create mastra', () => {
               "defaultOptions": {},
               "defaultStreamOptionsLegacy": {},
               "description": "",
+              "hasDraft": false,
               "id": "weather-agent",
               "inputProcessors": [],
               "instructions": "
@@ -125,11 +126,12 @@ describe('create mastra', () => {
 
                 Use the weatherTool to fetch current weather data.
           ",
-              "modelId": "gpt-4o",
+              "modelId": "gpt-5-mini",
               "modelVersion": "v2",
               "name": "Weather Agent",
               "outputProcessors": [],
               "provider": "openai",
+              "skills": [],
               "source": "code",
               "tools": {
                 "weatherTool": {
@@ -141,6 +143,7 @@ describe('create mastra', () => {
                 },
               },
               "workflows": {},
+              "workspaceTools": [],
             },
           }
         `);

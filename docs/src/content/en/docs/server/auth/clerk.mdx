@@ -41,8 +41,8 @@ npm install @mastra/auth-clerk@latest
 ## Usage example
 
 ```typescript {2,6-10} title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthClerk } from "@mastra/auth-clerk";
+import { Mastra } from '@mastra/core'
+import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 export const mastra = new Mastra({
   server: {
@@ -52,7 +52,7 @@ export const mastra = new Mastra({
       jwksUri: process.env.CLERK_JWKS_URI,
     }),
   },
-});
+})
 ```
 
 :::info
@@ -72,18 +72,18 @@ When using Clerk auth, you'll need to retrieve the access token from Clerk on th
 Use the Clerk React hooks to authenticate users and retrieve their access token:
 
 ```typescript title="lib/auth.ts"
-import { useAuth } from "@clerk/nextjs";
+import { useAuth } from '@clerk/nextjs'
 
 export const useClerkAuth = () => {
-  const { getToken } = useAuth();
+  const { getToken } = useAuth()
 
   const getAccessToken = async () => {
-    const token = await getToken();
-    return token;
-  };
+    const token = await getToken()
+    return token
+  }
 
-  return { getAccessToken };
-};
+  return { getAccessToken }
+}
 ```
 
 :::info
@@ -97,14 +97,14 @@ Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
 When `auth` is enabled, all requests made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
 ```typescript {6} title="lib/mastra/mastra-client.ts"
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: "https://<mastra-api-url>",
+  baseUrl: 'https://<mastra-api-url>',
   headers: {
     Authorization: `Bearer ${accessToken}`,
   },
-});
+})
 ```
 
 :::info
@@ -121,37 +121,35 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
 
 <Tabs>
   <TabItem value="react" label="React">
-
     ```tsx title="src/components/test-agent.tsx"
-    "use client";
+    'use client'
 
-    import { useAuth } from "@clerk/nextjs";
-    import { MastraClient } from "@mastra/client-js";
+    import { useAuth } from '@clerk/nextjs'
+    import { MastraClient } from '@mastra/client-js'
 
     export const TestAgent = () => {
-      const { getToken } = useAuth();
+      const { getToken } = useAuth()
 
       async function handleClick() {
-        const token = await getToken();
+        const token = await getToken()
 
         const client = new MastraClient({
-          baseUrl: "http://localhost:4111",
+          baseUrl: 'http://localhost:4111',
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
+        })
 
-        const weatherAgent = client.getAgent("weatherAgent");
-        const response = await weatherAgent.generate("What's the weather like in New York");
+        const weatherAgent = client.getAgent('weatherAgent')
+        const response = await weatherAgent.generate("What's the weather like in New York")
 
-        console.log({ response });
+        console.log({ response })
       }
 
-      return <button onClick={handleClick}>Test Agent</button>;
-    };
+      return <button onClick={handleClick}>Test Agent</button>
+    }
     ```
-
   </TabItem>
-  <TabItem value="curl" label="cURL">
 
+  <TabItem value="curl" label="cURL">
     ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -160,6 +158,5 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
         "messages": "Weather in London"
       }'
     ```
-
   </TabItem>
 </Tabs>
