@@ -34,10 +34,12 @@ function createOptimizedDependenciesCacheKey({
   depsToOptimize,
   bundlerOptions,
   platform,
+  externalDependencyVersions,
 }: {
   depsToOptimize: Map<string, DependencyMetadata>;
   bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
   platform: BundlerPlatform;
+  externalDependencyVersions: Map<string, string | undefined>;
 }): string {
   const normalizedExternals = Array.isArray(bundlerOptions?.externals)
     ? [...bundlerOptions.externals].sort()
@@ -45,9 +47,24 @@ function createOptimizedDependenciesCacheKey({
       ? true
       : false;
 
+  let externalsVersions: Record<string, string | null> | undefined;
+  if (Array.isArray(normalizedExternals)) {
+    externalsVersions = Object.fromEntries(
+      normalizedExternals.map(externalName => [externalName, externalDependencyVersions.get(externalName) ?? null]),
+    );
+  } else if (normalizedExternals === true) {
+    externalsVersions = Object.fromEntries(
+      Array.from(externalDependencyVersions.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([externalName, version]) => [externalName, version ?? null]),
+    );
+  }
+
   const payload = {
     platform,
+    enableSourcemap: Boolean(bundlerOptions?.enableSourcemap),
     externals: normalizedExternals,
+    externalsVersions,
     dependencies: Array.from(depsToOptimize.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([dependency, metadata]) => ({
@@ -468,8 +485,17 @@ If you think your configuration is valid, please open an issue.`);
   const hasWorkspaceDependencies = Array.from(depsToOptimize.values()).some(metadata => metadata.isWorkspace);
   const shouldUseOptimizedDependenciesCache = !isDev && !hasWorkspaceDependencies;
   const optimizedDependenciesCacheFile = join(outputDir, '.optimized-dependencies-cache.json');
+  const cacheRootDir = workspaceRoot || projectRoot;
+  const externalDependencyVersions = new Map(
+    Array.from(allUsedExternals.entries()).map(([dependency, info]) => [dependency, info.version] as const),
+  );
   const optimizedDependenciesCacheKey = shouldUseOptimizedDependenciesCache
-    ? createOptimizedDependenciesCacheKey({ depsToOptimize, bundlerOptions, platform })
+    ? createOptimizedDependenciesCacheKey({
+        depsToOptimize,
+        bundlerOptions,
+        platform,
+        externalDependencyVersions,
+      })
     : null;
 
   if (optimizedDependenciesCacheKey) {
@@ -477,7 +503,7 @@ If you think your configuration is valid, please open an issue.`);
     if (cachedOptimization?.key === optimizedDependenciesCacheKey) {
       const cachedDependencies = new Map(cachedOptimization.dependencies);
       const hasAllGeneratedFiles = Array.from(cachedDependencies.values()).every(fileName =>
-        existsSync(join(projectRoot, fileName)),
+        existsSync(join(cacheRootDir, fileName)),
       );
 
       if (hasAllGeneratedFiles) {
