@@ -188,7 +188,7 @@ async function executeAgent(
   const input = item.input as MessageListInput;
 
   const reqCtx: RequestContext | undefined = requestContext
-    ? new RequestContext(Object.entries(requestContext) as any)
+    ? new RequestContext(Object.entries(requestContext))
     : undefined;
 
   const rawResult = isSupportedLanguageModel(model)
