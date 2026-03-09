@@ -959,6 +959,17 @@ export class AgentLegacyHandler {
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
+      // End agent span with tripwire information
+      beforeResult.agentSpan?.end({
+        output: { tripwire: beforeResult.tripwire },
+        attributes: {
+          tripwireReason: beforeResult.tripwire.reason,
+          tripwireProcessorId: beforeResult.tripwire.processorId,
+          tripwireRetry: beforeResult.tripwire.retry,
+          tripwireMetadata: beforeResult.tripwire.metadata,
+        },
+      });
+
       const tripwireResult = {
         text: '',
         object: undefined,
@@ -1253,6 +1264,17 @@ export class AgentLegacyHandler {
 
     // Check for tripwire and return early if triggered
     if (beforeResult.tripwire) {
+      // End agent span with tripwire information
+      beforeResult.agentSpan?.end({
+        output: { tripwire: beforeResult.tripwire },
+        attributes: {
+          tripwireReason: beforeResult.tripwire.reason,
+          tripwireProcessorId: beforeResult.tripwire.processorId,
+          tripwireRetry: beforeResult.tripwire.retry,
+          tripwireMetadata: beforeResult.tripwire.metadata,
+        },
+      });
+
       // Return a promise that resolves immediately with empty result
       const emptyResult = {
         textStream: (async function* () {

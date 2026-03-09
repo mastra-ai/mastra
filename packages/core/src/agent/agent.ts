@@ -4420,7 +4420,18 @@ export class Agent<
         text: result.text,
         object: result.object,
         files: result.files,
+        ...(result.tripwire ? { tripwire: result.tripwire } : {}),
       },
+      ...(result.tripwire
+        ? {
+            attributes: {
+              tripwireReason: result.tripwire.reason,
+              tripwireProcessorId: result.tripwire.processorId,
+              tripwireRetry: result.tripwire.retry,
+              tripwireMetadata: result.tripwire.metadata,
+            },
+          }
+        : {}),
     });
   }
 

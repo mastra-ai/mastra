@@ -107,6 +107,17 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     // Check for tripwire and return early if triggered
     if (result.tripwire) {
+      // End agent span with tripwire information
+      agentSpan?.end({
+        output: { tripwire: memoryData.tripwire },
+        attributes: {
+          tripwireReason: memoryData.tripwire?.reason,
+          tripwireProcessorId: memoryData.tripwire?.processorId,
+          tripwireRetry: memoryData.tripwire?.retry,
+          tripwireMetadata: memoryData.tripwire?.metadata,
+        },
+      });
+
       const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
       if (!isSupportedLanguageModel(agentModel)) {
