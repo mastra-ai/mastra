@@ -71,6 +71,16 @@
         "default": "./dist/server/auth/index.cjs"
       }
     },
+    "./schemas": {
+      "import": {
+        "types": "./dist/server/schemas/index.d.ts",
+        "default": "./dist/server/schemas/index.js"
+      },
+      "require": {
+        "types": "./dist/server/schemas/index.d.ts",
+        "default": "./dist/server/schemas/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

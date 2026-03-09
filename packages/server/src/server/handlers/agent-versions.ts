@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+
 import { HTTPException } from '../http-exception';
 import {
   agentVersionPathParams,
@@ -13,6 +15,7 @@ import {
   deleteVersionResponseSchema,
   compareVersionsResponseSchema,
 } from '../schemas/agent-versions';
+import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
@@ -464,7 +467,14 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
 /**
  * GET /stored/agents/:agentId/versions/compare - Compare two versions
  */
-export const COMPARE_AGENT_VERSIONS_ROUTE = createRoute({
+export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
+  InferParams<typeof agentVersionPathParams, typeof compareVersionsQuerySchema, undefined>,
+  z.infer<typeof compareVersionsResponseSchema>,
+  'json',
+  RouteSchemas,
+  'GET',
+  '/stored/agents/:agentId/versions/compare'
+> = createRoute({
   method: 'GET',
   path: '/stored/agents/:agentId/versions/compare',
   requiresAuth: true,
