@@ -68,6 +68,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
     class DataChunkTrackingProcessor implements Processor {
       readonly id = 'data-chunk-tracking-processor';
       readonly name = 'Data Chunk Tracking Processor';
+      readonly processDataParts = true;
 
       async processOutputStream({ part }: any) {
         capturedChunkTypes.push(part.type);
@@ -118,6 +119,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
     class DataChunkModifyingProcessor implements Processor {
       readonly id = 'data-chunk-modifying-processor';
       readonly name = 'Data Chunk Modifying Processor';
+      readonly processDataParts = true;
 
       async processOutputStream({ part }: any) {
         if (part.type === 'data-moderation') {
@@ -168,6 +170,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
     class DataChunkBlockingProcessor implements Processor {
       readonly id = 'data-chunk-blocking-processor';
       readonly name = 'Data Chunk Blocking Processor';
+      readonly processDataParts = true;
 
       async processOutputStream({ part, abort }: any) {
         if (part.type === 'data-sensitive') {
@@ -256,6 +259,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
     class TransientMarkingProcessor implements Processor {
       readonly id = 'transient-marking-processor';
       readonly name = 'Transient Marking Processor';
+      readonly processDataParts = true;
 
       async processOutputStream({ part }: any) {
         if (part.type === 'data-debug') {
@@ -316,6 +320,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
     class MultiChunkTracker implements Processor {
       readonly id = 'multi-chunk-tracker';
       readonly name = 'Multi Chunk Tracker';
+      readonly processDataParts = true;
 
       async processOutputStream({ part }: any) {
         if (part.type.startsWith('data-')) {
@@ -362,5 +367,57 @@ describe('Output Processor Data Chunks (#13341)', () => {
 
     // Processor should have seen all 3 chunks
     expect(capturedDataChunks).toHaveLength(3);
+  });
+
+  it('should skip data-* chunks for processors without processDataParts', async () => {
+    const capturedChunkTypes: string[] = [];
+
+    class RegularProcessor implements Processor {
+      readonly id = 'regular-processor';
+      readonly name = 'Regular Processor';
+      // processDataParts is NOT set (defaults to false)
+
+      async processOutputStream({ part }: any) {
+        capturedChunkTypes.push(part.type);
+        return part;
+      }
+    }
+
+    const toolWithCustomData = createTool({
+      id: 'toolWithCustomData',
+      description: 'A test tool that emits custom data chunks',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async (inputData, { writer }) => {
+        writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
+        return `Processed: ${inputData.text}`;
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent with tools',
+      model: createToolCallingModel('toolWithCustomData') as any,
+      tools: { toolWithCustomData },
+      outputProcessors: [new RegularProcessor()],
+    });
+
+    const stream = await agent.stream('Call the tool with text "hello"', {
+      maxSteps: 5,
+    });
+
+    const dataChunks: any[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'data-metrics') {
+        dataChunks.push(chunk);
+      }
+    }
+
+    // The data chunk should still appear in the stream
+    expect(dataChunks).toHaveLength(1);
+    expect(dataChunks[0].data).toEqual({ latency: 42 });
+
+    // But the processor should NOT have seen any data-* chunks
+    expect(capturedChunkTypes.filter(t => t.startsWith('data-'))).toHaveLength(0);
   });
 });
