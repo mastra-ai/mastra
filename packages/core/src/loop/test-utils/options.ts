@@ -4916,6 +4916,15 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             "from": "AGENT",
             "payload": {
+              "providerMetadata": undefined,
+              "toolCallId": "2",
+            },
+            "runId": "test-run-id",
+            "type": "tool-call-input-streaming-end",
+          },
+          {
+            "from": "AGENT",
+            "payload": {
               "args": {
                 "value": "test",
               },
