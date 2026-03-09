@@ -51,7 +51,7 @@ export class DepsService {
     return execa(`${pm} ${installCommand} ${packageList}`, {
       all: true,
       shell: true,
-      stdio: 'inherit',
+      stdio: 'pipe',
     });
   }
 

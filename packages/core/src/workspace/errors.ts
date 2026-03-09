@@ -25,6 +25,13 @@ export class WorkspaceError extends Error {
 // Availability Errors
 // =============================================================================
 
+export class WorkspaceNotAvailableError extends WorkspaceError {
+  constructor() {
+    super('Workspace not available. Ensure the agent has a workspace configured.', 'NO_WORKSPACE');
+    this.name = 'WorkspaceNotAvailableError';
+  }
+}
+
 export class FilesystemNotAvailableError extends WorkspaceError {
   constructor() {
     super('Workspace does not have a filesystem configured', 'NO_FILESYSTEM');
@@ -40,7 +47,7 @@ export class SandboxNotAvailableError extends WorkspaceError {
 }
 
 export class SandboxFeatureNotSupportedError extends WorkspaceError {
-  constructor(feature: 'executeCommand' | 'installPackage') {
+  constructor(feature: 'executeCommand' | 'installPackage' | 'processes') {
     super(`Sandbox does not support ${feature}`, 'FEATURE_NOT_SUPPORTED');
     this.name = 'SandboxFeatureNotSupportedError';
   }
@@ -142,5 +149,15 @@ export class FileReadRequiredError extends FilesystemError {
   constructor(path: string, reason: string) {
     super(reason, 'EREAD_REQUIRED', path);
     this.name = 'FileReadRequiredError';
+  }
+}
+
+/**
+ * Error thrown when a filesystem operation is attempted before initialization.
+ */
+export class FilesystemNotReadyError extends FilesystemError {
+  constructor(id: string) {
+    super(`Filesystem "${id}" is not ready. Call init() first or use ensureReady().`, 'ENOTREADY', id);
+    this.name = 'FilesystemNotReadyError';
   }
 }

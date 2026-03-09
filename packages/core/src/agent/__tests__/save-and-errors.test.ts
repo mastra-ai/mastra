@@ -1,0 +1,1663 @@
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
+import { APICallError } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
+import { MockMemory } from '../../memory/mock';
+import { createTool } from '../../tools';
+import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list';
+
+function saveAndErrorTests(version: 'v1' | 'v2') {
+  let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+  beforeEach(() => {
+    if (version === 'v1') {
+      dummyModel = new MockLanguageModelV1({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 20 },
+          text: `Dummy response`,
+        }),
+        doStream: async () => ({
+          stream: simulateReadableStream({
+            chunks: [{ type: 'text-delta', textDelta: 'Dummy response' }],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      });
+    } else {
+      dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [
+            {
+              type: 'text',
+              text: 'Dummy response',
+            },
+          ],
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            {
+              type: 'stream-start',
+              warnings: [],
+            },
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'mock-model-id',
+              timestamp: new Date(0),
+            },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Dummy response' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ]),
+        }),
+      });
+    }
+  });
+
+  describe(`${version} - Agent save message parts`, () => {
+    // Model that emits 10 parts
+    let dummyResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let emptyResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
+    let errorResponseModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+    beforeEach(() => {
+      if (version === 'v1') {
+        dummyResponseModel = new MockLanguageModelV1({
+          doGenerate: async _options => ({
+            text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
+            finishReason: 'stop',
+            usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+          doStream: async _options => {
+            let count = 0;
+            const stream = new ReadableStream({
+              pull(controller) {
+                if (count < 10) {
+                  controller.enqueue({
+                    type: 'text-delta',
+                    textDelta: `Dummy response ${count}`,
+                    createdAt: new Date(Date.now() + count * 1000).toISOString(),
+                  });
+                  count++;
+                } else {
+                  controller.close();
+                }
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+
+        // Model never emits any parts
+        emptyResponseModel = new MockLanguageModelV1({
+          doGenerate: async _options => ({
+            text: undefined,
+            finishReason: 'stop',
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              chunks: [],
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        });
+
+        // Model throws immediately before emitting any part
+        errorResponseModel = new MockLanguageModelV1({
+          doGenerate: async _options => {
+            throw new Error('Immediate interruption');
+          },
+          doStream: async _options => {
+            const stream = new ReadableStream({
+              pull() {
+                throw new Error('Immediate interruption');
+              },
+            });
+            return { stream, rawCall: { rawPrompt: null, rawSettings: {} } };
+          },
+        });
+      } else {
+        dummyResponseModel = new MockLanguageModelV2({
+          doGenerate: async _options => ({
+            text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            content: [
+              {
+                type: 'text',
+                text: Array.from({ length: 10 }, (_, count) => `Dummy response ${count}`).join(' '),
+              },
+            ],
+            warnings: [],
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+          doStream: async _options => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: 'text-1' },
+              ...Array.from({ length: 10 }, (_, count) => ({
+                type: 'text-delta' as const,
+                id: '1',
+                delta: `Dummy response ${count} `,
+              })),
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+              },
+            ]),
+          }),
+        });
+
+        // Model never emits any parts
+        emptyResponseModel = new MockLanguageModelV2({
+          doGenerate: async _options => ({
+            text: undefined,
+            finishReason: 'stop',
+            usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+            content: [],
+            warnings: [],
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+              },
+            ]),
+          }),
+        });
+
+        // Model throws immediately before emitting any part
+        errorResponseModel = new MockLanguageModelV2({
+          doGenerate: async _options => {
+            throw new Error('Immediate interruption');
+          },
+          doStream: async _options => {
+            throw new Error('Immediate interruption');
+          },
+        });
+      }
+    });
+
+    describe('generate', () => {
+      it('should persist the full message after a successful run', async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent-generate',
+          name: 'Test Agent Generate',
+          instructions: 'test',
+          model: dummyResponseModel,
+          memory: mockMemory,
+        });
+        if (version === 'v1') {
+          await agent.generateLegacy('repeat tool calls', {
+            threadId: 'thread-1-generate',
+            resourceId: 'resource-1-generate',
+          });
+        } else {
+          await agent.generate('repeat tool calls', {
+            memory: {
+              thread: 'thread-1-generate',
+              resource: 'resource-1-generate',
+            },
+          });
+        }
+
+        const result = await mockMemory.recall({
+          threadId: 'thread-1-generate',
+          resourceId: 'resource-1-generate',
+        });
+        const messages = result.messages;
+        // Check that the last message matches the expected final output
+        expect(
+          messages[messages.length - 1]?.content?.parts?.some(
+            p => p.type === 'text' && p.text?.includes('Dummy response'),
+          ),
+        ).toBe(true);
+      });
+
+      it.skip('should only call saveMessages for the user message when no assistant parts are generated', async () => {
+        const mockMemory = new MockMemory();
+
+        let saveCallCount = 0;
+
+        mockMemory.saveMessages = async function (...args) {
+          saveCallCount++;
+          return MockMemory.prototype.saveMessages.apply(this, args);
+        };
+
+        const agent = new Agent({
+          id: 'no-progress-agent-generate',
+          name: 'No Progress Agent Generate',
+          instructions: 'test',
+          model: emptyResponseModel,
+          memory: mockMemory,
+        });
+
+        if (version === 'v1') {
+          await agent.generateLegacy('no progress', {
+            threadId: `thread-2-${version}-generate`,
+            resourceId: `resource-2-${version}-generate`,
+          });
+        } else {
+          await agent.generate('no progress', {
+            memory: {
+              thread: `thread-2-${version}-generate`,
+              resource: `resource-2-${version}-generate`,
+            },
+          });
+        }
+
+        expect(saveCallCount).toBe(1);
+
+        const result = await mockMemory.recall({
+          threadId: `thread-2-${version}-generate`,
+          resourceId: `resource-2-${version}-generate`,
+        });
+        const messages = result?.messages ?? [];
+
+        expect(messages.length).toBe(1);
+        expect(messages[0].role).toBe('user');
+        expect(messages[0].content.content).toBe('no progress');
+      });
+    }, 500000);
+
+    it('should not save any message if interrupted before any part is emitted', async () => {
+      const mockMemory = new MockMemory();
+      let saveCallCount = 0;
+
+      mockMemory.saveMessages = async function (...args) {
+        saveCallCount++;
+        return MockMemory.prototype.saveMessages.apply(this, args);
+      };
+
+      const agent = new Agent({
+        id: 'immediate-interrupt-agent-generate',
+        name: 'Immediate Interrupt Agent Generate',
+        instructions: 'test',
+        model: errorResponseModel,
+        memory: mockMemory,
+      });
+
+      try {
+        if (version === 'v1') {
+          await agent.generateLegacy('interrupt before step', {
+            threadId: 'thread-3-generate',
+            resourceId: 'resource-3-generate',
+          });
+        } else {
+          await agent.generate('interrupt before step', {
+            memory: {
+              thread: 'thread-3-generate',
+              resource: 'resource-3-generate',
+            },
+          });
+        }
+      } catch (err: any) {
+        expect(err.message).toBe('Immediate interruption');
+      }
+
+      const result = await mockMemory.recall({
+        threadId: 'thread-3-generate',
+        resourceId: 'resource-3-generate',
+      });
+
+      // TODO: output processors in v2 still run when the model throws an error! that doesn't seem right.
+      // it means in v2 our message history processor saves the input message.
+      if (version === `v1`) {
+        expect(result.messages.length).toBe(0);
+        expect(saveCallCount).toBe(0);
+      }
+    });
+
+    it('should save thread but not messages if error occurs during LLM generation', async () => {
+      // Both v1 and v2: Threads are now created upfront to prevent race conditions with
+      // storage backends like PostgresStore that validate thread existence before saving
+      // messages. When an error occurs during LLM generation, the thread will exist but
+      // no messages will be saved since the response never completed.
+      const mockMemory = new MockMemory();
+      const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+
+      let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
+      if (version === 'v1') {
+        errorModel = new MockLanguageModelV1({
+          doGenerate: async () => {
+            throw new Error('Simulated error during response');
+          },
+        });
+      } else {
+        errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Simulated error during response');
+          },
+          doStream: async () => {
+            throw new Error('Simulated error during response');
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'error-agent',
+        name: 'Error Agent',
+        instructions: 'test',
+        model: errorModel,
+        memory: mockMemory,
+      });
+
+      let errorCaught = false;
+      try {
+        if (version === 'v1') {
+          await agent.generateLegacy('trigger error', {
+            memory: {
+              resource: 'user-err',
+              thread: {
+                id: 'thread-err',
+              },
+            },
+          });
+        } else {
+          await agent.generate('trigger error', {
+            memory: {
+              resource: 'user-err',
+              thread: {
+                id: 'thread-err',
+              },
+            },
+          });
+        }
+      } catch (err: any) {
+        errorCaught = true;
+        expect(err.message).toMatch(/Simulated error/);
+      }
+      expect(errorCaught).toBe(true);
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-err' });
+
+      // Both v1 and v2: Thread should exist (created upfront to prevent race conditions
+      // with storage backends like PostgresStore that validate thread existence before saving messages)
+      expect(thread).not.toBeNull();
+      expect(thread?.id).toBe('thread-err');
+      // But no messages should be saved since the LLM call failed
+      expect(saveMessagesSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  if (version === 'v2') {
+    describe('error handling consistency', () => {
+      it('should preserve full APICallError in fullStream chunk, onError callback, and result.error', async () => {
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const testAPICallError = new APICallError({
+          message: 'Test API error',
+          url: 'https://test.api.com',
+          requestBodyValues: { test: 'test' },
+          statusCode: 401,
+          isRetryable: false,
+          responseBody: 'Test API error response',
+        });
+
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw testAPICallError;
+          },
+          doStream: async () => {
+            throw testAPICallError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-apicall-error-consistency',
+          name: 'Test APICallError Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        const resultError = result.error;
+
+        // All three should be the exact same APICallError instance (reference equality)
+        expect(onErrorCallbackError).toBe(testAPICallError);
+        expect(fullStreamError).toBe(testAPICallError);
+        expect(resultError).toBe(testAPICallError);
+
+        // Verify it's an APICallError instance
+        expect(onErrorCallbackError).toBeInstanceOf(APICallError);
+      });
+
+      it('should preserve the error.cause in fullStream error chunks, onError callback, and result.error', async () => {
+        const testErrorCauseMessage = 'Test error cause message';
+        const testErrorCause = new Error(testErrorCauseMessage);
+
+        const testErrorMessage = 'Test API error';
+        const testErrorStatusCode = 401;
+        const testErrorRequestId = 'req_123';
+        const testError = new Error(testErrorMessage, { cause: testErrorCause });
+        // Add some custom properties to verify they're preserved
+        (testError as any).statusCode = testErrorStatusCode;
+        (testError as any).requestId = testErrorRequestId;
+
+        const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
+          doStream: async () => {
+            throw testError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-consistency',
+          name: 'Test Error Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        // Get result.error
+        const resultError = result.error;
+
+        // All three should be defined
+        expect(onErrorCallbackError).toBeDefined();
+        expect(fullStreamError).toBeDefined();
+        expect(resultError).toBeDefined();
+
+        // All three should be Error instances
+        expect(onErrorCallbackError instanceof Error).toBe(true);
+        expect(fullStreamError instanceof Error).toBe(true);
+        expect(resultError instanceof Error).toBe(true);
+
+        expect(onErrorCallbackError).toBe(testError);
+        expect(fullStreamError).toBe(testError);
+        expect(resultError).toBe(testError);
+
+        expect(onErrorCallbackError.message).toBe(testErrorMessage);
+        expect(fullStreamError.message).toBe(testErrorMessage);
+        expect((resultError as Error).message).toBe(testErrorMessage);
+
+        // should preserve custom properties
+        expect(onErrorCallbackError.statusCode).toBe(testErrorStatusCode);
+        expect(onErrorCallbackError.requestId).toBe(testErrorRequestId);
+        expect(fullStreamError.statusCode).toBe(testErrorStatusCode);
+        expect(fullStreamError.requestId).toBe(testErrorRequestId);
+        expect((resultError as any).statusCode).toBe(testErrorStatusCode);
+        expect((resultError as any).requestId).toBe(testErrorRequestId);
+
+        // should preserve the error cause
+        expect(onErrorCallbackError.cause).toBe(testErrorCause);
+        expect(fullStreamError.cause).toBe(testErrorCause);
+        expect((resultError as Error).cause).toBe(testErrorCause);
+      });
+
+      it('should expose the same error in fullStream error chunks, onError callback, and result.error', async () => {
+        const testErrorMessage = 'Test API error';
+        const testErrorStatusCode = 401;
+        const testErrorRequestId = 'req_123';
+        const testError = new Error(testErrorMessage);
+        // Add some custom properties to verify they're preserved
+        (testError as any).statusCode = testErrorStatusCode;
+        (testError as any).requestId = testErrorRequestId;
+
+        const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw testError;
+          },
+          doStream: async () => {
+            throw testError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-consistency',
+          name: 'Test Error Consistency',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCallbackError: any = null;
+        let fullStreamError: any = null;
+
+        const result = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            onErrorCallbackError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume fullStream to capture error chunk
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === 'error') {
+            fullStreamError = chunk.payload.error;
+          }
+        }
+
+        // Get result.error
+        const resultError = result.error;
+
+        // should be defined
+        expect(onErrorCallbackError).toBeDefined();
+        expect(fullStreamError).toBeDefined();
+        expect(resultError).toBeDefined();
+
+        // should be Error instances
+        expect(onErrorCallbackError instanceof Error).toBe(true);
+        expect(fullStreamError instanceof Error).toBe(true);
+        expect(resultError instanceof Error).toBe(true);
+
+        expect(onErrorCallbackError).toBe(testError);
+        expect(fullStreamError).toBe(testError);
+        expect(resultError).toBe(testError);
+
+        // should have the same message
+        expect(onErrorCallbackError.message).toBe(testErrorMessage);
+        expect(fullStreamError.message).toBe(testErrorMessage);
+        expect((resultError as Error).message).toBe(testErrorMessage);
+
+        // should preserve custom properties
+        expect(onErrorCallbackError.statusCode).toBe(testErrorStatusCode);
+        expect(onErrorCallbackError.requestId).toBe(testErrorRequestId);
+        expect(fullStreamError.statusCode).toBe(testErrorStatusCode);
+        expect(fullStreamError.requestId).toBe(testErrorRequestId);
+        expect((resultError as any).statusCode).toBe(testErrorStatusCode);
+        expect((resultError as any).requestId).toBe(testErrorRequestId);
+      });
+
+      it('should throw APICallError in generate when model throws rate limit error', async () => {
+        const rateLimitError = new APICallError({
+          message: 'Rate limit exceeded',
+          url: 'https://api.example.com/v1/chat/completions',
+          requestBodyValues: {},
+          statusCode: 429,
+          isRetryable: true,
+          responseBody: 'Rate limit exceeded',
+        });
+
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw rateLimitError;
+          },
+          doStream: async () => {
+            throw rateLimitError;
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-rate-limit-generate',
+          name: 'Test Rate Limit Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let caughtError: Error | null = null;
+        try {
+          await agent.generate('Hello', { modelSettings: { maxRetries: 0 } });
+        } catch (err: any) {
+          caughtError = err;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError).toBeInstanceOf(APICallError);
+        expect(caughtError!.message).toBe('Rate limit exceeded');
+        expect((caughtError as InstanceType<typeof APICallError>).statusCode).toBe(429);
+      });
+
+      it('should throw correct error in generate when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model generation failed');
+          },
+          doStream: async () => {
+            throw new Error('Model generation failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-throw-generate',
+          name: 'Test Throw Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let caughtError: Error | null = null;
+        try {
+          await agent.generate('Please use a tool', { modelSettings: { maxRetries: 0 } });
+        } catch (err: any) {
+          caughtError = err;
+        }
+
+        expect(caughtError).toBeDefined();
+        expect(caughtError).toBeInstanceOf(Error);
+        expect(caughtError!.message).toMatch(/Model generation failed/i);
+      });
+
+      it('should have correct error in output.error and fullStream error chunk when model throws in stream', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model stream failed');
+          },
+          doStream: async () => {
+            throw new Error('Model stream failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-error-stream',
+          name: 'Test Error Stream',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const output = await agent.stream('Please use a tool', { modelSettings: { maxRetries: 0 } });
+
+        let errorChunk: any;
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'error') {
+            errorChunk = chunk;
+          }
+        }
+
+        // Verify error chunk has correct error
+        expect(errorChunk).toBeDefined();
+        expect(errorChunk.payload.error).toBeDefined();
+        expect(errorChunk.payload.error).toBeInstanceOf(Error);
+        expect((errorChunk.payload.error as Error).message).toMatch(/Model stream failed/i);
+
+        // Verify output.error has correct error
+        expect(output.error).toBeInstanceOf(Error);
+        expect((output.error as Error).message).toMatch(/Model stream failed/i);
+
+        // Verify they are the same instance
+        expect(output.error).toBe(errorChunk.payload.error);
+      });
+
+      it('should call onError with correct error in generate when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model generation failed');
+          },
+          doStream: async () => {
+            throw new Error('Model generation failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-onerror-generate',
+          name: 'Test OnError Generate',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCalled = false;
+        let onErrorArg: string | Error | null = null;
+
+        try {
+          await agent.generate('Please use a tool', {
+            onError: ({ error }) => {
+              onErrorCalled = true;
+              onErrorArg = error;
+            },
+            modelSettings: { maxRetries: 0 },
+          });
+        } catch {
+          // Expected to throw
+        }
+
+        expect(onErrorCalled).toBe(true);
+        expect(onErrorArg).toBeInstanceOf(Error);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Model generation failed/i);
+      });
+
+      it('should call onError with correct error in stream when model throws', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate: async () => {
+            throw new Error('Model stream failed');
+          },
+          doStream: async () => {
+            throw new Error('Model stream failed');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-onerror-stream',
+          name: 'Test OnError Stream',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let onErrorCalled = false;
+        let onErrorArg: string | Error | null = null;
+
+        const output = await agent.stream('Please use a tool', {
+          onError: ({ error }) => {
+            onErrorCalled = true;
+            onErrorArg = error;
+          },
+          modelSettings: { maxRetries: 0 },
+        });
+
+        // Consume the stream to trigger the error
+        for await (const _ of output.fullStream) {
+          // Just consume
+        }
+
+        expect(onErrorCalled).toBe(true);
+        expect(onErrorArg).toBeInstanceOf(Error);
+        expect((onErrorArg as unknown as Error).message).toMatch(/Model stream failed/i);
+      });
+
+      describe('error chunk with non-error finishReason', () => {
+        // Tests for the bug where error chunks are emitted mid-stream but the finish chunk
+        // has a non-'error' finishReason. Previously, generate() only threw when
+        // `finishReason === 'error' && error`, silently swallowing errors in this case.
+        const finishReasons = ['stop', 'length', 'content-filter', 'tool-calls', 'other', 'unknown'] as const;
+
+        for (const reason of finishReasons) {
+          it(`should throw in generate when error chunk is present but finishReason is '${reason}'`, async () => {
+            const streamError = new Error(`Stream error with finishReason '${reason}'`);
+
+            const errorModel = new MockLanguageModelV2({
+              doGenerate: async () => {
+                throw streamError;
+              },
+              doStream: async () => ({
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'response-metadata',
+                    id: 'id-0',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'partial response' },
+                  { type: 'text-end', id: 'text-1' },
+                  { type: 'error', error: streamError },
+                  {
+                    type: 'finish',
+                    finishReason: reason,
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+              }),
+            });
+
+            const agent = new Agent({
+              id: `test-error-finish-reason-${reason}`,
+              name: `Test Error FinishReason ${reason}`,
+              model: errorModel,
+              instructions: 'You are a helpful assistant.',
+            });
+
+            await expect(agent.generate('Hello', { modelSettings: { maxRetries: 0 } })).rejects.toThrow();
+          });
+        }
+
+        it('should expose error in stream output when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Mid-stream error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'partial' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-error-stream-non-error-finish',
+            name: 'Test Error Stream NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          const output = await agent.stream('Hello', { modelSettings: { maxRetries: 0 } });
+
+          let errorChunk: any;
+          for await (const chunk of output.fullStream) {
+            if (chunk.type === 'error') {
+              errorChunk = chunk;
+            }
+          }
+
+          expect(errorChunk).toBeDefined();
+          expect(errorChunk.payload.error).toBeInstanceOf(Error);
+          expect((errorChunk.payload.error as Error).message).toBe('Mid-stream error with stop finish');
+          expect(output.error).toBeInstanceOf(Error);
+          expect((output.error as Error).message).toBe('Mid-stream error with stop finish');
+        });
+
+        it('should call onError in generate when error chunk has non-error finishReason', async () => {
+          const streamError = new Error('Error with stop finish');
+
+          const errorModel = new MockLanguageModelV2({
+            doGenerate: async () => {
+              throw streamError;
+            },
+            doStream: async () => ({
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'error', error: streamError },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                },
+              ]),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            }),
+          });
+
+          const agent = new Agent({
+            id: 'test-onerror-non-error-finish',
+            name: 'Test OnError NonError Finish',
+            model: errorModel,
+            instructions: 'You are a helpful assistant.',
+          });
+
+          let onErrorCalled = false;
+          let onErrorArg: any = null;
+
+          try {
+            await agent.generate('Hello', {
+              onError: ({ error }) => {
+                onErrorCalled = true;
+                onErrorArg = error;
+              },
+              modelSettings: { maxRetries: 0 },
+            });
+          } catch {
+            // Expected to throw
+          }
+
+          expect(onErrorCalled).toBe(true);
+          expect(onErrorArg).toBeInstanceOf(Error);
+          expect((onErrorArg as Error).message).toBe('Error with stop finish');
+        });
+
+        // The error-chunk-with-mismatched-finishReason scenario requires bypassing the
+        // AISDKV5LanguageModel wrapper (which converts doGenerate results via
+        // createStreamFromGenerateResult and never inserts error chunks). We subclass
+        // AISDKV5LanguageModel so the model passes the instanceof check in resolveModel
+        // (avoiding re-wrapping), then override doGenerate to return a raw stream containing
+        // an error chunk with finishReason 'stop' — the exact scenario this fix addresses.
+        it('should throw in resumeGenerate when error chunk has non-error finishReason', async () => {
+          const { Mastra } = await import('../../mastra');
+          const { InMemoryStore } = await import('../../storage');
+          const { AISDKV5LanguageModel } = await import('../../llm/model/aisdk/v5/model');
+
+          const streamError = new Error('Resume model error with stop finish');
+          let generateCallCount = 0;
+
+          const suspendingTool = createTool({
+            id: 'suspend-tool',
+            description: 'A tool that suspends',
+            inputSchema: z.object({ input: z.string() }),
+            suspendSchema: z.object({ message: z.string() }),
+            resumeSchema: z.object({ data: z.string() }),
+            execute: async (_input, context) => {
+              if (!context?.agent?.resumeData) {
+                return await context?.agent?.suspend({ message: 'Need input' });
+              }
+              return { result: context.agent.resumeData.data };
+            },
+          });
+
+          const baseModel = new MockLanguageModelV2();
+
+          // Subclass to bypass resolveModel's instanceof check and return raw streams
+          class TestModel extends AISDKV5LanguageModel {
+            override async doGenerate(): Promise<any> {
+              generateCallCount++;
+              if (generateCallCount === 1) {
+                // First call: trigger tool suspension
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start' as const, warnings: [] },
+                    {
+                      type: 'response-metadata' as const,
+                      id: 'resp-1',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    {
+                      type: 'tool-input-start' as const,
+                      id: 'tc-1',
+                      toolName: 'suspendTool',
+                    },
+                    {
+                      type: 'tool-input-delta' as const,
+                      id: 'tc-1',
+                      delta: '{"input": "test"}',
+                    },
+                    {
+                      type: 'tool-input-end' as const,
+                      id: 'tc-1',
+                    },
+                    {
+                      type: 'tool-call' as const,
+                      toolCallId: 'tc-1',
+                      toolName: 'suspendTool',
+                      input: '{"input": "test"}',
+                    },
+                    {
+                      type: 'finish' as const,
+                      finishReason: 'tool-calls' as const,
+                      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                    },
+                  ]),
+                  warnings: [],
+                  request: {},
+                  rawResponse: {},
+                };
+              }
+              // Second call (after resume): error chunk with non-error finishReason
+              return {
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start' as const, warnings: [] },
+                  {
+                    type: 'response-metadata' as const,
+                    id: 'resp-2',
+                    modelId: 'mock-model-id',
+                    timestamp: new Date(0),
+                  },
+                  { type: 'error' as const, error: streamError },
+                  {
+                    type: 'finish' as const,
+                    finishReason: 'stop' as const,
+                    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+                  },
+                ]),
+                warnings: [],
+                request: {},
+                rawResponse: {},
+              };
+            }
+          }
+
+          const model = new TestModel(baseModel);
+          const storage = new InMemoryStore();
+
+          const agent = new Agent({
+            id: 'test-resume-error',
+            name: 'Test Resume Error',
+            model: model as any,
+            instructions: 'You are a helpful assistant.',
+            tools: { suspendTool: suspendingTool },
+          });
+
+          const mastra = new Mastra({
+            agents: { testResumeError: agent },
+            storage,
+            logger: false,
+          });
+
+          const registeredAgent = mastra.getAgent('testResumeError');
+
+          // First call suspends
+          const output = await registeredAgent.generate('test', {
+            maxSteps: 2,
+            modelSettings: { maxRetries: 0 },
+          });
+
+          expect(output.finishReason).toBe('suspended');
+
+          // Resume should throw because stream has error chunk despite finishReason 'stop'
+          await expect(
+            registeredAgent.resumeGenerate(
+              { data: 'resumed' },
+              { runId: output.runId!, modelSettings: { maxRetries: 0 } },
+            ),
+          ).rejects.toThrow();
+        });
+      });
+
+      // Helper to create a model that calls a tool which will throw during execution
+      function createModelWithFailingToolCall() {
+        return new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            content: [{ type: 'tool-call', toolCallId: '123', toolName: 'failingTool', input: '{"input": "test"}' }],
+            finishReason: 'tool-calls',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            warnings: [],
+          }),
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              {
+                type: 'stream-start',
+                warnings: [],
+              },
+              {
+                type: 'response-metadata',
+                id: 'response-1',
+                modelId: 'mock-model',
+                timestamp: new Date(0),
+              },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolCallType: 'function',
+                toolName: 'failingTool',
+                input: '{"input": "test"}',
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        });
+      }
+
+      // Helper to create an agent with a tool that throws during execution
+      function createAgentWithFailingTool(model: MockLanguageModelV2) {
+        const failingTool = createTool({
+          id: 'failingTool',
+          description: 'A tool that throws during execution',
+          inputSchema: z.object({ input: z.string() }),
+          execute: async () => {
+            throw new Error('Tool execution failed');
+          },
+        });
+
+        return new Agent({
+          id: 'test-tool-execution-error',
+          name: 'Test Tool Execution Error',
+          model,
+          instructions: 'You are a helpful assistant.',
+          tools: { failingTool },
+        });
+      }
+
+      it('should not throw in generate when tool execution fails (error returned to model)', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        // Tool execution failures bail the workflow but don't throw
+        const result = await agent.generate('Please use a tool');
+        expect(result).toBeDefined();
+      });
+
+      it('should not emit error chunks in stream when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        const output = await agent.stream('Please use a tool');
+
+        const errorChunks: any[] = [];
+        for await (const chunk of output.fullStream) {
+          if (chunk.type === 'error') {
+            errorChunks.push(chunk);
+          }
+        }
+
+        // Tool execution failures go through bail(), not the error path
+        expect(errorChunks.length).toBe(0);
+      });
+
+      it('should not call onError in generate when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        let onErrorCalled = false;
+
+        await agent.generate('Please use a tool', {
+          onError: () => {
+            onErrorCalled = true;
+          },
+        });
+
+        // Tool execution failures go through bail(), onError is not called
+        expect(onErrorCalled).toBe(false);
+      });
+
+      it('should not call onError in stream when tool execution fails', async () => {
+        const model = createModelWithFailingToolCall();
+        const agent = createAgentWithFailingTool(model);
+
+        let onErrorCalled = false;
+
+        const output = await agent.stream('Please use a tool', {
+          onError: () => {
+            onErrorCalled = true;
+          },
+        });
+
+        for await (const _ of output.fullStream) {
+          // Just consume
+        }
+
+        // Tool execution failures go through bail(), onError is not called
+        expect(onErrorCalled).toBe(false);
+      });
+    });
+
+    describe('stream options', () => {
+      it('should call options.onError when stream error occurs in stream', async () => {
+        const errorModel = new MockLanguageModelV2({
+          doGenerate() {
+            throw new Error('Simulated stream error');
+          },
+          doStream: async () => {
+            throw new Error('Simulated stream error');
+          },
+        });
+
+        const agent = new Agent({
+          id: 'test-options-onerror',
+          name: 'Test Options OnError',
+          model: errorModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let errorCaught = false;
+        let caughtError: any = null;
+
+        const stream = await agent.stream('Hello', {
+          onError: ({ error }) => {
+            errorCaught = true;
+            caughtError = error;
+          },
+          modelSettings: {
+            maxRetries: 0,
+          },
+        });
+
+        // Consume the stream to trigger the error
+        try {
+          await stream.consumeStream();
+        } catch {}
+
+        expect(errorCaught).toBe(true);
+        expect(caughtError).toBeDefined();
+        expect(caughtError.message).toMatch(/Simulated stream error/);
+      });
+
+      it('should call options.onChunk when streaming in stream', async () => {
+        const agent = new Agent({
+          id: 'test-options-onchunk',
+          name: 'Test Options OnChunk',
+          model: dummyModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        const chunks: any[] = [];
+
+        const stream = await agent.stream('Hello', {
+          onChunk: chunk => {
+            chunks.push(chunk);
+          },
+        });
+
+        // Consume the stream to trigger chunks
+        await stream.consumeStream();
+
+        expect(chunks.length).toBeGreaterThan(0);
+        expect(chunks[0]).toHaveProperty('type');
+      });
+
+      it('should call options.onAbort when stream is aborted in stream', async () => {
+        const abortController = new AbortController();
+        let pullCalls = 0;
+
+        const abortModel = new MockLanguageModelV2({
+          // @ts-expect-error - error
+          doGenerate: async () => {
+            await new Promise(resolve => setImmediate(resolve));
+            abortController.abort();
+          },
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              pull(controller) {
+                switch (pullCalls++) {
+                  case 0:
+                    controller.enqueue({
+                      type: 'stream-start',
+                      warnings: [],
+                    });
+                    break;
+                  case 1:
+                    controller.enqueue({
+                      type: 'text-start',
+                      id: '1',
+                    });
+                    break;
+                  case 2:
+                    // Abort during streaming
+                    abortController.abort();
+                    controller.error(new DOMException('The user aborted a request.', 'AbortError'));
+                    break;
+                }
+              },
+            }),
+          }),
+        });
+
+        const agent = new Agent({
+          id: 'test-options-onabort',
+          name: 'Test Options OnAbort',
+          model: abortModel,
+          instructions: 'You are a helpful assistant.',
+        });
+
+        let abortCalled = false;
+        let abortEvent: any = null;
+
+        const stream = await agent.stream('Hello', {
+          onAbort: event => {
+            abortCalled = true;
+            abortEvent = event;
+          },
+          abortSignal: abortController.signal,
+        });
+
+        // Consume the stream to trigger the abort
+        try {
+          await stream.consumeStream();
+        } catch {}
+
+        expect(abortCalled).toBe(true);
+        expect(abortEvent).toBeDefined();
+      });
+
+      it('should not persist full response to memory when stream is aborted mid-generation', async () => {
+        if (version === 'v1') return; // Only test for v2 (VNext) path
+
+        const abortController = new AbortController();
+        const totalChunks = 20;
+        const abortAfterChunks = 5;
+
+        // Simulate an LLM provider that does NOT respect the abort signal -
+        // it continues streaming all chunks even after the signal fires.
+        // This is realistic: many providers buffer data and continue sending
+        // even after the client signals cancellation.
+        const slowStreamModel = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+            content: [{ type: 'text', text: 'Full long response' }],
+            warnings: [],
+          }),
+          doStream: async () => {
+            // Build all chunks upfront - model does NOT check abort signal
+            const allChunks = [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: 'id-0',
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start' as const, id: 'text-1' },
+              ...Array.from({ length: totalChunks }, (_, i) => ({
+                type: 'text-delta' as const,
+                id: 'text-1',
+                delta: `chunk-${i + 1} `,
+              })),
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 10, outputTokens: 200, totalTokens: 210 },
+              },
+            ];
+
+            let index = 0;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: new ReadableStream({
+                pull(controller) {
+                  if (index < allChunks.length) {
+                    const chunk = allChunks[index++]!;
+
+                    // Fire abort after a few text-delta chunks, but keep streaming
+                    // This simulates the HTTP disconnect signal firing mid-stream
+                    const textDeltaCount = index - 3; // offset for header chunks
+                    if (chunk.type === 'text-delta' && textDeltaCount === abortAfterChunks) {
+                      abortController.abort();
+                    }
+
+                    controller.enqueue(chunk);
+                  } else {
+                    controller.close();
+                  }
+                },
+              }),
+            };
+          },
+        });
+
+        const mockMemory = new MockMemory();
+        let savedMessages: MastraDBMessage[] = [];
+        const origSaveMessages = mockMemory.saveMessages.bind(mockMemory);
+        mockMemory.saveMessages = async function (args) {
+          savedMessages.push(...args.messages);
+          return origSaveMessages(args);
+        };
+
+        const agent = new Agent({
+          id: 'test-abort-no-persist-full',
+          name: 'Test Abort No Persist Full',
+          model: slowStreamModel,
+          instructions: 'You are a helpful assistant.',
+          memory: mockMemory,
+        });
+
+        const stream = await agent.stream('Write a very long essay', {
+          abortSignal: abortController.signal,
+          memory: {
+            thread: 'abort-test-thread',
+            resource: 'abort-test-resource',
+          },
+        });
+
+        // Consume the stream - it should end due to abort
+        try {
+          await stream.consumeStream();
+        } catch {
+          // Expected - abort error
+        }
+
+        // Wait a bit for any background persistence to complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Collect all text that was persisted across all saved assistant messages
+        const assistantMessages = savedMessages.filter(m => m.role === 'assistant');
+        const savedText = assistantMessages
+          .map(m => {
+            if (typeof m.content === 'string') return m.content;
+            if (m.content.parts) {
+              return m.content.parts
+                .filter((p: any) => p.type === 'text')
+                .map((p: any) => p.text)
+                .join('');
+            }
+            return '';
+          })
+          .join('');
+
+        // Also check the memory store directly for messages on this thread
+        const recalled = await mockMemory.recall({
+          threadId: 'abort-test-thread',
+          count: 100,
+        });
+        const recalledAssistant = recalled.messages.filter(m => m.role === 'assistant');
+        const recalledText = recalledAssistant
+          .map(m => {
+            if (typeof m.content === 'string') return m.content;
+            if (m.content.parts) {
+              return m.content.parts
+                .filter((p: any) => p.type === 'text')
+                .map((p: any) => p.text)
+                .join('');
+            }
+            return '';
+          })
+          .join('');
+
+        const allPersistedText = savedText + recalledText;
+
+        // The persisted text should NOT contain the later chunks that were generated
+        // after the abort signal fired. The model produced all 20 chunks, but chunks
+        // after the abort point (chunk 5) should not be in memory.
+        // Using a generous buffer (checking chunks 10+) to account for buffering.
+        for (let i = 10; i <= totalChunks; i++) {
+          expect(allPersistedText).not.toContain(`chunk-${i} `);
+        }
+      });
+    });
+  }
+}
+
+saveAndErrorTests('v1');
+saveAndErrorTests('v2');
+
+/**
+ * Regression test for https://github.com/mastra-ai/mastra/issues/13984
+ *
+ * savePerStep: true does not actually persist messages to storage during step execution.
+ * It only accumulates messages in the in-memory MessageList via saveStepMessages(),
+ * which calls messageList.add() but never calls saveQueueManager.flushMessages().
+ *
+ * The actual persistence only happens in executeOnFinish, which is gated by
+ * !abortSignal.aborted. This means if the stream is aborted mid-generation,
+ * executeOnFinish is skipped and NO messages are persisted — including the user's
+ * original message.
+ */
+describe('savePerStep should persist messages during step execution (issue #13984)', () => {
+  it('should persist messages from completed steps when stream is aborted', async () => {
+    let doStreamCallCount = 0;
+
+    // Model that produces a tool call on first invocation, then text on second
+    const toolCallModel = new MockLanguageModelV2({
+      doStream: async () => {
+        doStreamCallCount++;
+        if (doStreamCallCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'echo-tool',
+                input: '{"input": "hello"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response after tool' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const mockMemory = new MockMemory();
+    const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+
+    const echoTool = createTool({
+      id: 'echo-tool',
+      description: 'Echoes the input',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async input => ({ output: input.input }),
+    });
+
+    const agent = new Agent({
+      id: 'save-per-step-abort-agent',
+      name: 'Save Per Step Abort Test',
+      instructions: 'test',
+      model: toolCallModel,
+      memory: mockMemory,
+      tools: { 'echo-tool': echoTool },
+    });
+
+    const abortController = new AbortController();
+    let stepFinishCount = 0;
+
+    const result = await agent.stream('test message', {
+      memory: {
+        thread: 'thread-save-per-step-abort',
+        resource: 'resource-save-per-step-abort',
+      },
+      savePerStep: true,
+      abortSignal: abortController.signal,
+      onStepFinish: async () => {
+        stepFinishCount++;
+        if (stepFinishCount === 1) {
+          // Abort after the first step completes (simulating page refresh).
+          // At this point savePerStep should have already persisted the user message
+          // and the first step's response to storage.
+          abortController.abort();
+        }
+      },
+    });
+
+    // Consume the stream (may throw due to abort)
+    try {
+      for await (const _chunk of result.fullStream) {
+        // consume
+      }
+    } catch {
+      // Expected: stream may error on abort
+    }
+
+    // Wait a tick for any async persistence to complete
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // The first step completed and onStepFinish fired with savePerStep: true.
+    // The abort signal then fired, causing executeOnFinish to be skipped.
+    //
+    // BUG: saveMessages should have been called at least once during step execution
+    // to persist the user message and/or the first step's response messages.
+    // Currently, onStepFinish only calls messageList.add() via saveStepMessages()
+    // but never calls saveQueueManager.flushMessages(), so nothing is persisted.
+    // executeOnFinish (the only persistence path) is gated by !abortSignal.aborted.
+    expect(stepFinishCount).toBeGreaterThanOrEqual(1);
+    expect(saveMessagesSpy).toHaveBeenCalled();
+
+    // Verify the persisted messages include the user's original message
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-save-per-step-abort',
+      resourceId: 'resource-save-per-step-abort',
+    });
+    expect(recalled.messages.length).toBeGreaterThan(0);
+    expect(recalled.messages.some(m => m.role === 'user')).toBe(true);
+  });
+});

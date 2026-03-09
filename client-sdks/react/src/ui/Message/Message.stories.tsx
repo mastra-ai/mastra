@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { Copy, DollarSign, Mic, Hash } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Icon } from '../Icon';
+import { IconButton } from '../IconButton';
 import {
   Message,
   MessageActions,
@@ -10,10 +14,6 @@ import {
   MessageUsages,
   MessageList,
 } from './Message';
-import { IconButton } from '../IconButton';
-import { Copy, DollarSign, Mic, Hash } from 'lucide-react';
-import { Icon } from '../Icon';
-import { useEffect, useState } from 'react';
 
 const Component = () => {
   const [count, setCount] = useState(0);

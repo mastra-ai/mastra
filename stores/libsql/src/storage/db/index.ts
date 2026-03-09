@@ -539,23 +539,43 @@ export class LibSQLDB extends MastraBase {
   async createTable({
     tableName,
     schema,
+    compositePrimaryKey,
   }: {
     tableName: TABLE_NAMES;
     schema: Record<string, StorageColumn>;
+    compositePrimaryKey?: string[];
   }): Promise<void> {
     try {
       const parsedTableName = parseSqlIdentifier(tableName, 'table name');
+
+      // Validate composite PK columns exist in schema
+      if (compositePrimaryKey) {
+        for (const col of compositePrimaryKey) {
+          if (!(col in schema)) {
+            throw new Error(`compositePrimaryKey column "${col}" does not exist in schema for table "${tableName}"`);
+          }
+        }
+      }
+
+      const compositePKSet = compositePrimaryKey ? new Set(compositePrimaryKey) : null;
 
       // Build column definitions
       const columnDefinitions = Object.entries(schema).map(([colName, colDef]) => {
         const type = this.getSqlType(colDef.type);
         const nullable = colDef.nullable === false ? 'NOT NULL' : '';
-        const primaryKey = colDef.primaryKey ? 'PRIMARY KEY' : '';
+        // Skip per-column PRIMARY KEY if column is part of composite PK
+        const primaryKey = colDef.primaryKey && !compositePKSet?.has(colName) ? 'PRIMARY KEY' : '';
         return `"${colName}" ${type} ${nullable} ${primaryKey}`.trim();
       });
 
       // Add table-level constraints
       const tableConstraints: string[] = [];
+
+      if (compositePrimaryKey) {
+        const pkCols = compositePrimaryKey.map(c => `"${c}"`).join(', ');
+        tableConstraints.push(`PRIMARY KEY (${pkCols})`);
+      }
+
       if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
         tableConstraints.push('UNIQUE (workflow_name, run_id)');
       }
@@ -919,7 +939,9 @@ export class LibSQLDB extends MastraBase {
         if (!existingColumns.has(columnName.toLowerCase()) && schema[columnName]) {
           const columnDef = schema[columnName];
           const sqlType = this.getSqlType(columnDef.type);
-          const defaultValue = this.getDefaultValue(columnDef.type);
+          // SQLite requires constant defaults for ALTER TABLE ADD COLUMN.
+          // Nullable columns use DEFAULT NULL; non-nullable use the type's default.
+          const defaultValue = columnDef.nullable ? 'DEFAULT NULL' : this.getDefaultValue(columnDef.type);
 
           // SQLite doesn't support ADD COLUMN IF NOT EXISTS, but we checked above
           const alterSql = `ALTER TABLE ${parsedTableName} ADD COLUMN "${columnName}" ${sqlType} ${defaultValue}`;

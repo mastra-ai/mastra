@@ -5,11 +5,13 @@ export const PROVIDERS_WITH_INSTALLED_PACKAGES = [
   'deepinfra',
   'deepseek',
   'google',
+  'groq',
   'mistral',
   'openai',
   'openrouter',
   'perplexity',
   'togetherai',
+  'vercel',
   'xai',
 ];
 

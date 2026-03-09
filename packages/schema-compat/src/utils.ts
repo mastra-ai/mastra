@@ -6,6 +6,8 @@ import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-jso
 import type { Targets } from 'zod-to-json-schema';
 import type { JSONSchema7, Schema } from './json-schema';
 import { jsonSchema } from './json-schema';
+import type { PublicSchema } from './schema';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from './schema';
 import type { SchemaCompatLayer } from './schema-compatibility';
 import { zodToJsonSchema } from './zod-to-json';
 
@@ -124,7 +126,7 @@ export function convertSchemaToZod(schema: Schema | ZodSchema | JSONSchema7): Zo
  * @returns Processed schema as an AI SDK Schema
  */
 export function applyCompatLayer(options: {
-  schema: Schema | ZodSchema | JSONSchema7;
+  schema: PublicSchema<any>;
   compatLayers: SchemaCompatLayer[];
   mode: 'aiSdkSchema';
 }): Schema;
@@ -139,7 +141,7 @@ export function applyCompatLayer(options: {
  * @returns Processed schema as a JSONSchema7
  */
 export function applyCompatLayer(options: {
-  schema: Schema | ZodSchema | JSONSchema7;
+  schema: PublicSchema<any>;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema';
 }): JSONSchema7;
@@ -184,28 +186,42 @@ export function applyCompatLayer({
   compatLayers,
   mode,
 }: {
-  schema: Schema | ZodSchema | JSONSchema7;
+  schema: PublicSchema<any>;
   compatLayers: SchemaCompatLayer[];
   mode: 'jsonSchema' | 'aiSdkSchema';
 }): JSONSchema7 | Schema {
-  let zodSchema: ZodSchema;
-
-  if (!isZodType(schema)) {
-    // Convert non-zod schema to Zod
-    zodSchema = convertSchemaToZod(schema);
-  } else {
-    zodSchema = schema;
-  }
-
-  for (const compat of compatLayers) {
-    if (compat.shouldApply()) {
-      return mode === 'jsonSchema' ? compat.processToJSONSchema(zodSchema) : compat.processToAISDKSchema(zodSchema);
-    }
-  }
-  // If no compatibility applied, convert back to appropriate format
   if (mode === 'jsonSchema') {
-    return zodToJsonSchema(zodSchema, 'jsonSchema7') as JSONSchema7;
+    const standardSchema = toStandardSchema(schema);
+
+    for (const compat of compatLayers) {
+      if (compat.shouldApply()) {
+        return compat.processToJSONSchema(standardSchema);
+      }
+    }
+
+    return standardSchemaToJSONSchema(standardSchema);
   } else {
+    let zodSchema: ZodSchema;
+
+    if (isZodType(schema)) {
+      zodSchema = schema;
+    } else {
+      if (isStandardSchemaWithJSON(schema)) {
+        throw new Error('StandardSchemaWithJSON is not supported for applyCompatLayer and aiSdkSchema mode');
+      }
+
+      // Convert non-zod schema to Zod
+      // After ruling out ZodType and StandardSchemaWithJSON above, remaining PublicSchema
+      // types are Schema (v4/v5/v6) and JSONSchema7, all handled by convertSchemaToZod
+      zodSchema = convertSchemaToZod(schema as Schema | JSONSchema7);
+    }
+
+    for (const compat of compatLayers) {
+      if (compat.shouldApply()) {
+        return compat.processToAISDKSchema(zodSchema);
+      }
+    }
+
     return convertZodSchemaToAISDKSchema(zodSchema);
   }
 }

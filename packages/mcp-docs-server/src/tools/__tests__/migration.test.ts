@@ -113,20 +113,19 @@ describe('migrationTool', () => {
       });
 
       expect(result).toContain('# upgrade-to-v1/agent');
-      expect(result).toContain('title:');
-      expect(result).toContain('description:');
-      // Should contain actual migration content
+      // Should contain actual migration content with markdown headers
+      expect(result).toContain('## ');
       expect(result.length).toBeGreaterThan(500);
     });
 
-    it('should include frontmatter in full migration guide', async () => {
+    it('should include markdown content in full migration guide', async () => {
       const result = await callTool(tools.mastra_mastraMigration, {
         path: 'upgrade-to-v1/tools',
       });
 
-      expect(result).toContain('---');
-      expect(result).toContain('title:');
-      expect(result).toContain('description:');
+      // Should have markdown structure
+      expect(result).toContain('# ');
+      expect(result).toContain('## ');
     });
 
     it('should include code blocks with diff syntax', async () => {
@@ -138,7 +137,7 @@ describe('migrationTool', () => {
       expect(result).toMatch(/[+-]\s+/); // Should have + or - diff markers
     });
 
-    it('should handle paths with .mdx extension', async () => {
+    it('should handle paths with .mdx extension for backwards compatibility', async () => {
       const result = await callTool(tools.mastra_mastraMigration, {
         path: 'upgrade-to-v1/agent.mdx',
       });

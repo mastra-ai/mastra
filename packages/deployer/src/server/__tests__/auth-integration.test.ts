@@ -19,13 +19,13 @@ describe('auth middleware integration tests', () => {
     },
     rules: [
       {
-        path: '/api/admin/*',
+        path: '/admin/*',
         condition: (user: any) => user?.role === 'admin',
         allow: true,
       },
       {
         // Allow all authenticated users to access all other routes
-        path: /^\/(?!api\/admin)/,
+        path: /^\/(?!admin)/,
         condition: (user: any) => !!user,
         allow: true,
       },
@@ -246,20 +246,27 @@ describe('auth middleware integration tests', () => {
 
   describe('Pattern-Based Protection', () => {
     it('should protect routes matching protected patterns', async () => {
-      // Test that /api/* pattern protection works
-      const mastra = createMastraWithRoutes([]);
+      // Test that routes registered via registerApiRoute are protected by default
+      const routes = [
+        registerApiRoute('/secure/users', {
+          method: 'GET',
+          handler: c => c.json({ users: [] }),
+        }),
+        registerApiRoute('/secure/posts', {
+          method: 'POST',
+          handler: c => c.json({ created: true }),
+        }),
+      ];
+
+      const mastra = createMastraWithRoutes(routes);
       const app = await createHonoServer(mastra, { tools: {} });
 
-      // Add routes manually that match protected patterns
-      app.get('/api/users', (c: any) => c.json({ users: [] }));
-      app.post('/api/posts', (c: any) => c.json({ created: true }));
-
-      // Both should be protected due to /api/* pattern
-      const usersReq = new Request('http://localhost/api/users');
+      // Both should be protected (requiresAuth defaults to true for registered routes)
+      const usersReq = new Request('http://localhost/secure/users');
       const usersRes = await app.request(usersReq);
       expect(usersRes.status).toBe(401);
 
-      const postsReq = new Request('http://localhost/api/posts', {
+      const postsReq = new Request('http://localhost/secure/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -267,7 +274,7 @@ describe('auth middleware integration tests', () => {
       expect(postsRes.status).toBe(401);
 
       // Should work with auth
-      const usersAuthReq = new Request('http://localhost/api/users', {
+      const usersAuthReq = new Request('http://localhost/secure/users', {
         headers: { Authorization: 'Bearer valid-token' },
       });
       const usersAuthRes = await app.request(usersAuthReq);
@@ -297,21 +304,25 @@ describe('auth middleware integration tests', () => {
 
   describe('Authorization Rules', () => {
     it('should enforce role-based authorization rules', async () => {
-      const mastra = createMastraWithRoutes([]);
+      const routes = [
+        registerApiRoute('/admin/users', {
+          method: 'GET',
+          handler: c => c.json({ adminData: true }),
+        }),
+      ];
+
+      const mastra = createMastraWithRoutes(routes);
       const app = await createHonoServer(mastra, { tools: {} });
 
-      // Add admin route manually
-      app.get('/api/admin/users', (c: any) => c.json({ adminData: true }));
-
       // Should deny regular user access to admin route
-      const userReq = new Request('http://localhost/api/admin/users', {
+      const userReq = new Request('http://localhost/admin/users', {
         headers: { Authorization: 'Bearer valid-token' }, // regular user
       });
       const userRes = await app.request(userReq);
       expect(userRes.status).toBe(403);
 
       // Should allow admin access
-      const adminReq = new Request('http://localhost/api/admin/users', {
+      const adminReq = new Request('http://localhost/admin/users', {
         headers: { Authorization: 'Bearer admin-token' }, // admin user
       });
       const adminRes = await app.request(adminReq);

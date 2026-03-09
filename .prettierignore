@@ -9,6 +9,7 @@ CLAUDE.md
 **/generated/**
 **/public/**
 **/public/**/**
+**/__recordings__/**
 pnpm-lock.yaml
 pnpm-workspace.yaml
 **/packages/**/src/client/**
