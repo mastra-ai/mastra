@@ -1500,6 +1500,29 @@ export class Agent<
   }
 
   /**
+   * Ensures a model can participate in prepared multi-model execution.
+   * @internal
+   */
+  private assertSupportsPreparedModels(
+    model: MastraLanguageModel | MastraLegacyLanguageModel,
+  ): asserts model is MastraLanguageModel {
+    if (!isSupportedLanguageModel(model)) {
+      const mastraError = new MastraError({
+        id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        details: {
+          agentName: this.name,
+        },
+        text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
+      });
+      this.logger.trackException(mastraError);
+      this.logger.error(mastraError.toString());
+      throw mastraError;
+    }
+  }
+
+  /**
    * Resolves model configuration that may be a dynamic function returning a single model or array of models.
    * Supports DynamicArgument for both MastraModelConfig and ModelWithRetries[].
    * Normalizes fallback arrays while preserving single-model semantics.
@@ -3935,21 +3958,7 @@ export class Agent<
 
     if (!Array.isArray(selection)) {
       const resolvedModel = await this.resolveModelConfig(selection, requestContext);
-
-      if (!isSupportedLanguageModel(resolvedModel)) {
-        const mastraError = new MastraError({
-          id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          details: {
-            agentName: this.name,
-          },
-          text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
-        });
-        this.logger.trackException(mastraError);
-        this.logger.error(mastraError.toString());
-        throw mastraError;
-      }
+      this.assertSupportsPreparedModels(resolvedModel);
 
       let headers: Record<string, string> | undefined;
       if (resolvedModel instanceof ModelRouterLanguageModel) {
@@ -3970,21 +3979,7 @@ export class Agent<
     const models = await Promise.all(
       selection.map(async modelConfig => {
         const model = await this.resolveModelConfig(modelConfig.model, requestContext);
-
-        if (!isSupportedLanguageModel(model)) {
-          const mastraError = new MastraError({
-            id: 'AGENT_PREPARE_MODELS_INCOMPATIBLE_WITH_MODEL_ARRAY_V1',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-            details: {
-              agentName: this.name,
-            },
-            text: `[Agent:${this.name}] - Only v2/v3 models are allowed when an array of models is provided`,
-          });
-          this.logger.trackException(mastraError);
-          this.logger.error(mastraError.toString());
-          throw mastraError;
-        }
+        this.assertSupportsPreparedModels(model);
 
         const modelId = modelConfig.id || model.modelId;
         if (!modelId) {
