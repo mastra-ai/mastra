@@ -193,8 +193,13 @@ export async function createHonoServer(
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
-  // Enable gzip/deflate compression for all responses
-  app.use('*', compress());
+  // Enable gzip/deflate compression for all responses (except SSE endpoints)
+  app.use('*', async (c, next) => {
+    if (c.req.path.endsWith('/refresh-events')) {
+      return next();
+    }
+    return compress()(c, next);
+  });
   // Ensure Vary: Accept-Encoding is set for proper caching behavior
   app.use('*', async (c, next) => {
     await next();
