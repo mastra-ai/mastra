@@ -38,7 +38,13 @@ function VariablesRequestContextForm({ variablesSchema }: { variablesSchema: Rec
   }, [variablesSchema]);
 
   if (!zodSchema) {
-    return null;
+    return (
+      <div className="p-4">
+        <Txt variant="ui-sm" className="text-red-400">
+          Failed to parse request context schema
+        </Txt>
+      </div>
+    );
   }
 
   return (
@@ -65,6 +71,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
     <div className="flex items-center gap-1 rounded-md border border-border1 p-0.5">
       <button
         type="button"
+        aria-pressed={mode === 'form'}
         onClick={() => onModeChange('form')}
         className={cn(
           'flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors',
@@ -78,6 +85,7 @@ function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (
       </button>
       <button
         type="button"
+        aria-pressed={mode === 'json'}
         onClick={() => onModeChange('json')}
         className={cn(
           'flex items-center gap-1.5 px-2 py-1 rounded text-xs transition-colors',
