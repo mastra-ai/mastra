@@ -16,13 +16,26 @@ import type { StandardSchemaWithJSON } from './standard-schema.types';
  */
 function jsonSchemaOverride(ctx: { zodSchema: unknown; jsonSchema: Record<string, unknown> }): undefined {
   const zodSchema = ctx.zodSchema as { type?: string; _zod?: { def?: { type?: string } }; optional?: () => unknown };
+
+  if (
+    ctx.jsonSchema.type === 'object' &&
+    ctx.jsonSchema.properties !== undefined &&
+    !ctx.jsonSchema.additionalProperties
+  ) {
+    ctx.jsonSchema.additionalProperties = false;
+  }
+
   if (zodSchema) {
     // Convert z.date() to JSON Schema string with date-time format
     if (zodSchema?.type === 'date') {
       ctx.jsonSchema.type = 'string';
       ctx.jsonSchema.format = 'date-time';
+      // @ts-expect-error - catchall is a valid property for zod
+    } else if (zodSchema?.type === 'object' && zodSchema._zod?.def?.catchall?.type === 'unknown') {
+      ctx.jsonSchema.additionalProperties = true;
     }
   }
+
   return undefined;
 }
 /**
@@ -259,11 +272,16 @@ export function standardSchemaToJSONSchema(
 ): JSONSchema7 {
   const { target = 'draft-07', io = 'output', override = JSON_SCHEMA_LIBRARY_OPTIONS.override } = options;
   const jsonSchemaFn = schema['~standard'].jsonSchema[io];
-  return jsonSchemaFn({
+  let jsonSchema = jsonSchemaFn({
     target,
     libraryOptions: {
       ...JSON_SCHEMA_LIBRARY_OPTIONS,
       override,
     },
   }) as JSONSchema7;
+
+  // make sure only jsonSchema is left, no standard schema metadata
+  jsonSchema = JSON.parse(JSON.stringify(jsonSchema));
+
+  return jsonSchema;
 }

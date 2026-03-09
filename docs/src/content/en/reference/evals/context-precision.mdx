@@ -12,14 +12,14 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 The `createContextPrecisionScorer()` function creates a scorer that evaluates how relevant and well-positioned retrieved context pieces are for generating expected outputs. It uses **Mean Average Precision (MAP)** to reward systems that place relevant context earlier in the sequence.
 
-It is especially useful for these use cases:
+It's especially useful for these use cases:
 
 ## RAG System Evaluation
 
 Ideal for evaluating retrieved context in RAG pipelines where:
 
 - Context ordering matters for model performance
-- You need to measure retrieval quality beyond simple relevance
+- You need to measure retrieval quality beyond basic relevance
 - Early relevant context is more valuable than later relevant context
 
 ## Context Window Optimization
@@ -34,39 +34,38 @@ Use when optimizing context selection for:
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraModelConfig",
-description: "The language model to use for evaluating context relevance",
-required: true,
-},
-{
-name: "options",
-type: "ContextPrecisionMetricOptions",
-description: "Configuration options for the scorer",
-required: true,
-children: [
-{
-name: "context",
-type: "string[]",
-description: "Array of context pieces to evaluate for relevance",
-required: false,
-},
-{
-name: "contextExtractor",
-type: "(input, output) => string[]",
-description:
-"Function to dynamically extract context from the run input and output",
-required: false,
-},
-{
-name: "scale",
-type: "number",
-description: "Scale factor to multiply the final score (default: 1)",
-required: false,
-},
-],
-},
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for evaluating context relevance',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'ContextPrecisionMetricOptions',
+    description: 'Configuration options for the scorer',
+    required: true,
+    children: [
+      {
+        name: 'context',
+        type: 'string[]',
+        description: 'Array of context pieces to evaluate for relevance',
+        required: false,
+      },
+      {
+        name: 'contextExtractor',
+        type: '(input, output) => string[]',
+        description: 'Function to dynamically extract context from the run input and output',
+        required: false,
+      },
+      {
+        name: 'scale',
+        type: 'number',
+        description: 'Scale factor to multiply the final score (default: 1)',
+        required: false,
+      },
+    ],
+  },
 ]}
 />
 
@@ -76,18 +75,16 @@ required: false,
 
 <PropertiesTable
   content={[
-{
-name: "score",
-type: "number",
-description:
-"Mean Average Precision score between 0 and scale (default 0-1)",
-},
-{
-name: "reason",
-type: "string",
-description:
-"Human-readable explanation of the context precision evaluation",
-},
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Mean Average Precision score between 0 and scale (default 0-1)',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Human-readable explanation of the context precision evaluation',
+  },
 ]}
 />
 
@@ -134,7 +131,7 @@ The reason field explains:
 Use results to:
 
 - **Improve retrieval**: Filter out irrelevant context before ranking
-- **Optimize ranking**: Ensure relevant context appears early
+- **Optimize ranking**: Ensure relevant context surfaces early
 - **Tune chunk size**: Balance context detail vs. relevance precision
 - **Evaluate embeddings**: Test different embedding models for better retrieval
 

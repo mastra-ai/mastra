@@ -10,7 +10,7 @@ packages:
 The Convex storage implementation provides a serverless storage solution using [Convex](https://convex.dev), a full-stack TypeScript development platform with real-time sync and automatic caching.
 
 :::warning[Observability Not Supported]
-Convex storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to Convex, and Mastra Studio's observability features won't work with Convex as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+Convex storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to Convex, and Mastra Studio's observability features won't work with Convex as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
 :::
 
 :::warning[Record Size Limit]
@@ -90,28 +90,25 @@ const storage = new ConvexStore({
 
 <PropertiesTable
   content={[
-{
-name: "deploymentUrl",
-type: "string",
-description:
-"Convex deployment URL (e.g., https://your-project.convex.cloud)",
-isOptional: false,
-},
-{
-name: "adminAuthToken",
-type: "string",
-description:
-"Convex admin authentication token for backend access",
-isOptional: false,
-},
-{
-name: "storageFunction",
-type: "string",
-description:
-"Path to the storage mutation function (default: 'mastra/storage:handle')",
-isOptional: true,
-defaultValue: "mastra/storage:handle",
-},
+  {
+    name: 'deploymentUrl',
+    type: 'string',
+    description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
+    isOptional: false,
+  },
+  {
+    name: 'adminAuthToken',
+    type: 'string',
+    description: 'Convex admin authentication token for backend access',
+    isOptional: false,
+  },
+  {
+    name: 'storageFunction',
+    type: 'string',
+    description: "Path to the storage mutation function (default: 'mastra/storage:handle')",
+    isOptional: true,
+    defaultValue: 'mastra/storage:handle',
+  },
 ]}
 />
 

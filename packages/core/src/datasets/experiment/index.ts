@@ -6,6 +6,7 @@ type ExperimentItem = {
   datasetVersion: number | null; // null for inline experiments
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 };
 import { executeTarget } from './executor';
@@ -67,6 +68,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     name,
     description,
     metadata,
+    requestContext: globalRequestContext,
   } = config;
 
   const startedAt = new Date();
@@ -122,6 +124,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       datasetVersion: v.datasetVersion,
       input: v.input,
       groundTruth: v.groundTruth,
+      requestContext: v.requestContext,
       metadata: v.metadata,
     }));
   } else {
@@ -161,7 +164,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     if (!target) {
       throw new Error(`Target not found: ${targetType}/${targetId}`);
     }
-    execFn = (item, itemSignal) => executeTarget(target, targetType, item, { signal: itemSignal });
+    execFn = (item, itemSignal) => {
+      // Merge global request context with per-item request context (item takes precedence)
+      const mergedRequestContext =
+        globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
+      return executeTarget(target, targetType, item, { signal: itemSignal, requestContext: mergedRequestContext });
+    };
   } else {
     throw new Error('No task: provide targetType+targetId or task');
   }
@@ -186,9 +194,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       });
     }
     // Update status to running (both sync and async paths)
+    // Also set totalItems — needed for the async path where the experiment
+    // was created with totalItems: 0 before items were resolved.
     await experimentsStore.updateExperiment({
       id: experimentId,
       status: 'running',
+      totalItems: items.length,
       startedAt,
     });
   }

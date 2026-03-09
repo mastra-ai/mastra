@@ -3,6 +3,7 @@
  * Main entry point for Mastra Code TUI.
  */
 import { isStreamDestroyedError } from './error-classification.js';
+import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -29,7 +30,7 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function main() {
+async function tuiMain() {
   const result = await createMastraCode();
   harness = result.harness;
   mcpManager = result.mcpManager;
@@ -134,6 +135,8 @@ function handleFatalError(error: unknown): never {
   write(`Fatal error: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
+
+const main = hasHeadlessFlag(process.argv) ? headlessMain : tuiMain;
 
 main().catch(error => {
   handleFatalError(error);

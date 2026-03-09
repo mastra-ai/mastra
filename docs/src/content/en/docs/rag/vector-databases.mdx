@@ -387,7 +387,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 - Google gemini-embedding-001: 768 dimensions (or custom)
 
 :::warning
-Index dimensions cannot be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
+Index dimensions can't be changed after creation. To use a different model, delete and recreate the index with the new dimension size.
 :::
 
 ### Naming Rules for Databases
@@ -602,7 +602,7 @@ Key metadata considerations:
 
 ## Deleting Vectors
 
-When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it easy to remove all embeddings associated with a specific document.
+When building RAG applications, you often need to clean up stale vectors when documents are deleted or updated. Mastra provides the `deleteVectors` method that supports deleting vectors by metadata filters, making it straightforward to remove all embeddings associated with a specific document.
 
 ### Delete by Metadata Filter
 

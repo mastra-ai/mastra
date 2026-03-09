@@ -370,6 +370,11 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    if (dependenciesToInstall.has('@mastra/core') && !dependenciesToInstall.has('@mastra/schema-compat')) {
+      const coreVersion = dependenciesToInstall.get('@mastra/core') || 'latest';
+      dependenciesToInstall.set('@mastra/schema-compat', coreVersion);
+    }
+
     try {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 

@@ -609,13 +609,6 @@ describe('output-helpers', () => {
       expect(await applyTokenLimit('', 100)).toBe('');
     });
 
-    it('handles output with punctuation and symbols', async () => {
-      const output = 'alpha | beta ~ gamma\nline 1\nline 2\nline 3';
-      const result = await applyTokenLimit(output, 5);
-      expect(result).toBeDefined();
-      expect(result).toContain('[output truncated');
-    });
-
     it('truncates from the start by default (keeps the end)', async () => {
       const lines = Array.from({ length: 100 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
@@ -647,10 +640,19 @@ describe('output-helpers', () => {
       expect(result).toContain('[output truncated');
     });
 
-    it('keeps at least one line even if it exceeds limit', async () => {
-      const longLine = 'word '.repeat(500);
-      const result = await applyTokenLimit(longLine, 10);
-      expect(result).toContain('word');
+    it('fills the token budget even with a single long line', async () => {
+      // This is the bug Tyler hit: a file with one huge line should still use the full budget
+      const longLine = 'word '.repeat(500); // 500 tokens of "word "
+      const limit = 50;
+      const result = await applyTokenLimit(longLine, limit);
+      expect(result).toContain('[output truncated');
+      // The kept portion (minus the notice) should be close to the budget
+      const notice = result.match(/\[output truncated[^\]]*\]\n?/)?.[0] ?? '';
+      const keptText = result.replace(notice, '');
+      // "word " is 1 token each, so we should have ~50 words
+      const wordCount = keptText.trim().split(/\s+/).length;
+      expect(wordCount).toBeGreaterThanOrEqual(limit - 5);
+      expect(wordCount).toBeLessThanOrEqual(limit + 5);
     });
   });
 
@@ -663,34 +665,62 @@ describe('output-helpers', () => {
       expect(await applyTokenLimitSandwich('', 100)).toBe('');
     });
 
-    it('keeps lines from both start and end', async () => {
+    it('keeps tokens from both start and end', async () => {
       const lines = Array.from({ length: 200 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
       const result = await applyTokenLimitSandwich(output, 50, 0.2);
-      // Should contain early lines (head)
       expect(result).toContain('line number 1');
-      // Should contain late lines (tail)
       expect(result).toContain('line number 200');
-      // Should have truncation notice in the middle
-      expect(result).toContain('lines truncated');
-      // Middle lines should be gone
+      expect(result).toContain('output truncated');
       expect(result).not.toContain('line number 100\n');
     });
 
-    it('head ratio controls how much of the budget goes to the start', async () => {
+    it('respects head ratio — higher ratio keeps more from the start', async () => {
       const lines = Array.from({ length: 200 }, (_, i) => `line number ${i + 1}`);
       const output = lines.join('\n');
-      // With headRatio 0.5, roughly equal head and tail
-      const result = await applyTokenLimitSandwich(output, 50, 0.5);
-      expect(result).toContain('line number 1');
-      expect(result).toContain('line number 200');
-      expect(result).toContain('lines truncated');
+      const small = await applyTokenLimitSandwich(output, 50, 0.1);
+      const large = await applyTokenLimitSandwich(output, 50, 0.9);
+      // Both should have start and end
+      expect(small).toContain('line number 1');
+      expect(large).toContain('line number 1');
+      // With 90% head ratio, the head portion should contain more lines from the start
+      const smallHead = small.split('output truncated')[0]!;
+      const largeHead = large.split('output truncated')[0]!;
+      expect(largeHead.length).toBeGreaterThan(smallHead.length);
+    });
+
+    it('fills the token budget even with a single long line', async () => {
+      const longLine = 'word '.repeat(500);
+      const limit = 50;
+      const result = await applyTokenLimitSandwich(longLine, limit, 0.2);
+      expect(result).toContain('output truncated');
+      const notice = result.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
+      const keptText = result.replace(notice, '');
+      const wordCount = keptText.trim().split(/\s+/).length;
+      expect(wordCount).toBeGreaterThanOrEqual(limit - 5);
+    });
+
+    it('does not leak full output when tail budget is zero', async () => {
+      const longLine = 'word '.repeat(500);
+      const result = await applyTokenLimitSandwich(longLine, 10, 1.0);
+      expect(result).toContain('output truncated');
+      const notice = result.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
+      const keptText = result.replace(notice, '');
+      expect(keptText.trim().split(/\s+/).length).toBeLessThanOrEqual(15);
+    });
+
+    it('does not leak full output when head budget is zero', async () => {
+      const longLine = 'word '.repeat(500);
+      const result = await applyTokenLimitSandwich(longLine, 10, 0);
+      expect(result).toContain('output truncated');
+      const notice = result.match(/\[\.\.\.output truncated[^\]]*\.\.\.\]\n?/)?.[0] ?? '';
+      const keptText = result.replace(notice, '');
+      expect(keptText.trim().split(/\s+/).length).toBeLessThanOrEqual(15);
     });
   });
 
   describe('truncateOutput', () => {
     it('applies tail then token limit', async () => {
-      // tail: 0 = no line limit, so only token limit applies
       const lines = Array.from({ length: 5000 }, (_, i) => `line number ${String(i).padStart(4, '0')}`);
       const output = lines.join('\n');
 
@@ -705,6 +735,16 @@ describe('output-helpers', () => {
       const result = await truncateOutput(output, 5);
       expect(result).not.toContain('[output truncated');
       expect(result).toContain('[showing last 5 of 500 lines]');
+    });
+
+    it('routes to sandwich mode when tokenFrom is sandwich', async () => {
+      const lines = Array.from({ length: 5000 }, (_, i) => `line number ${i + 1}`);
+      const output = lines.join('\n');
+
+      const result = await truncateOutput(output, 0, undefined, 'sandwich');
+      expect(result).toContain('line number 1');
+      expect(result).toContain('line number 5000');
+      expect(result).toContain('output truncated');
     });
   });
 });
@@ -773,7 +813,7 @@ describe('token limit integration', () => {
     const ctx = createContext(sandbox);
     const result = await executeCommandTool.execute({ command: 'cat big.log', tail: 0 }, ctx);
     // execute_command uses sandwich truncation — head + [...truncated...] + tail
-    expect(result).toContain('lines truncated');
+    expect(result).toContain('output truncated');
     // Should contain both start and end of output
     expect(result).toContain('output line number 1');
     expect(result).toContain('output line number 5000');
@@ -798,7 +838,7 @@ describe('token limit integration', () => {
       tools: { mastra_workspace_execute_command: { maxOutputTokens: 100 } },
     });
     const result = await executeCommandTool.execute({ command: 'cat big.log', tail: 0 }, { workspace });
-    expect(result).toContain('lines truncated');
+    expect(result).toContain('output truncated');
     // With only 100 tokens, result should be much shorter than default 3k limit
     const defaultResult = await executeCommandTool.execute({ command: 'cat big.log', tail: 0 }, createContext(sandbox));
     expect((result as string).length).toBeLessThan((defaultResult as string).length);
@@ -821,7 +861,7 @@ describe('token limit integration', () => {
     const ctx = createContext(sandbox);
     const result = await getProcessOutputTool.execute({ pid: 30, tail: 0 }, ctx);
     // get_process_output uses sandwich truncation
-    expect(result).toContain('lines truncated');
+    expect(result).toContain('output truncated');
     expect(result).toContain('log entry number 1');
     expect(result).toContain('log entry number 5000');
   });

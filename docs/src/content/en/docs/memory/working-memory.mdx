@@ -184,14 +184,14 @@ const memory = new Memory({
 
 ## Designing Effective Templates
 
-A well-structured template keeps the information easy for the agent to parse and update. Treat the
+A well-structured template keeps the information straightforward for the agent to parse and update. Treat the
 template as a short form that you want the assistant to keep up to date.
 
 - **Short, focused labels.** Avoid paragraphs or very long headings. Keep labels brief (for example
-  `## Personal Info` or `- Name:`) so updates are easy to read and less likely to be truncated.
+  `## Personal Info` or `- Name:`) so updates are readable and less likely to be truncated.
 - **Use consistent casing.** Inconsistent capitalization (`Timezone:` vs `timezone:`) can cause messy
   updates. Stick to Title Case or lower case for headings and bullet labels.
-- **Keep placeholder text simple.** Use hints such as `[e.g., Formal]` or `[Date]` to help the LLM
+- **Keep placeholder text minimal.** Use hints such as `[e.g., Formal]` or `[Date]` to help the LLM
   fill in the correct spots.
 - **Abbreviate very long values.** If you only need a short form, include guidance like
   `- Name: [First name or nickname]` or `- Address (short):` rather than the full legal text.
@@ -283,13 +283,13 @@ Schema-based working memory uses **merge semantics**, meaning the agent only nee
 
 - **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
 - **Set a field to `null` to delete it:** This explicitly removes the field from memory
-- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays are not merged element-by-element)
+- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays aren't merged element-by-element)
 
 ## Choosing Between Template and Schema
 
 - Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics** — the agent must provide the complete memory content on each update.
 - Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. Schemas use **merge semantics** — the agent only provides fields to update, and existing fields are preserved.
-- Only one mode can be active at a time: setting both `template` and `schema` is not supported.
+- Only one mode can be active at a time: setting both `template` and `schema` isn't supported.
 
 ## Example: Multi-step Retention
 
@@ -323,7 +323,7 @@ conversation:
 The agent can now refer to `Sam` or `Berlin` in later responses without requesting the information
 again because it has been stored in working memory.
 
-If your agent is not properly updating working memory when you expect it to, you can add system
+If your agent isn't properly updating working memory when you expect it to, you can add system
 instructions on _how_ and _when_ to use this template in your agent's `instructions` setting.
 
 ## Setting Initial Working Memory

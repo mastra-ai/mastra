@@ -58,6 +58,11 @@ function fileLink(displayText: string, filePath: string, line?: number): string 
   return `\x1b]8;;file://${absPath}${lineFragment}\x07${displayText}\x1b]8;;\x07`;
 }
 
+/** Check if a tool name is a web search provider tool (e.g. web_search, web_search_20250305) */
+function isWebSearchTool(name: string): boolean {
+  return name === 'web_search' || /^web_search_\d+$/.test(name);
+}
+
 /**
  * Extract the actual content from tool result text.
  */
@@ -191,8 +196,17 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const isWriteCommand = this.toolName === MC_TOOLS.WRITE_FILE;
     const isProcessCommand = this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT || this.toolName === MC_TOOLS.KILL_PROCESS;
     const isTaskWrite = this.toolName === 'task_write';
+    const isWebSearch = isWebSearchTool(this.toolName);
 
-    if (isShellCommand || isViewCommand || isEditCommand || isWriteCommand || isProcessCommand || isTaskWrite) {
+    if (
+      isShellCommand ||
+      isViewCommand ||
+      isEditCommand ||
+      isWriteCommand ||
+      isProcessCommand ||
+      isTaskWrite ||
+      isWebSearch
+    ) {
       // No background - let terminal colors show through
       this.contentBox.setBgFn((text: string) => text);
       return;
@@ -238,7 +252,11 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.renderTaskWriteEnhanced();
         break;
       default:
-        this.renderGenericToolEnhanced();
+        if (isWebSearchTool(this.toolName)) {
+          this.renderWebSearchEnhanced();
+        } else {
+          this.renderGenericToolEnhanced();
+        }
     }
   }
 
@@ -910,6 +928,113 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
         this.contentBox.addChild(new Text(theme.fg('error', output), 0, 0));
       }
     }
+  }
+
+  private renderWebSearchEnhanced(): void {
+    const argsObj = this.args as Record<string, unknown> | undefined;
+    const query = argsObj?.query ? String(argsObj.query) : '';
+    const status = this.getStatusIndicator();
+
+    const queryDisplay = query ? ` ${theme.fg('accent', `"${query}"`)}` : '';
+    const footerText = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
+
+    // Don't show border until we have a result
+    if (!this.result || this.isPartial) {
+      this.contentBox.addChild(new Text(footerText, 0, 0));
+      return;
+    }
+
+    if (this.result.isError) {
+      this.renderErrorResult(footerText);
+      return;
+    }
+
+    const border = (char: string) => theme.bold(theme.fg('accent', char));
+
+    // Parse search results and format as a clean list of titles + URLs
+    const output = this.formatWebSearchResults();
+    if (output) {
+      const termWidth = process.stdout.columns || 80;
+      const maxLineWidth = termWidth - 6;
+
+      // Empty line padding above
+      this.contentBox.addChild(new Text('', 0, 0));
+
+      // Top border
+      this.contentBox.addChild(new Text(border('┌──'), 0, 0));
+
+      let lines = output.split('\n');
+
+      // Limit lines when collapsed
+      const collapsedLines = 10;
+      const totalLines = lines.length;
+      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
+
+      if (hasMore) {
+        lines = lines.slice(0, collapsedLines);
+      }
+
+      const borderedLines = lines.map(line => {
+        const truncated = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + truncated;
+      });
+      this.contentBox.addChild(new Text(borderedLines.join('\n'), 0, 0));
+
+      // Show truncation indicator
+      if (hasMore) {
+        const remaining = totalLines - collapsedLines;
+        this.contentBox.addChild(
+          new Text(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`), 0, 0),
+        );
+      }
+
+      // Bottom border with tool info
+      this.contentBox.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+    } else {
+      this.contentBox.addChild(new Text(footerText, 0, 0));
+    }
+  }
+
+  /**
+   * Format web search results as a clean list of titles + URLs.
+   * Handles both Anthropic provider results (JSON array with encryptedContent)
+   * and Tavily results (markdown-formatted text).
+   */
+  private formatWebSearchResults(): string {
+    const raw = this.getFormattedOutput();
+    if (!raw) return '';
+
+    // Try to parse as JSON array (Anthropic provider format)
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const lines: string[] = [];
+        for (const item of parsed) {
+          if (typeof item !== 'object' || item === null) continue;
+          const url = typeof item.url === 'string' ? item.url : '';
+          if (!url) continue;
+          const title = typeof item.title === 'string' && item.title ? item.title : url;
+          const age = typeof item.pageAge === 'string' && item.pageAge ? theme.fg('muted', ` (${item.pageAge})`) : '';
+          lines.push(`  ${theme.fg('accent', title)}${age}`);
+          lines.push(`  ${theme.fg('muted', url)}`);
+        }
+        if (lines.length > 0) return lines.join('\n');
+
+        // Parsed as JSON array but couldn't extract results — strip encryptedContent
+        // before falling through, so we never dump huge base64 blobs to the terminal
+        const stripped = parsed.map((item: unknown) => {
+          if (typeof item !== 'object' || item === null) return item;
+          const { encryptedContent, ...rest } = item as Record<string, unknown>;
+          return rest;
+        });
+        return JSON.stringify(stripped, null, 2);
+      }
+    } catch {
+      // Not JSON — fall through to raw text (Tavily format)
+    }
+
+    // Not JSON (e.g. Tavily format) — already readable text, return as-is
+    return raw;
   }
 
   private renderGenericToolEnhanced(): void {
