@@ -633,6 +633,53 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           }),
         ).rejects.toThrow('perPage must be >= 0');
       });
+
+      it('should return only included messages when perPage is 0 with include', async () => {
+        // perPage: 0 with include should skip pagination/counting entirely
+        // and return only the included messages with context
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        });
+
+        // Should return Message 2 (previous), Message 3 (target), Message 4 (next)
+        expect(result.messages).toHaveLength(3);
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 2', 'Message 3', 'Message 4']);
+        expect(result.total).toBe(0); // total is 0 because we skipped the count query
+        expect(result.perPage).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should return only included messages from different threads when perPage is 0', async () => {
+        // perPage: 0 with cross-thread include
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [
+            {
+              id: messages[0]!.id, // Message 1 from thread
+              withPreviousMessages: 0,
+              withNextMessages: 0,
+            },
+            {
+              id: messages[5]!.id, // Thread2 Message 1
+              withPreviousMessages: 0,
+              withNextMessages: 0,
+            },
+          ],
+        });
+
+        expect(result.messages).toHaveLength(2);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
     });
 
     describe('listMessagesByResourceId (resource-scoped queries)', () => {

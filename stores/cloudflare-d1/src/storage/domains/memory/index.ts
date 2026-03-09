@@ -623,7 +623,9 @@ export class MemoryStorageD1 extends MemoryStorage {
       if (!target) continue;
 
       // Fetch the target message itself plus previous messages.
-      unionQueries.push(`(
+      // Wrap in SELECT * FROM (...) because SQLite does not allow ORDER BY
+      // inside compound-select members (UNION ALL) directly.
+      unionQueries.push(`SELECT * FROM (
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${tableName}
         WHERE thread_id = ?
@@ -635,7 +637,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
-        unionQueries.push(`(
+        unionQueries.push(`SELECT * FROM (
           SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
           FROM ${tableName}
           WHERE thread_id = ?
@@ -651,9 +653,9 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     let finalQuery: string;
     if (unionQueries.length === 1) {
-      finalQuery = unionQueries[0]!.slice(1, -1);
+      finalQuery = unionQueries[0]!;
     } else {
-      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) ORDER BY createdAt ASC`;
+      finalQuery = `${unionQueries.join(' UNION ALL ')} ORDER BY createdAt ASC`;
     }
     const messages = await this.#db.executeQuery({ sql: finalQuery, params });
 
