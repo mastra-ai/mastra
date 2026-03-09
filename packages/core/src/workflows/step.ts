@@ -7,11 +7,14 @@ import type { InferZodLikeSchema, SchemaWithValidation } from '../stream/base/sc
 import type { ToolStream } from '../tools/stream';
 import type { DynamicArgument } from '../types';
 import type { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
+import type { WaitForEventOptions } from './event-match';
 import type { OutputWriter, StepResult, StepMetadata } from './types';
 import type { AnyWorkflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
+  /** Suspend and wait for a named event before resuming. */
+  waitForEvent?: WaitForEventOptions;
 } & Record<string, any>;
 
 // Create a unique symbol that only exists at the type level

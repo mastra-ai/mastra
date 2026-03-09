@@ -1,6 +1,7 @@
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import { evaluateEventConditions } from '../../event-match';
 import type { StepExecutor } from '../step-executor';
 import { getStep } from './utils';
 import type { ProcessorArgs } from '.';
@@ -10,22 +11,44 @@ export async function processWorkflowWaitForEvent(
   {
     pubsub,
     eventName,
+    eventData,
     currentState,
   }: {
     pubsub: PubSub;
     eventName: string;
+    eventData?: Record<string, unknown>;
     currentState: WorkflowRunState;
   },
 ) {
+  // Only process events for workflows that are still suspended
+  if (currentState?.status !== 'suspended') {
+    return;
+  }
+
   const executionPath = currentState?.waitingPaths[eventName];
   if (!executionPath) {
     return;
   }
 
+  // Evaluate match/if conditions when present
+  const condition = currentState?.waitingPathConditions?.[eventName];
+  if (condition) {
+    try {
+      const passed = evaluateEventConditions(condition, eventData ?? {});
+      if (!passed) {
+        return;
+      }
+    } catch {
+      // Malformed condition — skip resume to avoid crashing the event loop
+      return;
+    }
+  }
+
   const currentStep = getStep(workflowData.workflow, executionPath);
+  const stepId = currentStep?.id ?? '';
   const prevResult = {
     status: 'success',
-    output: currentState?.context[currentStep?.id ?? 'input']?.payload,
+    output: currentState?.context[stepId || 'input']?.payload,
   };
 
   await pubsub.publish('workflows', {
@@ -35,8 +58,8 @@ export async function processWorkflowWaitForEvent(
       workflowId: workflowData.workflowId,
       runId: workflowData.runId,
       executionPath,
-      resumeSteps: [],
-      resumeData: workflowData.resumeData,
+      resumeSteps: stepId ? [stepId] : [],
+      resumeData: eventData ?? workflowData.resumeData,
       parentWorkflow: workflowData.parentWorkflow,
       stepResults: currentState?.context,
       prevResult,

@@ -6,6 +6,7 @@ import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from 
 import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
 import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
+import type { EventMatchCondition } from '../workflows/event-match';
 
 export type StoragePagination = {
   page: number;
@@ -1985,6 +1986,7 @@ export interface UpdateWorkflowStateOptions {
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
+  waitingPathConditions?: Record<string, EventMatchCondition>;
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
 }
 
