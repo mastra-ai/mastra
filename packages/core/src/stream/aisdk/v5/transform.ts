@@ -258,7 +258,8 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
               toolCallInput = repaired;
             } else {
               console.error('Error converting tool call input to JSON', {
-                input: value.input,
+                toolName: value.toolName,
+                inputLength: value.input.length,
               });
               toolCallInput = undefined;
             }
