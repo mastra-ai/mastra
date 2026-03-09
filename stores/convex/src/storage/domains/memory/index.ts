@@ -267,13 +267,18 @@ export class MemoryConvex extends MemoryStorage {
     const messageIds = new Set(messages.map(msg => msg.id));
 
     if (include && include.length > 0) {
-      // Pre-populate cache with already-fetched thread messages
+      // Pre-populate cache with already-fetched thread messages, but only when
+      // rows represent a full unfiltered thread snapshot. When resourceId or
+      // dateRange filters are active, the rows are a subset and would cause
+      // addContextMessages() to compute neighbors from a truncated snapshot.
       const preloadedThreads = new Map<string, StoredMessage[]>();
-      for (const tid of threadIds) {
-        preloadedThreads.set(
-          tid,
-          rows.filter(r => r.thread_id === tid),
-        );
+      if (!resourceId && !filter?.dateRange) {
+        for (const tid of threadIds) {
+          preloadedThreads.set(
+            tid,
+            rows.filter(r => r.thread_id === tid),
+          );
+        }
       }
 
       const includedMessages = await this._getIncludedMessages(include, preloadedThreads);

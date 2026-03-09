@@ -728,7 +728,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
 
       // Always sort messages by the sort field/direction before pagination
       // This ensures consistent ordering whether orderBy is explicit or uses the default (createdAt ASC)
-      this._sortMessages(messagesData, field, direction);
+      messagesData = this._sortMessages(messagesData, field, direction);
 
       const total = messagesData.length;
 
