@@ -1,5 +1,6 @@
 import { Play, CheckCircle, XCircle, Clock, Loader2, ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/ds/components/Button';
 import { Icon } from '@/ds/icons/Icon';
@@ -377,6 +378,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
   const isDirty = form.formState.isDirty;
   const mergedRequestContext = useMergedRequestContext();
 
+  const queryClient = useQueryClient();
   const { triggerExperiment } = useDatasetMutations();
   const { data: experiments, isLoading: isLoadingExperiments } = useAgentExperiments(agentId);
 
@@ -401,13 +403,14 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
         ...(hasRequestContext ? { requestContext: mergedRequestContext } : {}),
       });
 
+      queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
       toast.success('Experiment started');
     } catch (error) {
       toast.error(`Failed to start experiment: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsRunning(false);
     }
-  }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext]);
+  }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext, queryClient]);
 
   const selectedExperiment = selectedExperimentId
     ? experiments?.find(e => e.id === selectedExperimentId)
