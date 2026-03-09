@@ -17,7 +17,7 @@ import { Agent } from '../agent';
 
 config();
 
-const weatherTool = createTool({
+const getWeather = createTool({
   id: 'getWeather',
   description: 'Get the current weather for a city',
   inputSchema: z.object({
@@ -28,39 +28,95 @@ const weatherTool = createTool({
   },
 });
 
+const getPopulation = createTool({
+  id: 'getPopulation',
+  description: 'Get the population of a city',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get population for'),
+  }),
+  execute: async ({ city }) => {
+    return { city, population: 2_161_000 };
+  },
+});
+
+const getTimezone = createTool({
+  id: 'getTimezone',
+  description: 'Get the timezone of a city',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get timezone for'),
+  }),
+  execute: async ({ city }) => {
+    return { city, timezone: 'CET', utcOffset: '+01:00' };
+  },
+});
+
+const getLanguage = createTool({
+  id: 'getLanguage',
+  description: 'Get the primary language spoken in a city',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get the language for'),
+  }),
+  execute: async ({ city }) => {
+    return { city, language: 'French' };
+  },
+});
+
+const getCurrency = createTool({
+  id: 'getCurrency',
+  description: 'Get the currency used in a city',
+  inputSchema: z.object({
+    city: z.string().describe('The city to get the currency for'),
+  }),
+  execute: async ({ city }) => {
+    return { city, currency: 'EUR', symbol: '€' };
+  },
+});
+
 function createTestAgent(model: any) {
   return new Agent({
     id: 'tool-finish-reason-test-agent',
     name: 'Tool Finish Reason Test Agent',
     instructions:
-      'You are a helpful assistant. When asked about the weather, use the getWeather tool. After getting the result, summarize it briefly.',
+      'You are a helpful assistant with access to city information tools. When asked about a city, first explain your plan for what you will look up, then call ALL 5 tools in parallel. Always call all 5 tools at once while also providing text explaining what you are doing.',
     model,
-    tools: { getWeather: weatherTool },
+    tools: { getWeather, getPopulation, getTimezone, getLanguage, getCurrency },
   });
 }
 
-async function runToolCallTest(agent: Agent) {
-  const response = await agent.stream('What is the weather in Paris?');
+async function runToolCallTest(agent: Agent, modelName: string) {
+  const response = await agent.stream(
+    'I need a comprehensive city report for Paris. Look up everything: weather, population, timezone, language, and currency. Explain what you are about to do first, then call all 5 tools simultaneously.',
+  );
 
-  let hasToolCall = false;
-  let hasToolResult = false;
+  let toolCallCount = 0;
+  let toolResultCount = 0;
+  const finishReasons: string[] = [];
 
   for await (const chunk of response.fullStream) {
     if (chunk.type === 'tool-call') {
-      hasToolCall = true;
+      toolCallCount++;
     }
     if (chunk.type === 'tool-result') {
-      hasToolResult = true;
+      toolResultCount++;
+    }
+    if (chunk.type === 'step-finish') {
+      const reason = (chunk as any).payload?.finishReason ?? (chunk as any).finishReason ?? 'unknown';
+      finishReasons.push(reason);
     }
   }
 
   const text = await response.text;
 
-  // The agent must have called the tool and received results
-  expect(hasToolCall).toBe(true);
-  expect(hasToolResult).toBe(true);
+  // Log what we observed for debugging
+  console.log(
+    `[${modelName}] toolCalls=${toolCallCount} toolResults=${toolResultCount} finishReasons=${JSON.stringify(finishReasons)} textLen=${text.length}`,
+  );
 
-  // The final response should reference the weather data
+  // The agent should have called multiple tools in parallel
+  expect(toolCallCount).toBeGreaterThanOrEqual(3);
+  expect(toolResultCount).toBeGreaterThanOrEqual(3);
+
+  // The final response should reference the gathered data
   expect(text).toBeTruthy();
   expect(text.length).toBeGreaterThan(0);
 }
@@ -84,7 +140,7 @@ describe('Tool calls with various LLM providers', { timeout: 120_000 }, () => {
       `should continue after tool calls with ${name}`,
       async () => {
         const agent = createTestAgent(model);
-        await runToolCallTest(agent);
+        await runToolCallTest(agent, name);
       },
       60_000,
     );
