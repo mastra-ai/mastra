@@ -12,7 +12,7 @@ Tool streaming in Mastra enables tools to send incremental results while they ru
 Streams can be written to in two main ways:
 
 - **From within a tool**: every tool receives a `context.writer` object, which is a writable stream you can use to push updates as execution progresses.
-- **From an agent stream**: you can also pipe an agent's `stream` output directly into a tool's writer, making it easy to chain agent responses into tool results without extra glue code.
+- **From an agent stream**: you can also pipe an agent's `stream` output directly into a tool's writer, making it convenient to chain agent responses into tool results without extra glue code.
 
 By combining writable tool streams with agent streaming, you gain fine grained control over how intermediate results flow through your system and into the user experience.
 
@@ -99,7 +99,7 @@ export const testTool = createTool({
 
 ### Transient data chunks
 
-By default, `data-*` chunks emitted with `writer.custom()` are persisted to storage as part of the message history. For chunks that are only needed during live streaming — such as progress updates or verbose log output — set `transient: true` to skip storage persistence. Transient chunks are still streamed to the client in real time but are not saved to the database.
+By default, `data-*` chunks emitted with `writer.custom()` are persisted to storage as part of the message history. For chunks that are only needed during live streaming — such as progress updates or verbose log output — set `transient: true` to skip storage persistence. Transient chunks are still streamed to the client in real time but aren't saved to the database.
 
 ```typescript {4}
 await context?.writer?.custom({
