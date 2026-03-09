@@ -457,6 +457,8 @@ When `mastra build` is run, Mastra bundles your project into the `.mastra/output
 
 By default, `mastra build` sets this option to `true`. If you deploy your project to [Mastra Cloud](/docs/mastra-cloud/overview), it also sets this option to `true`.
 
+For faster repeated builds, Mastra caches optimized dependency artifacts in `.mastra/.build` and reuses them when dependency inputs are unchanged.
+
 Here's an overview of what the different values mean:
 
 - `true`: All dependencies listed in your project's `package.json` are marked as external

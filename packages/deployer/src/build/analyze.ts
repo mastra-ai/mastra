@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, join, relative } from 'node:path';
@@ -21,6 +22,71 @@ type ErrorId =
   | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
   | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
   | 'DEPLOYER_ANALYZE_TYPE_ERROR';
+
+type OptimizedDependenciesCache = {
+  version: 1;
+  key: string;
+  dependencies: Array<[string, string]>;
+  externalDependencies: Array<[string, ExternalDependencyInfo]>;
+};
+
+function createOptimizedDependenciesCacheKey({
+  depsToOptimize,
+  bundlerOptions,
+  platform,
+}: {
+  depsToOptimize: Map<string, DependencyMetadata>;
+  bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap'> | null;
+  platform: BundlerPlatform;
+}): string {
+  const normalizedExternals = Array.isArray(bundlerOptions?.externals)
+    ? [...bundlerOptions.externals].sort()
+    : bundlerOptions?.externals === true
+      ? true
+      : false;
+
+  const payload = {
+    platform,
+    externals: normalizedExternals,
+    dependencies: Array.from(depsToOptimize.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dependency, metadata]) => ({
+        dependency,
+        exports: [...metadata.exports].sort(),
+        rootPath: metadata.rootPath,
+        version: metadata.version ?? null,
+      })),
+  };
+
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+async function readOptimizedDependenciesCache(cacheFilePath: string): Promise<OptimizedDependenciesCache | null> {
+  if (!existsSync(cacheFilePath)) {
+    return null;
+  }
+
+  try {
+    const cacheRaw = await readFile(cacheFilePath, 'utf-8');
+    const parsed = JSON.parse(cacheRaw) as Partial<OptimizedDependenciesCache>;
+    if (
+      parsed?.version !== 1 ||
+      typeof parsed.key !== 'string' ||
+      !Array.isArray(parsed.dependencies) ||
+      !Array.isArray(parsed.externalDependencies)
+    ) {
+      return null;
+    }
+
+    return parsed as OptimizedDependenciesCache;
+  } catch {
+    return null;
+  }
+}
+
+async function writeOptimizedDependenciesCache(cacheFilePath: string, cache: OptimizedDependenciesCache) {
+  await writeFile(cacheFilePath, JSON.stringify(cache), 'utf-8');
+}
 
 function throwExternalDependencyError({
   errorId,
@@ -399,6 +465,32 @@ If you think your configuration is valid, please open an issue.`);
     }
   }
 
+  const hasWorkspaceDependencies = Array.from(depsToOptimize.values()).some(metadata => metadata.isWorkspace);
+  const shouldUseOptimizedDependenciesCache = !isDev && !hasWorkspaceDependencies;
+  const optimizedDependenciesCacheFile = join(outputDir, '.optimized-dependencies-cache.json');
+  const optimizedDependenciesCacheKey = shouldUseOptimizedDependenciesCache
+    ? createOptimizedDependenciesCacheKey({ depsToOptimize, bundlerOptions, platform })
+    : null;
+
+  if (optimizedDependenciesCacheKey) {
+    const cachedOptimization = await readOptimizedDependenciesCache(optimizedDependenciesCacheFile);
+    if (cachedOptimization?.key === optimizedDependenciesCacheKey) {
+      const cachedDependencies = new Map(cachedOptimization.dependencies);
+      const hasAllGeneratedFiles = Array.from(cachedDependencies.values()).every(fileName =>
+        existsSync(join(projectRoot, fileName)),
+      );
+
+      if (hasAllGeneratedFiles) {
+        logger.info('Optimizing dependencies... (cache hit)');
+        return {
+          dependencies: cachedDependencies,
+          externalDependencies: new Map(cachedOptimization.externalDependencies),
+          workspaceMap,
+        };
+      }
+    }
+  }
+
   const sortedDeps = Array.from(depsToOptimize.keys()).sort();
   logger.info('Optimizing dependencies...');
   logger.debug(`${sortedDeps.map(key => `- ${key}`).join('\n')}`);
@@ -492,8 +584,23 @@ If you think your configuration is valid, please open an issue.`);
     }
   }
 
-  return {
+  const finalResult = {
     ...result,
     externalDependencies: mergedExternalDeps,
   };
+
+  if (optimizedDependenciesCacheKey) {
+    try {
+      await writeOptimizedDependenciesCache(optimizedDependenciesCacheFile, {
+        version: 1,
+        key: optimizedDependenciesCacheKey,
+        dependencies: Array.from(finalResult.dependencies.entries()),
+        externalDependencies: Array.from(finalResult.externalDependencies.entries()),
+      });
+    } catch (error) {
+      logger.debug('Failed to write optimized dependency cache', { error });
+    }
+  }
+
+  return finalResult;
 }

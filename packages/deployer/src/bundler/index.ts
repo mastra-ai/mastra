@@ -35,11 +35,13 @@ export abstract class Bundler extends MastraBundler {
   }
 
   async prepare(outputDirectory: string): Promise<void> {
-    // Clean up the output directory first
-    await emptyDir(outputDirectory);
-
+    // Keep `.build` artifacts between runs so dependency optimization can be reused.
+    // Always clean the deploy output directory.
+    await ensureDir(outputDirectory);
     await ensureDir(join(outputDirectory, this.analyzeOutputDir));
-    await ensureDir(join(outputDirectory, this.outputDir));
+    const deployOutputDir = join(outputDirectory, this.outputDir);
+    await ensureDir(deployOutputDir);
+    await emptyDir(deployOutputDir);
   }
 
   async writePackageJson(
