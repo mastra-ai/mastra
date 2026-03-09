@@ -232,7 +232,7 @@ The `match` option compares a field path on both the incoming event data and the
 For more complex conditions, use the `if` option with a comparison expression. Two variables are available in expressions: `event` (the incoming event data) and `async` (the data passed to `suspend()`).
 
 ```typescript
-await suspend(
+return await suspend(
   { userId: currentUser.id },
   {
     waitForEvent: {
