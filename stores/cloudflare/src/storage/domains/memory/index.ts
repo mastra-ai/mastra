@@ -831,8 +831,9 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         );
 
         const list = new MessageList().add(includedMessages as MastraMessageV1[], 'memory');
+        const messages = list.get.all.db();
         return {
-          messages: list.get.all.db(),
+          messages: direction === 'DESC' ? messages.reverse() : messages,
           total: 0,
           page,
           perPage: perPageForResponse,

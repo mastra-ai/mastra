@@ -6,4 +6,4 @@
 '@mastra/cloudflare': patch
 ---
 
-Fixed semantic recall latency by skipping unnecessary full thread loads, COUNT queries, and data queries when only included messages are needed (perPage=0 path used by semantic recall). Previously, all thread messages were fetched and paginated in memory even when only the include results were needed. (Fixes #11702)
+Fixed slow semantic recall by skipping unnecessary full thread loads and queries when only semantic recall results are needed. Previously, all thread messages were fetched even when only the recalled messages were required. (Fixes #11702)

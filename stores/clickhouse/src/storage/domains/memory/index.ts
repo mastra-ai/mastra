@@ -278,8 +278,9 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       if (perPageForQuery === 0 && include && include.length > 0) {
         const includeResult = await this._getIncludedMessages({ include });
         const list = new MessageList().add(includeResult, 'memory');
+        const messages = list.get.all.db();
         return {
-          messages: list.get.all.db(),
+          messages: direction === 'DESC' ? messages.reverse() : messages,
           total: 0,
           page,
           perPage: perPageForResponse,

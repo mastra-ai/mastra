@@ -4,4 +4,4 @@
 '@mastra/clickhouse': patch
 ---
 
-Fixed semantic recall latency that scaled linearly with message count. Rewrote \_getIncludedMessages() to batch-fetch target message metadata and use cursor-based pagination instead of ROW\_NUMBER window functions, enabling index usage. Also skips unnecessary COUNT(\*) and data queries when only included messages are needed (perPage=0 path used by semantic recall). (Fixes #11702)
+Fixed slow semantic recall in the libsql, Cloudflare D1, and ClickHouse stores for threads with many messages. Query performance no longer degrades linearly with thread size. Also skips unnecessary queries when only semantic recall results are needed. (Fixes #11702)

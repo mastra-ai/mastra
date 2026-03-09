@@ -680,6 +680,27 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.total).toBe(0);
         expect(result.hasMore).toBe(false);
       });
+
+      it('should respect DESC orderBy on the include-only fast path (perPage=0)', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          include: [
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 1,
+            },
+          ],
+        });
+
+        expect(result.messages).toHaveLength(3);
+        // DESC order: Message 4, Message 3, Message 2
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 4', 'Message 3', 'Message 2']);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
     });
 
     describe('listMessagesByResourceId (resource-scoped queries)', () => {

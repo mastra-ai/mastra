@@ -330,7 +330,14 @@ export class MemoryLibSQL extends MemoryStorage {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
         const list = new MessageList().add(includeMessages, 'memory');
-        return { messages: list.get.all.db(), total: 0, page, perPage: perPageForResponse, hasMore: false };
+        const messages = list.get.all.db();
+        return {
+          messages: direction === 'DESC' ? messages.reverse() : messages,
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
       }
 
       // Get total count

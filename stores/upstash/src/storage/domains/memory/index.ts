@@ -645,6 +645,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
         );
       }
 
+      // Determine sort field and direction, default to ASC (oldest first)
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
       // Get included messages with context if specified
       let includedMessages: MastraDBMessage[] = [];
       if (include && include.length > 0) {
@@ -655,8 +658,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // When perPage is 0, we only need included messages — skip thread load entirely
       if (perPage === 0 && includedMessages.length > 0) {
         const list = new MessageList().add(includedMessages, 'memory');
+        const messages = list.get.all.db();
         return {
-          messages: list.get.all.db(),
+          messages: direction === 'DESC' ? messages.reverse() : messages,
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -705,9 +709,6 @@ export class StoreMemoryUpstash extends MemoryStorage {
         (msg: MastraDBMessage) => new Date(msg.createdAt),
         filter?.dateRange,
       );
-
-      // Determine sort field and direction, default to ASC (oldest first)
-      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
       // Type-safe field accessor helper
       const getFieldValue = (msg: MastraDBMessage): number => {

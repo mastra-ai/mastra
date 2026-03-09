@@ -221,8 +221,9 @@ export class MemoryConvex extends MemoryStorage {
     if (perPage === 0 && include && include.length > 0) {
       const messages = await this._getIncludedMessages(include);
       const list = new MessageList().add(messages, 'memory');
+      const result = list.get.all.db();
       return {
-        messages: list.get.all.db(),
+        messages: direction === 'DESC' ? result.reverse() : result,
         total: 0,
         page,
         perPage: perPageForResponse,

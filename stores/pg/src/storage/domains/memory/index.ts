@@ -870,7 +870,14 @@ export class MemoryPG extends MemoryStorage {
         }
         const messagesWithParsedContent = includeMessages.map(row => this.parseRow(row));
         const list = new MessageList().add(messagesWithParsedContent, 'memory');
-        return { messages: list.get.all.db(), total: 0, page, perPage: perPageForResponse, hasMore: false };
+        const messages = list.get.all.db();
+        return {
+          messages: direction === 'DESC' ? messages.reverse() : messages,
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
       }
 
       const countQuery = `SELECT COUNT(*) FROM ${tableName} ${whereClause}`;
@@ -1058,7 +1065,7 @@ export class MemoryPG extends MemoryStorage {
         const finalMessages = list.get.all.db();
 
         return {
-          messages: finalMessages,
+          messages: direction === 'DESC' ? finalMessages.reverse() : finalMessages,
           total: finalMessages.length,
           page,
           perPage: perPageForResponse,
