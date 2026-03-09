@@ -1,5 +1,5 @@
 import { DatabaseIcon, Save } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useMessage } from '@assistant-ui/react';
 import { useMastraClient } from '@mastra/react';
 
@@ -38,15 +38,24 @@ function DatasetSaveDialog({
   input,
   onInputChange,
   requestContext,
+  initialGroundTruth = '',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   input: string;
   onInputChange: (value: string) => void;
   requestContext?: Record<string, unknown>;
+  initialGroundTruth?: string;
 }) {
-  const [groundTruth, setGroundTruth] = useState('');
+  const [groundTruth, setGroundTruth] = useState(initialGroundTruth);
   const [selectedDatasetId, setSelectedDatasetId] = useState('');
+
+  // Sync ground truth when dialog opens with new initial value
+  useEffect(() => {
+    if (open) {
+      setGroundTruth(initialGroundTruth);
+    }
+  }, [open, initialGroundTruth]);
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
@@ -227,6 +236,7 @@ function SaveFullConversationInner() {
   const client = useMastraClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [input, setInput] = useState('');
+  const [groundTruth, setGroundTruth] = useState('');
   const [isFetching, setIsFetching] = useState(false);
 
   const handleClick = useCallback(async () => {
@@ -236,7 +246,21 @@ function SaveFullConversationInner() {
         agentId: ctx.agentId,
       });
       const messages = result?.messages ?? [];
-      setInput(JSON.stringify(messages, null, 2));
+
+      // Split: everything up to (and including) the last user message is input,
+      // the final assistant response becomes the ground truth seed
+      const lastAssistantIdx = messages.length - 1;
+      const lastMessage = messages[lastAssistantIdx];
+      if (lastMessage && lastMessage.role === 'assistant') {
+        const inputMessages = messages.slice(0, lastAssistantIdx);
+        setInput(JSON.stringify(inputMessages, null, 2));
+        setGroundTruth(JSON.stringify(lastMessage, null, 2));
+      } else {
+        // No trailing assistant message — use all messages as input
+        setInput(JSON.stringify(messages, null, 2));
+        setGroundTruth('');
+      }
+
       setDialogOpen(true);
     } catch (error) {
       toast.error(`Failed to fetch thread messages: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -262,6 +286,7 @@ function SaveFullConversationInner() {
         input={input}
         onInputChange={setInput}
         requestContext={ctx.requestContext}
+        initialGroundTruth={groundTruth}
       />
     </>
   );
