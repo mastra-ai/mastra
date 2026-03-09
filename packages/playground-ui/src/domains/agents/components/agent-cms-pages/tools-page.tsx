@@ -118,8 +118,8 @@ export function ToolsPage() {
   }, [options, search]);
 
   const selectedOptions = useMemo(() => {
-    return filteredOptions.filter(opt => selectedToolIds.includes(opt.value));
-  }, [filteredOptions, selectedToolIds]);
+    return options.filter(opt => selectedToolIds.includes(opt.value));
+  }, [options, selectedToolIds]);
 
   const unselectedOptions = useMemo(() => {
     return filteredOptions.filter(opt => !selectedToolIds.includes(opt.value));
@@ -135,6 +135,7 @@ export function ToolsPage() {
           <EntityDescription>
             <input
               type="text"
+              aria-label={`Description for ${tool.label}`}
               disabled={isDisabled}
               className={cn(
                 'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
