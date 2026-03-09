@@ -1811,6 +1811,24 @@ describe('Memory Handlers', () => {
         });
 
         expect(result.resourceId).toBe('user-b');
+
+        // Verify new owner (user-b) can read the transferred thread
+        const readResult = await GET_THREAD_BY_ID_ROUTE.handler({
+          ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-b' }),
+          agentId: 'test-agent',
+          threadId: 'transfer-thread',
+        });
+        expect(readResult.id).toBe('transfer-thread');
+        expect(readResult.resourceId).toBe('user-b');
+
+        // Verify old owner (user-a) is rejected from reading the transferred thread
+        await expect(
+          GET_THREAD_BY_ID_ROUTE.handler({
+            ...createTestContextWithReservedKeys({ mastra, resourceId: 'user-a' }),
+            agentId: 'test-agent',
+            threadId: 'transfer-thread',
+          }),
+        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
       });
     });
 
