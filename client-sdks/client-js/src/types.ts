@@ -935,6 +935,8 @@ export interface UpdateStoredAgentParams {
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
   requestContextSchema?: Record<string, unknown>;
+  /** Optional message describing the changes for the auto-created version */
+  changeMessage?: string;
 }
 
 /**
@@ -2024,6 +2026,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: unknown;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2036,6 +2039,7 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown> | null;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2086,6 +2090,7 @@ export interface CreateDatasetParams {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetParams {
@@ -2095,12 +2100,14 @@ export interface UpdateDatasetParams {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemParams {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -2109,6 +2116,7 @@ export interface UpdateDatasetItemParams {
   itemId: string;
   input?: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -2117,6 +2125,7 @@ export interface BatchInsertDatasetItemsParams {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }>;
 }
@@ -2133,6 +2142,7 @@ export interface TriggerDatasetExperimentParams {
   scorerIds?: string[];
   version?: number;
   maxConcurrency?: number;
+  requestContext?: Record<string, unknown>;
 }
 
 export interface CompareExperimentsParams {

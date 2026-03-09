@@ -20,6 +20,7 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts'],
+          setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
           env: {
             OPENROUTER_API_KEY: '',
@@ -34,6 +35,7 @@ export default defineConfig({
           name: 'e2e:packages/core',
           environment: 'node',
           include: ['src/**/*.e2e.test.ts'],
+          setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
         },
       },

@@ -310,31 +310,47 @@ await agent.generate('Complex task', {
 ### Custom output processor
 
 ```typescript title="src/mastra/processors/custom-output.ts"
-import type { Processor, MastraDBMessage, RequestContext } from '@mastra/core'
+import type { Processor, MastraDBMessage, ChunkType } from '@mastra/core'
 
 export class CustomOutputProcessor implements Processor {
   id = 'custom-output'
 
-  async processOutputResult({
-    messages,
-    context,
-  }: {
-    messages: MastraDBMessage[]
-    context: RequestContext
-  }): Promise<MastraDBMessage[]> {
+  async processOutputResult({ messages }): Promise<MastraDBMessage[]> {
     // Transform messages after the LLM generates them
     return messages.filter(msg => msg.role !== 'system')
   }
 
-  async processOutputStream({
-    stream,
-    context,
-  }: {
-    stream: ReadableStream
-    context: RequestContext
-  }): Promise<ReadableStream> {
-    // Transform streaming responses
-    return stream
+  async processOutputStream({ part }): Promise<ChunkType | null> {
+    // Transform or filter streaming chunks
+    return part
+  }
+}
+```
+
+#### Accessing generation result data
+
+The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This makes it easy to access token usage, generated text, finish reason, and step details.
+
+```typescript title="src/mastra/processors/usage-tracker.ts"
+import type { Processor } from '@mastra/core'
+
+export class UsageTracker implements Processor {
+  id = 'usage-tracker'
+
+  async processOutputResult({ messages, result }) {
+    console.log(`Text: ${result.text}`)
+    console.log(`Tokens: ${result.usage.inputTokens} in, ${result.usage.outputTokens} out`)
+    console.log(`Finish reason: ${result.finishReason}`)
+    console.log(`Steps: ${result.steps.length}`)
+
+    // Each step contains toolCalls, toolResults, reasoning, sources, files, etc.
+    for (const step of result.steps) {
+      if (step.toolCalls?.length) {
+        console.log(`Step used ${step.toolCalls.length} tool calls`)
+      }
+    }
+
+    return messages
   }
 }
 ```

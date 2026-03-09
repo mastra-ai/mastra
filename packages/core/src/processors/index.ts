@@ -10,7 +10,7 @@ import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
 import type { ChunkType } from '../stream';
-import type { DataChunkType } from '../stream/types';
+import type { DataChunkType, LanguageModelUsage, LLMStepResult } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
@@ -100,6 +100,21 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
 }
 
 /**
+ * Resolved generation result passed to processOutputResult.
+ * Contains the same data available in the onFinish callback.
+ */
+export interface OutputResult {
+  /** The accumulated text from all steps */
+  text: string;
+  /** Token usage (cumulative across all steps) */
+  usage: LanguageModelUsage;
+  /** Why the generation finished (e.g. 'stop', 'tool-calls', 'length') */
+  finishReason: string;
+  /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
+  steps: LLMStepResult[];
+}
+
+/**
  * Arguments for processOutputResult method
  */
 export interface ProcessOutputResultArgs<
@@ -107,6 +122,8 @@ export interface ProcessOutputResultArgs<
 > extends ProcessorMessageContext<TTripwireMetadata> {
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /** Resolved generation result with usage, text, steps, and finish reason */
+  result: OutputResult;
 }
 
 /**
