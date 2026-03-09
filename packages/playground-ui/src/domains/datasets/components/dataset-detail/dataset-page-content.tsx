@@ -79,7 +79,11 @@ export function DatasetPageContent({
   } = useDatasetItems(datasetId, debouncedSearch || undefined, activeDatasetVersion);
   // Unfiltered query (no search) to determine if dataset has any items — avoids
   // incorrectly disabling the experiment button when a search yields no matches.
-  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(datasetId, undefined, activeDatasetVersion);
+  const { data: unfilteredItems = [], isLoading: isUnfilteredLoading } = useDatasetItems(
+    datasetId,
+    undefined,
+    activeDatasetVersion,
+  );
   const [experimentsFilters, setExperimentsFilters] = useState<DatasetExperimentsFilters>({});
   const { data: experimentsData, isLoading: isExperimentsLoading } = useDatasetExperiments(
     datasetId,

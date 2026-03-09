@@ -1,3 +1,4 @@
+import { MastraError } from '../../error/index.js';
 import type { Mastra } from '../../mastra';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
@@ -13,7 +14,6 @@ import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, runScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
-import { MastraError } from '../../error/index.js';
 
 // Re-export types and helpers
 export type {
