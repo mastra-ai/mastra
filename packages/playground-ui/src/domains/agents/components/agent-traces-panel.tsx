@@ -124,7 +124,11 @@ function TraceTableHeader({
       )}
     >
       <div className="flex items-center justify-center">
-        <Checkbox checked={allSelected ? true : someSelected ? 'indeterminate' : false} onCheckedChange={onToggleAll} />
+        <Checkbox
+          aria-label={allSelected ? 'Deselect all visible traces' : 'Select all visible traces'}
+          checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+          onCheckedChange={onToggleAll}
+        />
       </div>
       <div className="w-3.5" />
       <Txt variant="ui-xs" className="text-neutral3 font-medium">
@@ -179,7 +183,7 @@ function TraceTableRow({
       )}
     >
       <div className="flex items-center justify-center" onClick={e => e.stopPropagation()}>
-        <Checkbox checked={isChecked} onCheckedChange={onCheck} />
+        <Checkbox aria-label={`Select trace from ${timestamp}`} checked={isChecked} onCheckedChange={onCheck} />
       </div>
 
       <button type="button" className="contents cursor-pointer" onClick={onClick}>
@@ -273,8 +277,12 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
   const filters = {
     entityId: agentId,
     entityType: EntityType.AGENT,
-    ...(dateFrom && { startedAt: { start: dateFrom } }),
-    ...(dateTo && { endedAt: { end: dateTo } }),
+    ...((dateFrom || dateTo) && {
+      startedAt: {
+        ...(dateFrom && { start: dateFrom }),
+        ...(dateTo && { end: dateTo }),
+      },
+    }),
   };
 
   const {
@@ -413,7 +421,7 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
     update: setSelectedTraceId,
   });
 
-  if (tracesError) {
+  if (tracesError && traces.length === 0) {
     return (
       <div className="flex h-full items-center justify-center">
         <Txt variant="ui-sm" className="text-neutral3">
@@ -466,6 +474,15 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
             onAdd={handleBulkAdd}
             isPending={batchInsertItems.isPending}
           />
+        )}
+
+        {/* Stale data warning */}
+        {!!tracesError && traces.length > 0 && (
+          <div className="px-4 py-2 border-b border-border1 bg-surface2">
+            <Txt variant="ui-xs" className="text-red-400">
+              Failed to refresh traces. Showing last successful results.
+            </Txt>
+          </div>
         )}
 
         {/* Traces table */}
