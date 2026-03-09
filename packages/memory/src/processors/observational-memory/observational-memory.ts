@@ -976,11 +976,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     return ObservationalMemory.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
   }
 
-  private getModelToResolve(model: AgentConfig['model']) {
+  private getModelToResolve(model: AgentConfig['model']): Parameters<typeof resolveModelConfig>[0] {
     if (Array.isArray(model)) {
-      return model[0]?.model ?? 'unknown';
+      return (model[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
     }
-
+    if (typeof model === 'function') {
+      // Wrap to handle functions that may return ModelWithRetries[]
+      return async ctx => {
+        const result = await model(ctx);
+        if (Array.isArray(result)) {
+          return (result[0]?.model ?? 'unknown') as MastraModelConfig;
+        }
+        return result as MastraModelConfig;
+      };
+    }
     return model;
   }
 
@@ -3150,7 +3159,7 @@ ${suggestedResponse}
             `[OM:async-obs] belowThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, shouldTrigger=${shouldTrigger}, isBufferingObs=${record.isBufferingObservation}, lastBufferedAt=${record.lastBufferedAtTokens}`,
           );
           if (shouldTrigger) {
-            this.startAsyncBufferedObservation(
+            void this.startAsyncBufferedObservation(
               record,
               threadId,
               unobservedMessages,
@@ -3169,7 +3178,7 @@ ${suggestedResponse}
             `[OM:async-obs] atOrAboveThreshold: pending=${totalPendingTokens}, unbuffered=${unbufferedPendingTokens}, threshold=${threshold}, step=${stepNumber}, shouldTrigger=${shouldTrigger}`,
           );
           if (shouldTrigger) {
-            this.startAsyncBufferedObservation(
+            void this.startAsyncBufferedObservation(
               record,
               threadId,
               unobservedMessages,
@@ -3365,8 +3374,7 @@ ${suggestedResponse}
       }
 
       return messageList;
-    },
-    );
+    });
   }
 
   /**
