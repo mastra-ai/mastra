@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "",
   "type": "module",
   "files": [
@@ -96,10 +96,11 @@
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.89",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
+    "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

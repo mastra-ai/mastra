@@ -124,13 +124,15 @@ const workspace = new Workspace({
 
 ## How agents use skills
 
-When an agent activates a skill, the skill's instructions are added to the conversation context. The agent can then follow those instructions and access the skill's references and scripts.
+When a workspace has skills configured, agents automatically get access to skill tools. Available skills are listed in the system message so the agent knows what's available, and the agent can load any skill on demand.
 
-Under the hood this involves:
+The agent has three skill tools:
 
-1. Lists available skills in the system message
-1. Allows agents to activate skills during conversation
-1. Provides access to skill references and scripts
+- **`skill`** — Loads a skill's full instructions and returns them in the tool result. The agent calls this whenever it needs a skill's guidance.
+- **`skill_read`** — Reads a file from a skill's `references/`, `scripts/`, or `assets/` directory.
+- **`skill_search`** — Searches across all skill content. Uses BM25 or vector search when configured, otherwise falls back to basic text matching.
+
+This design is stateless — there is no activation state to track. If the skill instructions leave the conversation context (due to context window limits or compaction), the agent can call `skill` again to reload them.
 
 ## Skill search
 
@@ -170,7 +172,7 @@ const workspace = new Workspace({
 - **`blobStore`** (`BlobStore`) — A content-addressable blob store instance that holds the actual file contents referenced by hash.
 - **`versionCreatedAt`** (`Date`) — The timestamp when this skill version was published. Used as the modification time for all files in the version.
 
-When `skillSource` is provided, it is used instead of the workspace filesystem for skill discovery.
+When `skillSource` is provided, it's used instead of the workspace filesystem for skill discovery.
 
 ## Related
 

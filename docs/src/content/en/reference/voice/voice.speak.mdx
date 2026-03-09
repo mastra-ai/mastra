@@ -28,12 +28,20 @@ The `speak()` method is a core function available in all Mastra voice providers 
     type: 'object',
     description: 'Options for speech synthesis',
     isOptional: true,
-  },
-  {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Voice ID to use for this specific request. Overrides the default speaker set in the constructor.',
-    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description:
+              'Voice ID to use for this specific request. Overrides the default speaker set in the constructor.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -54,11 +62,24 @@ Each voice provider may support additional options specific to their implementat
 <PropertiesTable
   content={[
   {
-    name: 'options.speed',
-    type: 'number',
-    description: 'Speech speed multiplier. Values between 0.25 and 4.0 are supported.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: '1.0',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speed',
+            type: 'number',
+            description: 'Speech speed multiplier. Values between 0.25 and 4.0 are supported.',
+            isOptional: true,
+            defaultValue: '1.0',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -68,18 +89,31 @@ Each voice provider may support additional options specific to their implementat
 <PropertiesTable
   content={[
   {
-    name: 'options.stability',
-    type: 'number',
-    description: 'Voice stability. Higher values result in more stable, less expressive speech.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: '0.5',
-  },
-  {
-    name: 'options.similarity_boost',
-    type: 'number',
-    description: 'Voice clarity and similarity to the original voice.',
-    isOptional: true,
-    defaultValue: '0.75',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'stability',
+            type: 'number',
+            description: 'Voice stability. Higher values result in more stable, less expressive speech.',
+            isOptional: true,
+            defaultValue: '0.5',
+          },
+          {
+            name: 'similarity_boost',
+            type: 'number',
+            description: 'Voice clarity and similarity to the original voice.',
+            isOptional: true,
+            defaultValue: '0.75',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -89,17 +123,30 @@ Each voice provider may support additional options specific to their implementat
 <PropertiesTable
   content={[
   {
-    name: 'options.languageCode',
-    type: 'string',
-    description: "Language code for the voice (e.g., 'en-US').",
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-  },
-  {
-    name: 'options.audioConfig',
-    type: 'object',
-    description: 'Audio configuration options from Google Cloud Text-to-Speech API.',
-    isOptional: true,
-    defaultValue: "{ audioEncoding: 'LINEAR16' }",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'languageCode',
+            type: 'string',
+            description: "Language code for the voice (e.g., 'en-US').",
+            isOptional: true,
+          },
+          {
+            name: 'audioConfig',
+            type: 'object',
+            description: 'Audio configuration options from Google Cloud Text-to-Speech API.',
+            isOptional: true,
+            defaultValue: "{ audioEncoding: 'LINEAR16' }",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -109,22 +156,48 @@ Each voice provider may support additional options specific to their implementat
 <PropertiesTable
   content={[
   {
-    name: 'options.properties.rate',
-    type: 'number',
-    description: 'Speech rate multiplier.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-  },
-  {
-    name: 'options.properties.pitch',
-    type: 'number',
-    description: 'Voice pitch adjustment.',
-    isOptional: true,
-  },
-  {
-    name: 'options.properties.format',
-    type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
-    description: 'Output audio format.',
-    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'properties',
+            type: 'object',
+            description: 'properties configuration.',
+            isOptional: true,
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'rate',
+                    type: 'number',
+                    description: 'Speech rate multiplier.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'pitch',
+                    type: 'number',
+                    description: 'Voice pitch adjustment.',
+                    isOptional: true,
+                  },
+                  {
+                    name: 'format',
+                    type: "'MP3' | 'WAV' | 'FLAC' | 'ALAW' | 'ULAW'",
+                    description: 'Output audio format.',
+                    isOptional: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

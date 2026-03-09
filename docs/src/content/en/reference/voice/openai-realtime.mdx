@@ -154,11 +154,24 @@ Emits a speaking event using the configured voice model. Can accept either a str
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Voice ID to use for this specific speech request.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Voice ID to use for this specific speech request.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

@@ -180,9 +180,9 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
   - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
   - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
-- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the _explicitly defined tool will take precedence_. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
+- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
 
-This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, just like any other tool.
+This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, like any other tool.
 
 ### Agent-to-Tool Conversion
 
@@ -517,7 +517,7 @@ Use the default session-based mode (without `serverless: true`) for:
 
 The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
 
-**Note:** The following MCP features require session state or persistent connections and will **not work** in serverless mode:
+**Note:** The following MCP features require session state or persistent connections and **won't work** in serverless mode:
 
 - **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
 - **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
@@ -971,7 +971,7 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 ## Elicitation
 
-### What is Elicitation?
+### What's Elicitation?
 
 Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
 
