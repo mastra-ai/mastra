@@ -1,6 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/playground-ui': patch
 ---
 
 **Absolute paths now resolve to real filesystem locations instead of being treated as workspace-relative.**
