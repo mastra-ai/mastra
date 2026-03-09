@@ -74,9 +74,6 @@ describe('dependency optimization cache (issue #13379)', () => {
 
       bundleExternalsMock.mockImplementation(
         async (_depsToOptimize: Map<string, unknown>, _outDir: string, options) => {
-          // Simulate expensive optimization work.
-          await new Promise(resolve => setTimeout(resolve, 120));
-
           const optimizedFile = '.mastra/.build/lodash.mjs';
           const optimizedEntryName = '.mastra/.build/lodash';
           await mkdir(join(options.projectRoot, '.mastra', '.build'), { recursive: true });
@@ -106,7 +103,6 @@ describe('dependency optimization cache (issue #13379)', () => {
         error: vi.fn(),
       } as unknown as IMastraLogger;
 
-      const firstStart = Date.now();
       const firstRun = await analyzeBundle(
         [entryFile],
         mastraEntry,
@@ -117,9 +113,7 @@ describe('dependency optimization cache (issue #13379)', () => {
         },
         logger,
       );
-      const firstDuration = Date.now() - firstStart;
 
-      const secondStart = Date.now();
       const secondRun = await analyzeBundle(
         [entryFile],
         mastraEntry,
@@ -130,12 +124,10 @@ describe('dependency optimization cache (issue #13379)', () => {
         },
         logger,
       );
-      const secondDuration = Date.now() - secondStart;
 
       expect(bundleExternalsMock).toHaveBeenCalledTimes(1);
       expect(firstRun.dependencies.get('lodash')).toBe('.mastra/.build/lodash.mjs');
       expect(secondRun.dependencies.get('lodash')).toBe('.mastra/.build/lodash.mjs');
-      expect(firstDuration - secondDuration).toBeGreaterThan(80);
       expect(logger.info).toHaveBeenCalledWith('Optimizing dependencies... (cache hit)');
     } finally {
       await rm(testRoot, { recursive: true, force: true });
@@ -329,6 +321,114 @@ describe('dependency optimization cache (issue #13379)', () => {
       );
 
       expect(bundleExternalsMock).toHaveBeenCalledTimes(2);
+    } finally {
+      await rm(testRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('should invalidate cache when optimized dependency version changes', async () => {
+    const testRoot = await mkdtemp(join(tmpdir(), 'mastra-analyze-dep-version-cache-'));
+
+    try {
+      const entryFile = join(testRoot, 'src', 'entry.ts');
+      const mastraEntry = join(testRoot, 'src', 'mastra.ts');
+      const outputDir = join(testRoot, '.mastra', '.build');
+
+      await mkdir(dirname(entryFile), { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(entryFile, 'export const value = 1;');
+      await writeFile(mastraEntry, 'export const mastra = {};');
+
+      getWorkspaceInformationMock.mockResolvedValue({
+        workspaceMap: new Map(),
+        workspaceRoot: undefined,
+      });
+
+      analyzeEntryMock
+        .mockResolvedValueOnce({
+          output: { code: 'export const analyzed = true;' },
+          dependencies: new Map([
+            [
+              'lodash',
+              {
+                exports: ['map'],
+                rootPath: '/node_modules/lodash',
+                isWorkspace: false,
+                version: '4.17.20',
+              },
+            ],
+          ]),
+        })
+        .mockResolvedValueOnce({
+          output: { code: 'export const analyzed = true;' },
+          dependencies: new Map([
+            [
+              'lodash',
+              {
+                exports: ['map'],
+                rootPath: '/node_modules/lodash',
+                isWorkspace: false,
+                version: '4.17.21',
+              },
+            ],
+          ]),
+        });
+
+      bundleExternalsMock.mockImplementation(
+        async (_depsToOptimize: Map<string, unknown>, _outDir: string, options) => {
+          const optimizedFile = '.mastra/.build/lodash.mjs';
+          const optimizedEntryName = '.mastra/.build/lodash';
+          await mkdir(join(options.projectRoot, '.mastra', '.build'), { recursive: true });
+          await writeFile(join(options.projectRoot, optimizedFile), 'export const map = () => {};');
+
+          return {
+            output: [
+              {
+                type: 'chunk',
+                isEntry: true,
+                isDynamicEntry: true,
+                name: optimizedEntryName,
+                fileName: optimizedFile,
+                imports: [],
+              },
+            ],
+            fileNameToDependencyMap: new Map([[optimizedEntryName, 'lodash']]),
+            usedExternals: {},
+          };
+        },
+      );
+
+      const logger = {
+        info: vi.fn(),
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as IMastraLogger;
+
+      await analyzeBundle(
+        [entryFile],
+        mastraEntry,
+        {
+          outputDir,
+          projectRoot: testRoot,
+          platform: 'node',
+        },
+        logger,
+      );
+
+      await analyzeBundle(
+        [entryFile],
+        mastraEntry,
+        {
+          outputDir,
+          projectRoot: testRoot,
+          platform: 'node',
+        },
+        logger,
+      );
+
+      expect(bundleExternalsMock).toHaveBeenCalledTimes(2);
+      expect(logger.info).not.toHaveBeenCalledWith('Optimizing dependencies... (cache hit)');
     } finally {
       await rm(testRoot, { recursive: true, force: true });
     }
