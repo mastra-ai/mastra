@@ -261,4 +261,54 @@ describe('analyzeEntry', () => {
     // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
     // (Test will timeout if there's an infinite loop issue)
   });
+
+  it('should deduplicate Rollup instances when analyzeCache is provided (#12843)', async () => {
+    const entryFilePath = join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts');
+
+    const analyzeCache = new Map();
+    const opts = {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+      analyzeCache,
+    };
+
+    // First call: cache miss — creates a Rollup instance
+    const result1 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
+
+    // Second call with the same entry: cache hit — no new Rollup instance
+    const result2 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
+
+    // Only 1 Rollup instance created despite 2 analyzeEntry calls
+    expect(rollup).toHaveBeenCalledTimes(1);
+    // Both return the same result
+    expect(result1).toBe(result2);
+    expect(result1.dependencies.size).toBe(4);
+    // Cache populated
+    expect(analyzeCache.size).toBe(1);
+  });
+
+  it('should not cache virtual file entries', async () => {
+    const entryCode = `
+      import { Mastra } from '@mastra/core/mastra';
+      export const mastra = new Mastra({});
+    `;
+
+    const analyzeCache = new Map();
+    const opts = {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+      analyzeCache,
+    };
+
+    await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
+    await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
+
+    // Virtual files have no stable path — each call creates a new Rollup instance
+    expect(rollup).toHaveBeenCalledTimes(2);
+    expect(analyzeCache.size).toBe(0);
+  });
 });
