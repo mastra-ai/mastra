@@ -70,6 +70,7 @@ describe('Dataset', () => {
       getScorerById: vi.fn(),
       getWorkflowById: vi.fn(),
       getWorkflow: vi.fn(),
+      getLogger: vi.fn().mockReturnValue({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
     } as unknown as Mastra;
 
     // Create a dataset for tests that need one
@@ -304,6 +305,77 @@ describe('Dataset', () => {
 
     // Wait for fire-and-forget to complete
     await new Promise(r => setTimeout(r, 500));
+  });
+
+  it('startExperimentAsync throws EXPERIMENT_NO_ITEMS on empty dataset', async () => {
+    await expect(
+      ds.startExperimentAsync({
+        task: async () => 'ok',
+        scorers: [],
+      }),
+    ).rejects.toThrow('has no items');
+
+    try {
+      await ds.startExperimentAsync({ task: async () => 'ok', scorers: [] });
+    } catch (err) {
+      expect(err).toBeInstanceOf(MastraError);
+      expect((err as MastraError).id).toBe('EXPERIMENT_NO_ITEMS');
+    }
+
+    // Verify no experiment record was created
+    const { experiments } = await ds.listExperiments();
+    expect(experiments).toHaveLength(0);
+  });
+
+  it('startExperimentAsync returns totalItems matching dataset item count', async () => {
+    await ds.addItem({ input: { prompt: 'Hello' } });
+    await ds.addItem({ input: { prompt: 'World' } });
+
+    const result = await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [],
+    });
+
+    expect(result.totalItems).toBe(2);
+
+    // Wait for fire-and-forget to complete
+    await new Promise(r => setTimeout(r, 500));
+  });
+
+  // 23b. startExperimentAsync — throws on empty dataset
+  it('startExperimentAsync throws EXPERIMENT_NO_ITEMS when dataset has no items', async () => {
+    // Dataset has no items — do NOT add any
+    try {
+      await ds.startExperimentAsync({
+        task: async () => 'ok',
+        scorers: [],
+      });
+      expect.fail('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(MastraError);
+      expect((err as MastraError).id).toBe('EXPERIMENT_NO_ITEMS');
+    }
+
+    // Verify no experiment record was created
+    const result = await experimentsStorage.listExperiments({
+      datasetId,
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(result.experiments.length).toBe(0);
+  });
+
+  // 23c. startExperiment — throws on empty dataset (sync path)
+  it('startExperiment throws on empty dataset', async () => {
+    try {
+      await ds.startExperiment({
+        task: async () => 'ok',
+        scorers: [],
+      });
+      expect.fail('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain('No items in dataset');
+    }
   });
 
   // 24. listExperiments

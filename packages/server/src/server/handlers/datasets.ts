@@ -76,6 +76,8 @@ function getHttpStatusForMastraError(errorId: string): number {
     case 'DATASET_NOT_FOUND':
     case 'EXPERIMENT_NOT_FOUND':
       return 404;
+    case 'EXPERIMENT_NO_ITEMS':
+      return 400;
     default:
       return 500;
   }
@@ -490,7 +492,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       return {
         experimentId: result.experimentId,
         status: result.status,
-        totalItems: 0,
+        totalItems: result.totalItems,
         succeededCount: 0,
         failedCount: 0,
         startedAt: new Date(),

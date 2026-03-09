@@ -191,6 +191,7 @@ export function DatasetPageContent({
               onDuplicateClick={() => setDuplicateDialogOpen(true)}
               onDeleteClick={onDeleteClick}
               experimentTriggerSlot={experimentTriggerSlot}
+              disableExperimentTrigger={!isItemsLoading && items.length === 0}
               onExperimentClick={onExperimentClick}
             />
 

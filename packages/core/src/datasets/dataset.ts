@@ -283,7 +283,7 @@ export class Dataset {
    */
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
-  ): Promise<{ experimentId: string; status: 'pending' }> {
+  ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
     const experimentsStore = await this.#getExperimentsStore();
     const datasetsStore = await this.#getDatasetsStore();
 
@@ -297,12 +297,27 @@ export class Dataset {
       });
     }
 
+    // Validate that dataset has items before creating experiment record
+    const targetVersion = config.version ?? dataset.version;
+    const items = await datasetsStore.getItemsByVersion({
+      datasetId: this.id,
+      version: targetVersion,
+    });
+    if (items.length === 0) {
+      throw new MastraError({
+        id: 'EXPERIMENT_NO_ITEMS',
+        text: `Cannot run experiment: dataset "${this.id}" has no items at version ${targetVersion}`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+
     const run = await experimentsStore.createExperiment({
       datasetId: this.id,
       datasetVersion: dataset.version,
       targetType: config.targetType ?? 'agent',
       targetId: config.targetId ?? 'inline',
-      totalItems: 0,
+      totalItems: items.length,
       name: config.name,
       description: config.description,
       metadata: config.metadata,
@@ -310,14 +325,23 @@ export class Dataset {
 
     const experimentId = run.id;
 
-    // Fire-and-forget — errors are silently caught
+    // Fire-and-forget — update experiment to failed on unexpected errors
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
       ...config,
-    } as ExperimentConfig).catch(() => {});
+    } as ExperimentConfig).catch(async err => {
+      await experimentsStore
+        .updateExperiment({
+          id: experimentId,
+          status: 'failed',
+          completedAt: new Date(),
+        })
+        .catch(() => {});
+      this.#mastra.getLogger()?.error(`Experiment ${experimentId} failed: ${err?.message ?? err}`);
+    });
 
-    return { experimentId, status: 'pending' as const };
+    return { experimentId, status: 'pending' as const, totalItems: items.length };
   }
 
   /**
