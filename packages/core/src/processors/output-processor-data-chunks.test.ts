@@ -420,4 +420,139 @@ describe('Output Processor Data Chunks (#13341)', () => {
     // But the processor should NOT have seen any data-* chunks
     expect(capturedChunkTypes.filter(t => t.startsWith('data-'))).toHaveLength(0);
   });
+
+  it('should chain data-* chunks through multiple processors in order', async () => {
+    const processorOrder: string[] = [];
+
+    class FirstProcessor implements Processor {
+      readonly id = 'first-processor';
+      readonly name = 'First Processor';
+      readonly processDataParts = true;
+
+      async processOutputStream({ part }: any) {
+        if (part.type === 'data-pipeline') {
+          processorOrder.push('first');
+          return { ...part, data: { ...part.data, first: true } };
+        }
+        return part;
+      }
+    }
+
+    class SecondProcessor implements Processor {
+      readonly id = 'second-processor';
+      readonly name = 'Second Processor';
+      readonly processDataParts = true;
+
+      async processOutputStream({ part }: any) {
+        if (part.type === 'data-pipeline') {
+          processorOrder.push('second');
+          return { ...part, data: { ...part.data, second: true } };
+        }
+        return part;
+      }
+    }
+
+    const toolWithData = createTool({
+      id: 'toolWithData',
+      description: 'A test tool',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async (inputData, { writer }) => {
+        writer!.custom({ type: 'data-pipeline', data: { original: true } });
+        return `Done: ${inputData.text}`;
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model: createToolCallingModel('toolWithData') as any,
+      tools: { toolWithData },
+      outputProcessors: [new FirstProcessor(), new SecondProcessor()],
+    });
+
+    const stream = await agent.stream('Call the tool', { maxSteps: 5 });
+
+    const dataChunks: any[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'data-pipeline') {
+        dataChunks.push(chunk);
+      }
+    }
+
+    // Both processors should have run in order
+    expect(processorOrder).toEqual(['first', 'second']);
+
+    // The final chunk should have mutations from both processors
+    expect(dataChunks).toHaveLength(1);
+    expect(dataChunks[0].data).toEqual({ original: true, first: true, second: true });
+  });
+
+  it('should only deliver data-* chunks to processors that opt in when mixed', async () => {
+    const optedInChunks: string[] = [];
+    const regularChunks: string[] = [];
+
+    class OptedInProcessor implements Processor {
+      readonly id = 'opted-in-processor';
+      readonly name = 'Opted In Processor';
+      readonly processDataParts = true;
+
+      async processOutputStream({ part }: any) {
+        optedInChunks.push(part.type);
+        if (part.type === 'data-info') {
+          return { ...part, data: { ...part.data, seen: true } };
+        }
+        return part;
+      }
+    }
+
+    class RegularProcessor implements Processor {
+      readonly id = 'regular-processor';
+      readonly name = 'Regular Processor';
+      // processDataParts NOT set — defaults to false
+
+      async processOutputStream({ part }: any) {
+        regularChunks.push(part.type);
+        return part;
+      }
+    }
+
+    const toolWithData = createTool({
+      id: 'toolWithData',
+      description: 'A test tool',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async (inputData, { writer }) => {
+        writer!.custom({ type: 'data-info', data: { value: 1 } });
+        return `Done: ${inputData.text}`;
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent',
+      model: createToolCallingModel('toolWithData') as any,
+      tools: { toolWithData },
+      outputProcessors: [new OptedInProcessor(), new RegularProcessor()],
+    });
+
+    const stream = await agent.stream('Call the tool', { maxSteps: 5 });
+
+    const dataChunks: any[] = [];
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'data-info') {
+        dataChunks.push(chunk);
+      }
+    }
+
+    // The opted-in processor should have seen the data-* chunk
+    expect(optedInChunks.filter(t => t.startsWith('data-'))).toHaveLength(1);
+
+    // The regular processor should NOT have seen any data-* chunks
+    expect(regularChunks.filter(t => t.startsWith('data-'))).toHaveLength(0);
+
+    // The chunk should still appear in the stream with the opted-in processor's mutation
+    expect(dataChunks).toHaveLength(1);
+    expect(dataChunks[0].data).toEqual({ value: 1, seen: true });
+  });
 });
