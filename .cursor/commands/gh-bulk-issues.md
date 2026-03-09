@@ -18,11 +18,13 @@ Summarize the user's contribution areas and match them to open issues. Ask the u
 For each issue number in the list:
 
 1. **Create a git worktree** with a dedicated branch:
+
    ```
    git worktree add ../$(basename $PWD)-issue-<NUMBER> -b fix/issue-<NUMBER>
    ```
 
 2. **Install and build** in the worktree. Run 2 worktrees at a time to manage CPU:
+
    ```
    cd ../$(basename $PWD)-issue-<NUMBER> && pnpm i && pnpm build
    ```
