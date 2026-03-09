@@ -5,12 +5,14 @@ Let's check that your project has the correct structure. You should have:
 1. A `src/mastra` directory that contains:
    - `index.ts` - The main entry point for your Mastra project
    - `agents/` - Directory containing individual agent files
+   - `scorers/` - Directory containing individual scorer files
    - `tools/` - Directory containing individual tool files
    - `workflows/` - Directory containing individual workflow files
 
 If the CLI created your project, you should see files like:
 
 - `agents/weather-agent.ts` - Example weather agent
+- `scorers/weather-scorer.ts` - Example weather scorer
 - `tools/weather-tool.ts` - Example weather tool
 - `workflows/weather-workflow.ts` - Example weather workflow
 

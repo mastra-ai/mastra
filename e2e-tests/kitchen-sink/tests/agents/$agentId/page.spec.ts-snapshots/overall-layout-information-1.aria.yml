@@ -1,6 +1,0 @@
-- navigation:
-    - list:
-        - listitem:
-            - link "Agents":
-                - /url: /agents
-                - img

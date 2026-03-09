@@ -2,15 +2,15 @@ import { z } from 'zod';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
+import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import type { OutputSchema } from '../../../stream/base/schema';
 import { createStep } from '../../../workflows';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
-interface PrepareToolsStepOptions<OUTPUT extends OutputSchema | undefined = undefined> {
+interface PrepareToolsStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
@@ -22,7 +22,7 @@ interface PrepareToolsStepOptions<OUTPUT extends OutputSchema | undefined = unde
   memory?: MastraMemory;
 }
 
-export function createPrepareToolsStep<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createPrepareToolsStep<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -64,11 +64,12 @@ export function createPrepareToolsStep<OUTPUT extends OutputSchema | undefined =
         resourceId,
         runId,
         requestContext,
-        tracingContext: { currentSpan: agentSpan },
+        ...createObservabilityContext({ currentSpan: agentSpan }),
         outputWriter: options.outputWriter,
         methodType,
         memoryConfig: options.memory?.options,
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
+        delegation: options.delegation,
       });
 
       return {

@@ -218,10 +218,14 @@ export function createResourcesTest({ storage }: { storage: MastraStorage }) {
       };
 
       const savedResource = await memoryStorage.saveResource({ resource });
-      expect(!!savedResource.metadata).toBe(false);
+      // Stores may normalize undefined to {} or return as-is
+      expect(savedResource.metadata === undefined || Object.keys(savedResource.metadata || {}).length === 0).toBe(true);
 
       const retrievedResource = await memoryStorage.getResourceById({ resourceId: resource.id });
-      expect(!!retrievedResource?.metadata).toBe(false);
+      // Retrieved metadata should be either undefined or empty object (no crash)
+      expect(
+        retrievedResource?.metadata === undefined || Object.keys(retrievedResource?.metadata || {}).length === 0,
+      ).toBe(true);
     });
 
     it('should handle complex metadata structures', async () => {

@@ -147,11 +147,11 @@ async function pushToRepo(repoName) {
     );
 
     try {
-      console.log(`Check out to beta branch in local`);
+      console.log(`Check out to main branch in local`);
       execSync(
         `
-      git checkout beta &&
-      git pull origin beta
+      git checkout main &&
+      git pull origin main
       `,
         {
           stdio: 'inherit',
@@ -159,10 +159,10 @@ async function pushToRepo(repoName) {
         },
       );
     } catch (error) {
-      console.log(`No beta branch found in local, creating new beta branch`);
+      console.log(`No main branch found in local, creating new main branch`);
       execSync(
         `
-        git checkout -b beta
+        git checkout -b main
       `,
         { stdio: 'inherit', cwd: tempDir },
       );
@@ -190,13 +190,13 @@ async function pushToRepo(repoName) {
     fsExtra.copySync(templatePath, tempDir);
 
     // Initialize git and push to repo
-    console.log(`Pushing to beta branch`);
+    console.log(`Pushing to main branch`);
     try {
       execSync(
         `
       git add . &&
-      git commit -m "Update template from monorepo (beta v1.0)" &&
-      git push origin beta
+      git commit -m "Update template from monorepo (main)" &&
+      git push origin main
     `,
         { stdio: 'inherit', cwd: tempDir },
       );

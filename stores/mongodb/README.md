@@ -105,6 +105,7 @@ The MongoDB vector store is initialized with:
 - `id`: Unique identifier for this store instance
 - `uri`: MongoDB connection string (with credentials and options)
 - `dbName`: Name of the database to use
+- `embeddingFieldPath` (optional): Path to the field that stores vector embeddings. Supports nested paths using dot notation (e.g., `'text.contentEmbedding'`). Defaults to `'embedding'`.
 
 Example:
 
@@ -113,6 +114,19 @@ const vectorDB = new MongoDBVector({
   id: 'mongodb-vector',
   uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
   dbName: 'vector_db',
+});
+```
+
+### Custom Embedding Field Path
+
+If you need to store embeddings in a nested field structure, use the `embeddingFieldPath` option:
+
+```typescript
+const vectorDB = new MongoDBVector({
+  id: 'mongodb-vector',
+  uri: 'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true',
+  dbName: 'vector_db',
+  embeddingFieldPath: 'text.contentEmbedding', // Store embeddings at text.contentEmbedding
 });
 ```
 

@@ -4,7 +4,7 @@ This example demonstrates how to create a simple custom metric in Mastra that ch
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 
 ## Getting Started

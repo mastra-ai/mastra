@@ -1,5 +1,5 @@
-import posthog from 'posthog-js';
 import { PostHogProvider as PHProvider } from '@posthog/react';
+import posthog from 'posthog-js';
 import { useEffect } from 'react';
 
 export function PostHogProvider({ children }: { children: React.ReactNode }) {
@@ -9,7 +9,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // @ts-ignore - window is always defined in the browser and we don't want to type this out.
+    // @ts-expect-error - window is always defined in the browser and we don't want to type this out.
     if (window.MASTRA_TELEMETRY_DISABLED) {
       console.info('[Analytics]: Telemetry is disabled.');
       return;

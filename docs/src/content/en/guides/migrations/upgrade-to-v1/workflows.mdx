@@ -24,8 +24,8 @@ To migrate, replace all calls to `mastra.getWorkflows()` with `mastra.listWorkfl
 
 You can use Mastra's codemod CLI to update your imports automatically:
 
-```shell
-npx @mastra/codemod@beta v1/mastra-plural-apis .
+```bash
+npx @mastra/codemod@latest v1/mastra-plural-apis .
 ```
 
 :::
@@ -51,8 +51,8 @@ To migrate, update references from `runtimeContext` to `requestContext` in step 
 
 You can use Mastra's codemod CLI to update your imports automatically:
 
-```shell
-npx @mastra/codemod@beta v1/runtime-context .
+```bash
+npx @mastra/codemod@latest v1/runtime-context .
 ```
 
 :::
@@ -72,8 +72,8 @@ To migrate, rename method calls from `createRunAsync` to `createRun`.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/workflow-create-run-async .
+```bash
+npx @mastra/codemod@latest v1/workflow-create-run-async .
 ```
 
 :::
@@ -97,8 +97,34 @@ To migrate, rename `runCount` to `retryCount` in step execution functions.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/workflow-run-count .
+```bash
+npx @mastra/codemod@latest v1/workflow-run-count .
+```
+
+:::
+
+### `getInitData` returns unknown
+
+The `getInitData` function in the execute function now returns unknown instead of any. You'll need to type it yourself.
+To migrate, change `getInitData()` into `getInitData<any>()`
+
+```diff
+  createStep({
+    execute: async ({ getInitData }) => {
+-     const initData = getInitData();
+-     if (initData.key === 'value') {}
++     const initData = getInitData<any>();
++     if (initData.key === 'value') {}
+    },
+  });
+```
+
+:::tip[Codemod]
+
+You can use Mastra's codemod CLI to update your code automatically:
+
+```bash
+npx @mastra/codemod@latest v1/workflow-get-init-data .
 ```
 
 :::
@@ -118,15 +144,15 @@ To migrate, rename method calls from `getWorkflowRuns` to `listWorkflowRuns`.
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/workflow-list-runs .
+```bash
+npx @mastra/codemod@latest v1/workflow-list-runs .
 ```
 
 :::
 
 ### Inputs are validated by default
 
-Previously, inputs weren't validated by default. The [`validateInputs`](/reference/v1/workflows/workflow#workflowoptions) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
+Previously, inputs weren't validated by default. The [`validateInputs`](/reference/workflows/workflow#constructor-parameters) flag determines whether to validate the workflow inputs or not. This boolean has been flipped to `true`. If you want the old behavior or have workflows whose schemas don't need to be validated, set `validateInputs: false`.
 
 ```diff
 createWorkflow({
@@ -204,17 +230,17 @@ This change simplifies the API - rather than creating a `WritableStream` wrapper
 
 :::note
 
-The `writer` parameter passed to step `execute` functions is not affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
+The `writer` parameter passed to step `execute` functions isn't affected by this change. It remains a `ToolStream` that extends `WritableStream<unknown>` and provides `.write()` and `.custom()` methods:
 
 ```ts
 createStep({
   id: 'my-step',
   execute: async ({ writer }) => {
     // This API is unchanged
-    await writer.write({ data: 'some output' });
-    await writer.custom({ type: 'custom-event', payload: {} });
+    await writer.write({ data: 'some output' })
+    await writer.custom({ type: 'custom-event', payload: {} })
   },
-});
+})
 ```
 
 :::
@@ -240,21 +266,21 @@ The experimental `streamVNext()`, `resumeStreamVNext()`, and `observeStreamVNext
 
 To migrate, use the standard `stream()`, `resumeStream()`, and `observeStream()` methods. Update event type checks to use workflow-prefixed names and access stream properties directly.
 
-See [`Run.stream()`](/reference/v1/streaming/workflows/stream), [`Run.resumeStream()`](/reference/v1/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/v1/streaming/workflows/observeStream) for details.
+See [`Run.stream()`](/reference/streaming/workflows/stream), [`Run.resumeStream()`](/reference/streaming/workflows/resumeStream), and [`Run.observeStream()`](/reference/streaming/workflows/observeStream) for details.
 
 :::tip[Codemod]
 
 You can use Mastra's codemod CLI to update your code automatically:
 
-```shell
-npx @mastra/codemod@beta v1/workflow-stream-vnext .
+```bash
+npx @mastra/codemod@latest v1/workflow-stream-vnext .
 ```
 
 :::
 
-### `suspend` and `setState` are not available in step condition functions parameters
+### `suspend` and `setState` aren't available in step condition functions parameters
 
-The `suspend` and `setState` functions are not available in step condition functions parameters.
+The `suspend` and `setState` functions aren't available in step condition functions parameters.
 
 To migrate, use the `suspend` function in the step execute function instead.
 
@@ -272,7 +298,7 @@ This is the same for `dountil` and `branch` condition functions parameters.
 
 The `./workflows/legacy` export path has been removed from `@mastra/core`. Legacy workflows are no longer supported.
 
-To migrate, use the new workflow API. There is no direct migration path from legacy workflows.
+To migrate, use the new workflow API. No direct migration path exists from legacy workflows.
 
 ```diff
 - import { LegacyWorkflow } from '@mastra/core/workflows/legacy';
@@ -347,3 +373,7 @@ createStep({
 +   });
 + }
 ```
+
+### `sendEvent` API
+
+The `sendEvent` API has been removed from workflows. Use the suspend/resume API instead.

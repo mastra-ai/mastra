@@ -5,7 +5,7 @@ import { MessageList } from '../../agent';
 import type { IMastraLogger } from '../../logger';
 import { parseMemoryRequestContext } from '../../memory';
 import type { MastraDBMessage } from '../../memory';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../../vector';
@@ -131,6 +131,10 @@ export class SemanticRecall implements Processor {
   // xxhash-wasm hasher instance (initialized as a promise)
   private hasher = xxhash();
 
+  // Cache for index dimension validation (per-process)
+  // Prevents redundant API calls when index already validated
+  private indexValidationCache = new Map<string, { dimension: number }>();
+
   constructor(options: SemanticRecallOptions) {
     this.storage = options.storage;
     this.vector = options.vector;
@@ -158,13 +162,14 @@ export class SemanticRecall implements Processor {
     }
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    messageList: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> {
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList | MastraDBMessage[]> {
     const { messages, messageList, requestContext } = args;
 
     // Get memory context from RequestContext
@@ -454,33 +459,39 @@ export class SemanticRecall implements Processor {
 
   /**
    * Ensure vector index exists with correct dimensions
+   * Uses in-memory cache to avoid redundant validation calls
    */
   private async ensureVectorIndex(indexName: string, dimension: number): Promise<void> {
-    // Check if index exists
-    const indexes = await this.vector.listIndexes();
-    const indexExists = indexes.includes(indexName);
-
-    if (!indexExists) {
-      // Create index if it doesn't exist
-      await this.vector.createIndex({
-        indexName,
-        dimension,
-        metric: 'cosine',
-      });
+    // Check cache first - if already validated in this process, skip
+    const cached = this.indexValidationCache.get(indexName);
+    if (cached?.dimension === dimension) {
+      return;
     }
+
+    // Always call createIndex - it's idempotent and validates dimensions
+    // Vector stores handle the "already exists" case and validate dimensions
+    await this.vector.createIndex({
+      indexName,
+      dimension,
+      metric: 'cosine',
+    });
+
+    // Cache the validated dimension to avoid redundant calls
+    this.indexValidationCache.set(indexName, { dimension });
   }
 
   /**
    * Process output messages to create embeddings for messages being saved
    * This allows semantic recall to index new messages for future retrieval
    */
-  async processOutputResult(args: {
-    messages: MastraDBMessage[];
-    messageList?: MessageList;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-    requestContext?: RequestContext;
-  }): Promise<MessageList | MastraDBMessage[]> {
+  async processOutputResult(
+    args: {
+      messages: MastraDBMessage[];
+      messageList?: MessageList;
+      abort: (reason?: string) => never;
+      requestContext?: RequestContext;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList | MastraDBMessage[]> {
     const { messages, messageList, requestContext } = args;
 
     if (!this.vector || !this.embedder || !this.storage) {

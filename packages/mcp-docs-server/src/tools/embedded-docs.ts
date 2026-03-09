@@ -750,7 +750,7 @@ export const searchEmbeddedDocsTool = {
 
           const lines = content.split('\n');
           for (let i = 0; i < lines.length; i++) {
-            if (lines[i].toLowerCase().includes(queryLower)) {
+            if (lines[i]?.toLowerCase().includes(queryLower)) {
               const start = Math.max(0, i - 1);
               const end = Math.min(lines.length, i + 3);
               const excerpt = lines.slice(start, end).join('\n').slice(0, 300);

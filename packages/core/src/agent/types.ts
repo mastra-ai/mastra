@@ -1,4 +1,4 @@
-import type { GenerateTextOnStepFinishCallback, ToolSet } from '@internal/ai-sdk-v4';
+import type { GenerateTextOnStepFinishCallback } from '@internal/ai-sdk-v4';
 import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema } from 'zod';
@@ -25,21 +25,28 @@ import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, StorageThreadType } from '../memory/types';
-import type { Span, SpanType, TracingContext, TracingOptions, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, SpanType, TracingOptions, TracingPolicy } from '../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { OutputSchema } from '../stream';
-import type { InferSchemaOutput } from '../stream/base/schema';
-import type { ModelManagerModelConfig } from '../stream/types';
+import type { MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
 import type { DynamicArgument } from '../types';
-import type { CompositeVoice } from '../voice';
+import type { MastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
+import type { AnyWorkspace } from '../workspace';
+import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
 
-export type { MastraDBMessage, MastraMessageContentV2, UIMessageWithMetadata, MessageList } from './message-list/index';
+export type {
+  MastraDBMessage,
+  MastraMessageContentV2,
+  MastraMessagePart,
+  UIMessageWithMetadata,
+  MessageList,
+} from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type { LLMStepResult } from '../stream/types';
 
@@ -47,24 +54,20 @@ export type { LLMStepResult } from '../stream/types';
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
-export type ToolsInput = Record<string, ToolAction<any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool>;
+export type ToolsInput = Record<
+  string,
+  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool
+>;
 
 export type AgentInstructions = SystemMessage;
-export type DynamicAgentInstructions = DynamicArgument<AgentInstructions>;
 
 export type ToolsetsInput = Record<string, ToolsInput>;
 
-type FallbackFields<OUTPUT extends OutputSchema = undefined> =
+type FallbackFields<OUTPUT = undefined> =
   | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
-  | { errorStrategy: 'fallback'; fallbackValue: InferSchemaOutput<OUTPUT> };
+  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
-export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
-  /** Zod schema to validate the output against */
-  schema: OUTPUT;
-
-  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
-  model?: MastraModelConfig;
-
+type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /**
    * Custom instructions for the structuring agent.
    * If not provided, will generate instructions based on the schema.
@@ -95,10 +98,19 @@ export type StructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = {
   providerOptions?: ProviderOptions;
 } & FallbackFields<OUTPUT>;
 
-export type SerializableStructuredOutputOptions<OUTPUT extends OutputSchema = undefined> = Omit<
-  StructuredOutputOptions<OUTPUT>,
-  'model'
-> & { model?: ModelRouterModelId | OpenAICompatibleConfig };
+export type StructuredOutputOptions<OUTPUT = {}> = {
+  /** Zod schema to validate the output against */
+  schema: NonNullable<OutputSchema<OUTPUT>>;
+
+  /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
+  model?: MastraModelConfig;
+} & StructuredOutputOptionsBase<OUTPUT>;
+
+export type SerializableStructuredOutputOptions<OUTPUT = {}> = StructuredOutputOptionsBase & {
+  model?: ModelRouterModelId | OpenAICompatibleConfig;
+  /** Zod schema to validate the output against */
+  schema: NonNullable<OutputSchema<OUTPUT>>;
+};
 
 /**
  * Provide options while creating an agent.
@@ -107,24 +119,19 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-// This is used in place of DynamicArgument so that model router IDE autocomplete works.
-// Without this TS doesn't understand the function/string union type from DynamicArgument
-type DynamicModel = ({
-  requestContext,
-  mastra,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-}) => Promise<MastraModelConfig> | MastraModelConfig;
-
-type ModelWithRetries = {
+export type ModelWithRetries = {
   id?: string;
-  model: MastraModelConfig | DynamicModel;
-  maxRetries?: number; //defaults to 0
-  enabled?: boolean; //defaults to true
+  model: DynamicArgument<MastraModelConfig>;
+  maxRetries?: number; // defaults to agent-level maxRetries
+  enabled?: boolean; // defaults to true
 };
 
-export interface AgentConfig<TAgentId extends string = string, TTools extends ToolsInput = ToolsInput> {
+export interface AgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+> {
   /**
    * Identifier for the agent.
    */
@@ -141,11 +148,72 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Instructions that guide the agent's behavior. Can be a string, array of strings, system message object,
    * array of system messages, or a function that returns any of these types dynamically.
    */
-  instructions: DynamicAgentInstructions;
+  instructions: DynamicArgument<AgentInstructions, TRequestContext>;
   /**
    * The language model used by the agent. Can be provided statically or resolved at runtime.
+   * Supports DynamicArgument for both single models and model fallback arrays.
+   *
+   * @example Static single model (magic string)
+   * ```typescript
+   * model: 'openai/gpt-4'
+   * ```
+   *
+   * @example Static single model (config object)
+   * ```typescript
+   * model: {
+   *   id: 'openai/gpt-4',
+   *   apiKey: process.env.OPENAI_API_KEY
+   * }
+   * ```
+   *
+   * @example Static fallback array
+   * ```typescript
+   * model: [
+   *   { model: 'openai/gpt-4', maxRetries: 2 },
+   *   { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   * ]
+   * ```
+   *
+   * @example Dynamic single model (tier-based selection)
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   return tier === 'premium' ? 'openai/gpt-4' : 'openai/gpt-3.5-turbo';
+   * }
+   * ```
+   *
+   * @example Dynamic fallback array (tier-based fallback configuration)
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const tier = requestContext.get('tier');
+   *   if (tier === 'premium') {
+   *     return [
+   *       { model: 'openai/gpt-4', maxRetries: 2 },
+   *       { model: 'anthropic/claude-3-opus', maxRetries: 1 }
+   *     ];
+   *   }
+   *   return [{ model: 'openai/gpt-3.5-turbo', maxRetries: 1 }];
+   * }
+   * ```
+   *
+   * @example Dynamic fallback array with nested dynamic models
+   * ```typescript
+   * model: ({ requestContext }) => {
+   *   const region = requestContext.get('region');
+   *   return [
+   *     {
+   *       // Each model can also be dynamic
+   *       model: ({ requestContext }) => {
+   *         return region === 'eu' ? 'openai/gpt-4-eu' : 'openai/gpt-4';
+   *       },
+   *       maxRetries: 2
+   *     },
+   *     { model: 'openai/gpt-3.5-turbo', maxRetries: 1 }
+   *   ];
+   * }
+   * ```
    */
-  model: MastraModelConfig | DynamicModel | ModelWithRetries[];
+  model: DynamicArgument<MastraModelConfig | ModelWithRetries[]>;
   /**
    * Maximum number of retries for model calls in case of failure.
    * @defaultValue 0
@@ -154,11 +222,11 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
-  tools?: DynamicArgument<TTools>;
+  tools?: DynamicArgument<TTools, TRequestContext>;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
-  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any>>>;
+  workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>>;
   /**
    * Default options used when calling `generate()`.
    */
@@ -170,7 +238,7 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
   /**
    * Default options used when calling `stream()` in vNext mode.
    */
-  defaultOptions?: DynamicArgument<AgentExecutionOptions<OutputSchema>>;
+  defaultOptions?: DynamicArgument<AgentExecutionOptions<TOutput>>;
   /**
    * Default options used when calling `network()`.
    * These are merged with options passed to each network() call.
@@ -214,9 +282,19 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    */
   memory?: DynamicArgument<MastraMemory>;
   /**
+   * Format for skill information injection when workspace has skills.
+   * @default 'xml'
+   */
+  skillsFormat?: SkillFormat;
+  /**
    * Voice settings for speech input and output.
    */
-  voice?: CompositeVoice;
+  voice?: MastraVoice;
+  /**
+   * Workspace for file storage and code execution.
+   * When configured, workspace tools are automatically injected into the agent.
+   */
+  workspace?: DynamicArgument<AnyWorkspace | undefined>;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
@@ -240,6 +318,17 @@ export interface AgentConfig<TAgentId extends string = string, TTools extends To
    * Options to pass to the agent upon creation.
    */
   options?: AgentCreateOptions;
+  /**
+   * Raw storage configuration this agent was created from.
+   * Set when the agent is hydrated from a stored config.
+   */
+  rawConfig?: Record<string, unknown>;
+  /**
+   * Optional schema for validating request context values.
+   * When provided, the request context will be validated against this schema at the start of generate() and stream() calls.
+   * If validation fails, an error is thrown.
+   */
+  requestContextSchema?: ZodSchema<TRequestContext>;
 }
 
 export type AgentMemoryOption = {
@@ -299,34 +388,33 @@ export type AgentGenerateOptions<
    * If not set, no retries are performed.
    */
   maxProcessorRetries?: number;
-  /** tracing context for span hierarchy and metadata */
-  tracingContext?: TracingContext;
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
-} & (
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId?: undefined;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId?: undefined;
-    }
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId: string;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId: string;
-    }
-) &
+} & Partial<ObservabilityContext> &
+  (
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId?: undefined;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId?: undefined;
+      }
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId: string;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId: string;
+      }
+  ) &
   (OUTPUT extends undefined ? DefaultLLMTextOptions : DefaultLLMTextObjectOptions);
 
 /**
@@ -376,43 +464,42 @@ export type AgentStreamOptions<
   savePerStep?: boolean;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
-  /** tracing context for span hierarchy and metadata */
-  tracingContext?: TracingContext;
   /** tracing options for starting new traces */
   tracingOptions?: TracingOptions;
   /** Scorers to use for this generation */
   scorers?: MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
   /** Provider-specific options for supported AI SDK packages (Anthropic, Google, OpenAI, xAI) */
   providerOptions?: ProviderOptions;
-} & (
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId?: undefined;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId?: undefined;
-    }
-  | {
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      resourceId: string;
-      /**
-       * @deprecated Use the `memory` property instead for all memory-related options.
-       */
-      threadId: string;
-    }
-) &
+} & Partial<ObservabilityContext> &
+  (
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId?: undefined;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId?: undefined;
+      }
+    | {
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        resourceId: string;
+        /**
+         * @deprecated Use the `memory` property instead for all memory-related options.
+         */
+        threadId: string;
+      }
+  ) &
   (OUTPUT extends undefined ? DefaultLLMStreamOptions : DefaultLLMStreamObjectOptions);
 
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
   runId: string;
-  result: Parameters<StreamTextOnFinishCallback<ToolSet>>[0] & { object?: unknown };
+  result: MastraOnFinishCallbackArgs & { object?: unknown };
   thread: StorageThreadType | null | undefined;
   readOnlyMemory?: boolean;
   threadId?: string;

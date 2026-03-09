@@ -14,7 +14,7 @@ import type {
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { PgDB, resolvePgConfig } from '../../db';
+import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
 
 function getSchemaName(schema?: string) {
@@ -26,23 +26,14 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
   return schemaName ? `${schemaName}.${quotedIndexName}` : quotedIndexName;
 }
 
-function parseWorkflowRun(row: Record<string, any>): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-  return {
-    workflowName: row.workflow_name as string,
-    runId: row.run_id as string,
-    snapshot: parsedSnapshot,
-    resourceId: row.resourceId as string,
-    createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
-    updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
-  };
+/**
+ * Sanitizes JSON string by removing problematic Unicode sequences that PostgreSQL jsonb rejects.
+ * Removes:
+ * - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
+ * - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
+ */
+function sanitizeJsonForPg(jsonString: string): string {
+  return jsonString.replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '');
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
@@ -62,6 +53,49 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.#skipDefaultIndexes = skipDefaultIndexes;
     // Filter indexes to only those for tables managed by this domain
     this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
+  }
+
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+    return {
+      workflowName: row.workflow_name as string,
+      runId: row.run_id as string,
+      snapshot: parsedSnapshot,
+      resourceId: row.resourceId as string,
+      createdAt: new Date(row.createdAtZ || (row.createdAt as string)),
+      updatedAt: new Date(row.updatedAtZ || (row.updatedAt as string)),
+    };
+  }
+
+  /**
+   * Returns all DDL statements for this domain: table with unique constraint.
+   * Used by exportSchemas to produce a complete, reproducible schema export.
+   */
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+
+    // Table (includes the UNIQUE constraint on workflow_name, run_id via generateTableSQL)
+    statements.push(
+      generateTableSQL({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+        schemaName,
+        includeAllConstraints: true,
+      }),
+    );
+
+    return statements;
   }
 
   /**
@@ -116,35 +150,146 @@ export class WorkflowsPG extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  updateWorkflowResults(
-    {
-      // workflowName,
-      // runId,
-      // stepId,
-      // result,
-      // requestContext,
-    }: {
-      workflowName: string;
-      runId: string;
-      stepId: string;
-      result: StepResult<any, any, any, any>;
-      requestContext: Record<string, any>;
-    },
-  ): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowResults({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    try {
+      // Use a transaction with row-level locking to ensure atomicity
+      return await this.#db.client.tx(async t => {
+        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
+        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+
+        let snapshot: WorkflowRunState;
+        if (!existingSnapshotResult) {
+          // Create new snapshot if none exists
+          snapshot = {
+            context: {},
+            activePaths: [],
+            timestamp: Date.now(),
+            suspendedPaths: {},
+            activeStepsPath: {},
+            resumeLabels: {},
+            serializedStepGraph: [],
+            status: 'pending',
+            value: {},
+            waitingPaths: {},
+            runId: runId,
+            requestContext: {},
+          } as WorkflowRunState;
+        } else {
+          // Parse existing snapshot
+          const existingSnapshot = existingSnapshotResult.snapshot;
+          snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        }
+
+        // Merge the new step result and request context
+        snapshot.context[stepId] = result;
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+        // Upsert the snapshot within the same transaction
+        const now = new Date();
+        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
+        await t.none(
+          `INSERT INTO ${tableName} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (workflow_name, run_id) DO UPDATE
+           SET snapshot = $3, "updatedAt" = $5`,
+          [workflowName, runId, sanitizedSnapshot, now, now],
+        );
+
+        return snapshot.context;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+            stepId,
+          },
+        },
+        error,
+      );
+    }
   }
-  updateWorkflowState(
-    {
-      // workflowName,
-      // runId,
-      // opts,
-    }: {
-      workflowName: string;
-      runId: string;
-      opts: UpdateWorkflowStateOptions;
-    },
-  ): Promise<WorkflowRunState | undefined> {
-    throw new Error('Method not implemented.');
+  async updateWorkflowState({
+    workflowName,
+    runId,
+    opts,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+  }): Promise<WorkflowRunState | undefined> {
+    try {
+      // Use a transaction with row-level locking to ensure atomicity
+      return await this.#db.client.tx(async t => {
+        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+
+        // Load existing snapshot within transaction with FOR UPDATE to lock the row
+        // This prevents concurrent updates from reading stale data
+        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
+          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+
+        if (!existingSnapshotResult) {
+          return undefined;
+        }
+
+        // Parse existing snapshot
+        const existingSnapshot = existingSnapshotResult.snapshot;
+        const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+
+        if (!snapshot || !snapshot?.context) {
+          throw new Error(`Snapshot not found for runId ${runId}`);
+        }
+
+        // Merge the new options with the existing snapshot
+        const updatedSnapshot = { ...snapshot, ...opts };
+
+        // Update the snapshot within the same transaction
+        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        await t.none(
+          `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
+          [sanitizedSnapshot, new Date(), workflowName, runId],
+        );
+
+        return updatedSnapshot;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            workflowName,
+            runId,
+          },
+        },
+        error,
+      );
+    }
   }
 
   async persistWorkflowSnapshot({
@@ -166,12 +311,14 @@ export class WorkflowsPG extends WorkflowsStorage {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
+      // Sanitize the snapshot JSON to remove problematic Unicode sequences
+      const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
         `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
                  SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, JSON.stringify(snapshot), createdAtValue, updatedAtValue],
+        [workflowName, runId, resourceId, sanitizedSnapshot, createdAtValue, updatedAtValue],
       );
     } catch (error) {
       throw new MastraError(
@@ -251,7 +398,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return null;
       }
 
-      return parseWorkflowRun(result);
+      return this.parseWorkflowRun(result);
     } catch (error) {
       throw new MastraError(
         {
@@ -311,7 +458,15 @@ export class WorkflowsPG extends WorkflowsStorage {
       }
 
       if (status) {
-        conditions.push(`snapshot::jsonb ->> 'status' = $${paramIndex}`);
+        // Use regexp_replace to strip problematic Unicode escape sequences before casting to jsonb.
+        // PostgreSQL's jsonb cast fails on:
+        // - \u0000 (null character) with error 22P05 "unsupported Unicode escape sequence"
+        // - \uD800-\uDFFF (unpaired surrogates) with "Unicode low surrogate must follow a high surrogate"
+        // The regex pattern matches \u0000 and all surrogate code points (D800-DFFF).
+        // See: https://github.com/mastra-ai/mastra/issues/11563
+        conditions.push(
+          `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status' = $${paramIndex}`,
+        );
         values.push(status);
         paramIndex++;
       }
@@ -365,7 +520,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
       const runs = (result || []).map(row => {
-        return parseWorkflowRun(row);
+        return this.parseWorkflowRun(row);
       });
 
       return { runs, total: total || runs.length };

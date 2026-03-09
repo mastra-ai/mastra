@@ -2,12 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { serve } from '@hono/node-server';
+import type { ServerType } from '@hono/node-server';
 import { realtimeMiddleware } from '@inngest/realtime/middleware';
+import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
+import type { WorkflowResult, WorkflowRegistry, ResumeWorkflowOptions } from '@internal/workflow-test-utils';
 import { Agent } from '@mastra/core/agent';
 import { MastraError } from '@mastra/core/error';
 import type { MastraScorer } from '@mastra/core/evals';
 import { createScorer, runEvals } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
+import type { ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import {
@@ -18,12 +22,15 @@ import { createTool } from '@mastra/core/tools';
 import type { StreamEvent } from '@mastra/core/workflows';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
+import { Observability } from '@mastra/observability';
 import { MockLanguageModelV1 } from 'ai/test';
-import { $ } from 'execa';
+import { execaCommand } from 'execa';
+import type { ResultPromise } from 'execa';
 import { Inngest } from 'inngest';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { z } from 'zod';
+import type { InngestWorkflow } from './workflow';
 import { init, serve as inngestServe } from './index';
 
 interface LocalTestContext {
@@ -32,10 +39,56 @@ interface LocalTestContext {
   srv?: any;
 }
 
+// Inngest dev server process (managed via inngest-cli, no Docker required)
+let standaloneInngestProcess: ResultPromise | null = null;
+
+/**
+ * Start a fresh inngest-cli dev server, killing any existing one first.
+ * Replaces the old `docker compose restart` pattern.
+ */
 async function resetInngest() {
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  await $`docker-compose restart`;
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  // Kill existing inngest dev server if running
+  if (standaloneInngestProcess) {
+    standaloneInngestProcess.kill();
+    standaloneInngestProcess = null;
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Start inngest-cli dev server
+  standaloneInngestProcess = execaCommand(
+    `npx inngest-cli dev -p 4000 -u http://localhost:4001/inngest/api --poll-interval=1 --retry-interval=1`,
+    { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
+  );
+
+  // Wait for it to be ready
+  for (let i = 0; i < 30; i++) {
+    try {
+      const response = await fetch('http://localhost:4000/dev');
+      if (response.ok) break;
+    } catch {
+      // Keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Trigger registration by sending PUT to the handler
+  try {
+    await fetch('http://localhost:4001/inngest/api', { method: 'PUT' });
+  } catch {
+    // Ignore
+  }
+
+  // Wait for function registration
+  for (let i = 0; i < 20; i++) {
+    try {
+      const response = await fetch('http://localhost:4000/dev');
+      const data = await response.json();
+      if (data.functions?.length > 0) return;
+    } catch {
+      // Keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
 }
 
 describe('MastraInngestWorkflow', () => {
@@ -48,6 +101,14 @@ describe('MastraInngestWorkflow', () => {
     globServer?.close();
 
     vi.restoreAllMocks();
+  });
+
+  afterAll(async () => {
+    globServer?.close();
+    if (standaloneInngestProcess) {
+      standaloneInngestProcess.kill();
+      standaloneInngestProcess = null;
+    }
   });
 
   describe.sequential('Basic Workflow Execution', () => {
@@ -1683,7 +1744,7 @@ describe('MastraInngestWorkflow', () => {
       });
 
       try {
-        // @ts-expect-error - we expect this to throw an error
+        // @ts-expect-error - testing dynamic workflow result - we expect this to throw an error
         workflow.then(step1).waitForEvent('hello-event', step2).commit();
       } catch (error) {
         expect(error).toBeInstanceOf(MastraError);
@@ -3648,9 +3709,9 @@ describe('MastraInngestWorkflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toMatchObject({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
       expect(totalCount).toBe(12);
 
@@ -3755,9 +3816,9 @@ describe('MastraInngestWorkflow', () => {
 
       expect(increment).toHaveBeenCalledTimes(12);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.result).toMatchObject({ finalValue: 12 });
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.increment.output).toMatchObject({ value: 12 });
       expect(totalCount).toBe(12);
       srv.close();
@@ -4125,9 +4186,9 @@ describe('MastraInngestWorkflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(0);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.finalIf.output).toMatchObject({ finalValue: 2 });
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.start.output).toMatchObject({ newValue: 2 });
 
       srv.close();
@@ -4279,9 +4340,9 @@ describe('MastraInngestWorkflow', () => {
       expect(start).toHaveBeenCalledTimes(1);
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['else-branch'].output).toMatchObject({ finalValue: 26 + 6 + 1 });
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.start.output).toMatchObject({ newValue: 7 });
     });
   });
@@ -4330,7 +4391,7 @@ describe('MastraInngestWorkflow', () => {
         workflow.execute({
           inputData: {
             required: 'test',
-            // @ts-expect-error
+            // @ts-expect-error - testing dynamic workflow result
             nested: { value: 'not-a-number' },
           },
         }),
@@ -4463,15 +4524,18 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -4520,8 +4584,8 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps.step2.status).toBe('failed');
       expect(result.steps.step2.error).toBeInstanceOf(Error);
       expect((result.steps.step2.error as Error).message).toBe('Step failed');
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(1); // 0 retries + 1 initial call
     });
 
     it('should retry a step with a custom retry config', async ctx => {
@@ -4532,15 +4596,18 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
       });
@@ -4593,8 +4660,8 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (retryConfig.attempts = 2)
     });
 
     it('should retry a step with step retries option, overriding the workflow retry config', async ctx => {
@@ -4605,16 +4672,19 @@ describe('MastraInngestWorkflow', () => {
 
       const { createWorkflow, createStep } = init(inngest);
 
+      const step1Execute = vi.fn().mockResolvedValue({ result: 'success' });
+      const step2Execute = vi.fn().mockRejectedValue(new Error('Step failed'));
+
       const step1 = createStep({
         id: 'step1',
-        execute: vi.fn().mockResolvedValue({ result: 'success' }),
+        execute: step1Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 2,
       });
       const step2 = createStep({
         id: 'step2',
-        execute: vi.fn().mockRejectedValue(new Error('Step failed')),
+        execute: step2Execute,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         retries: 2,
@@ -4668,8 +4738,8 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      expect(step1.execute).toHaveBeenCalledTimes(1);
-      expect(step2.execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (step.retries = 2)
+      expect(step1Execute).toHaveBeenCalledTimes(1);
+      expect(step2Execute).toHaveBeenCalledTimes(3); // 1 initial + 2 retries (step.retries = 2)
     });
   });
 
@@ -4691,7 +4761,7 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ name: z.string() }),
       });
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       const toolAction = vi.fn().mockImplementation(async ({ name }) => {
         return { name };
       });
@@ -9073,12 +9143,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -9168,7 +9238,7 @@ describe('MastraInngestWorkflow', () => {
         .then(startStep)
         .branch([
           [async () => false, otherStep],
-          // @ts-ignore
+          // @ts-expect-error - testing dynamic workflow result
           [async () => true, finalStep],
         ])
         .map({
@@ -9229,12 +9299,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -9394,7 +9464,7 @@ describe('MastraInngestWorkflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
-        // @ts-ignore
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
@@ -9559,7 +9629,7 @@ describe('MastraInngestWorkflow', () => {
         expect(first).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
@@ -9761,7 +9831,7 @@ describe('MastraInngestWorkflow', () => {
         // expect(first).toHaveBeenCalledTimes(1);
         // expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['nested-workflow-b'].output).toMatchObject({
           finalValue: 1,
         });
@@ -9919,12 +9989,12 @@ describe('MastraInngestWorkflow', () => {
           status: 'suspended',
         });
 
-        // @ts-ignore
+        // @ts-expect-error - testing dynamic workflow result
         expect(result.steps['last-step']).toMatchObject(undefined);
 
         const resumedResults = await run.resume({ step: [wfA, otherStep], resumeData: { newValue: 0 } });
 
-        // @ts-ignore
+        // @ts-expect-error - testing dynamic workflow result
         expect(resumedResults.steps['nested-workflow-a'].output).toMatchObject({
           finalValue: 26 + 1,
         });
@@ -10072,7 +10142,7 @@ describe('MastraInngestWorkflow', () => {
         expect(final).toHaveBeenCalledTimes(1);
         expect(last).toHaveBeenCalledTimes(1);
 
-        // @ts-ignore
+        // @ts-expect-error - testing dynamic workflow result
         expect(results['nested-workflow-a']).toMatchObject({
           status: 'success',
           output: {
@@ -10153,13 +10223,15 @@ describe('MastraInngestWorkflow', () => {
         finalValue: z.number(),
       });
 
+      const passthroughExecute = vi.fn().mockImplementation(async ({ inputData }) => {
+        return inputData;
+      });
+
       const passthroughStep = createStep({
         id: 'passthrough',
         inputSchema: counterInputSchema,
         outputSchema: counterInputSchema,
-        execute: vi.fn().mockImplementation(async ({ inputData }) => {
-          return inputData;
-        }),
+        execute: passthroughExecute,
       });
 
       const wfA = createWorkflow({
@@ -10251,7 +10323,7 @@ describe('MastraInngestWorkflow', () => {
       const run = await counterWorkflow.createRun();
       const result = await run.start({ inputData: { startValue: 0 } });
 
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
       expect(result.steps['nested-workflow-c']).toMatchObject({
         status: 'suspended',
         suspendPayload: {
@@ -10261,7 +10333,7 @@ describe('MastraInngestWorkflow', () => {
         },
       });
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['last-step']).toMatchObject(undefined);
 
       if (result.status !== 'suspended') {
@@ -10277,7 +10349,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(resumedResults.steps['nested-workflow-c'].output).toMatchObject({
         finalValue: 26 + 1,
       });
@@ -10286,7 +10358,7 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(2);
       expect(final).toHaveBeenCalledTimes(1);
       expect(last).toHaveBeenCalledTimes(1);
-      expect(passthroughStep.execute).toHaveBeenCalledTimes(2);
+      expect(passthroughExecute).toHaveBeenCalledTimes(2);
     });
 
     it('should be able clone workflows as steps', async ctx => {
@@ -10423,12 +10495,12 @@ describe('MastraInngestWorkflow', () => {
       expect(other).toHaveBeenCalledTimes(1);
       expect(final).toHaveBeenCalledTimes(2);
       expect(last).toHaveBeenCalledTimes(1);
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-a-clone'].output).toMatchObject({
         finalValue: 26 + 1,
       });
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps['nested-workflow-b'].output).toMatchObject({
         finalValue: 1,
       });
@@ -10503,7 +10575,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result.steps.step1.output.injectedValue).toBe(testValue);
     });
 
@@ -10566,7 +10638,7 @@ describe('MastraInngestWorkflow', () => {
         requestContext: resumerequestContext,
       });
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result?.steps.step1.output.injectedValue).toBe(testValue + '2');
     });
 
@@ -10846,7 +10918,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(result?.steps.step1.output.hasEngine).toBe(true);
     });
   });
@@ -13122,7 +13194,7 @@ describe('MastraInngestWorkflow', () => {
 
       srv.close();
 
-      // @ts-ignore
+      // @ts-expect-error - testing dynamic workflow result
       expect(agentEvents.map(event => event?.payload?.output?.type)).toEqual([
         'start',
         'step-start',
@@ -13393,6 +13465,96 @@ describe('MastraInngestWorkflow', () => {
     });
   });
 
+  describe.sequential('Long Running Steps', () => {
+    it('should handle long-running steps with eventual consistency', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const childWorkflowStep = createStep({
+        id: 'child-workflow-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      const childWorkflow = createWorkflow({
+        id: 'child-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(childWorkflowStep)
+        .commit();
+
+      // Create a step that takes 30 seconds to complete
+      const longRunningStep = createStep({
+        id: 'long-running-step',
+        execute: async () => {
+          // Simulate a long-running operation (30 seconds)
+          await new Promise(resolve => setTimeout(resolve, 30000));
+          return { result: 'completed after 30 seconds' };
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'long-running-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [childWorkflow, longRunningStep],
+      });
+      workflow.then(childWorkflow).then(longRunningStep).commit();
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        workflows: {
+          'long-running-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      srv.close();
+
+      // Verify the workflow completed successfully with the correct output
+      expect(result.status).toBe('success');
+      expect(result.steps['long-running-step']).toEqual({
+        status: 'success',
+        output: { result: 'completed after 30 seconds' },
+        payload: {},
+        startedAt: expect.any(Number),
+        endedAt: expect.any(Number),
+      });
+    }, 120000); // 2 minute timeout for the test
+  });
+
   describe.sequential('Flow Control Configuration', () => {
     it('should accept workflow configuration with flow control properties', async ctx => {
       const inngest = new Inngest({
@@ -13586,12 +13748,9 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      // Get current time and schedule cron for 1 minute from now
+      // Use every-minute cron schedule
+      const cronSchedule = '* * * * *';
       const now = new Date();
-      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
-
-      // Convert to cron format: minute hour day month dayOfWeek
-      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
 
       const workflow = createWorkflow({
         id: 'cron-test',
@@ -13637,15 +13796,23 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      // Calculate wait time (1 minute + 10 seconds buffer)
-      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
-      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+      // Poll for workflow runs until we find at least one, or timeout
+      const maxWaitTime = 75 * 1000; // 75 seconds max
+      const pollInterval = 20 * 1000; // Poll every 20 seconds
+      const startTime = Date.now();
+      let runs: Awaited<ReturnType<typeof workflow.listWorkflowRuns>>['runs'] = [];
+      let total = 0;
 
-      // Wait for cron to trigger
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log('Waiting for cron to trigger (polling every 20s, max 75s)...');
 
-      // Check storage for workflow runs
-      const { runs, total } = await workflow.listWorkflowRuns();
+      while (runs.length === 0 && Date.now() - startTime < maxWaitTime) {
+        const result = await workflow.listWorkflowRuns();
+        runs = result.runs;
+        total = result.total;
+        if (runs.length === 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      }
 
       expect(total).toBeGreaterThanOrEqual(1);
       expect(runs.length).toBeGreaterThanOrEqual(1);
@@ -13661,7 +13828,7 @@ describe('MastraInngestWorkflow', () => {
       expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
 
       srv.close();
-    }, 120000); // 2 minute timeout
+    }, 90000); // 90 second timeout
 
     it('should execute workflow via cron schedule with initialState', async ctx => {
       const inngest = new Inngest({
@@ -13681,12 +13848,9 @@ describe('MastraInngestWorkflow', () => {
         outputSchema: z.object({ result: z.string() }),
       });
 
-      // Get current time and schedule cron for 1 minute from now
+      // Use every-minute cron schedule
+      const cronSchedule = '* * * * *';
       const now = new Date();
-      const scheduledTime = new Date(now.getTime() + 60 * 1000); // 1 minute from now
-
-      // Convert to cron format: minute hour day month dayOfWeek
-      const cronSchedule = `${scheduledTime.getMinutes()} ${scheduledTime.getHours()} * * *`;
 
       const workflow = createWorkflow({
         id: 'cron-initial-state-test',
@@ -13734,15 +13898,23 @@ describe('MastraInngestWorkflow', () => {
 
       await resetInngest();
 
-      // Calculate wait time (1 minute + 10 seconds buffer)
-      const waitTime = scheduledTime.getTime() - now.getTime() + 10 * 1000;
-      console.log(`Waiting ${waitTime}ms for cron to trigger at ${scheduledTime.toISOString()}`);
+      // Poll for workflow runs until we find at least one, or timeout
+      const maxWaitTime = 75 * 1000; // 75 seconds max
+      const pollInterval = 20 * 1000; // Poll every 20 seconds
+      const startTime = Date.now();
+      let runs: Awaited<ReturnType<typeof workflow.listWorkflowRuns>>['runs'] = [];
+      let total = 0;
 
-      // Wait for cron to trigger
-      await new Promise(resolve => setTimeout(resolve, waitTime));
+      console.log('Waiting for cron to trigger (polling every 20s, max 75s)...');
 
-      // Check storage for workflow runs
-      const { runs, total } = await workflow.listWorkflowRuns();
+      while (runs.length === 0 && Date.now() - startTime < maxWaitTime) {
+        const result = await workflow.listWorkflowRuns();
+        runs = result.runs;
+        total = result.total;
+        if (runs.length === 0) {
+          await new Promise(resolve => setTimeout(resolve, pollInterval));
+        }
+      }
 
       expect(total).toBeGreaterThanOrEqual(1);
       expect(runs.length).toBeGreaterThanOrEqual(1);
@@ -13758,7 +13930,7 @@ describe('MastraInngestWorkflow', () => {
       expect(runCreatedAt.getTime()).toBeGreaterThanOrEqual(now.getTime());
 
       srv.close();
-    }, 120000); // 2 minute timeout
+    }, 90000); // 90 second timeout
   });
 
   describe('serve function with user-supplied functions', () => {
@@ -14882,4 +15054,594 @@ describe('MastraInngestWorkflow', () => {
       srv.close();
     });
   });
+
+  describe.sequential('Workflow Tracing', () => {
+    it('should provide tracingContext.currentSpan to step execution', async ctx => {
+      // This test verifies that workflow tracing works correctly.
+      // The InngestWorkflow creates a workflow span and passes it to the execution engine,
+      // which then makes it available to step handlers via tracingContext.currentSpan.
+
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      let capturedTracingContext: any = null;
+
+      const tracingStep = createStep({
+        id: 'tracing-test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          // Capture the tracingContext for verification
+          capturedTracingContext = tracingContext;
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'tracing-test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [tracingStep],
+      });
+
+      workflow.then(tracingStep).commit();
+
+      // Create a simple test exporter to capture tracing events
+      const capturedEvents: TracingEvent[] = [];
+      const testExporter: ObservabilityExporter = {
+        name: 'test-exporter',
+        async exportTracingEvent(event: TracingEvent) {
+          capturedEvents.push(event);
+        },
+        async shutdown() {},
+      };
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        observability: new Observability({
+          configs: {
+            default: {
+              serviceName: 'tracing-test',
+              exporters: [testExporter],
+            },
+          },
+        }),
+        workflows: {
+          'tracing-test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { value: 'test' } });
+
+      srv.close();
+
+      // Verify workflow execution succeeded
+      expect(result.status).toBe('success');
+      expect(result.steps['tracing-test-step']).toMatchObject({
+        status: 'success',
+        output: { result: 'processed: test' },
+      });
+
+      // Verify tracing context was provided
+      expect(capturedTracingContext).toBeDefined();
+
+      expect(capturedTracingContext.currentSpan).toBeDefined();
+    });
+
+    it('should create workflow step child spans from the workflow span', async ctx => {
+      // This test verifies that step spans can be created as children of the workflow span.
+      // The step handler in packages/core/src/workflows/handlers/step.ts line 138 does:
+      //   const stepSpan = tracingContext.currentSpan?.createChildSpan({...})
+      // When currentSpan is undefined (as it is in Inngest), stepSpan will be undefined.
+
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+        middleware: [realtimeMiddleware()],
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      let stepSpanExists = false;
+
+      const spanTestStep = createStep({
+        id: 'span-test-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        execute: async ({ inputData, tracingContext }) => {
+          // Check if we can create a child span (which requires currentSpan to exist)
+          stepSpanExists = tracingContext?.currentSpan !== undefined;
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'span-test-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [spanTestStep],
+      });
+
+      workflow.then(spanTestStep).commit();
+
+      // Create a simple test exporter
+      const testExporter2: ObservabilityExporter = {
+        name: 'test-exporter-2',
+        async exportTracingEvent() {},
+        async shutdown() {},
+      };
+
+      const mastra = new Mastra({
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        observability: new Observability({
+          configs: {
+            default: {
+              serviceName: 'span-test',
+              exporters: [testExporter2],
+            },
+          },
+        }),
+        workflows: {
+          'span-test-workflow': workflow,
+        },
+        server: {
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+
+      await resetInngest();
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { value: 'test' } });
+
+      srv.close();
+
+      expect(result.status).toBe('success');
+
+      // This should be true if tracing is working correctly
+      expect(stepSpanExists).toBe(true);
+    });
+  });
 }, 80e3);
+
+// ============================================================================
+// Shared Test Suite (Inngest Engine)
+// ============================================================================
+
+// Shared infrastructure - created once for all shared suite tests
+let sharedInngest: Inngest;
+let sharedMastra: Mastra;
+let sharedServer: ServerType;
+let sharedStorage: DefaultStorage;
+let sharedInngestProcess: ResultPromise | null = null;
+
+const SHARED_INNGEST_PORT = 4000;
+const SHARED_HANDLER_PORT = 4001;
+
+/**
+ * Wait for handler to be responding to requests
+ */
+async function waitForSharedHandler(maxAttempts = 30, intervalMs = 100): Promise<boolean> {
+  const handlerUrl = `http://localhost:${SHARED_HANDLER_PORT}/inngest/api`;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch(handlerUrl, { method: 'GET' });
+      // The handler returns 200 on GET with function info
+      if (response.ok || response.status === 405) {
+        console.log(`[waitForSharedHandler] Handler ready after ${i + 1} attempts`);
+        return true;
+      }
+    } catch {
+      // Connection refused, keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+  }
+  console.log('[waitForSharedHandler] Handler not ready after max attempts');
+  return false;
+}
+
+/**
+ * Ensure the Inngest dev server is running and has registered our functions.
+ *
+ * Uses the npm-installed inngest-cli binary (no Docker required).
+ * The dev server polls the handler URL for function definitions.
+ */
+async function startSharedInngest() {
+  // First, verify the handler is responding
+  console.log('[startSharedInngest] Verifying handler is responding...');
+  const handlerReady = await waitForSharedHandler();
+  if (!handlerReady) {
+    throw new Error('Handler not responding on port ' + SHARED_HANDLER_PORT);
+  }
+
+  // Check if Inngest is already running
+  try {
+    const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
+    if (response.ok) {
+      const data = await response.json();
+      const functionsRegistered = data.functions?.length || 0;
+      console.log(`[startSharedInngest] Inngest already running with ${functionsRegistered} functions`);
+      if (functionsRegistered > 0) return;
+    }
+  } catch {
+    // Not running yet
+  }
+
+  // Start the inngest dev server as a background process using the npm CLI
+  console.log('[startSharedInngest] Starting Inngest dev server via inngest-cli...');
+  sharedInngestProcess = execaCommand(
+    `npx inngest-cli dev -p ${SHARED_INNGEST_PORT} -u http://localhost:${SHARED_HANDLER_PORT}/inngest/api --poll-interval=1 --retry-interval=1`,
+    { cwd: import.meta.dirname, stdio: 'ignore', reject: false },
+  );
+
+  // Wait for the dev server to be ready
+  console.log('[startSharedInngest] Waiting for Inngest dev server to be ready...');
+  for (let i = 0; i < 30; i++) {
+    try {
+      const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
+      if (response.ok) {
+        console.log(`[startSharedInngest] Inngest dev server ready after ${i + 1} attempts`);
+        break;
+      }
+    } catch {
+      // Keep trying
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Trigger registration by sending PUT to the handler
+  // This makes the handler send its function definitions to the dev server
+  console.log('[startSharedInngest] Triggering function registration via PUT...');
+  try {
+    await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+  } catch (e) {
+    console.log('[startSharedInngest] PUT registration failed:', e);
+  }
+
+  // Wait for function registration
+  console.log('[startSharedInngest] Waiting for function registration...');
+  for (let i = 0; i < 30; i++) {
+    try {
+      const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
+      const data = await response.json();
+      const functionsRegistered = data.functions?.length || 0;
+      if (functionsRegistered > 0) {
+        console.log(`[startSharedInngest] ${functionsRegistered} functions registered`);
+        return;
+      }
+    } catch {
+      // Keep trying
+    }
+    if (i === 10) {
+      // Retry PUT registration if not yet registered
+      console.log('[startSharedInngest] Retrying PUT registration...');
+      try {
+        await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+      } catch {
+        // Ignore
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+
+  throw new Error('[startSharedInngest] No functions registered after 30 attempts - aborting test suite');
+}
+
+/**
+ * Stop the Inngest dev server
+ */
+async function stopSharedInngest() {
+  if (sharedInngestProcess) {
+    sharedInngestProcess.kill();
+    sharedInngestProcess = null;
+  }
+}
+
+createWorkflowTestSuite({
+  name: 'Workflow (Inngest Engine)',
+
+  getWorkflowFactory: () => {
+    // Create Inngest client if not already created
+    if (!sharedInngest) {
+      sharedInngest = new Inngest({
+        id: 'mastra-workflow-tests',
+        baseUrl: `http://localhost:${SHARED_INNGEST_PORT}`,
+        middleware: [realtimeMiddleware()],
+      });
+    }
+    return init(sharedInngest);
+  },
+
+  /**
+   * Register all workflows with Mastra and start the server.
+   * This is called once after all workflows are created.
+   *
+   * Order of operations:
+   * 1. Start the handler server (so Inngest can sync with it)
+   * 2. Start Inngest (which will auto-discover and sync with handler)
+   * 3. Wait for sync to complete
+   */
+  registerWorkflows: async (registry: WorkflowRegistry) => {
+    // Collect all workflows from registry
+    const workflows: Record<string, InngestWorkflow<any, any, any, any, any, any, any>> = {};
+    for (const [id, entry] of Object.entries(registry)) {
+      workflows[id] = entry.workflow as InngestWorkflow<any, any, any, any, any, any, any>;
+    }
+
+    // Create storage
+    sharedStorage = new DefaultStorage({
+      id: 'shared-test-storage',
+      url: ':memory:',
+    });
+
+    // Create Mastra with all workflows
+    sharedMastra = new Mastra({
+      storage: sharedStorage,
+      workflows,
+      server: {
+        apiRoutes: [
+          {
+            path: '/inngest/api',
+            method: 'ALL',
+            createHandler: async ({ mastra }) => inngestServe({ mastra, inngest: sharedInngest }),
+          },
+        ],
+      },
+    });
+
+    // Start handler server FIRST (before Inngest)
+    console.log('[registerWorkflows] Starting handler server...');
+
+    // Debug: check what workflows are registered with Mastra
+    const registeredWorkflows = sharedMastra.listWorkflows();
+    console.log(
+      `[registerWorkflows] Mastra has ${Object.keys(registeredWorkflows).length} workflows registered:`,
+      Object.keys(registeredWorkflows),
+    );
+
+    const app = await createHonoServer(sharedMastra);
+    sharedServer = serve({
+      fetch: app.fetch,
+      port: SHARED_HANDLER_PORT,
+    });
+    console.log(`[registerWorkflows] Handler server started on port ${SHARED_HANDLER_PORT}`);
+
+    // Wait for handler to be fully ready before starting Inngest
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Now start Inngest (this also triggers registration via PUT with url body)
+    console.log('[registerWorkflows] Starting Inngest...');
+    await startSharedInngest();
+    console.log('[registerWorkflows] Inngest started and functions registered');
+  },
+
+  // Provide access to storage for tests that need to spy on storage operations
+  getStorage: () => sharedStorage,
+
+  // beforeAll is called AFTER registerWorkflows in the factory, so nothing to do here
+  beforeAll: async () => {
+    console.log('[beforeAll] Ready');
+  },
+
+  afterAll: async () => {
+    // Close server
+    if (sharedServer) {
+      await new Promise<void>(resolve => sharedServer.close(() => resolve()));
+    }
+    await stopSharedInngest();
+  },
+
+  beforeEach: async () => {
+    // Reset all mock call counts to prevent accumulation across tests
+    vi.clearAllMocks();
+
+    // Wait for Inngest to settle between tests (reduced from 2000ms)
+    await new Promise(resolve => setTimeout(resolve, 500));
+  },
+
+  // ============================================================================
+  // Domain-level skips: These domains require different APIs or aren't implemented
+  // Individual test skips within enabled domains are configured in skipTests below
+  // ============================================================================
+  skip: {
+    // ENABLED DOMAINS - these work with Inngest (individual tests may be skipped)
+    variableResolution: false,
+    simpleConditions: false,
+    errorHandling: false,
+    loops: false,
+    foreach: false,
+    branching: false,
+    retry: false,
+    callbacks: false,
+    streaming: false,
+    workflowRuns: false,
+    dependencyInjection: false,
+    nestedWorkflows: false,
+    multipleChains: false,
+    complexConditions: false,
+
+    // ENABLED DOMAINS - individual tests may be skipped via skipTests below
+    schemaValidation: false,
+    suspendResume: false,
+    timeTravel: false,
+    agentStep: false,
+    abort: false,
+    interoperability: false,
+
+    // SKIPPED DOMAINS - not supported on Inngest engine
+    restart: true, // restart() throws "not supported on inngest workflows"
+  },
+
+  skipTests: {
+    // ============================================================================
+    // FIXED BY SNAPSHOT PERSISTENCE: These tests now pass after adding explicit
+    // snapshot persistence before workflow-finish in workflow.ts finalize step.
+    // ============================================================================
+    state: false,
+    variableResolutionErrors: false,
+    foreachSingleConcurrency: true, // Flaky - race condition with snapshot persistence
+    callbackOnFinish: false,
+    callbackOnError: false,
+
+    // ============================================================================
+    // TIMING: Inngest network overhead (100-500ms/step) makes timing unreliable
+    // ============================================================================
+    foreachConcurrentTiming: true, // Expected <2000ms, got ~6000ms
+    foreachPartialConcurrencyTiming: true, // Expected <1500ms, got ~7000ms
+
+    // ============================================================================
+    // BEHAVIOR DIFFERENCES: Inngest handles these differently than default engine
+    // ============================================================================
+    schemaValidationThrows: true, // Inngest doesn't throw - validation happens async, returns result
+    abortStatus: true, // Inngest returns 'failed' or 'success', no 'canceled' status
+    streamingSuspendResumeLegacy: true, // Inngest streaming has different suspend/resume behavior
+    abortDuringStep: true, // Abort during step test has 5s timeout waiting for abort signal
+    agentStepDeepNested: true, // Deep nested agent workflow fails on Inngest
+    executionFlowNotDefined: true, // InngestWorkflow.createRun() doesn't validate stepFlow
+    executionGraphNotCommitted: true, // InngestWorkflow.createRun() doesn't validate commit status
+    resumeMultiSuspendError: true, // Inngest result doesn't include 'suspended' array
+    resumeForeach: true, // Foreach suspend/resume uses different step coordination
+    resumeForeachConcurrent: true, // Foreach concurrent resume returns 'failed' not 'suspended'
+    resumeForeachIndex: true, // forEachIndex parameter not fully supported
+    storageWithNestedWorkflows: true, // Inngest step.invoke() uses different step naming convention
+
+    // ============================================================================
+    // ALL PASSING TESTS
+    // ============================================================================
+    loopUntil: false,
+    loopWhile: false,
+    errorIdentity: false,
+    emptyForeach: false,
+    nestedMultipleLevels: false,
+    mapPreviousStep: false,
+    nestedWorkflowFailure: false,
+    nestedDataPassing: false,
+    callbackResult: false,
+    callbackOnErrorNotCalled: false,
+    callbackBothOnFailure: false,
+    callbackAsyncOnFinish: false,
+    callbackAsyncOnError: false,
+    nestedWorkflowErrors: false,
+    parallelBranchErrors: false,
+    errorMessageFormat: false,
+    branchingElse: false,
+    stepExecutionOrder: false,
+    nonObjectOutput: false,
+    requestContextPropagation: false,
+    getInitData: false,
+    errorCauseChain: false,
+    // Storage round-trip test - enabled since storage tests pass
+    errorStorageRoundtrip: false,
+    // Error persistence tests - enabled with storage spy access
+    errorPersistWithoutStack: false,
+    errorPersistMastraError: false,
+    // Resume tests - enabled for testing
+    resumeBasic: false,
+    resumeWithLabel: false, // Testing - uses label instead of step
+    resumeWithState: true, // requestContext bug #4442 - request context not preserved during resume
+    resumeNested: true, // Nested step path resume not supported on Inngest
+    resumeParallelMulti: true, // parallel suspended steps behavior differs on Inngest
+    resumeAutoDetect: true, // Inngest result doesn't include 'suspended' array property
+    resumeBranchingStatus: true, // Inngest branching + suspend behavior differs (returns 'failed' not 'suspended')
+    resumeConsecutiveNested: true, // Nested step path resume not supported on Inngest
+    resumeDountil: true, // Dountil loop with nested resume not supported on Inngest
+    resumeLoopInput: true, // Loop resume input tracking not supported on Inngest
+    resumeMapStep: true, // Map step resume not supported on Inngest
+    // Foreach: state batch and bail not supported on Inngest
+    foreachStateBatch: true, // stateSchema batching not supported
+    foreachBail: true, // bail() in foreach not supported
+    // DI: requestContext not preserved across suspend/resume on Inngest
+    diResumeRequestContext: true, // requestContext lost during Inngest resume
+    diRequestContextBeforeSuspension: true, // requestContext values lost after resume
+    diBug4442: true, // requestContext bug #4442 - same issue
+    // Resume: additional foreach/parallel resume not supported on Inngest
+    resumeAutoNoStep: true, // Auto-resume without step parameter not supported
+    resumeForeachPartialIndex: true, // Foreach partial index resume not supported
+    resumeForeachLabel: true, // Foreach label resume not supported
+    resumeForeachPartial: true, // Foreach partial resume not supported
+    resumeNotSuspendedWorkflow: true, // Error for non-suspended workflow differs
+    // Storage tests - enabled for testing
+    storageListRuns: false,
+    storageGetDelete: false,
+    storageResourceId: false,
+    // Run count tests - skip until loop behavior is verified
+    runCount: true,
+    retryCount: true,
+  },
+
+  executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
+    const inngestWorkflow = workflow as unknown as InngestWorkflow<any, any, any, any, any, any, any>;
+
+    // Create the run and execute
+    // The workflow is already registered with Mastra, so we can execute directly
+    const run = await inngestWorkflow.createRun({
+      runId: options.runId,
+      resourceId: options.resourceId,
+    });
+    const result = await run.start({
+      inputData,
+      initialState: options.initialState,
+      perStep: options.perStep,
+      requestContext: options.requestContext as any,
+    });
+
+    return result as WorkflowResult;
+  },
+
+  resumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<WorkflowResult> => {
+    const inngestWorkflow = workflow as unknown as InngestWorkflow<any, any, any, any, any, any, any>;
+
+    // Create the run with the existing runId to resume
+    const run = await inngestWorkflow.createRun({ runId: options.runId });
+    const result = await run.resume({
+      step: options.step,
+      label: options.label,
+      resumeData: options.resumeData,
+    } as any);
+
+    return result as WorkflowResult;
+  },
+});

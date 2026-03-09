@@ -7,7 +7,12 @@ import type {
   GetWorkflowRunByIdResponse,
 } from '../types';
 
-import { parseClientRequestContext, base64RequestContext, requestContextQueryString } from '../utils';
+import {
+  parseClientRequestContext,
+  base64RequestContext,
+  requestContextQueryString,
+  parseSuperJsonString,
+} from '../utils';
 import { BaseResource } from './base';
 import { Run } from './run';
 
@@ -27,7 +32,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing workflow details including steps and graphs
    */
   details(requestContext?: RequestContext | Record<string, any>): Promise<GetWorkflowResponse> {
-    return this.request(`/api/workflows/${this.workflowId}${requestContextQueryString(requestContext)}`);
+    return this.request(`/workflows/${this.workflowId}${requestContextQueryString(requestContext)}`);
   }
 
   /**
@@ -77,9 +82,9 @@ export class Workflow extends BaseResource {
     }
 
     if (searchParams.size) {
-      return this.request(`/api/workflows/${this.workflowId}/runs?${searchParams}`);
+      return this.request(`/workflows/${this.workflowId}/runs?${searchParams}`);
     } else {
-      return this.request(`/api/workflows/${this.workflowId}/runs`);
+      return this.request(`/workflows/${this.workflowId}/runs`);
     }
   }
 
@@ -116,7 +121,7 @@ export class Workflow extends BaseResource {
     }
 
     const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}${queryString}`);
+    return this.request(`/workflows/${this.workflowId}/runs/${runId}${queryString}`);
   }
 
   /**
@@ -125,9 +130,26 @@ export class Workflow extends BaseResource {
    * @returns Promise containing a success message
    */
   deleteRunById(runId: string): Promise<{ message: string }> {
-    return this.request(`/api/workflows/${this.workflowId}/runs/${runId}`, {
+    return this.request(`/workflows/${this.workflowId}/runs/${runId}`, {
       method: 'DELETE',
     });
+  }
+
+  /**
+   * Retrieves the input/output schema for the workflow
+   * @returns Promise containing parsed inputSchema and outputSchema, or null if not defined
+   */
+  async getSchema(): Promise<{
+    inputSchema: Record<string, unknown> | null;
+    outputSchema: Record<string, unknown> | null;
+  }> {
+    const details = await this.details();
+    return {
+      inputSchema: details.inputSchema ? (parseSuperJsonString(details.inputSchema) as Record<string, unknown>) : null,
+      outputSchema: details.outputSchema
+        ? (parseSuperJsonString(details.outputSchema) as Record<string, unknown>)
+        : null,
+    };
   }
 
   /**
@@ -143,7 +165,7 @@ export class Workflow extends BaseResource {
     }
 
     const res = await this.request<{ runId: string }>(
-      `/api/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
+      `/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
       {
         method: 'POST',
         body: {

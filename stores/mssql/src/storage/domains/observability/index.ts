@@ -5,12 +5,13 @@ import {
   ObservabilityStorage,
   SPAN_SCHEMA,
   TABLE_SPANS,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
   SpanRecord,
-  PaginationInfo,
   ListTracesArgs,
+  ListTracesResponse,
   TracingStorageStrategy,
   BatchUpdateSpansArgs,
   BatchDeleteTracesArgs,
@@ -156,6 +157,35 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.db.clearTable({ tableName: TABLE_SPANS });
+  }
+
+  /**
+   * Manually run the spans migration to deduplicate and add the unique constraint.
+   * This is intended to be called from the CLI when duplicates are detected.
+   *
+   * @returns Migration result with status and details
+   */
+  async migrateSpans(): Promise<{
+    success: boolean;
+    alreadyMigrated: boolean;
+    duplicatesRemoved: number;
+    message: string;
+  }> {
+    return this.db.migrateSpans();
+  }
+
+  /**
+   * Check migration status for the spans table.
+   * Returns information about whether migration is needed.
+   */
+  async checkSpansMigrationStatus(): Promise<{
+    needsMigration: boolean;
+    hasDuplicates: boolean;
+    duplicateCount: number;
+    constraintExists: boolean;
+    tableName: string;
+  }> {
+    return this.db.checkSpansMigrationStatus();
   }
 
   public override get tracingStrategy(): {
@@ -386,7 +416,7 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
     }
   }
 
-  async listTraces(args: ListTracesArgs): Promise<{ pagination: PaginationInfo; spans: SpanRecord[] }> {
+  async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
     const { page, perPage } = pagination;
@@ -640,11 +670,13 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: result.recordset.map(span =>
-          transformFromSqlRow<SpanRecord>({
-            tableName: TABLE_SPANS,
-            sqlRow: span,
-          }),
+        spans: toTraceSpans(
+          result.recordset.map(span =>
+            transformFromSqlRow<SpanRecord>({
+              tableName: TABLE_SPANS,
+              sqlRow: span,
+            }),
+          ),
         ),
       };
     } catch (error) {

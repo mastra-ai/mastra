@@ -24,9 +24,7 @@ async function main() {
   const agent = client.getAgent('your-agent-id');
 
   // Generate a response
-  const response = await agent.generate({
-    messages: [{ role: 'user', content: "What's the weather like today?" }],
-  });
+  const response = await agent.generate([{ role: 'user', content: "What's the weather like today?" }]);
 
   console.log(response);
 }

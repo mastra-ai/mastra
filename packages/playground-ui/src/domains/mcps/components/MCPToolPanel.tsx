@@ -1,13 +1,14 @@
-import { resolveSerializedZodOutput } from '@/components/dynamic-form/utils';
+import { resolveSerializedZodOutput } from '@/lib/form/utils';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod';
 import { Txt } from '@/ds/components/Txt';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import ToolExecutor from '@/domains/tools/components/ToolExecutor';
 import { useExecuteMCPTool, useMCPServerTool } from '@/domains/mcps/hooks/use-mcp-server-tool';
 import { toast } from '@/lib/toast';
 import { useEffect } from 'react';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface MCPToolPanelProps {
   toolId: string;
@@ -15,6 +16,9 @@ export interface MCPToolPanelProps {
 }
 
 export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
+  const { canExecute } = usePermissions();
+  const canExecuteTool = canExecute('tools');
+
   const { data: tool, isLoading, error } = useMCPServerTool(serverId, toolId);
   const { mutateAsync: executeTool, isPending: isExecuting, data: result } = useExecuteMCPTool(serverId, toolId);
 
@@ -45,8 +49,17 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   if (!tool)
     return (
       <div className="py-12 text-center px-6">
-        <Txt variant="header-md" className="text-icon3">
+        <Txt variant="header-md" className="text-neutral3">
           Tool not found
+        </Txt>
+      </div>
+    );
+
+  if (!canExecuteTool)
+    return (
+      <div className="py-12 text-center px-6">
+        <Txt variant="ui-sm" className="text-neutral3">
+          You don't have permission to execute tools.
         </Txt>
       </div>
     );

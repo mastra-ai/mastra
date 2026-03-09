@@ -4,7 +4,7 @@ This example demonstrates how to create a custom Scorer in Mastra to check recip
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm
 - OpenAI API key (required for LLM-based evaluation)
 

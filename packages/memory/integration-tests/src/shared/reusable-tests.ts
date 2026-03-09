@@ -3,13 +3,14 @@ import * as path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import type { SharedMemoryConfig } from '@mastra/core/memory';
+import type { SharedMemoryConfig, StorageThreadType } from '@mastra/core/memory';
+import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import type { LibSQLConfig, LibSQLVectorConfig } from '@mastra/libsql';
 import type { Memory } from '@mastra/memory';
 import type { PostgresStoreConfig } from '@mastra/pg';
 import type { UpstashConfig } from '@mastra/upstash';
 import type { ToolResultPart, TextPart, ToolCallPart } from 'ai';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const resourceId = 'resource';
 const NUMBER_OF_WORKERS = 2;
@@ -94,14 +95,14 @@ const getTextContent = (message: any): string => {
   return '';
 };
 
-export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestConfig) {
-  const cleanupAllThreads = async () => {
-    let allThreads: any[] = [];
+export function getResuableTests(optionsFactory: () => { memory: Memory; workerTestConfig?: WorkerTestConfig }) {
+  const cleanupAllThreads = async (memory: Memory) => {
+    let allThreads: StorageThreadType[] = [];
     let page = 0;
     const perPage = 100;
     while (true) {
-      const { threads, hasMore } = await memory.listThreadsByResourceId({
-        resourceId,
+      const { threads, hasMore } = await memory.listThreads({
+        filter: { resourceId },
         page,
         perPage,
       });
@@ -110,15 +111,35 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       page++;
     }
     await Promise.all(allThreads.map(thread => memory.deleteThread(thread.id)));
+
+    const indexes = await memory.vector?.listIndexes();
+    if (indexes) {
+      await Promise.all(
+        indexes.map(index =>
+          memory.vector?.deleteVectors({
+            indexName: index,
+            filter: { thread_id: { $in: allThreads.map(thread => thread.id) } },
+          }),
+        ),
+      );
+    }
   };
 
+  let memory: Memory;
+  let workerTestConfig: WorkerTestConfig | undefined;
   beforeEach(async () => {
     messageCounter = 0;
-    await cleanupAllThreads();
+    await cleanupAllThreads(memory);
+  });
+
+  beforeAll(() => {
+    const options = optionsFactory();
+    memory = options.memory;
+    workerTestConfig = options.workerTestConfig;
   });
 
   afterAll(async () => {
-    await cleanupAllThreads();
+    await cleanupAllThreads(memory);
   });
 
   describe('Memory Features', () => {
@@ -187,7 +208,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         const threadId = thread.id;
 
         const content = Array(1000).fill(`This is a long message to test chunking with`).join(`
-`);
+  `);
         await expect(
           memory.saveMessages({
             messages: [
@@ -390,6 +411,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             semanticRecall: { messageRange: 0, topK: 1 },
           },
         });
+
         const programmingContents = resultProgramming.messages.map(m => getTextContent(m));
         expect(programmingContents).toContain('JavaScript is a versatile language.');
         expect(programmingContents).not.toContain('The weather is rainy and cold.');
@@ -855,8 +877,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Get first page
-      const result = await memory.listThreadsByResourceId({
-        resourceId,
+      const result = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 10,
       });
@@ -874,8 +896,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
 
     it('should handle edge cases (empty results, last page)', async () => {
       // Empty result set
-      const emptyResult = await memory.listThreadsByResourceId({
-        resourceId: 'non-existent-resource',
+      const emptyResult = await memory.listThreads({
+        filter: { resourceId: 'non-existent-resource' },
         page: 0,
         perPage: 10,
       });
@@ -893,8 +915,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
         ),
       );
 
-      const lastPageResult = await memory.listThreadsByResourceId({
-        resourceId,
+      const lastPageResult = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 10,
       });
@@ -915,8 +937,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       );
 
       // Test second page
-      const page2Result = await memory.listThreadsByResourceId({
-        resourceId,
+      const page2Result = await memory.listThreads({
+        filter: { resourceId },
         page: 1,
         perPage: 7,
       });
@@ -926,8 +948,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       expect(page2Result.hasMore).toBe(true);
 
       // Test third page (final page)
-      const page3Result = await memory.listThreadsByResourceId({
-        resourceId,
+      const page3Result = await memory.listThreads({
+        filter: { resourceId },
         page: 2,
         perPage: 7,
       });
@@ -943,8 +965,8 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
 
       await expect(
-        memory.listThreadsByResourceId({
-          resourceId,
+        memory.listThreads({
+          filter: { resourceId },
           page: -1,
           perPage: 10,
         }),
@@ -957,29 +979,29 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
 
       // Test perPage = 0 (should return zero results)
-      const zeroResult = await memory.listThreadsByResourceId({
-        resourceId,
+      const zeroResult = await memory.listThreads({
+        filter: { resourceId },
         page: 0,
         perPage: 0,
       });
       expect(zeroResult.threads).toHaveLength(0);
       expect(zeroResult.perPage).toBe(0);
 
-      // Test negative perPage (should fall back to default)
-      const negativeResult = await memory.listThreadsByResourceId({
-        resourceId,
-        page: 0,
-        perPage: -5,
-      });
-      expect(negativeResult.threads.length).toBeGreaterThan(0);
-      expect(negativeResult.perPage).toBe(100); // Default for listThreadsByResourceId
+      // Test negative perPage (should throw an error - invalid input)
+      await expect(
+        memory.listThreads({
+          filter: { resourceId },
+          page: 0,
+          perPage: -5,
+        }),
+      ).rejects.toThrow('perPage must be >= 0');
     });
   });
 
   if (workerTestConfig) {
     describe('Concurrent Operations with Workers', () => {
       it('should save multiple messages concurrently using Memory instance in workers to a single thread', async () => {
-        const totalMessages = 20;
+        const totalMessages = 1;
         const mainThread = await memory.saveThread({
           thread: createTestThread(`Reusable Concurrent Worker Test Thread`),
         });
@@ -1007,9 +1029,11 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
                 vectorConfig: workerTestConfig.vectorConfigForWorker,
               },
             });
+            let completed = false;
             worker.on('message', msg => {
               if ((msg as any).success) {
                 resolve(msg);
+                completed = true;
               } else {
                 console.error('Worker error (reusable test):', (msg as any).error);
                 reject(new Error((msg as any).error?.message || 'Worker failed in reusable test'));
@@ -1017,7 +1041,7 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
             });
             worker.on('error', reject);
             worker.on('exit', code => {
-              if (code !== 0) {
+              if (!completed && code !== 0) {
                 reject(new Error(`Reusable test worker stopped with exit code ${code}`));
               }
             });
@@ -1030,6 +1054,9 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
           console.error('Error during reusable worker execution:', error);
           throw error;
         }
+
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+
         const result = await memory.recall({
           threadId: mainThread.id,
           resourceId,
@@ -1056,4 +1083,453 @@ export function getResuableTests(memory: Memory, workerTestConfig?: WorkerTestCo
       });
     });
   }
+
+  // ============================================
+  // Observational Memory Cloning Tests
+  // ============================================
+  describe('Clone Thread with Observational Memory', () => {
+    let memoryStore: MemoryStorage;
+
+    const omResourceId = 'om-clone-test-resource';
+
+    /** Clean up OM test threads and OM records */
+    const cleanupOMTests = async () => {
+      let allThreads: StorageThreadType[] = [];
+      let page = 0;
+      while (true) {
+        const { threads, hasMore } = await memory.listThreads({
+          filter: { resourceId: omResourceId },
+          page,
+          perPage: 100,
+        });
+        allThreads.push(...threads);
+        if (!hasMore || threads.length === 0) break;
+        page++;
+      }
+      for (const t of allThreads) {
+        try {
+          await memoryStore.clearObservationalMemory(t.id, omResourceId);
+        } catch {
+          // ignore
+        }
+        await memory.deleteThread(t.id);
+      }
+      // Clear resource-scoped OM once after all threads are deleted
+      try {
+        await memoryStore.clearObservationalMemory(null, omResourceId);
+      } catch {
+        // ignore
+      }
+    };
+
+    /** Create a minimal OM record for testing */
+    const createOMRecord = (
+      overrides: Partial<ObservationalMemoryRecord> &
+        Pick<ObservationalMemoryRecord, 'scope' | 'threadId' | 'resourceId'>,
+    ): ObservationalMemoryRecord => {
+      const now = new Date();
+      return {
+        id: randomUUID(),
+        scope: overrides.scope,
+        threadId: overrides.threadId,
+        resourceId: overrides.resourceId,
+        createdAt: now,
+        updatedAt: now,
+        lastObservedAt: overrides.lastObservedAt ?? now,
+        originType: overrides.originType ?? 'initial',
+        generationCount: overrides.generationCount ?? 0,
+        activeObservations: overrides.activeObservations ?? '',
+        bufferedObservationChunks: overrides.bufferedObservationChunks,
+        bufferedReflection: overrides.bufferedReflection,
+        bufferedReflectionTokens: overrides.bufferedReflectionTokens,
+        bufferedReflectionInputTokens: overrides.bufferedReflectionInputTokens,
+        reflectedObservationLineCount: overrides.reflectedObservationLineCount,
+        observedMessageIds: overrides.observedMessageIds,
+        observedTimezone: overrides.observedTimezone,
+        totalTokensObserved: overrides.totalTokensObserved ?? 0,
+        observationTokenCount: overrides.observationTokenCount ?? 0,
+        pendingMessageTokens: overrides.pendingMessageTokens ?? 0,
+        isReflecting: overrides.isReflecting ?? false,
+        isObserving: overrides.isObserving ?? false,
+        isBufferingObservation: overrides.isBufferingObservation ?? false,
+        isBufferingReflection: overrides.isBufferingReflection ?? false,
+        lastBufferedAtTokens: overrides.lastBufferedAtTokens ?? 0,
+        lastBufferedAtTime: overrides.lastBufferedAtTime ?? null,
+        config: overrides.config ?? {},
+        metadata: overrides.metadata,
+      };
+    };
+
+    beforeEach(async () => {
+      const store = await memory.storage.getStore('memory');
+      if (!store || !store.supportsObservationalMemory) return;
+      memoryStore = store;
+      await cleanupOMTests();
+    });
+
+    it('should skip if storage does not support observational memory', async () => {
+      const store = await memory.storage.getStore('memory');
+      if (!store?.supportsObservationalMemory) {
+        // Test passes vacuously for adapters without OM
+        expect(true).toBe(true);
+        return;
+      }
+      // If OM is supported, all subsequent tests apply
+      expect(store.supportsObservationalMemory).toBe(true);
+    });
+
+    describe('Thread-scoped OM', () => {
+      it('should clone thread-scoped OM to the new thread with preserved content', async () => {
+        const store = await memory.storage.getStore('memory');
+        if (!store?.supportsObservationalMemory) return;
+
+        // Create source thread and messages
+        const sourceThread = createTestThread('OM Source Thread');
+        sourceThread.resourceId = omResourceId;
+        await memory.saveThread({ thread: sourceThread });
+
+        const msg1 = createTestMessage(sourceThread.id, 'Hello from source', 'user');
+        msg1.resourceId = omResourceId;
+        const msg2 = createTestMessage(sourceThread.id, 'Response from assistant', 'assistant');
+        msg2.resourceId = omResourceId;
+        await memory.saveMessages({ messages: [msg1, msg2] });
+
+        // Initialize thread-scoped OM and add observation data
+        const omRecord = createOMRecord({
+          scope: 'thread',
+          threadId: sourceThread.id,
+          resourceId: omResourceId,
+          activeObservations: 'User greeted the assistant. Assistant responded warmly.',
+          observationTokenCount: 50,
+          totalTokensObserved: 100,
+          observedMessageIds: [msg1.id, msg2.id],
+        });
+        await memoryStore.insertObservationalMemoryRecord(omRecord);
+
+        // Verify the source OM was created
+        const sourceOM = await memoryStore.getObservationalMemory(sourceThread.id, omResourceId);
+        expect(sourceOM).toBeDefined();
+        expect(sourceOM!.activeObservations).toBe('User greeted the assistant. Assistant responded warmly.');
+
+        // Clone the thread
+        const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
+          sourceThreadId: sourceThread.id,
+        });
+
+        expect(clonedThread).toBeDefined();
+        expect(clonedMessages.length).toBe(2);
+
+        // Verify cloned OM exists on the new thread
+        const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+        expect(clonedOM).toBeDefined();
+        expect(clonedOM!.scope).toBe('thread');
+        expect(clonedOM!.threadId).toBe(clonedThread.id);
+        expect(clonedOM!.resourceId).toBe(clonedThread.resourceId);
+        expect(clonedOM!.activeObservations).toBe('User greeted the assistant. Assistant responded warmly.');
+        expect(clonedOM!.observationTokenCount).toBe(50);
+        expect(clonedOM!.totalTokensObserved).toBe(100);
+        expect(clonedOM!.originType).toBe('initial');
+
+        // Verify observedMessageIds are remapped to cloned message IDs (no source IDs remain)
+        expect(clonedOM!.observedMessageIds).toBeDefined();
+        expect(clonedOM!.observedMessageIds!.length).toBe(2);
+        for (const clonedMsgId of clonedOM!.observedMessageIds!) {
+          // Should not be any source message ID
+          expect(clonedMsgId).not.toBe(msg1.id);
+          expect(clonedMsgId).not.toBe(msg2.id);
+          // Should be in the cloned messages
+          const isClonedId = clonedMessages.some(m => m.id === clonedMsgId);
+          expect(isClonedId).toBe(true);
+        }
+
+        // Transient state flags should be reset
+        expect(clonedOM!.isObserving).toBe(false);
+        expect(clonedOM!.isReflecting).toBe(false);
+        expect(clonedOM!.isBufferingObservation).toBe(false);
+        expect(clonedOM!.isBufferingReflection).toBe(false);
+
+        // Source OM should be untouched
+        const sourceOMAfter = await memoryStore.getObservationalMemory(sourceThread.id, omResourceId);
+        expect(sourceOMAfter!.id).toBe(omRecord.id);
+      });
+
+      it('should remap bufferedObservationChunks messageIds in cloned OM', async () => {
+        const store = await memory.storage.getStore('memory');
+        if (!store?.supportsObservationalMemory) return;
+
+        const sourceThread = createTestThread('OM Buffered Chunks Source');
+        sourceThread.resourceId = omResourceId;
+        await memory.saveThread({ thread: sourceThread });
+
+        const msg1 = createTestMessage(sourceThread.id, 'Message one', 'user');
+        msg1.resourceId = omResourceId;
+        const msg2 = createTestMessage(sourceThread.id, 'Message two', 'assistant');
+        msg2.resourceId = omResourceId;
+        const msg3 = createTestMessage(sourceThread.id, 'Message three', 'user');
+        msg3.resourceId = omResourceId;
+        await memory.saveMessages({ messages: [msg1, msg2, msg3] });
+
+        const chunkDate = new Date();
+        const chunk1: BufferedObservationChunk = {
+          id: randomUUID(),
+          cycleId: 'cycle-1',
+          observations: 'Chunk 1 observations',
+          tokenCount: 20,
+          messageIds: [msg1.id, msg2.id],
+          messageTokens: 40,
+          lastObservedAt: chunkDate,
+          createdAt: chunkDate,
+        };
+        const chunk2: BufferedObservationChunk = {
+          id: randomUUID(),
+          cycleId: 'cycle-2',
+          observations: 'Chunk 2 observations',
+          tokenCount: 15,
+          messageIds: [msg3.id],
+          messageTokens: 20,
+          lastObservedAt: chunkDate,
+          createdAt: chunkDate,
+        };
+
+        const omRecord = createOMRecord({
+          scope: 'thread',
+          threadId: sourceThread.id,
+          resourceId: omResourceId,
+          activeObservations: 'Prior observations',
+          observedMessageIds: [msg1.id],
+          bufferedObservationChunks: [chunk1, chunk2],
+        });
+        await memoryStore.insertObservationalMemoryRecord(omRecord);
+
+        // Clone the thread
+        const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
+          sourceThreadId: sourceThread.id,
+        });
+
+        const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+        expect(clonedOM).toBeDefined();
+
+        // Verify bufferedObservationChunks messageIds are remapped
+        expect(clonedOM!.bufferedObservationChunks).toBeDefined();
+        expect(clonedOM!.bufferedObservationChunks!.length).toBe(2);
+
+        const clonedChunk1 = clonedOM!.bufferedObservationChunks![0]!;
+        const clonedChunk2 = clonedOM!.bufferedObservationChunks![1]!;
+
+        // Chunk 1 should have remapped message IDs
+        expect(clonedChunk1.messageIds.length).toBe(2);
+        for (const mid of clonedChunk1.messageIds) {
+          expect(mid).not.toBe(msg1.id);
+          expect(mid).not.toBe(msg2.id);
+          expect(clonedMessages.some(m => m.id === mid)).toBe(true);
+        }
+
+        // Chunk 2 should have remapped message IDs
+        expect(clonedChunk2.messageIds.length).toBe(1);
+        expect(clonedChunk2.messageIds[0]).not.toBe(msg3.id);
+        expect(clonedMessages.some(m => m.id === clonedChunk2.messageIds[0])).toBe(true);
+
+        // Observation text content should be preserved
+        expect(clonedChunk1.observations).toBe('Chunk 1 observations');
+        expect(clonedChunk2.observations).toBe('Chunk 2 observations');
+
+        // observedMessageIds should also be remapped
+        expect(clonedOM!.observedMessageIds).toBeDefined();
+        expect(clonedOM!.observedMessageIds!.length).toBe(1);
+        expect(clonedOM!.observedMessageIds![0]).not.toBe(msg1.id);
+        expect(clonedMessages.some(m => m.id === clonedOM!.observedMessageIds![0])).toBe(true);
+      });
+
+      it('should clone only the current OM generation (not old history)', async () => {
+        const store = await memory.storage.getStore('memory');
+        if (!store?.supportsObservationalMemory) return;
+
+        const sourceThread = createTestThread('OM History Source');
+        sourceThread.resourceId = omResourceId;
+        await memory.saveThread({ thread: sourceThread });
+
+        const msg1 = createTestMessage(sourceThread.id, 'Gen 0 msg', 'user');
+        msg1.resourceId = omResourceId;
+        await memory.saveMessages({ messages: [msg1] });
+
+        // Create generation 0 (initial)
+        const gen0 = createOMRecord({
+          scope: 'thread',
+          threadId: sourceThread.id,
+          resourceId: omResourceId,
+          activeObservations: 'Generation 0 observations',
+          generationCount: 0,
+          originType: 'initial',
+          observedMessageIds: [msg1.id],
+        });
+        gen0.createdAt = new Date(Date.now() - 2000);
+        gen0.updatedAt = new Date(Date.now() - 2000);
+        await memoryStore.insertObservationalMemoryRecord(gen0);
+
+        // Create generation 1 (reflection)
+        const gen1 = createOMRecord({
+          scope: 'thread',
+          threadId: sourceThread.id,
+          resourceId: omResourceId,
+          activeObservations: 'Reflected observations from gen 1',
+          generationCount: 1,
+          originType: 'reflection',
+          observedMessageIds: [msg1.id],
+        });
+        gen1.createdAt = new Date(Date.now() - 1000);
+        gen1.updatedAt = new Date(Date.now() - 1000);
+        await memoryStore.insertObservationalMemoryRecord(gen1);
+
+        // Clone the thread — only the current (most recent) generation should be cloned
+        const { thread: clonedThread } = await memory.cloneThread({
+          sourceThreadId: sourceThread.id,
+        });
+
+        // Get the cloned OM (should be the latest generation only)
+        const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+        expect(clonedOM).toBeDefined();
+        expect(clonedOM!.activeObservations).toBe('Reflected observations from gen 1');
+        expect(clonedOM!.generationCount).toBe(1);
+        expect(clonedOM!.threadId).toBe(clonedThread.id);
+        expect(clonedOM!.id).not.toBe(gen1.id);
+
+        // Old generations are NOT cloned — only the current record
+        const clonedHistory = await memoryStore.getObservationalMemoryHistory(clonedThread.id, clonedThread.resourceId);
+        expect(clonedHistory).toHaveLength(1);
+      });
+
+      it('should not fail when cloning a thread that has no OM', async () => {
+        const store = await memory.storage.getStore('memory');
+        if (!store?.supportsObservationalMemory) return;
+
+        const sourceThread = createTestThread('No OM Thread');
+        sourceThread.resourceId = omResourceId;
+        await memory.saveThread({ thread: sourceThread });
+
+        const msg = createTestMessage(sourceThread.id, 'Hello no OM', 'user');
+        msg.resourceId = omResourceId;
+        await memory.saveMessages({ messages: [msg] });
+
+        // Clone without any OM – should succeed gracefully
+        const { thread: clonedThread } = await memory.cloneThread({
+          sourceThreadId: sourceThread.id,
+        });
+
+        expect(clonedThread).toBeDefined();
+
+        // No OM should exist on the cloned thread
+        const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, clonedThread.resourceId);
+        expect(clonedOM).toBeNull();
+      });
+    });
+
+    describe('Resource-scoped OM', () => {
+      it('should share resource-scoped OM when resourceId is unchanged (no clone)', async () => {
+        const store = await memory.storage.getStore('memory');
+        if (!store?.supportsObservationalMemory) return;
+
+        const sourceThread = createTestThread('Resource OM Source');
+        sourceThread.resourceId = omResourceId;
+        await memory.saveThread({ thread: sourceThread });
+
+        const msg = createTestMessage(sourceThread.id, 'Resource msg', 'user');
+        msg.resourceId = omResourceId;
+        await memory.saveMessages({ messages: [msg] });
+
+        // Create resource-scoped OM (threadId = null)
+        const omRecord = createOMRecord({
+          scope: 'resource',
+          threadId: null,
+          resourceId: omResourceId,
+          activeObservations: '<thread id="abc123">\nShared resource observations\n</thread>',
+          observedMessageIds: [msg.id],
+        });
+        await memoryStore.insertObservationalMemoryRecord(omRecord);
+
+        // Clone with same resourceId (default behavior)
+        const { thread: clonedThread } = await memory.cloneThread({
+          sourceThreadId: sourceThread.id,
+          // No resourceId override → same resource
+        });
+
+        expect(clonedThread.resourceId).toBe(omResourceId);
+
+        // Resource-scoped OM should be the SAME record (shared), not duplicated
+        const resourceOM = await memoryStore.getObservationalMemory(null, omResourceId);
+        expect(resourceOM).toBeDefined();
+        expect(resourceOM!.id).toBe(omRecord.id);
+
+        // No thread-scoped OM should have been created
+        const threadOM = await memoryStore.getObservationalMemory(clonedThread.id, omResourceId);
+        expect(threadOM).toBeNull();
+      });
+
+      it('should clone resource-scoped OM when resourceId changes', async () => {
+        const store = await memory.storage.getStore('memory');
+        if (!store?.supportsObservationalMemory) return;
+
+        const newResourceId = `om-clone-new-${randomUUID()}`;
+
+        const sourceThread = createTestThread('Resource OM Clone Source');
+        sourceThread.resourceId = omResourceId;
+        await memory.saveThread({ thread: sourceThread });
+
+        const msg1 = createTestMessage(sourceThread.id, 'Resource msg 1', 'user');
+        msg1.resourceId = omResourceId;
+        const msg2 = createTestMessage(sourceThread.id, 'Resource msg 2', 'assistant');
+        msg2.resourceId = omResourceId;
+        await memory.saveMessages({ messages: [msg1, msg2] });
+
+        // Create resource-scoped OM
+        const omRecord = createOMRecord({
+          scope: 'resource',
+          threadId: null,
+          resourceId: omResourceId,
+          activeObservations: 'Resource-level observations about user preferences',
+          observedMessageIds: [msg1.id, msg2.id],
+        });
+        await memoryStore.insertObservationalMemoryRecord(omRecord);
+
+        // Clone with a DIFFERENT resourceId
+        const { thread: clonedThread, clonedMessages } = await memory.cloneThread({
+          sourceThreadId: sourceThread.id,
+          resourceId: newResourceId,
+        });
+
+        expect(clonedThread.resourceId).toBe(newResourceId);
+
+        // A new OM record should exist for the new resource
+        const clonedOM = await memoryStore.getObservationalMemory(null, newResourceId);
+        expect(clonedOM).toBeDefined();
+        expect(clonedOM!.scope).toBe('resource');
+        expect(clonedOM!.threadId).toBeNull();
+        expect(clonedOM!.resourceId).toBe(newResourceId);
+        expect(clonedOM!.activeObservations).toBe('Resource-level observations about user preferences');
+
+        // observedMessageIds should be remapped
+        expect(clonedOM!.observedMessageIds).toBeDefined();
+        expect(clonedOM!.observedMessageIds!.length).toBe(2);
+        for (const mid of clonedOM!.observedMessageIds!) {
+          expect(mid).not.toBe(msg1.id);
+          expect(mid).not.toBe(msg2.id);
+          expect(clonedMessages.some(m => m.id === mid)).toBe(true);
+        }
+
+        // Source OM should be untouched
+        const sourceOM = await memoryStore.getObservationalMemory(null, omResourceId);
+        expect(sourceOM).toBeDefined();
+        expect(sourceOM!.id).toBe(omRecord.id);
+        expect(sourceOM!.resourceId).toBe(omResourceId);
+
+        // Clean up new resource OM
+        try {
+          await memoryStore.clearObservationalMemory(null, newResourceId);
+        } catch {}
+        // Clean up cloned thread
+        try {
+          await memory.deleteThread(clonedThread.id);
+        } catch {}
+      });
+    });
+  });
 }

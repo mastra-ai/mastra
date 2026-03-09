@@ -38,7 +38,6 @@ export interface TraceloopConfig {
 
 export interface LaminarConfig {
   apiKey?: string; // Required at runtime (LMNR_PROJECT_API_KEY)
-  teamId?: string; // Optional, for backwards compatibility
   endpoint?: string;
 }
 

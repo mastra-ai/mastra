@@ -2,7 +2,7 @@ import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { IdGenerator } from '@internal/ai-sdk-v5';
 import { generateId as defaultGenerateId } from '@internal/ai-sdk-v5';
 import type { RegisteredLogger } from '../../../logger';
-import { MastraModelInput } from '../../base';
+import { safeEnqueue, MastraModelInput } from '../../base';
 import type { ChunkType } from '../../types';
 import { convertFullStreamChunkToMastra } from './transform';
 import type { StreamPart } from './transform';
@@ -48,7 +48,7 @@ export class AISDKV5InputStream extends MastraModelInput {
     const idMap = new Map<string, string>();
 
     // ReadableStream throws TS errors, if imported not imported. What an annoying thing.
-    //@ts-ignore
+    // @ts-expect-error - ReadableStream async iteration
     for await (const chunk of stream) {
       const rawChunk = chunk as StreamPart;
 
@@ -75,7 +75,7 @@ export class AISDKV5InputStream extends MastraModelInput {
           transformedChunk.payload.id = idMap.get(originalId)!;
         }
 
-        controller.enqueue(transformedChunk);
+        safeEnqueue(controller, transformedChunk);
       }
     }
   }

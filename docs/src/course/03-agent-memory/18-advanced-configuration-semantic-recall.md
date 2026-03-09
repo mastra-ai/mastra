@@ -5,13 +5,13 @@ We can configure semantic recall in more detail by setting options for the `sema
 ```typescript
 const memory = new Memory({
   storage: new LibSQLStore({
-    id: "learning-memory-storage",
-    url: "file:../../memory.db", // relative path from the `.mastra/output` directory
+    id: 'learning-memory-storage',
+    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
   }),
   vector: new LibSQLVector({
-    connectionUrl: "file:../../vector.db", // relative path from the `.mastra/output` directory
+    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
   }),
-  embedder: openai.embedding("text-embedding-3-small"),
+  embedder: openai.embedding('text-embedding-3-small'),
   options: {
     semanticRecall: {
       topK: 3,
@@ -21,7 +21,7 @@ const memory = new Memory({
       },
     },
   },
-});
+})
 ```
 
 The `topK` parameter controls how many semantically similar messages are retrieved. A higher value will retrieve more messages, which can be helpful for complex topics but may also include less relevant information. The default value is `4`.

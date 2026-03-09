@@ -1,4 +1,7 @@
-**/*.mdx
-.docusaurus
-build
-node_modules
+.turbo/**
+.docusaurus/**
+build/**
+node_modules/**
+static/**
+src/content/ja/**
+src/content/en/models/**

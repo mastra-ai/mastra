@@ -4,7 +4,7 @@ A simple example showing how to work with RAG using Mastra, OpenAI, and PGVector
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - OpenAI API key
 

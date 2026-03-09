@@ -1,0 +1,42 @@
+{
+  "name": "inngest",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "mastra:dev": "mastra dev",
+    "start:inngest:server": "npx inngest-cli@latest dev -u http://localhost:3000/api/inngest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "dependencies": {
+    "@hono/node-server": "^1.19.8",
+    "@inngest/realtime": "^0.4.5",
+    "@mastra/core": "1.0.0-beta.20",
+    "@mastra/deployer": "1.0.0-beta.20",
+    "@mastra/inngest": "1.0.0-beta.11",
+    "@mastra/libsql": "1.0.0-beta.11",
+    "@mastra/loggers": "1.0.0-beta.4",
+    "@mastra/observability": "1.0.0-beta.10",
+    "inngest": "^3.49.0",
+    "mastra": "1.0.0-beta.13",
+    "zod": "^3.25.76"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/inngest": "link:../../workflows/inngest",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/loggers": "link:../../packages/loggers",
+      "@mastra/observability": "link:../../observability/mastra",
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/deployer": "link:../../packages/deployer",
+      "@mastra/server": "link:../../packages/server",
+      "mastra": "link:../../packages/cli"
+    }
+  }
+}

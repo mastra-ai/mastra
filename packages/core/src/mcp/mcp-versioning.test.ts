@@ -8,8 +8,8 @@ class MockMCPServer extends MCPServerBase {
   constructor(config: MCPServerConfig) {
     super(config);
   }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  convertTools(tools: any) {
+
+  convertTools(_tools: any) {
     return {};
   }
   async startStdio() {

@@ -12,27 +12,26 @@ The `.getLogger()` method is used to retrieve the logger instance that has been 
 ## Usage example
 
 ```typescript
-mastra.getLogger();
+mastra.getLogger()
 ```
 
 ## Parameters
 
-This method does not accept any parameters.
+This method doesn't accept any parameters.
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "logger",
-      type: "TLogger",
-      description:
-        "The configured logger instance used for logging across all components (agents, workflows, etc.).",
-    },
-  ]}
+  {
+    name: 'logger',
+    type: 'TLogger',
+    description: 'The configured logger instance used for logging across all components (agents, workflows, etc.).',
+  },
+]}
 />
 
 ## Related
 
-- [Logging overview](/docs/v1/observability/logging)
-- [Logger reference](/reference/v1/logging/pino-logger)
+- [Logging overview](/docs/observability/logging)
+- [Logger reference](/reference/logging/pino-logger)

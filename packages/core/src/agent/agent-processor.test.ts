@@ -1,10 +1,9 @@
-import { openai as openai_v5 } from '@ai-sdk/openai-v5';
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { Processor } from '../processors/index';
+import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { RequestContext } from '../request-context';
 import { createStep, createWorkflow } from '../workflows';
@@ -209,20 +208,13 @@ describe('Input and Output Processors', () => {
         inputProcessors: [abortProcessor],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agentWithAbortProcessor.generate('This should be aborted', {
-          format,
-        });
+      const result = await agentWithAbortProcessor.generate('This should be aborted');
 
-        expect(result.tripwire).toBeDefined();
+      expect(result.tripwire).toBeDefined();
 
-        expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-processor');
+      expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-processor');
 
-        expect(await result.finishReason).toBe('other');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(result.finishReason).toBe('other');
     });
 
     it('should handle processor abort with custom message', async () => {
@@ -243,17 +235,10 @@ describe('Input and Output Processors', () => {
         inputProcessors: [customAbortProcessor],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agentWithCustomAbort.generate('Custom abort test', {
-          format,
-        });
+      const result = await agentWithCustomAbort.generate('Custom abort test');
 
-        expect(result.tripwire).toBeDefined();
-        expect(result.tripwire?.reason).toBe('Custom abort reason');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Custom abort reason');
     });
 
     it('should not execute subsequent processors after abort', async () => {
@@ -607,20 +592,13 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generate('Hello', {
-          format,
-        });
+      const result = await agent.generate('Hello');
 
-        // The output processors should modify the returned result
-        expect((result.response.messages[0].content[0] as any).text).toBe('This is a TEST response with TEST words');
+      // The output processors should modify the returned result
+      expect((result.response.messages[0].content[0] as any).text).toBe('This is a TEST response with TEST words');
 
-        // And the processor should have been called and processed the text
-        expect(processedText).toBe('This is a TEST response with TEST words');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // And the processor should have been called and processed the text
+      expect(processedText).toBe('This is a TEST response with TEST words');
     });
 
     it('should return processed text in result.text property', async () => {
@@ -755,20 +733,13 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generate('Test', {
-          format,
-        });
+      const result = await agent.generate('Test');
 
-        // The output processors should modify the returned result
-        expect((result.response.messages?.[0].content[0] as any).text).toBe('[PROCESSED] HELLO world');
+      // The output processors should modify the returned result
+      expect((result.response.messages?.[0].content[0] as any).text).toBe('[PROCESSED] HELLO world');
 
-        // And both processors should have been called in sequence
-        expect(finalProcessedText).toBe('[PROCESSED] HELLO world');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // And both processors should have been called in sequence
+      expect(finalProcessedText).toBe('[PROCESSED] HELLO world');
     });
 
     it('should handle abort in output processors', async () => {
@@ -821,19 +792,12 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new AbortingOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        // Should return tripwire result when processor aborts
-        const result = await agent.generate('Generate inappropriate content', {
-          format,
-        });
+      // Should return tripwire result when processor aborts
+      const result = await agent.generate('Generate inappropriate content');
 
-        expect(result.tripwire).toBeDefined();
-        expect(result.tripwire?.reason).toBe('Content flagged as inappropriate');
-        expect(result.finishReason).toBe('other');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(result.tripwire).toBeDefined();
+      expect(result.tripwire?.reason).toBe('Content flagged as inappropriate');
+      expect(result.finishReason).toBe('other');
     });
 
     it('should skip processors that do not implement processOutputResult', async () => {
@@ -891,17 +855,10 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new IncompleteProcessor() as any, new CompleteProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const result = await agent.generate('Test incomplete processors', {
-          format,
-        });
+      const result = await agent.generate('Test incomplete processors');
 
-        // Only the complete processor should have run
-        expect((result.response.messages![0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
-      }
-
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Only the complete processor should have run
+      expect((result.response.messages![0].content[0] as any).text).toBe('[COMPLETE] This is a test response');
     });
   });
 
@@ -940,29 +897,18 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new TestOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Hello', {
-          format,
-        });
+      const stream = await agent.stream('Hello');
 
-        let collectedText = '';
-        for await (const chunk of stream.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
+      let collectedText = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
         }
-
-        expect(collectedText).toBe(
-          'processed: You are a helpful assistant. Respond with exactly: "This is a TEST response" Hello',
-        );
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      expect(collectedText).toBe(
+        'processed: You are a helpful assistant. Respond with exactly: "This is a TEST response" Hello',
+      );
     });
 
     it('should filter blocked content chunks', async () => {
@@ -987,28 +933,17 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new BlockingOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Hello', {
-          format,
-        });
+      const stream = await agent.stream('Hello');
 
-        let collectedText = '';
-        for await (const chunk of stream.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
+      let collectedText = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
         }
-
-        // The blocked content should be filtered out completely (not appear in stream)
-        expect(collectedText).toBe('processed: ');
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // The blocked content should be filtered out completely (not appear in stream)
+      expect(collectedText).toBe('processed: ');
     });
 
     it('should emit tripwire when output processor calls abort', async () => {
@@ -1033,44 +968,28 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new AbortingOutputProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Hello', {
-          format,
-        });
-        const chunks: any[] = [];
+      const stream = await agent.stream('Hello');
+      const chunks: any[] = [];
 
-        for await (const chunk of stream.fullStream) {
-          chunks.push(chunk);
-        }
-
-        // Should have received a tripwire chunk
-        const tripwireChunk = chunks.find(chunk => chunk.type === 'tripwire');
-        expect(tripwireChunk).toBeDefined();
-
-        if (format === 'aisdk') {
-          expect(tripwireChunk.payload?.reason).toBe('Content triggered abort');
-        } else {
-          expect(tripwireChunk.payload.reason).toBe('Content triggered abort');
-        }
-
-        // Should not have received the text after the abort trigger
-        let collectedText = '';
-        chunks.forEach(chunk => {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
-        });
-        // The abort happens when "test" is encountered, which is in the first chunk
-        // So we might not get any text before the abort
-        expect(collectedText).not.toContain('test');
+      for await (const chunk of stream.fullStream) {
+        chunks.push(chunk);
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Should have received a tripwire chunk
+      const tripwireChunk = chunks.find(chunk => chunk.type === 'tripwire');
+      expect(tripwireChunk).toBeDefined();
+      expect(tripwireChunk.payload.reason).toBe('Content triggered abort');
+
+      // Should not have received the text after the abort trigger
+      let collectedText = '';
+      chunks.forEach(chunk => {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
+        }
+      });
+      // The abort happens when "test" is encountered, which is in the first chunk
+      // So we might not get any text before the abort
+      expect(collectedText).not.toContain('test');
     });
 
     it('should process chunks through multiple output processors in sequence', async () => {
@@ -1119,28 +1038,17 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new ReplaceProcessor(), new AddPrefixProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const stream = await agent.stream('Test', {
-          format,
-        });
+      const stream = await agent.stream('Test');
 
-        let collectedText = '';
-        for await (const chunk of stream.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              collectedText += chunk.text;
-            } else {
-              collectedText += chunk.payload.text;
-            }
-          }
+      let collectedText = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'text-delta') {
+          collectedText += chunk.payload.text;
         }
-
-        // Should be processed by both processors: replace "test" -> "TEST", then add prefix
-        expect(collectedText).toBe('[PROCESSED] SUH DUDE[PROCESSED] SUH DUDE');
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Should be processed by both processors: replace "test" -> "TEST", then add prefix
+      expect(collectedText).toBe('[PROCESSED] SUH DUDE[PROCESSED] SUH DUDE');
     });
   });
 
@@ -1236,49 +1144,39 @@ describe('Input and Output Processors', () => {
         outputProcessors: [new StreamStructuredProcessor()],
       });
 
-      async function testWithFormat(format: 'aisdk' | 'mastra') {
-        const response = await agent.stream('Who won the 2012 US presidential election?', {
-          structuredOutput: {
-            schema: z.object({
-              winner: z.string(),
-              year: z.string(),
-            }),
-          },
-          format,
-        });
+      const response = await agent.stream('Who won the 2012 US presidential election?', {
+        structuredOutput: {
+          schema: z.object({
+            winner: z.string(),
+            year: z.string(),
+          }),
+        },
+      });
 
-        // Consume the stream
-        let streamedContent = '';
-        for await (const chunk of response.fullStream) {
-          if (chunk.type === 'text-delta') {
-            if (format === 'aisdk') {
-              streamedContent += chunk.text;
-            } else {
-              streamedContent += chunk.payload.text;
-            }
-          }
+      // Consume the stream
+      let streamedContent = '';
+      for await (const chunk of response.fullStream) {
+        if (chunk.type === 'text-delta') {
+          streamedContent += chunk.payload.text;
         }
-
-        // Wait for the stream to finish
-        await response.getFullOutput();
-
-        // Check that streaming chunks were processed
-        expect(processedChunks.length).toBeGreaterThan(0);
-        expect(processedChunks.join('')).toContain('Barack');
-
-        // Check that streaming content was modified
-        expect(streamedContent).toContain('OBAMA');
-
-        // Check that final object processing occurred
-        expect(finalProcessedObject).toEqual({
-          winner: 'Barack OBAMA',
-          year: '2012',
-          stream_processed: true,
-        });
       }
 
-      // await testWithFormat('aisdk');
-      await testWithFormat('mastra');
+      // Wait for the stream to finish
+      await response.getFullOutput();
+
+      // Check that streaming chunks were processed
+      expect(processedChunks.length).toBeGreaterThan(0);
+      expect(processedChunks.join('')).toContain('Barack');
+
+      // Check that streaming content was modified
+      expect(streamedContent).toContain('OBAMA');
+
+      // Check that final object processing occurred
+      expect(finalProcessedObject).toEqual({
+        winner: 'Barack OBAMA',
+        year: '2012',
+        stream_processed: true,
+      });
     }, 20_000);
   });
 
@@ -1325,19 +1223,12 @@ describe('Input and Output Processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const result = await agent.generate('Hello', {
-            format,
-          });
+        const result = await agent.generate('Hello');
 
-          expect(result.tripwire).toBeDefined();
-          expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
+        expect(result.tripwire).toBeDefined();
+        expect(result.tripwire?.reason).toBe('Tripwire triggered by abort-output-processor');
 
-          expect(await result.finishReason).toBe('other');
-        }
-
-        // await testWithFormat('aisdk');
-        await testWithFormat('mastra');
+        expect(result.finishReason).toBe('other');
       });
     });
 
@@ -1363,28 +1254,17 @@ describe('Input and Output Processors', () => {
           outputProcessors: [abortProcessor],
         });
 
-        async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const stream = await agent.stream('Hello', {
-            format,
-          });
-          const chunks: any[] = [];
+        const stream = await agent.stream('Hello');
+        const chunks: any[] = [];
 
-          for await (const chunk of stream.fullStream) {
-            chunks.push(chunk);
-          }
-
-          // Should receive tripwire chunk
-          const tripwireChunk = chunks.find(c => c.type === 'tripwire');
-          expect(tripwireChunk).toBeDefined();
-          if (format === 'aisdk') {
-            expect(tripwireChunk.payload?.reason).toBe('Tripwire triggered by abort-stream-output-processor');
-          } else {
-            expect(tripwireChunk.payload.reason).toBe('Tripwire triggered by abort-stream-output-processor');
-          }
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
         }
 
-        // await testWithFormat('aisdk');
-        await testWithFormat('mastra');
+        // Should receive tripwire chunk
+        const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+        expect(tripwireChunk).toBeDefined();
+        expect(tripwireChunk.payload.reason).toBe('Tripwire triggered by abort-stream-output-processor');
       });
 
       it('should handle processor abort with custom message', async () => {
@@ -1407,370 +1287,19 @@ describe('Input and Output Processors', () => {
           outputProcessors: [customAbortProcessor],
         });
 
-        async function testWithFormat(format: 'aisdk' | 'mastra') {
-          const stream = await agent.stream('Custom abort test', {
-            format,
-          });
-          const chunks: any[] = [];
+        const stream = await agent.stream('Custom abort test');
+        const chunks: any[] = [];
 
-          for await (const chunk of stream.fullStream) {
-            chunks.push(chunk);
-          }
-
-          const tripwireChunk = chunks.find(c => c.type === 'tripwire');
-          expect(tripwireChunk).toBeDefined();
-          if (format === 'aisdk') {
-            expect(tripwireChunk.payload?.reason).toBe('Custom stream output abort reason');
-          } else {
-            expect(tripwireChunk.payload.reason).toBe('Custom stream output abort reason');
-          }
+        for await (const chunk of stream.fullStream) {
+          chunks.push(chunk);
         }
 
-        // await testWithFormat('aisdk');
-        await testWithFormat('mastra');
+        const tripwireChunk = chunks.find(c => c.type === 'tripwire');
+        expect(tripwireChunk).toBeDefined();
+        expect(tripwireChunk.payload.reason).toBe('Custom stream output abort reason');
       });
     });
   });
-
-  function testStructuredOutput(format: 'aisdk' | 'mastra', model: LanguageModelV2) {
-    describe('StructuredOutputProcessor Integration Tests', () => {
-      describe('with real LLM', () => {
-        it('should convert unstructured text to structured JSON for color analysis', async () => {
-          const colorSchema = z.object({
-            color: z.string().describe('The primary color'),
-            intensity: z.enum(['light', 'medium', 'bright', 'vibrant']).describe('How intense the color is'),
-            hexCode: z
-              .string()
-              .regex(/^#[0-9A-F]{6}$/i)
-              .describe('Hex color code')
-              .nullable(),
-            mood: z.string().describe('The mood or feeling the color evokes'),
-          });
-
-          const agent = new Agent({
-            id: 'color-expert',
-            name: 'Color Expert',
-            instructions: `You are an expert on colors. 
-              Analyze colors and describe their properties, psychological effects, and technical details.
-              Always give a hex code for the color.
-              `,
-            model,
-          });
-
-          const result = await agent.generate(
-            'Tell me about a vibrant sunset orange color. What are its properties and how does it make people feel? Keep your response really short.',
-            {
-              structuredOutput: {
-                schema: colorSchema,
-                model, // Use smaller model for faster tests
-                errorStrategy: 'strict',
-              },
-              format,
-            },
-          );
-
-          // Verify we have both natural text AND structured data
-          expect(result.text).toBeTruthy();
-
-          expect(() => JSON.parse(result.text)).toThrow();
-
-          expect(result.object).toBeDefined();
-
-          // Validate the structured data
-          expect(result.object).toMatchObject({
-            color: expect.any(String),
-            intensity: expect.stringMatching(/^(light|medium|bright|vibrant)$/),
-            hexCode: expect.stringMatching(/^#[0-9A-F]{6}$/i),
-            mood: expect.any(String),
-          });
-
-          // Validate the content makes sense for orange
-          expect(result.object!.color.toLowerCase()).toContain('orange');
-          expect(['bright', 'vibrant']).toContain(result.object!.intensity);
-          expect(result.object!.mood).toBeTruthy();
-
-          console.log('Natural text:', result.text);
-          console.log('Structured color data:', result.object);
-        }, 40000);
-
-        it('should handle complex nested schemas for article analysis', async () => {
-          const articleSchema = z.object({
-            title: z.string().describe('A concise title for the content'),
-            summary: z.string().describe('A brief summary of the main points'),
-            keyPoints: z
-              .array(
-                z.object({
-                  point: z.string().describe('A key insight or main point'),
-                  importance: z.number().min(1).max(5).describe('Importance level from 1-5'),
-                }),
-              )
-              .describe('List of key points from the content'),
-            metadata: z.object({
-              topics: z.array(z.string()).describe('Main topics covered'),
-              difficulty: z.enum(['beginner', 'intermediate', 'advanced']).describe('Content difficulty level'),
-              estimatedReadTime: z.number().describe('Estimated reading time in minutes'),
-            }),
-          });
-
-          const agent = new Agent({
-            id: 'content-analyzer',
-            name: 'Content Analyzer',
-            instructions: 'You are an expert content analyst. Read and analyze text content to extract key insights.',
-            model,
-          });
-
-          const articleText = `
-          Machine learning has revolutionized how we approach data analysis. 
-          At its core, machine learning involves training algorithms to recognize patterns in data. 
-          There are three main types: supervised learning (with labeled data), unsupervised learning (finding hidden patterns), 
-          and reinforcement learning (learning through trial and error). 
-          Popular applications include recommendation systems, image recognition, and natural language processing. 
-          For beginners, starting with simple algorithms like linear regression or decision trees is recommended.
-        `;
-
-          const result = await agent.generate(`Analyze this article and extract key information:\n\n${articleText}`, {
-            structuredOutput: {
-              schema: articleSchema,
-              model,
-              errorStrategy: 'strict',
-            },
-            format,
-          });
-
-          // Verify we have both natural text AND structured data
-          expect(result.text).toBeTruthy();
-
-          expect(() => JSON.parse(result.text)).toThrow();
-
-          expect(result.object).toBeDefined();
-
-          // Validate the structured data
-          expect(result.object).toMatchObject({
-            title: expect.any(String),
-            summary: expect.any(String),
-            keyPoints: expect.arrayContaining([
-              expect.objectContaining({
-                point: expect.any(String),
-                importance: expect.any(Number),
-              }),
-            ]),
-            metadata: expect.objectContaining({
-              topics: expect.any(Array),
-              difficulty: expect.stringMatching(/^(beginner|intermediate|advanced)$/),
-              estimatedReadTime: expect.any(Number),
-            }),
-          });
-
-          // Validate content relevance
-          expect(result.object!.title.toLowerCase()).toMatch(/machine learning|ml|data/);
-          expect(result.object!.summary.toLowerCase()).toContain('machine learning');
-          expect(result.object!.keyPoints.length).toBeGreaterThan(0);
-          expect(
-            result.object!.metadata.topics.some(
-              (topic: string) =>
-                topic.toLowerCase().includes('machine learning') || topic.toLowerCase().includes('data'),
-            ),
-          ).toBe(true);
-
-          console.log('Natural text:', result.text);
-          console.log('Structured article analysis:', result.object);
-        }, 40000);
-
-        it('should handle fallback strategy gracefully', async () => {
-          const strictSchema = z.object({
-            impossible: z.literal('exact_match_required'),
-            number: z.number().min(1000).max(1000), // Very restrictive
-          });
-
-          const fallbackValue = {
-            impossible: 'exact_match_required' as const,
-            number: 1000,
-          };
-
-          const agent = new Agent({
-            id: 'test-agent',
-            name: 'Test Agent',
-            instructions: 'You are a helpful assistant.',
-            model,
-          });
-
-          const result = await agent.generate('Tell me about the weather today in a casual way.', {
-            structuredOutput: {
-              schema: strictSchema,
-              model: new MockLanguageModelV2({
-                doStream: async () => {
-                  throw new Error('test error');
-                },
-              }),
-              errorStrategy: 'fallback',
-              fallbackValue,
-            },
-            format,
-          });
-
-          // Should preserve natural text but return fallback object
-          expect(result.text).toBeTruthy();
-
-          expect(result.object).toEqual(fallbackValue);
-
-          console.log('Natural text:', result.text);
-          console.log('Fallback object:', result.object);
-        }, 40000);
-
-        it('should work with different models for main agent vs structuring agent', async () => {
-          const ideaSchema = z.object({
-            idea: z.string().describe('The creative idea'),
-            category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
-            feasibility: z.number().min(1).max(10).describe('How feasible is this idea (1-10)'),
-            resources: z.array(z.string()).describe('Resources needed to implement'),
-          });
-
-          const agent = new Agent({
-            id: 'creative-thinker',
-            name: 'Creative Thinker',
-            instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
-            model, // Use faster model for idea generation
-          });
-
-          const result = await agent.generate(
-            'Come up with an innovative solution for reducing food waste in restaurants.',
-            {
-              structuredOutput: {
-                schema: ideaSchema,
-                model,
-                errorStrategy: 'strict',
-              },
-              format,
-            },
-          );
-
-          // Verify we have both natural text AND structured data
-          expect(result.text).toBeTruthy();
-
-          expect(result.object).toBeDefined();
-
-          // Validate structured data
-          expect(result.object).toMatchObject({
-            idea: expect.any(String),
-            category: expect.stringMatching(/^(technology|business|art|science|other)$/),
-            feasibility: expect.any(Number),
-            resources: expect.any(Array),
-          });
-
-          // Validate content
-          expect(result.object!.idea).toBeDefined();
-          expect(result.object!.feasibility).toBeGreaterThanOrEqual(1);
-          expect(result.object!.feasibility).toBeLessThanOrEqual(10);
-          expect(result.object!.resources.length).toBeGreaterThan(0);
-
-          console.log('Natural text:', result.text);
-          console.log('Structured idea data:', result.object);
-        }, 40000);
-      });
-
-      it('should work with stream', async () => {
-        const ideaSchema = z.object({
-          idea: z.string().describe('The creative idea'),
-          category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
-          feasibility: z.number().min(1).max(10).describe('How feasible is this idea (1-10)'),
-          resources: z.array(z.string()).describe('Resources needed to implement'),
-        });
-
-        const agent = new Agent({
-          id: 'creative-thinker',
-          name: 'Creative Thinker',
-          instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
-          model: model,
-        });
-
-        const result = await agent.stream(
-          `
-              Come up with an innovative solution for reducing food waste in restaurants. 
-              Make sure to include an idea, category, feasibility, and resources.
-            `,
-          {
-            format,
-            structuredOutput: {
-              schema: ideaSchema,
-              model,
-              errorStrategy: 'strict',
-            },
-          },
-        );
-
-        const resultText = await result.text;
-        const resultObj = await result.object;
-
-        expect(resultText).toBeTruthy();
-        expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
-        expect(resultObj).toBeDefined();
-
-        expect(resultObj).toMatchObject({
-          idea: expect.any(String),
-          category: expect.stringMatching(/^(technology|business|art|science|other)$/),
-          feasibility: expect.any(Number),
-          resources: expect.any(Array),
-        });
-
-        expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
-        expect(resultObj.feasibility).toBeLessThanOrEqual(10);
-        expect(resultObj.resources.length).toBeGreaterThan(0);
-      }, 60000);
-
-      it('should work with stream with useJsonSchemaPromptInjection', async () => {
-        const ideaSchema = z.object({
-          idea: z.string().describe('The creative idea'),
-          category: z.enum(['technology', 'business', 'art', 'science', 'other']).describe('Category of the idea'),
-          feasibility: z.number().min(1).max(10).describe('How feasible is this idea (1-10)'),
-          resources: z.array(z.string()).describe('Resources needed to implement'),
-        });
-
-        const agent = new Agent({
-          id: 'creative-thinker',
-          name: 'Creative Thinker',
-          instructions: 'You are a creative thinker who generates innovative ideas and explores possibilities.',
-          model: model,
-        });
-
-        const result = await agent.stream(
-          `
-              Come up with an innovative solution for reducing food waste in restaurants. 
-              Make sure to include an idea, category, feasibility, and resources.
-            `,
-          {
-            format,
-            structuredOutput: {
-              schema: ideaSchema,
-              model,
-              errorStrategy: 'strict',
-              jsonPromptInjection: true,
-            },
-          },
-        );
-
-        const resultText = await result.text;
-        const resultObj = await result.object;
-
-        expect(resultText).toBeTruthy();
-        expect(resultText).toMatch(/food waste|restaurant|reduce|solution|innovative/i); // Should contain natural language
-        expect(resultObj).toBeDefined();
-
-        expect(resultObj).toMatchObject({
-          idea: expect.any(String),
-          category: expect.stringMatching(/^(technology|business|art|science|other)$/),
-          feasibility: expect.any(Number),
-          resources: expect.any(Array),
-        });
-
-        expect(resultObj.feasibility).toBeGreaterThanOrEqual(1);
-        expect(resultObj.feasibility).toBeLessThanOrEqual(10);
-        expect(resultObj.resources.length).toBeGreaterThan(0);
-      }, 60000);
-    });
-  }
-
-  // testStructuredOutput('aisdk', openai_v5('gpt-4o'));
-  testStructuredOutput('mastra', openai_v5('gpt-4o'));
 });
 
 describe('New Processor Features', () => {
@@ -2273,6 +1802,159 @@ describe('New Processor Features', () => {
       // Should return tripwire since max retries exceeded
       expect(result.tripwire).toBeDefined();
       expect(result.tripwire?.reason).toBe('Never satisfied');
+    });
+
+    it('should not include rejected assistant response in messages sent to LLM on retry', async () => {
+      let callCount = 0;
+      const receivedPrompts: LanguageModelV2Prompt[] = [];
+
+      const mockModel = new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => {
+          callCount++;
+          receivedPrompts.push([...prompt]);
+
+          if (callCount === 1) {
+            return {
+              content: [{ type: 'text', text: 'fabricated response that should be rejected' }],
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          } else {
+            return {
+              content: [{ type: 'text', text: 'corrected response' }],
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          }
+        },
+      });
+
+      // Capture the rejected text dynamically from the processor, mirroring how
+      // a real processor inspects the response at runtime (not hardcoded).
+      let firstResponseText = '';
+
+      const fabricationDetector = {
+        id: 'fabrication-detector',
+        processOutputStep: async ({ text, abort, retryCount }: ProcessOutputStepArgs) => {
+          if (retryCount === 0) {
+            firstResponseText = text || '';
+            abort('Fabrication detected, please regenerate without fabricating', { retry: true });
+          }
+          return [];
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'retry-no-rejected-response-agent',
+        name: 'Retry No Rejected Response Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        outputProcessors: [fabricationDetector],
+        maxProcessorRetries: 3,
+      });
+
+      const result = await agent.generate('What is the capital of France?');
+
+      // Sanity: processor saw the rejected text
+      expect(firstResponseText).toBe('fabricated response that should be rejected');
+      expect(callCount).toBe(2);
+
+      // The retry call's prompt should NOT contain the rejected assistant response.
+      // This is the core of the bug: on retry, the full message thread is sent to the LLM
+      // including the rejected response, which confuses the model and causes empty responses.
+      const retryPrompt = receivedPrompts[1]!;
+      const hasRejectedResponse = retryPrompt.some(msg => {
+        if (msg.role !== 'assistant') return false;
+        return msg.content.some(part => part.type === 'text' && part.text.includes(firstResponseText));
+      });
+      expect(hasRejectedResponse).toBe(false);
+
+      // The retry feedback should be present as a system message
+      const hasRetryFeedback = retryPrompt.some(
+        msg => msg.role === 'system' && msg.content.includes('Fabrication detected'),
+      );
+      expect(hasRetryFeedback).toBe(true);
+
+      // Final result should be the corrected response
+      expect(result.text).toBe('corrected response');
+    });
+
+    it('should not include rejected assistant response in messages on retry when streaming', async () => {
+      let callCount = 0;
+      const receivedPrompts: LanguageModelV2Prompt[] = [];
+
+      const mockModel = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          callCount++;
+          receivedPrompts.push([...prompt]);
+
+          const responseText = callCount === 1 ? 'fabricated response that should be rejected' : 'corrected response';
+
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: responseText },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          };
+        },
+      });
+
+      // Capture the rejected text dynamically from the processor
+      let firstResponseText = '';
+
+      const fabricationDetector = {
+        id: 'fabrication-detector-stream',
+        processOutputStep: async ({ text, abort, retryCount }: ProcessOutputStepArgs) => {
+          if (retryCount === 0) {
+            firstResponseText = text || '';
+            abort('Fabrication detected, please regenerate', { retry: true });
+          }
+          return [];
+        },
+      } satisfies Processor;
+
+      const agent = new Agent({
+        id: 'retry-no-rejected-response-stream-agent',
+        name: 'Retry No Rejected Response Stream Agent',
+        instructions: 'You are a helpful assistant.',
+        model: mockModel,
+        outputProcessors: [fabricationDetector],
+        maxProcessorRetries: 3,
+      });
+
+      const stream = await agent.stream('What is the capital of France?');
+      // Consume the stream
+      for await (const _ of stream.fullStream) {
+      }
+      const result = await stream.getFullOutput();
+
+      // Sanity: processor saw the rejected text
+      expect(firstResponseText).toBe('fabricated response that should be rejected');
+      expect(callCount).toBe(2);
+
+      // The retry prompt should NOT contain the rejected assistant response
+      const retryPrompt = receivedPrompts[1]!;
+      const hasRejectedResponse = retryPrompt.some(msg => {
+        if (msg.role !== 'assistant') return false;
+        return msg.content.some(part => part.type === 'text' && part.text.includes(firstResponseText));
+      });
+      expect(hasRejectedResponse).toBe(false);
+
+      // Final text should be the corrected response
+      expect(result?.text).toBe('corrected response');
     });
   });
 

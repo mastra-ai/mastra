@@ -12,7 +12,7 @@ A Next.js application that generates OpenAPI specifications from API documentati
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - GitHub account (for PR creation feature)
 

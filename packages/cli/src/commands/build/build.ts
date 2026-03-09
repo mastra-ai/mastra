@@ -1,10 +1,10 @@
 import { join } from 'node:path';
-
-import { FileService } from '../../services/service.file';
-
-import { BuildBundler } from './BuildBundler';
 import { getDeployer } from '@mastra/deployer';
+import { FileService } from '../../services/service.file';
+import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { createLogger } from '../../utils/logger';
+import { getMastraPackages } from '../../utils/mastra-packages';
+import { BuildBundler } from './BuildBundler';
 
 export async function build({
   dir,
@@ -24,6 +24,11 @@ export async function build({
   const outputDirectory = join(rootDir, '.mastra');
   const logger = createLogger(debug);
 
+  // Check for peer dependency version mismatches
+  const mastraPackages = await getMastraPackages(rootDir);
+  const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
+  logPeerDepWarnings(peerDepMismatches);
+
   try {
     const fs = new FileService();
     const mastraEntryFile = fs.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
@@ -42,10 +47,11 @@ export async function build({
         toolsPaths: discoveredTools,
         projectRoot: rootDir,
       });
+
       logger.info(`Build successful, you can now deploy the .mastra/output directory to your target platform.`);
       if (studio) {
         logger.info(
-          `To start the server with studio, run: MASTRA_STUDIO_PATH=.mastra/output/playground node .mastra/output/index.mjs`,
+          `To start the server with studio, run: MASTRA_STUDIO_PATH=.mastra/output/studio node .mastra/output/index.mjs`,
         );
       } else {
         logger.info(`To start the server, run: node .mastra/output/index.mjs`);
@@ -64,6 +70,7 @@ export async function build({
       toolsPaths: discoveredTools,
       projectRoot: rootDir,
     });
+
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
     try {

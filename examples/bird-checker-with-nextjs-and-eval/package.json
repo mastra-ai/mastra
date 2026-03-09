@@ -14,7 +14,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "latest",
     "@mastra/core": "latest",
-    "braintrust": "^0.0.168",
+    "braintrust": "^2.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.454.0",
@@ -34,7 +34,7 @@
     }
   },
   "devDependencies": {
-    "@types/node": "22.13.17",
+    "@types/node": "22.19.7",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "eslint": "^9.37.0",

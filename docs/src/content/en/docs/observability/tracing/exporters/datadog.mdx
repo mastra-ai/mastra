@@ -1,6 +1,9 @@
 ---
 title: "Datadog Exporter | Tracing | Observability"
 description: "Send traces to Datadog for LLM observability and analytics"
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Datadog Exporter
@@ -10,7 +13,7 @@ description: "Send traces to Datadog for LLM observability and analytics"
 ## Installation
 
 ```bash npm2yarn
-npm install @mastra/datadog@beta
+npm install @mastra/datadog@latest
 ```
 
 ## Configuration
@@ -18,8 +21,8 @@ npm install @mastra/datadog@beta
 ### Prerequisites
 
 1. **Datadog Account**: Sign up at [datadoghq.com](https://datadoghq.com/) with LLM Observability enabled
-2. **API Key**: Get your API key from Datadog Organization Settings → API Keys
-3. **Environment Variables**: Set your credentials
+1. **API Key**: Get your API key from Datadog Organization Settings → API Keys
+1. **Environment Variables**: Set your credentials
 
 ```bash title=".env"
 DD_API_KEY=your-datadog-api-key
@@ -28,18 +31,41 @@ DD_SITE=datadoghq.com  # Optional: defaults to datadoghq.com
 DD_ENV=production      # Optional: environment name
 ```
 
-### Basic Setup
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { DatadogExporter } from "@mastra/datadog";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { DatadogExporter } from '@mastra/datadog'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       datadog: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
+        exporters: [new DatadogExporter()],
+      },
+    },
+  }),
+})
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { DatadogExporter } from '@mastra/datadog'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      datadog: {
+        serviceName: 'my-service',
         exporters: [
           new DatadogExporter({
             mlApp: process.env.DD_LLMOBS_ML_APP!,
@@ -49,7 +75,7 @@ export const mastra = new Mastra({
       },
     },
   }),
-});
+})
 ```
 
 ## Configuration Options
@@ -63,17 +89,17 @@ new DatadogExporter({
   apiKey: process.env.DD_API_KEY!, // Required for agentless mode (default)
 
   // Optional settings
-  site: "datadoghq.com", // Datadog site (datadoghq.eu, us3.datadoghq.com, etc.)
-  service: "my-service", // Service name (defaults to mlApp)
-  env: "production", // Environment name
+  site: 'datadoghq.com', // Datadog site (datadoghq.eu, us3.datadoghq.com, etc.)
+  service: 'my-service', // Service name (defaults to mlApp)
+  env: 'production', // Environment name
   agentless: true, // true = direct HTTPS, false = local Datadog Agent
 
   // Advanced settings
   integrationsEnabled: false, // Enable dd-trace auto-instrumentation
 
   // Diagnostic logging
-  logLevel: "info", // debug | info | warn | error
-});
+  logLevel: 'info', // debug | info | warn | error
+})
 ```
 
 ### With Local Datadog Agent
@@ -84,8 +110,8 @@ If you have a Datadog Agent running locally, you can route traces through it ins
 new DatadogExporter({
   mlApp: process.env.DD_LLMOBS_ML_APP!,
   agentless: false, // Use local Datadog Agent
-  env: "production",
-});
+  env: 'production',
+})
 ```
 
 Note: When using agent mode, the API key is read from the local agent's configuration.
@@ -94,20 +120,56 @@ Note: When using agent mode, the API key is read from the local agent's configur
 
 Mastra span types are automatically mapped to Datadog LLMObs span kinds:
 
-| Mastra SpanType      | Datadog Kind |
-| -------------------- | ------------ |
-| `AGENT_RUN`          | `agent`      |
-| `MODEL_GENERATION`   | `workflow`   |
-| `MODEL_STEP`         | `llm`        |
-| `TOOL_CALL`          | `tool`       |
-| `MCP_TOOL_CALL`      | `tool`       |
-| `WORKFLOW_RUN`       | `workflow`   |
-| Other workflow types | `task`       |
-| `GENERIC`            | `task`       |
+| Mastra SpanType | Datadog Kind |
+| - | - |
+| `AGENT_RUN` | `agent` |
+| `MODEL_GENERATION` | `workflow` |
+| `MODEL_STEP` | `llm` |
+| `TOOL_CALL` | `tool` |
+| `MCP_TOOL_CALL` | `tool` |
+| `WORKFLOW_RUN` | `workflow` |
+| Other workflow types | `task` |
+| `GENERIC` | `task` |
 
 Other/future Mastra span types will default to 'task' when mapped unless specified.
 
+## Troubleshooting
+
+### Native module ABI mismatch
+
+If you see errors like:
+
+```
+Error: No native build was found for runtime=node abi=137 platform=linuxglibc arch=x64
+```
+
+This indicates a Node.js version compatibility issue with `dd-trace`'s native modules. These native modules are **optional** and provide performance monitoring features.
+
+**Solutions:**
+
+1. **Use Node.js 22.x**: Native modules have the best compatibility with Node.js 22.x.
+
+1. **Ignore native module warnings**: The native modules (`@datadog/native-metrics`, `@datadog/native-appsec`, etc.) are optional. If they fail to load, core tracing functionality still works.
+
+### Bundler externals configuration
+
+When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may need to mark `dd-trace` and its dependencies as external:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  bundler: {
+    externals: [
+      'dd-trace',
+      '@datadog/native-metrics',
+      '@datadog/native-appsec',
+      '@datadog/native-iast-taint-tracking',
+      '@datadog/pprof',
+    ],
+  },
+})
+```
+
 ## Related
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview)
+- [Tracing Overview](/docs/observability/tracing/overview)
 - [Datadog LLM Observability Documentation](https://docs.datadoghq.com/llm_observability/)

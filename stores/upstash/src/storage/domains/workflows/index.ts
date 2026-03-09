@@ -18,26 +18,6 @@ import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';
 import { getKey } from '../utils';
 
-function parseWorkflowRun(row: any): WorkflowRun {
-  let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
-  if (typeof parsedSnapshot === 'string') {
-    try {
-      parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
-    } catch (e) {
-      // If parsing fails, return the raw snapshot string
-      console.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
-    }
-  }
-
-  return {
-    workflowName: row.workflow_name,
-    runId: row.run_id,
-    snapshot: parsedSnapshot,
-    createdAt: ensureDate(row.createdAt)!,
-    updatedAt: ensureDate(row.updatedAt)!,
-    resourceId: row.resourceId,
-  };
-}
 export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
   #db: UpstashDB;
@@ -47,6 +27,30 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     const client = resolveUpstashConfig(config);
     this.client = client;
     this.#db = new UpstashDB({ client });
+  }
+
+  supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  private parseWorkflowRun(row: any): WorkflowRun {
+    let parsedSnapshot: WorkflowRunState | string = row.snapshot as string;
+    if (typeof parsedSnapshot === 'string') {
+      try {
+        parsedSnapshot = JSON.parse(row.snapshot as string) as WorkflowRunState;
+      } catch (e) {
+        this.logger.warn(`Failed to parse snapshot for workflow ${row.workflow_name}: ${e}`);
+      }
+    }
+
+    return {
+      workflowName: row.workflow_name,
+      runId: row.run_id,
+      snapshot: parsedSnapshot,
+      createdAt: ensureDate(row.createdAt)!,
+      updatedAt: ensureDate(row.updatedAt)!,
+      resourceId: row.resourceId,
+    };
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -67,46 +71,117 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
-      // Load existing snapshot
-      const existingSnapshot = await this.loadWorkflowSnapshot({
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
         namespace: 'workflows',
-        workflowName,
-        runId,
+        workflow_name: workflowName,
+        run_id: runId,
       });
 
-      let snapshot: WorkflowRunState;
-      if (!existingSnapshot) {
-        // Create new snapshot if none exists
-        snapshot = {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          serializedStepGraph: [],
-          status: 'pending',
-          value: {},
-          waitingPaths: {},
+      const now = new Date().toISOString();
+
+      // Use Lua script for atomic read-modify-write operation
+      // This ensures concurrent updates don't overwrite each other
+      // The script returns the updated full record as JSON string
+      const luaScript = `
+        local key = KEYS[1]
+        local stepId = ARGV[1]
+        local resultJson = ARGV[2]
+        local requestContextJson = ARGV[3]
+        local now = ARGV[4]
+        local namespace = ARGV[5]
+        local workflowName = ARGV[6]
+        local runId = ARGV[7]
+        local timestamp = tonumber(ARGV[8])
+
+        -- Get existing data
+        local existing = redis.call('GET', key)
+        local data
+        local snapshot
+
+        if existing then
+          data = cjson.decode(existing)
+          snapshot = data.snapshot
+          if type(snapshot) == 'string' then
+            snapshot = cjson.decode(snapshot)
+          end
+        else
+          -- Create new record with default snapshot
+          snapshot = {
+            context = {},
+            activePaths = {},
+            timestamp = timestamp,
+            suspendedPaths = {},
+            activeStepsPath = {},
+            resumeLabels = {},
+            serializedStepGraph = {},
+            status = 'pending',
+            value = {},
+            waitingPaths = {},
+            runId = runId,
+            requestContext = {}
+          }
+          data = {
+            namespace = namespace,
+            workflow_name = workflowName,
+            run_id = runId,
+            createdAt = now,
+            updatedAt = now
+          }
+        end
+
+        -- Initialize context if nil
+        if snapshot.context == nil then
+          snapshot.context = {}
+        end
+
+        -- Merge the new step result
+        local stepResult = cjson.decode(resultJson)
+        snapshot.context[stepId] = stepResult
+
+        -- Merge request context
+        local newRequestContext = cjson.decode(requestContextJson)
+        if snapshot.requestContext == nil then
+          snapshot.requestContext = {}
+        end
+        for k, v in pairs(newRequestContext) do
+          snapshot.requestContext[k] = v
+        end
+
+        -- Update the record
+        data.snapshot = snapshot
+        data.updatedAt = now
+
+        -- Save back
+        redis.call('SET', key, cjson.encode(data))
+
+        -- Return the full updated data
+        return cjson.encode(data)
+      `;
+
+      const resultJson = await this.client.eval(
+        luaScript,
+        [key],
+        [
+          stepId,
+          JSON.stringify(result),
+          JSON.stringify(requestContext),
+          now,
+          'workflows',
+          workflowName,
           runId,
-          requestContext: {},
-        } as WorkflowRunState;
+          String(Date.now()),
+        ],
+      );
+
+      // Parse the result - handle both string and already-parsed object
+      let data: any;
+      if (typeof resultJson === 'string') {
+        data = JSON.parse(resultJson);
       } else {
-        snapshot = existingSnapshot;
+        data = resultJson;
       }
 
-      // Merge the new step result and request context
-      snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-      // Update the snapshot
-      await this.persistWorkflowSnapshot({
-        namespace: 'workflows',
-        workflowName,
-        runId,
-        snapshot,
-      });
-
+      const snapshot = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
       return snapshot.context;
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -132,29 +207,72 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     try {
-      // Load existing snapshot
-      const existingSnapshot = await this.loadWorkflowSnapshot({
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
         namespace: 'workflows',
-        workflowName,
-        runId,
+        workflow_name: workflowName,
+        run_id: runId,
       });
 
-      if (!existingSnapshot || !existingSnapshot.context) {
+      const now = new Date().toISOString();
+
+      // Use Lua script for atomic read-modify-write operation
+      // This ensures concurrent updates don't overwrite each other
+      const luaScript = `
+        local key = KEYS[1]
+        local optsJson = ARGV[1]
+        local now = ARGV[2]
+
+        -- Get existing data
+        local existing = redis.call('GET', key)
+
+        if not existing then
+          return nil
+        end
+
+        local data = cjson.decode(existing)
+        local snapshot = data.snapshot
+
+        if type(snapshot) == 'string' then
+          snapshot = cjson.decode(snapshot)
+        end
+
+        if not snapshot or not snapshot.context then
+          return nil
+        end
+
+        -- Merge the new options with the existing snapshot
+        local opts = cjson.decode(optsJson)
+        for k, v in pairs(opts) do
+          snapshot[k] = v
+        end
+
+        -- Update the record
+        data.snapshot = snapshot
+        data.updatedAt = now
+
+        -- Save back
+        redis.call('SET', key, cjson.encode(data))
+
+        -- Return the full updated data
+        return cjson.encode(data)
+      `;
+
+      const resultJson = await this.client.eval(luaScript, [key], [JSON.stringify(opts), now]);
+
+      if (!resultJson) {
         return undefined;
       }
 
-      // Merge the new options with the existing snapshot
-      const updatedSnapshot = { ...existingSnapshot, ...opts };
+      // Parse the result - handle both string and already-parsed object
+      let data: any;
+      if (typeof resultJson === 'string') {
+        data = JSON.parse(resultJson);
+      } else {
+        data = resultJson;
+      }
 
-      // Update the snapshot
-      await this.persistWorkflowSnapshot({
-        namespace: 'workflows',
-        workflowName,
-        runId,
-        snapshot: updatedSnapshot,
-      });
-
-      return updatedSnapshot;
+      const snapshot = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
+      return snapshot;
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -272,7 +390,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       );
       const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
       if (!data) return null;
-      return parseWorkflowRun(data);
+      return this.parseWorkflowRun(data);
     } catch (error) {
       throw new MastraError(
         {
@@ -373,7 +491,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         )
         // Only filter by workflowName if it was specifically requested
         .filter(record => !workflowName || record.workflow_name === workflowName)
-        .map(w => parseWorkflowRun(w!))
+        .map(w => this.parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
@@ -383,7 +501,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
               try {
                 snapshot = JSON.parse(snapshot) as WorkflowRunState;
               } catch (e) {
-                console.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
+                this.logger.warn(`Failed to parse snapshot for workflow ${w.workflowName}: ${e}`);
                 return false;
               }
             }

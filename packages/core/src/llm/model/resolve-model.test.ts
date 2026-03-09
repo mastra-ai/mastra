@@ -72,6 +72,48 @@ describe('resolveModelConfig', () => {
     await expect(resolveModelConfig({} as any)).rejects.toThrow('Invalid model configuration');
   });
 
+  describe('unknown specificationVersion handling', () => {
+    it('should wrap a model with unknown specificationVersion as AISDKV5LanguageModel when it has doStream/doGenerate', async () => {
+      const model = {
+        specificationVersion: 'v4',
+        provider: 'ollama.responses',
+        modelId: 'llama3.2',
+        supportedUrls: {},
+        doGenerate: async () => ({}),
+        doStream: async () => ({}),
+      };
+      const result = await resolveModelConfig(model as any);
+      expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result.specificationVersion).toBe('v2');
+      expect(result.modelId).toBe('llama3.2');
+      expect(result.provider).toBe('ollama.responses');
+    });
+
+    it('should pass through a model with unknown specificationVersion when it lacks doStream/doGenerate', async () => {
+      const model = {
+        specificationVersion: 'v4',
+        provider: 'test',
+        modelId: 'test-model',
+      };
+      const result = await resolveModelConfig(model as any);
+      expect(result).not.toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result).toBe(model);
+    });
+
+    it('should still wrap v1 models as legacy (no AISDKV5LanguageModel wrapping)', async () => {
+      const model = {
+        specificationVersion: 'v1',
+        provider: 'test',
+        modelId: 'test-model',
+        doGenerate: async () => ({}),
+        doStream: async () => ({}),
+      };
+      const result = await resolveModelConfig(model as any);
+      expect(result).not.toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result).toBe(model);
+    });
+  });
+
   describe('custom OpenAI-compatible config objects', () => {
     describe('using id format (provider/model)', () => {
       it('should resolve a custom config with id, url, and apiKey', async () => {

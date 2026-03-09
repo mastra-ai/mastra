@@ -10,21 +10,22 @@ import { Tool } from '@mastra/core/tools';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
-import { normalizeStudioBase } from '../build/utils';
+import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
 import { restartAllActiveWorkflowRunsHandler } from './handlers/restart-active-runs';
+import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
 import { html } from './welcome';
 
-// Get studio path from env or default to ./playground relative to cwd
+// Get studio path from env or default to ./studio relative to cwd
 const getStudioPath = () => {
   if (process.env.MASTRA_STUDIO_PATH) {
     return process.env.MASTRA_STUDIO_PATH;
@@ -36,7 +37,7 @@ const getStudioPath = () => {
     __dirname = dirname(__filename);
   }
 
-  const studioPath = process.env.MASTRA_STUDIO_PATH || join(__dirname, 'playground');
+  const studioPath = process.env.MASTRA_STUDIO_PATH || join(__dirname, 'studio');
   return studioPath;
 };
 
@@ -74,17 +75,43 @@ export async function createHonoServer(
     tools: {},
   },
 ) {
+  // Register bundled tools with Mastra so they can be used by stored agents
+  // This bridges the gap between tools discovered by the CLI bundler and the Mastra instance
+  if (options.tools) {
+    for (const [key, tool] of Object.entries(options.tools)) {
+      try {
+        mastra.addTool(tool as any, key);
+      } catch {
+        // Tool may already be registered (e.g., if defined in Mastra config), ignore
+      }
+    }
+  }
+
   // Create typed Hono app
   const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
   const server = mastra.getServer();
   const a2aTaskStore = new InMemoryTaskStore();
   const routes = server?.apiRoutes;
 
+  // Pre-process routes: bake hono-openapi describeRoute into route middleware
+  // so the adapter handles it as normal middleware without needing to know about hono-openapi
+  const processedRoutes = routes?.map(route => {
+    if ('openapi' in route && route.openapi) {
+      const existingMiddleware = route.middleware
+        ? Array.isArray(route.middleware)
+          ? route.middleware
+          : [route.middleware]
+        : [];
+      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+    }
+    return route;
+  });
+
   // Store custom route auth configurations
   const customRouteAuthConfig = new Map<string, boolean>();
 
-  if (routes) {
-    for (const route of routes) {
+  if (processedRoutes) {
+    for (const route of processedRoutes) {
       // By default, routes require authentication unless explicitly set to false
       const requiresAuth = route.requiresAuth !== false;
       const routeKey = `${route.method}:${route.path}`;
@@ -114,8 +141,9 @@ export async function createHonoServer(
     tools: options.tools,
     taskStore: a2aTaskStore,
     bodyLimitOptions,
-    openapiPath: '/openapi.json',
+    openapiPath: options?.isDev || server?.build?.openAPIDocs ? '/openapi.json' : undefined,
     customRouteAuthConfig,
+    customApiRoutes: processedRoutes,
   });
 
   // Register context middleware FIRST - this sets mastra, requestContext, tools, taskStore in context
@@ -135,10 +163,27 @@ export async function createHonoServer(
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
+    // Check if auth is configured - if so, we need credentials for cookie-based sessions
+    const hasAuth = !!server?.auth;
+
+    // When auth + credentials are enabled, origin cannot be '*'.
+    // Use user-configured cors.origin if provided; otherwise fall back to
+    // reflecting the request origin (required for dev/Studio but users should
+    // set an explicit origin in production).
+    let corsOrigin: string | string[] | ((origin: string) => string | undefined | null);
+    if (server?.cors && typeof server.cors === 'object' && 'origin' in server.cors && server.cors.origin) {
+      corsOrigin = server.cors.origin as string | string[] | ((origin: string) => string | undefined | null);
+    } else if (hasAuth) {
+      corsOrigin = (origin: string) => origin || undefined;
+    } else {
+      corsOrigin = '*';
+    }
+
     const corsConfig = {
-      origin: '*',
+      origin: corsOrigin,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      credentials: false,
+      // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
+      credentials: hasAuth ? true : false,
       maxAge: 3600,
       ...server?.cors,
       allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
@@ -162,6 +207,25 @@ export async function createHonoServer(
     healthHandler,
   );
 
+  if (options?.isDev || server?.build?.swaggerUI) {
+    app.get(
+      '/api',
+      describeRoute({
+        description: 'API Welcome Page',
+        tags: ['system'],
+        responses: {
+          200: {
+            description: 'Success',
+          },
+        },
+      }),
+      rootHandler,
+    );
+  }
+
+  // Validate EE license before starting (checks RBAC config vs license)
+  await honoServerAdapter.validateEELicense();
+
   // Register auth middleware (authentication and authorization)
   // This is handled by the server adapter now
   honoServerAdapter.registerAuthMiddleware();
@@ -184,30 +248,8 @@ export async function createHonoServer(
     }
   }
 
-  if (routes) {
-    for (const route of routes) {
-      const middlewares: MiddlewareHandler[] = [];
-
-      if (route.middleware) {
-        middlewares.push(...(Array.isArray(route.middleware) ? route.middleware : [route.middleware]));
-      }
-      if (route.openapi) {
-        middlewares.push(describeRoute(route.openapi));
-      }
-
-      const handler = 'handler' in route ? route.handler : await route.createHandler({ mastra });
-
-      // Register route using app.on() which supports dynamic method/path registration
-      // Hono's H type (Handler | MiddlewareHandler) is internal, so we use Handler
-      // which is compatible at runtime since both accept (context, next)
-      const allHandlers = [...middlewares, handler] as const;
-      if (route.method === 'ALL') {
-        app.all(route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      } else {
-        app.on(route.method, route.path, allHandlers[0]!, ...allHandlers.slice(1));
-      }
-    }
-  }
+  // Register custom API routes via the adapter (auth + middleware handled uniformly)
+  await honoServerAdapter.registerCustomApiRoutes();
 
   if (server?.build?.apiReqLogs) {
     app.use(logger());
@@ -218,12 +260,23 @@ export async function createHonoServer(
   await honoServerAdapter.registerRoutes();
 
   if (options?.isDev || server?.build?.swaggerUI) {
+    // Warn if Swagger UI is enabled but OpenAPI docs are not in production
+    if (!options?.isDev && server?.build?.swaggerUI && !server?.build?.openAPIDocs) {
+      const logger = mastra.getLogger();
+      logger.warn(
+        'Swagger UI is enabled but OpenAPI documentation is disabled. ' +
+          'The Swagger UI will not function properly without the OpenAPI endpoint. ' +
+          'Please enable openAPIDocs in your server.build configuration:\n' +
+          '  server: { build: { swaggerUI: true, openAPIDocs: true } }',
+      );
+    }
+
     app.get(
       '/swagger-ui',
       describeRoute({
         hide: true,
       }),
-      swaggerUI({ url: '/openapi.json' }),
+      swaggerUI({ url: '/api/openapi.json' }),
     );
   }
 
@@ -240,7 +293,7 @@ export async function createHonoServer(
   const serverOptions = mastra.getServer();
   const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
 
-  if (options?.playground) {
+  if (options?.studio) {
     // SSE endpoint for refresh notifications
     app.get(
       `${studioBasePath}/refresh-events`,
@@ -273,8 +326,8 @@ export async function createHonoServer(
       },
     );
 
-    // Playground routes - these should come after API routes
-    // Serve static assets from playground directory
+    // Studio routes - these should come after API routes
+    // Serve static assets from studio directory
     // Note: Vite builds with base: './' so all asset URLs are relative
     // The <base href> tag in index.html handles path resolution for the SPA
     const studioPath = getStudioPath();
@@ -284,12 +337,12 @@ export async function createHonoServer(
         root: join(studioPath, 'assets'),
         rewriteRequestPath: path => {
           // Remove the basePath AND /assets prefix to get the actual file path
-          // Example: /custom-path/assets/style.css -> /style.css -> ./playground/assets/style.css
+          // Example: /custom-path/assets/style.css -> /style.css -> ./studio/assets/style.css
           let rewritten = path;
           if (studioBasePath && rewritten.startsWith(studioBasePath)) {
             rewritten = rewritten.slice(studioBasePath.length);
           }
-          // Remove the /assets prefix since root is already './playground/assets'
+          // Remove the /assets prefix since root is already './studio/assets'
           if (rewritten.startsWith('/assets')) {
             rewritten = rewritten.slice('/assets'.length);
           }
@@ -305,6 +358,7 @@ export async function createHonoServer(
 
     // Skip if it's an API route
     if (
+      requestPath === '/api' ||
       requestPath.startsWith('/api/') ||
       requestPath.startsWith('/swagger-ui') ||
       requestPath.startsWith('/openapi.json')
@@ -317,15 +371,15 @@ export async function createHonoServer(
       return await next();
     }
 
-    // Only serve playground for routes matching the configured base path
-    const isPlaygroundRoute =
+    // Only serve studio for routes matching the configured base path
+    const isStudioRoute =
       studioBasePath === '' || requestPath === studioBasePath || requestPath.startsWith(`${studioBasePath}/`);
-    if (options?.playground && isPlaygroundRoute) {
+    if (options?.studio && isStudioRoute) {
       // For HTML routes, serve index.html with dynamic replacements
       const studioPath = getStudioPath();
       let indexHtml = await readFile(join(studioPath, 'index.html'), 'utf-8');
 
-      // Inject the server configuration information
+      // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
       const host = serverOptions?.host ?? 'localhost';
@@ -337,13 +391,38 @@ export async function createHonoServer(
         (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
       const protocol = key && cert ? 'https' : 'http';
 
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_HOST%%'`, `'${host}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PORT%%'`, `'${port}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_HIDE_CLOUD_CTA%%'`, `'${hideCloudCta}'`);
-      indexHtml = indexHtml.replace(`'%%MASTRA_SERVER_PROTOCOL%%'`, `'${protocol}'`);
-      // Inject the base path for frontend routing
-      // The <base href> tag uses this to resolve all relative URLs correctly
-      indexHtml = indexHtml.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', studioBasePath);
+      const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
+      const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
+      const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
+
+      // Helper function to escape JSON for embedding in HTML/JavaScript
+      const escapeForHtml = (json: string): string => {
+        return json
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'")
+          .replace(/\n/g, '\\n')
+          .replace(/\r/g, '\\r')
+          .replace(/</g, '\\u003c')
+          .replace(/>/g, '\\u003e')
+          .replace(/\u2028/g, '\\u2028')
+          .replace(/\u2029/g, '\\u2029');
+      };
+
+      const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
+
+      indexHtml = injectStudioHtmlConfig(indexHtml, {
+        host: `'${host}'`,
+        port: `'${port}'`,
+        protocol: `'${protocol}'`,
+        apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
+        basePath: studioBasePath,
+        hideCloudCta: `'${hideCloudCta}'`,
+        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        experimentalFeatures: `'${experimentalFeatures}'`,
+        telemetryDisabled: `''`,
+        requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        autoDetectUrl: `'${autoDetectUrl}'`,
+      });
 
       return c.newResponse(indexHtml, 200, { 'Content-Type': 'text/html' });
     }
@@ -351,14 +430,14 @@ export async function createHonoServer(
     return c.newResponse(html, 200, { 'Content-Type': 'text/html' });
   });
 
-  if (options?.playground) {
-    // Serve extra static files from playground directory (this comes after HTML handler)
-    const studioPath = getStudioPath();
-    const playgroundPath = studioBasePath ? `${studioBasePath}/*` : '*';
+  if (options?.studio) {
+    // Serve extra static files from studio directory (this comes after HTML handler)
+    const studioRootPath = getStudioPath();
+    const studioPath = studioBasePath ? `${studioBasePath}/*` : '*';
     app.use(
-      playgroundPath,
+      studioPath,
       serveStatic({
-        root: studioPath,
+        root: studioRootPath,
         rewriteRequestPath: path => {
           // Remove the basePath prefix if present
           if (studioBasePath && path.startsWith(studioBasePath)) {
@@ -407,7 +486,7 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     () => {
       const logger = mastra.getLogger();
       logger.info(` Mastra API running on ${protocol}://${host}:${port}/api`);
-      if (options?.playground) {
+      if (options?.studio) {
         const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
         const studioUrl = `${protocol}://${host}:${port}${studioBasePath}`;
         logger.info(`👨‍💻 Studio available at ${studioUrl}`);

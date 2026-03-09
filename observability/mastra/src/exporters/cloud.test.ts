@@ -51,6 +51,10 @@ describe('CloudExporter', () => {
     });
   });
 
+  afterEach(async () => {
+    await exporter.shutdown();
+  });
+
   describe('Core Event Filtering', () => {
     const mockSpan = getMockSpan({
       id: 'span-123',
@@ -164,9 +168,6 @@ describe('CloudExporter', () => {
 
       const buffer = (exporter as any).buffer;
       const firstTime = buffer.firstEventTime;
-
-      // Wait a bit to ensure time difference
-      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Add second span
       const secondSpan = { ...mockSpan, id: 'span-456' };
@@ -305,6 +306,7 @@ describe('CloudExporter', () => {
 
       expect(shouldFlushSpy).toHaveReturnedWith(true);
       expect(flushSpy).toHaveBeenCalled();
+      await smallBatchExporter.shutdown();
     });
 
     it('should schedule flush for first event in empty buffer', async () => {
@@ -383,14 +385,6 @@ describe('CloudExporter', () => {
       output: { response: 'result' },
     });
 
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
     it('should set timer when scheduling flush', async () => {
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
@@ -420,17 +414,23 @@ describe('CloudExporter', () => {
     });
 
     it('should trigger flush when timer expires', async () => {
-      const flushSpy = vi.spyOn(exporter as any, 'flush').mockResolvedValue(undefined);
+      const shortExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'team-123', projectId: 'project-456' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchWaitMs: 50,
+      });
+      const flushSpy = vi.spyOn(shortExporter as any, 'flush').mockResolvedValue(undefined);
 
-      await exporter.exportTracingEvent({
+      await shortExporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
-      // Fast-forward timer
-      vi.advanceTimersByTime(5000);
+      // Wait for the real timer to fire
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(flushSpy).toHaveBeenCalled();
+      await shortExporter.shutdown();
     });
 
     it('should clear timer after flush', async () => {
@@ -449,23 +449,26 @@ describe('CloudExporter', () => {
     });
 
     it('should handle timer errors gracefully', async () => {
-      const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
+      const shortExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'team-123', projectId: 'project-456' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchWaitMs: 50,
+      });
+      const loggerErrorSpy = vi.spyOn((shortExporter as any).logger, 'error');
 
       // Mock flush to throw error
-      vi.spyOn(exporter as any, 'flush').mockRejectedValue(new Error('Flush failed'));
+      vi.spyOn(shortExporter as any, 'flush').mockRejectedValue(new Error('Flush failed'));
 
-      await exporter.exportTracingEvent({
+      await shortExporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
-      // Fast-forward timer to trigger flush
-      vi.advanceTimersByTime(5000);
-
-      // Wait for error handling
-      await vi.runAllTimersAsync();
+      // Wait for the real timer to fire and error to be handled
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       expect(loggerErrorSpy).toHaveBeenCalledWith('Scheduled flush failed', expect.any(Object));
+      await shortExporter.shutdown();
     });
 
     it('should clear timer on flush and set flushTimer to null', async () => {
@@ -624,6 +627,7 @@ describe('CloudExporter', () => {
       const headers = requestOptions.headers as Record<string, string>;
 
       expect(headers.Authorization).toBe(`Bearer ${testJWT}`);
+      await authExporter.shutdown();
     });
 
     it('should handle multiple spans in batch', async () => {
@@ -682,14 +686,9 @@ describe('CloudExporter', () => {
     });
 
     beforeEach(() => {
-      vi.useFakeTimers();
       vi.clearAllMocks();
       // Reset mock to default success behavior
       mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
     });
 
     it('should retry on API failures using fetchWithRetry', async () => {
@@ -718,6 +717,7 @@ describe('CloudExporter', () => {
         expect.any(Object),
         3, // maxRetries passed to fetchWithRetry
       );
+      await retryExporter.shutdown();
     });
 
     it('should pass maxRetries to fetchWithRetry correctly', async () => {
@@ -741,6 +741,7 @@ describe('CloudExporter', () => {
         expect.any(Object),
         5, // Custom maxRetries value
       );
+      await customRetryExporter.shutdown();
     });
 
     it('should drop batch after fetchWithRetry exhausts all retries', async () => {
@@ -767,30 +768,104 @@ describe('CloudExporter', () => {
         'Batch upload failed after all retries, dropping batch',
         expect.any(Object),
       );
+      await retryExporter.shutdown();
     });
 
     it('should handle flush errors gracefully in background', async () => {
-      const loggerErrorSpy = vi.spyOn((exporter as any).logger, 'error');
+      const shortExporter = new CloudExporter({
+        accessToken: createTestJWT({ teamId: 'team-123', projectId: 'project-456' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchWaitMs: 50,
+      });
+      const loggerErrorSpy = vi.spyOn((shortExporter as any).logger, 'error');
 
       // Mock fetchWithRetry to fail
       mockFetchWithRetry.mockRejectedValue(new Error('API down'));
 
-      await exporter.exportTracingEvent({
+      await shortExporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,
         exportedSpan: mockSpan,
       });
 
-      // Fast-forward to trigger scheduled flush - errors should be caught
-      vi.advanceTimersByTime(5000);
-
-      // Wait for async error handling
-      await vi.runAllTimersAsync();
+      // Wait for the real timer to fire and error to be handled
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Should log the batch upload failure, not scheduled flush failure
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         'Batch upload failed after all retries, dropping batch',
         expect.any(Object),
       );
+      await shortExporter.shutdown();
+    });
+  });
+
+  describe('Public Flush API', () => {
+    const mockSpan = getMockSpan({
+      id: 'span-123',
+      name: 'test-span',
+      type: SpanType.MODEL_GENERATION,
+      isEvent: false,
+      traceId: 'trace-456',
+      input: { prompt: 'test' },
+      output: { response: 'result' },
+    });
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+    });
+
+    it('should flush buffered events without shutting down', async () => {
+      const loggerDebugSpy = vi.spyOn((exporter as any).logger, 'debug');
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: mockSpan,
+      });
+
+      const buffer = (exporter as any).buffer;
+      expect(buffer.totalSize).toBe(1);
+
+      // Call public flush() method
+      await exporter.flush();
+
+      expect(loggerDebugSpy).toHaveBeenCalledWith('Flushing buffered events', { bufferedEvents: 1 });
+      expect(mockFetchWithRetry).toHaveBeenCalled();
+
+      // Buffer should be empty after flush
+      expect(buffer.totalSize).toBe(0);
+
+      // Exporter should still be usable after flush
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: { ...mockSpan, id: 'span-456' },
+      });
+      expect(buffer.totalSize).toBe(1);
+    });
+
+    it('should be a no-op when buffer is empty', async () => {
+      const buffer = (exporter as any).buffer;
+      expect(buffer.totalSize).toBe(0);
+
+      // Call flush on empty buffer
+      await exporter.flush();
+
+      // Should not have called the API
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
+    });
+
+    it('should skip flush when exporter is disabled', async () => {
+      const disabledExporter = new CloudExporter({
+        // Missing access token will disable the exporter
+        accessToken: undefined,
+        endpoint: 'http://localhost:3000',
+      });
+
+      // Should not throw
+      await expect(disabledExporter.flush()).resolves.not.toThrow();
+
+      // Should not call API since exporter is disabled
+      expect(mockFetchWithRetry).not.toHaveBeenCalled();
     });
   });
 
@@ -803,14 +878,6 @@ describe('CloudExporter', () => {
       traceId: 'trace-456',
       input: { prompt: 'test' },
       output: { response: 'result' },
-    });
-
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
     });
 
     it('should clear timer on shutdown', async () => {
@@ -834,7 +901,7 @@ describe('CloudExporter', () => {
     });
 
     it('should flush remaining events on shutdown', async () => {
-      const flushSpy = vi.spyOn(exporter as any, 'flush').mockResolvedValue(undefined);
+      const flushSpy = vi.spyOn(exporter, 'flush').mockResolvedValue(undefined);
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       // Add events to buffer
@@ -853,15 +920,12 @@ describe('CloudExporter', () => {
 
       await exporter.shutdown();
 
-      expect(loggerInfoSpy).toHaveBeenCalledWith('Flushing remaining events on shutdown', {
-        remainingEvents: 2,
-      });
       expect(flushSpy).toHaveBeenCalled();
       expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 
     it('should handle shutdown with empty buffer gracefully', async () => {
-      const flushSpy = vi.spyOn(exporter as any, 'flush');
+      const flushSpy = vi.spyOn(exporter, 'flush');
       const loggerInfoSpy = vi.spyOn((exporter as any).logger, 'info');
 
       const buffer = (exporter as any).buffer;
@@ -869,8 +933,8 @@ describe('CloudExporter', () => {
 
       await exporter.shutdown();
 
-      // Should not call flush for empty buffer
-      expect(flushSpy).not.toHaveBeenCalled();
+      // flush() is called but it's a no-op for empty buffer
+      expect(flushSpy).toHaveBeenCalled();
       expect(loggerInfoSpy).toHaveBeenCalledWith('CloudExporter shutdown complete');
     });
 

@@ -1,0 +1,181 @@
+---
+title: "Skills | Workspace"
+description: Teach agents reusable capabilities with the Agent Skills specification.
+packages:
+  - "@mastra/core"
+---
+
+# Workspace Skills
+
+**Added in:** `@mastra/core@1.1.0`
+
+Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io) - an open standard for packaging agent capabilities.
+
+A skill is a folder containing:
+
+- `SKILL.md`: Instructions and metadata for the agent
+- `references/`: Supporting documentation (optional)
+- `scripts/`: Executable scripts (optional)
+- `assets/`: Images and other files (optional)
+
+```plaintext title="Folder structure"
+/skills
+  /code-review
+    SKILL.md
+    /references
+      style-guide.md
+      pr-checklist.md
+    /scripts
+      lint.ts
+```
+
+When skills are configured on a workspace, agents can discover and activate them during conversations.
+
+## SKILL.md format
+
+Follow the official [skill specification](https://agentskills.io/specification) when creating your skill. Here is an example `SKILL.md` for a code review skill:
+
+```markdown title="SKILL.md"
+---
+name: code-review
+description: Reviews code for quality, style, and potential issues
+version: 1.0.0
+tags:
+  - development
+  - review
+---
+
+# Code Review
+
+You are a code reviewer. When reviewing code:
+
+1. Check for bugs and edge cases
+2. Verify the code follows the style guide in references/style-guide.md
+3. Suggest improvements for readability
+4. Run the linter using scripts/lint.ts
+
+## What to look out for
+
+- Unused variables and imports
+- Missing error handling
+- Security vulnerabilities
+- Performance issues
+```
+
+## Configuring skills
+
+Enable skill discovery by setting the `skills` option on your workspace:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+})
+```
+
+The `skills` directory is relative to your `basePath`. You can specify multiple skill directories or use glob patterns for discovery:
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: [
+    '/skills', // Project skills
+    '/team-skills', // Shared team skills
+  ],
+})
+```
+
+You can also pass a direct path to a skill directory or `SKILL.md` file:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/path/to/my-skill'],
+})
+```
+
+Glob patterns let you discover skills across nested directories:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['./**/skills'],
+})
+```
+
+## Dynamic skills
+
+For dynamic skill paths based on context, pass a function:
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: context => {
+    const paths = ['/skills']
+    if (context.user?.role === 'developer') {
+      paths.push('/dev-skills')
+    }
+    return paths
+  },
+})
+```
+
+## How agents use skills
+
+When a workspace has skills configured, agents automatically get access to skill tools. Available skills are listed in the system message so the agent knows what's available, and the agent can load any skill on demand.
+
+The agent has three skill tools:
+
+- **`skill`** — Loads a skill's full instructions and returns them in the tool result. The agent calls this whenever it needs a skill's guidance.
+- **`skill_read`** — Reads a file from a skill's `references/`, `scripts/`, or `assets/` directory.
+- **`skill_search`** — Searches across all skill content. Uses BM25 or vector search when configured, otherwise falls back to basic text matching.
+
+This design is stateless — there is no activation state to track. If the skill instructions leave the conversation context (due to context window limits or compaction), the agent can call `skill` again to reload them.
+
+## Skill search
+
+If BM25 or vector search is enabled on the workspace, skills are automatically indexed. Agents can search across skill content to find relevant instructions.
+
+```typescript
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+  // highlight-next-line
+  bm25: true,
+})
+```
+
+## Custom skill source
+
+By default, skills are read from the workspace filesystem. For advanced use cases, provide a custom `skillSource` to load skills from a different backend.
+
+`VersionedSkillSource` serves published skill versions from a content-addressable blob store, so production agents use a specific published version without touching the live filesystem:
+
+```typescript
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+// highlight-next-line
+import { VersionedSkillSource } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['/skills'],
+  // highlight-next-line
+  skillSource: new VersionedSkillSource(versionTree, blobStore, versionCreatedAt),
+})
+```
+
+`VersionedSkillSource` accepts three parameters:
+
+- **`versionTree`** (`SkillVersionTree`) — A manifest mapping relative file paths to blob entries (`{ entries: Record<string, { blobHash, size, mimeType?, encoding? }> }`).
+- **`blobStore`** (`BlobStore`) — A content-addressable blob store instance that holds the actual file contents referenced by hash.
+- **`versionCreatedAt`** (`Date`) — The timestamp when this skill version was published. Used as the modification time for all files in the version.
+
+When `skillSource` is provided, it's used instead of the workspace filesystem for skill discovery.
+
+## Related
+
+- [Agent skills specification](https://agentskills.io)
+- [Workspace overview](/docs/workspace/overview)
+- [Search and indexing](/docs/workspace/search)

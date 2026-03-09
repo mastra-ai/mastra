@@ -1,5 +1,3 @@
-import { Link, useParams } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -13,6 +11,7 @@ import {
   useMCPServerTool,
   useMCPServers,
 } from '@mastra/playground-ui';
+import { Link, useParams } from 'react-router';
 
 const MCPServerToolExecutor = () => {
   const { data: mcpServers } = useMCPServers();
@@ -29,7 +28,7 @@ const MCPServerToolExecutor = () => {
   if (!mcpTool) return null;
 
   return (
-    <div className="h-full w-full bg-mastra-bg-1 overflow-y-hidden">
+    <div className="h-full w-full bg-surface2 overflow-y-hidden">
       <Header>
         <Breadcrumb>
           <Crumb as={Link} to={`/mcps`}>

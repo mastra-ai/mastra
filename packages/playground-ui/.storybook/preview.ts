@@ -1,7 +1,7 @@
 import type { Preview } from '@storybook/react-vite';
 import { themes } from 'storybook/theming';
-import '../src/index.css';
-import '../../../packages/playground/src/index.css';
+import './tailwind.css';
+import { Colors } from '@/ds/tokens/colors';
 
 const preview: Preview = {
   parameters: {
@@ -15,17 +15,10 @@ const preview: Preview = {
       },
     },
     backgrounds: {
-      default: 'dark',
-      values: [
-        {
-          name: 'dark',
-          value: '#1a1a1a',
-        },
-        {
-          name: 'light',
-          value: '#ffffff',
-        },
-      ],
+      options: {
+        dark: { name: 'Dark', value: Colors.surface1 },
+        light: { name: 'Light', value: Colors.surface1 },
+      },
     },
   },
   initialGlobals: {

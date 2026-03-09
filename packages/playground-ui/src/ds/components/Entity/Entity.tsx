@@ -1,11 +1,12 @@
 import { Icon } from '@/ds/icons';
 import { Txt } from '../Txt';
-import clsx from 'clsx';
+import { cn } from '@/lib/utils';
 
 export interface EntityProps {
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export const Entity = ({ children, className, onClick }: EntityProps) => {
@@ -19,8 +20,8 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
           onClick?.();
         }
       }}
-      className={clsx(
-        'flex gap-3 group/entity bg-surface3 rounded-lg border-sm border-border1 py-3 px-4',
+      className={cn(
+        'flex gap-3 group/entity bg-surface3 rounded-xl border border-border1 py-3 px-4',
         onClick && 'cursor-pointer hover:bg-surface4 transition-all',
         className,
       )}
@@ -31,9 +32,9 @@ export const Entity = ({ children, className, onClick }: EntityProps) => {
   );
 };
 
-export const EntityIcon = ({ children, className }: EntityProps) => {
+export const EntityIcon = ({ children, className, style }: EntityProps) => {
   return (
-    <Icon size="lg" className={clsx('text-icon3 mt-1', className)}>
+    <Icon size="lg" className={cn('text-neutral3 mt-1 shrink-0', className)} style={style}>
       {children}
     </Icon>
   );
@@ -41,7 +42,7 @@ export const EntityIcon = ({ children, className }: EntityProps) => {
 
 export const EntityName = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-lg" className={clsx('text-icon6 font-medium', className)}>
+    <Txt as="p" variant="ui-lg" className={cn('text-neutral6 font-medium', className)}>
       {children}
     </Txt>
   );
@@ -49,12 +50,12 @@ export const EntityName = ({ children, className }: EntityProps) => {
 
 export const EntityDescription = ({ children, className }: EntityProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className={clsx('text-icon3', className)}>
+    <Txt as="div" variant="ui-sm" className={cn('text-neutral3', className)}>
       {children}
     </Txt>
   );
 };
 
 export const EntityContent = ({ children, className }: EntityProps) => {
-  return <div className={className}>{children}</div>;
+  return <div className={cn('flex-1 w-full', className)}>{children}</div>;
 };

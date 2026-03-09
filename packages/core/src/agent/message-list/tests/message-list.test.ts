@@ -1136,16 +1136,17 @@ describe('MessageList', () => {
             format: 2,
             parts: [
               { type: 'text', text: 'Here is an image URL:' },
-              {
+              expect.objectContaining({
                 data: 'https://example.com/image.jpg',
+                filename: 'image.jpg',
                 mimeType: 'image/jpeg',
                 type: 'file',
-              },
+              }),
             ],
           },
           threadId,
           resourceId,
-        } satisfies MastraDBMessage,
+        },
       ]);
     });
 
@@ -1174,16 +1175,17 @@ describe('MessageList', () => {
             format: 2,
             parts: [
               { type: 'text', text: 'Here is another image URL:' },
-              {
+              expect.objectContaining({
                 type: 'file',
                 data: 'https://example.com/another-image.png',
+                filename: 'another-image.png',
                 mimeType: 'image/png',
-              },
+              }),
             ],
           },
           threadId,
           resourceId,
-        } satisfies MastraDBMessage,
+        },
       ]);
     });
 
@@ -2010,7 +2012,7 @@ describe('MessageList', () => {
       ];
       const newUIMessages5 = appendResponseMessages({
         messages: newUIMessages3,
-        // @ts-ignore
+        // @ts-expect-error - testing response message format
         responseMessages: responseMessages2,
       });
 
@@ -3868,40 +3870,39 @@ describe('MessageList', () => {
     });
   });
 
-  describe('Empty message list validation', () => {
-    it('should throw error when calling prompt() with empty message list', () => {
+  describe('Empty message list handling', () => {
+    it('should pass through empty message list unchanged when calling prompt()', () => {
       const list = new MessageList();
 
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(0);
     });
 
-    it('should throw error when calling prompt() with only system messages', () => {
+    it('should pass through system-only message list unchanged when calling prompt()', () => {
       const list = new MessageList();
       list.addSystem('You are a helpful assistant');
       list.addSystem('Follow these rules');
 
-      expect(() => list.get.all.aiV5.prompt()).toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const prompt = list.get.all.aiV5.prompt();
+      expect(prompt).toHaveLength(2);
+      expect(prompt[0].role).toBe('system');
+      expect(prompt[1].role).toBe('system');
     });
 
-    it('should throw error when calling llmPrompt() with empty message list', async () => {
+    it('should pass through empty message list unchanged when calling llmPrompt()', async () => {
       const list = new MessageList();
 
-      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      expect(llmPrompt).toHaveLength(0);
     });
 
-    it('should throw error when calling llmPrompt() with only system messages', async () => {
+    it('should pass through system-only message list unchanged when calling llmPrompt()', async () => {
       const list = new MessageList();
       list.addSystem('You are a helpful assistant');
 
-      await expect(list.get.all.aiV5.llmPrompt()).rejects.toThrow(
-        'This request does not contain any user or assistant messages. At least one user or assistant message is required to generate a response.',
-      );
+      const llmPrompt = await list.get.all.aiV5.llmPrompt();
+      expect(llmPrompt).toHaveLength(1);
+      expect(llmPrompt[0].role).toBe('system');
     });
   });
 
@@ -3997,6 +3998,78 @@ describe('MessageList', () => {
       const result = list.replaceAllSystemMessages([{ role: 'system', content: 'Test' }]);
 
       expect(result).toBe(list);
+    });
+  });
+
+  describe('mastraDBMessageToAIV4UIMessage', () => {
+    it('should handle MastraDBMessage with undefined parts (issue #11526)', () => {
+      // This test reproduces the bug where ModerationProcessor crashes when
+      // mastraDBMessageToAIV4UIMessage receives a message with undefined parts.
+      // The MastraMessageContentV2 type only requires format: 2, not parts.
+      const messageWithUndefinedParts: MastraDBMessage = {
+        id: 'test-id',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'This is text content without parts',
+        } as any, // Cast to any to simulate runtime scenario where parts is undefined
+      };
+
+      const list = new MessageList();
+      list.add(messageWithUndefinedParts, 'input');
+
+      // This should not throw "Cannot read properties of undefined (reading 'reduce')"
+      // or "Cannot read properties of undefined (reading 'length')"
+      expect(() => list.get.all.ui()).not.toThrow();
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].content).toBe('This is text content without parts');
+    });
+
+    it('should handle MastraDBMessage with null parts', () => {
+      const messageWithNullParts: MastraDBMessage = {
+        id: 'test-id-2',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: null as any, // Explicitly null parts
+          content: 'Assistant response',
+        },
+      };
+
+      const list = new MessageList();
+      list.add(messageWithNullParts, 'response');
+
+      expect(() => list.get.all.ui()).not.toThrow();
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].content).toBe('Assistant response');
+    });
+
+    it('should handle MastraDBMessage with empty parts array', () => {
+      const messageWithEmptyParts: MastraDBMessage = {
+        id: 'test-id-3',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [],
+          content: 'Content with empty parts',
+        },
+      };
+
+      const list = new MessageList();
+      list.add(messageWithEmptyParts, 'input');
+
+      expect(() => list.get.all.ui()).not.toThrow();
+
+      const uiMessages = list.get.all.ui();
+      expect(uiMessages).toHaveLength(1);
+      expect(uiMessages[0].content).toBe('Content with empty parts');
     });
   });
 });

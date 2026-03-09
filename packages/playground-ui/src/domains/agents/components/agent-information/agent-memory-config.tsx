@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useMemoryConfig } from '@/domains/memory/hooks';
@@ -72,6 +72,28 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
       });
     }
 
+    // Observational Memory section
+    const omConfig = config.observationalMemory;
+    if (omConfig?.enabled) {
+      const formatThreshold = (threshold: number | { min: number; max: number } | undefined) => {
+        if (!threshold) return 'Default';
+        if (typeof threshold === 'number') return `${threshold.toLocaleString()} tokens`;
+        return `${threshold.min.toLocaleString()}-${threshold.max.toLocaleString()} tokens`;
+      };
+
+      sections.push({
+        title: 'Observational Memory',
+        items: [
+          { label: 'Enabled', value: true, badge: 'success' },
+          { label: 'Scope', value: omConfig.scope || 'resource' },
+          { label: 'Message Tokens', value: formatThreshold(omConfig.messageTokens) },
+          { label: 'Observation Tokens', value: formatThreshold(omConfig.observationTokens) },
+          ...(omConfig.observationModel ? [{ label: 'Observation Model', value: omConfig.observationModel }] : []),
+          ...(omConfig.reflectionModel ? [{ label: 'Reflection Model', value: omConfig.reflectionModel }] : []),
+        ],
+      });
+    }
+
     return sections;
   }, [config]);
 
@@ -112,7 +134,7 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
       return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
     }
 
-    return <span className="text-xs text-icon3">{value}</span>;
+    return <span className="text-xs text-neutral3">{value}</span>;
   };
 
   if (isLoading) {
@@ -126,15 +148,15 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   if (!config || configSections.length === 0) {
     return (
       <div className="p-4">
-        <h3 className="text-sm font-medium text-icon5 mb-3">Memory Configuration</h3>
-        <p className="text-xs text-icon3">No memory configuration available</p>
+        <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
+        <p className="text-xs text-neutral3">No memory configuration available</p>
       </div>
     );
   }
 
   return (
     <div className="p-4">
-      <h3 className="text-sm font-medium text-icon5 mb-3">Memory Configuration</h3>
+      <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
       <div className="space-y-2">
         {configSections.map(section => (
           <div key={section.title} className="border border-border1 rounded-lg bg-surface3">
@@ -142,18 +164,18 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
               onClick={() => toggleSection(section.title)}
               className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
             >
-              <span className="text-xs font-medium text-icon5">{section.title}</span>
+              <span className="text-xs font-medium text-neutral5">{section.title}</span>
               {expandedSections.has(section.title) ? (
-                <ChevronDown className="w-3 h-3 text-icon3" />
+                <ChevronDown className="w-3 h-3 text-neutral3" />
               ) : (
-                <ChevronRight className="w-3 h-3 text-icon3" />
+                <ChevronRight className="w-3 h-3 text-neutral3" />
               )}
             </button>
             {expandedSections.has(section.title) && (
               <div className="px-3 pb-2 space-y-1">
                 {section.items.map(item => (
                   <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
-                    <span className="text-xs text-icon3">{item.label}</span>
+                    <span className="text-xs text-neutral3">{item.label}</span>
                     {renderValue(item.value ?? '', item.badge)}
                   </div>
                 ))}

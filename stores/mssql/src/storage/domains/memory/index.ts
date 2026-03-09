@@ -16,8 +16,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import sql from 'mssql';
@@ -183,33 +183,97 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError({
-        id: createStorageErrorId('MSSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+        id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_PAGE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: 'Page number must be non-negative',
-        details: {
-          resourceId,
-          page,
-        },
+        text: error instanceof Error ? error.message : 'Invalid pagination parameters',
+        details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
       });
     }
 
     const perPage = normalizePerPage(perPageInput, 100);
+
+    // Validate metadata keys to prevent SQL injection
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError({
+        id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: error instanceof Error ? error.message : 'Invalid metadata key',
+        details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+      });
+    }
+
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy);
+
     try {
-      const baseQuery = `FROM ${getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) })} WHERE [resourceId] = @resourceId`;
+      const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.schema) });
+      const whereClauses: string[] = [];
+      const params: Record<string, any> = {};
+
+      // Add resourceId filter if provided
+      if (filter?.resourceId) {
+        whereClauses.push('[resourceId] = @resourceId');
+        params.resourceId = filter.resourceId;
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Keys are validated above to prevent SQL injection
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          // Validate filter value type - only allow scalar types
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError({
+              id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+              details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+            });
+          }
+
+          // Handle null values specially: JSON_VALUE returns NULL for null values,
+          // and NULL = NULL evaluates to NULL (not true) in SQL
+          if (value === null) {
+            whereClauses.push(`JSON_VALUE(metadata, '$.${key}') IS NULL`);
+          } else {
+            const paramName = `metadata${metadataIndex}`;
+            whereClauses.push(`JSON_VALUE(metadata, '$.${key}') = @${paramName}`);
+            // JSON_VALUE returns strings directly, numbers as strings, booleans as 'true'/'false'
+            // Don't use JSON.stringify as it escapes quotes/backslashes which JSON_VALUE doesn't
+            if (typeof value === 'string') {
+              params[paramName] = value;
+            } else if (typeof value === 'boolean') {
+              params[paramName] = value ? 'true' : 'false';
+            } else {
+              params[paramName] = String(value);
+            }
+          }
+          metadataIndex++;
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const baseQuery = `FROM ${tableName} ${whereClause}`;
 
       const countQuery = `SELECT COUNT(*) as count ${baseQuery}`;
       const countRequest = this.pool.request();
-      countRequest.input('resourceId', resourceId);
+      for (const [key, value] of Object.entries(params)) {
+        countRequest.input(key, value);
+      }
       const countResult = await countRequest.query(countQuery);
       const total = parseInt(countResult.recordset[0]?.count ?? '0', 10);
 
@@ -228,7 +292,10 @@ export class MemoryMSSQL extends MemoryStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const dataQuery = `SELECT id, [resourceId], title, metadata, [createdAt], [updatedAt] ${baseQuery} ORDER BY ${orderByField} ${dir} OFFSET @offset ROWS FETCH NEXT @perPage ROWS ONLY`;
       const dataRequest = this.pool.request();
-      dataRequest.input('resourceId', resourceId);
+
+      for (const [key, value] of Object.entries(params)) {
+        dataRequest.input(key, value);
+      }
       dataRequest.input('offset', offset);
 
       if (limitValue > 2147483647) {
@@ -236,6 +303,7 @@ export class MemoryMSSQL extends MemoryStorage {
       } else {
         dataRequest.input('perPage', limitValue);
       }
+
       const rowsResult = await dataRequest.query(dataQuery);
       const rows = rowsResult.recordset || [];
       const threads = rows.map(thread => ({
@@ -253,13 +321,18 @@ export class MemoryMSSQL extends MemoryStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('MSSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('MSSQL', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            resourceId,
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
             page,
           },
         },

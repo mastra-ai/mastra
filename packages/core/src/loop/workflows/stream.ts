@@ -2,33 +2,15 @@ import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
+import { createObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
-import type { OutputSchema } from '../../stream/base/schema';
+import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
-/**
- * Check if a ReadableStreamDefaultController is open and can accept data.
- *
- * Note: While the ReadableStream spec indicates desiredSize can be:
- * - positive (ready), 0 (full but open), or null (closed/errored),
- * our empirical testing shows that after controller.close(), desiredSize becomes 0.
- * Therefore, we treat both 0 and null as closed states to prevent
- * "Invalid state: Controller is already closed" errors.
- *
- * @param controller - The ReadableStreamDefaultController to check
- * @returns true if the controller is open and can accept data
- */
-export function isControllerOpen(controller: ReadableStreamDefaultController<any>): boolean {
-  return controller.desiredSize !== 0 && controller.desiredSize !== null;
-}
-
-export function workflowLoopStream<
-  Tools extends ToolSet = ToolSet,
-  OUTPUT extends OutputSchema | undefined = undefined,
->({
+export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   resumeContext,
   requireToolApproval,
   models,
@@ -50,7 +32,8 @@ export function workflowLoopStream<
       const outputWriter = async (chunk: ChunkType<OUTPUT>) => {
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
-        if (chunk.type.startsWith('data-') && messageId) {
+        // Transient chunks are streamed to the client but not saved to the DB
+        if (chunk.type.startsWith('data-') && messageId && !('transient' in chunk && chunk.transient)) {
           const dataPart = {
             type: chunk.type as `data-${string}`,
             data: 'data' in chunk ? chunk.data : undefined,
@@ -68,7 +51,7 @@ export function workflowLoopStream<
           };
           messageList.add(message, 'response');
         }
-        void controller.enqueue(chunk);
+        safeEnqueue(controller, chunk);
       };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
@@ -115,7 +98,7 @@ export function workflowLoopStream<
       };
 
       if (!resumeContext) {
-        controller.enqueue({
+        safeEnqueue(controller, {
           type: 'start',
           runId,
           from: ChunkFrom.AGENT,
@@ -130,7 +113,7 @@ export function workflowLoopStream<
         runId,
       });
 
-      const requestContext = new RequestContext();
+      const requestContext = rest.requestContext ?? new RequestContext();
 
       if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);
@@ -139,12 +122,13 @@ export function workflowLoopStream<
       const executionResult = resumeContext
         ? await run.resume({
             resumeData: resumeContext.resumeData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+            requestContext,
             label: toolCallId,
           })
         : await run.start({
             inputData: initialData,
-            tracingContext: rest.modelSpanTracker?.getTracingContext(),
+            ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
             requestContext,
           });
 
@@ -154,7 +138,7 @@ export function workflowLoopStream<
             fallbackMessage: 'Unknown error in agent workflow stream',
           });
 
-          controller.enqueue({
+          safeEnqueue(controller, {
             type: 'error',
             runId,
             from: ChunkFrom.AGENT,
@@ -170,7 +154,7 @@ export function workflowLoopStream<
           await agenticLoopWorkflow.deleteWorkflowRunById(runId);
         }
 
-        controller.close();
+        safeClose(controller);
         return;
       }
 
@@ -179,7 +163,7 @@ export function workflowLoopStream<
       // Always emit finish chunk, even for abort (tripwire) cases
       // This ensures the stream properly completes and all promises are resolved
       // The tripwire/abort status is communicated through the stepResult.reason
-      controller.enqueue({
+      safeEnqueue(controller, {
         type: 'finish',
         runId,
         from: ChunkFrom.AGENT,
@@ -193,7 +177,7 @@ export function workflowLoopStream<
         },
       });
 
-      controller.close();
+      safeClose(controller);
     },
   });
 }

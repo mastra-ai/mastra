@@ -30,7 +30,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
 
       messageList.add([userMessage], 'input');
 
-      // Get AIV5 UI messages - this is what happens internally when format: 'aisdk' is used
+      // Get AIV5 UI messages - this is what happens internally when converting to AI SDK v5 format
       const v5Messages = messageList.get.all.aiV5.ui();
 
       // The AIV5 UI message should have the URL properly preserved
@@ -281,7 +281,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
         },
       ];
 
-      // User is passing these messages to stream with format: 'aisdk'
+      // Messages are converted to AI SDK v5 format internally
       const messageList = new MessageList();
       messageList.add(modelMessages, 'input');
 
@@ -303,7 +303,7 @@ describe('MessageList AI SDK v5 URL handling', () => {
         expect(filePart.mimeType).toBe('image/png');
       }
 
-      // Now convert to V3 (what happens internally when format: 'aisdk' is used)
+      // Now convert to AI SDK v5 (what happens internally for streaming)
       const v5Messages = messageList.get.all.aiV5.ui();
 
       expect(v5Messages).toHaveLength(1);

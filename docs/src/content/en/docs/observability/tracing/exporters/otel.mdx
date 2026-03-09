@@ -13,7 +13,7 @@ The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible obser
 
 :::info Looking for bidirectional OTEL integration?
 
-If you have existing OpenTelemetry instrumentation and want Mastra traces to inherit context from active OTEL spans, see the [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel) instead.
+If you have existing OpenTelemetry instrumentation and want Mastra traces to inherit context from active OTEL spans, see the [OpenTelemetry Bridge](/docs/observability/tracing/bridges/otel) instead.
 
 :::
 
@@ -24,35 +24,34 @@ Each provider requires specific protocol packages. Install the base exporter plu
 ### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow)
 
 ```bash npm2yarn
-npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-proto
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
 ```
 
 ### For gRPC Providers (Dash0, Datadog)
 
 ```bash npm2yarn
-npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
 ### For HTTP/JSON Providers (Traceloop)
 
 ```bash npm2yarn
-npm install @mastra/otel-exporter@beta @opentelemetry/exporter-trace-otlp-http
+npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
 ```
 
 ## Environment Variables
 
 All providers support zero-config setup via environment variables. Set the appropriate variables and the exporter will automatically use them:
 
-| Provider  | Environment Variables                                                                      |
-| --------- | ------------------------------------------------------------------------------------------ |
-| Dash0     | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional)        |
-| SigNoz    | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional)      |
-| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional)                        |
-| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional)|
-| Laminar   | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT`, `LAMINAR_TEAM_ID` (optional)        |
+| Provider | Environment Variables |
+| - | - |
+| Dash0 | `DASH0_API_KEY` (required), `DASH0_ENDPOINT` (required), `DASH0_DATASET` (optional) |
+| SigNoz | `SIGNOZ_API_KEY` (required), `SIGNOZ_REGION` (optional), `SIGNOZ_ENDPOINT` (optional) |
+| New Relic | `NEW_RELIC_LICENSE_KEY` (required), `NEW_RELIC_ENDPOINT` (optional) |
+| Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
+| Laminar | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional) |
 
 ## Provider Configurations
-
 
 ### MLflow
 
@@ -63,9 +62,9 @@ new OtelExporter({
   provider: {
     custom: {
       endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
-      protocol: "http/protobuf",
+      protocol: 'http/protobuf',
       headers: {
-        "x-mlflow-experiment-id": process.env.MLFLOW_EXPERIMENT_ID,
+        'x-mlflow-experiment-id': process.env.MLFLOW_EXPERIMENT_ID,
       },
     },
   },
@@ -90,53 +89,53 @@ DASH0_DATASET=production
 ```
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelExporter } from "@mastra/otel-exporter";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelExporter } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       otel: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [new OtelExporter({ provider: { dash0: {} } })],
       },
     },
   }),
-});
+})
 ```
 
 #### Explicit Configuration
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelExporter } from "@mastra/otel-exporter";
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelExporter } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {
       otel: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new OtelExporter({
             provider: {
               dash0: {
                 apiKey: process.env.DASH0_API_KEY,
                 endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
-                dataset: "production", // Optional dataset name
+                dataset: 'production', // Optional dataset name
               },
             },
             resourceAttributes: {
               // Optional OpenTelemetry Resource Attributes for the trace
-              ["deployment.environment"]: "dev",
+              ['deployment.environment']: 'dev',
             },
           }),
         ],
       },
     },
   }),
-});
+})
 ```
 
 :::info
@@ -171,11 +170,11 @@ new OtelExporter({
   provider: {
     signoz: {
       apiKey: process.env.SIGNOZ_API_KEY,
-      region: "us", // 'us' | 'eu' | 'in'
+      region: 'us', // 'us' | 'eu' | 'in'
       // endpoint: 'https://my-signoz.example.com', // For self-hosted
     },
   },
-});
+})
 ```
 
 ### New Relic
@@ -206,7 +205,7 @@ new OtelExporter({
       // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
     },
   },
-});
+})
 ```
 
 ### Traceloop
@@ -235,15 +234,15 @@ new OtelExporter({
   provider: {
     traceloop: {
       apiKey: process.env.TRACELOOP_API_KEY,
-      destinationId: "my-destination", // Optional
+      destinationId: 'my-destination', // Optional
     },
   },
-});
+})
 ```
 
 ### Laminar
 
-[Laminar](https://www.lmnr.ai/) provides specialized LLM observability and analytics.
+[Laminar](https://laminar.sh/) provides specialized LLM observability and analytics.
 
 #### Zero-Config Setup
 
@@ -253,7 +252,6 @@ LMNR_PROJECT_API_KEY=your-api-key
 
 # Optional
 LAMINAR_ENDPOINT=https://api.lmnr.ai/v1/traces
-LAMINAR_TEAM_ID=your-team-id  # For backwards compatibility
 ```
 
 ```typescript title="src/mastra/index.ts"
@@ -267,45 +265,46 @@ new OtelExporter({
   provider: {
     laminar: {
       apiKey: process.env.LMNR_PROJECT_API_KEY,
-      // teamId: process.env.LAMINAR_TEAM_ID, // Optional, for backwards compatibility
     },
   },
-});
+})
 ```
+
+:::tip Laminar-Native Exporter
+
+For Laminar-specific features like native span paths, metadata, and tags rendering in the Laminar dashboard, consider using the dedicated [`@mastra/laminar`](/docs/observability/tracing/exporters/laminar) exporter instead. It provides optimized integration with Laminar's platform.
+
+:::
 
 ### Datadog
 
 [Datadog](https://www.datadoghq.com/) APM provides application performance monitoring with distributed tracing. To send traces to Datadog via OTLP, you need the Datadog Agent running with OTLP ingestion enabled.
 
-Datadog uses gRPC for OTLP ingestion, which requires explicit imports and bundler configuration to work correctly:
+Datadog uses gRPC for OTLP ingestion, which requires explicit imports and [bundler configuration](/reference/configuration#bundlerexternals) to work correctly:
 
 ```typescript title="src/mastra/index.ts"
 // Explicitly import gRPC dependencies for the bundler
-import "@grpc/grpc-js";
-import "@opentelemetry/exporter-trace-otlp-grpc";
-import { Mastra } from "@mastra/core";
-import { Observability } from "@mastra/observability";
-import { OtelExporter, type ExportProtocol } from "@mastra/otel-exporter";
+import '@grpc/grpc-js'
+import '@opentelemetry/exporter-trace-otlp-grpc'
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { OtelExporter, type ExportProtocol } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
   // Add grpc-js to externals so it's handled at runtime
   bundler: {
-    externals: ["@grpc/grpc-js"],
+    externals: ['@grpc/grpc-js'],
   },
-
   observability: new Observability({
     configs: {
       default: {
-        serviceName: "my-service",
+        serviceName: 'my-service',
         exporters: [
           new OtelExporter({
             provider: {
               custom: {
-                endpoint:
-                  process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
-                  "http://localhost:4317",
-                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL ||
-                  "grpc") as ExportProtocol,
+                endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4317',
+                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL || 'grpc') as ExportProtocol,
                 headers: {},
               },
             },
@@ -314,7 +313,7 @@ export const mastra = new Mastra({
       },
     },
   }),
-});
+})
 ```
 
 :::info
@@ -335,7 +334,13 @@ The default OTLP endpoint is `http://localhost:4317` when running the Datadog Ag
 
 :::warning
 
-The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the `bundler.externals` configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+The explicit imports of `@grpc/grpc-js` and `@opentelemetry/exporter-trace-otlp-grpc` at the top of the file, along with the [`bundler.externals`](/reference/configuration#bundlerexternals) configuration, are required for the gRPC transport to work correctly. Without these, you may encounter connection issues.
+
+:::
+
+:::tip Datadog-Native Exporter
+
+For Datadog-specific features like automatic span type mapping, LLM span categorization, and simplified setup without gRPC configuration, consider using the dedicated [`@mastra/datadog`](/docs/observability/tracing/exporters/datadog) exporter instead. It provides optimized integration with Datadog's APM platform.
 
 :::
 
@@ -347,14 +352,14 @@ For other OTEL-compatible platforms or custom collectors:
 new OtelExporter({
   provider: {
     custom: {
-      endpoint: "https://your-collector.example.com/v1/traces",
-      protocol: "http/protobuf", // 'http/json' | 'http/protobuf' | 'grpc'
+      endpoint: 'https://your-collector.example.com/v1/traces',
+      protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
       headers: {
-        "x-api-key": process.env.API_KEY,
+        'x-api-key': process.env.API_KEY,
       },
     },
   },
-});
+})
 ```
 
 ## Configuration Options
@@ -373,8 +378,8 @@ new OtelExporter({
   batchSize: 100, // Number of spans per batch
 
   // Debug options
-  logLevel: "info", // 'debug' | 'info' | 'warn' | 'error'
-});
+  logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'
+})
 ```
 
 ## OpenTelemetry Semantic Conventions
@@ -404,15 +409,15 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](http
 
 Choose the right protocol package based on your provider:
 
-| Provider  | Protocol      | Required Package                           |
-| --------- | ------------- | ------------------------------------------ |
-| Dash0     | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
-| Datadog   | gRPC          | `@opentelemetry/exporter-trace-otlp-grpc`  |
-| SigNoz    | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Provider | Protocol | Required Package |
+| - | - | - |
+| Dash0 | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
+| Datadog | gRPC | `@opentelemetry/exporter-trace-otlp-grpc` |
+| SigNoz | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
 | New Relic | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Traceloop | HTTP/JSON     | `@opentelemetry/exporter-trace-otlp-http`  |
-| Laminar   | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
-| Custom    | Varies        | Depends on your collector                  |
+| Traceloop | HTTP/JSON | `@opentelemetry/exporter-trace-otlp-http` |
+| Laminar | HTTP/Protobuf | `@opentelemetry/exporter-trace-otlp-proto` |
+| Custom | Varies | Depends on your collector |
 
 :::warning
 
@@ -437,31 +442,12 @@ Install the suggested package for your provider.
 ### Common Issues
 
 1. **Wrong protocol package**: Verify you installed the correct exporter for your provider
-2. **Invalid endpoint**: Check endpoint format matches provider requirements
-3. **Authentication failures**: Verify API keys and headers are correct
-
-## Using Tags
-
-Tags help you categorize and filter traces in your observability platform. Add tags when executing agents or workflows:
-
-```typescript
-const result = await agent.generate({
-  messages: [{ role: "user", content: "Hello" }],
-  tracingOptions: {
-    tags: ["production", "experiment-v2", "user-request"],
-  },
-});
-```
-
-Tags are exported as a JSON string in the `mastra.tags` span attribute for broad backend compatibility. Common use cases include:
-
-- Environment labels: `"production"`, `"staging"`
-- Experiment tracking: `"experiment-v1"`, `"control-group"`
-- Priority levels: `"priority-high"`, `"batch-job"`
+1. **Invalid endpoint**: Check endpoint format matches provider requirements
+1. **Authentication failures**: Verify API keys and headers are correct
 
 ## Related
 
-- [Tracing Overview](/docs/v1/observability/tracing/overview)
-- [OpenTelemetry Bridge](/docs/v1/observability/tracing/bridges/otel)
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [OpenTelemetry Bridge](/docs/observability/tracing/bridges/otel)
 - [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai)
-- [OTEL Exporter Reference](/reference/v1/observability/tracing/exporters/otel)
+- [OTEL Exporter Reference](/reference/observability/tracing/exporters/otel)

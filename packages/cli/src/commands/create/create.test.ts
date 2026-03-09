@@ -51,7 +51,7 @@ vi.mock('../init/utils', () => ({
   interactivePrompt: vi.fn(),
   getModelIdentifier: vi.fn((provider: string) => {
     const models: Record<string, string> = {
-      openai: "'openai/gpt-4o-mini'",
+      openai: "'openai/gpt-5-mini'",
       anthropic: "'anthropic/claude-sonnet-4-5-20250929'",
       groq: "'groq/llama-3.3-70b-versatile'",
       google: "'google/gemini-2.5-pro'",
@@ -149,7 +149,7 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'my-project',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
       expect(installDependencies).toHaveBeenCalledWith('/my-project');
@@ -182,7 +182,7 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'user-chosen-name',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
     });
@@ -210,7 +210,7 @@ describe('create command with --template flag', () => {
       expect(cloneTemplate).toHaveBeenCalledWith({
         template: mockTemplate,
         projectName: 'my-project',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
     });
@@ -362,7 +362,7 @@ describe('create command with --template flag', () => {
           slug: 'template-deep-research',
         }),
         projectName: 'my-github-project',
-        branch: 'beta',
+        branch: undefined,
         llmProvider: 'openai',
       });
       expect(note).toHaveBeenCalled();

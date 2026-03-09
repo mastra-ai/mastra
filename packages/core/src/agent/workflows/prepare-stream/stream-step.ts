@@ -3,10 +3,11 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfig } from '../../../memory/types';
+import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
-import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
+import { MastraModelOutput } from '../../../stream';
 import { createStep } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
@@ -30,9 +31,10 @@ interface StreamStepOptions {
   memory?: MastraMemory;
   resourceId?: string;
   autoResumeSuspendedTools?: boolean;
+  workspace?: Workspace;
 }
 
-export function createStreamStep<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createStreamStep<OUTPUT = undefined>({
   capabilities,
   runId,
   returnScorerData,
@@ -48,15 +50,13 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
   memory,
   resourceId,
   autoResumeSuspendedTools,
+  workspace,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
     inputSchema: z.any(), // tried to type this in various ways but it's too complex
-    outputSchema: z.union([
-      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
-      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
-    ]),
-    execute: async ({ inputData, tracingContext }) => {
+    outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
+    execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
       const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
 
@@ -80,7 +80,7 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         ...validatedInputData,
         outputProcessors: processors,
         returnScorerData,
-        tracingContext,
+        ...resolveObservabilityContext(observabilityContext),
         requireToolApproval,
         toolCallConcurrency,
         resumeContext,
@@ -97,9 +97,10 @@ export function createStreamStep<OUTPUT extends OutputSchema | undefined = undef
         toolCallId,
         methodType: modelMethodType,
         autoResumeSuspendedTools,
+        workspace,
       });
 
-      return streamResult;
+      return streamResult as unknown as MastraModelOutput<OUTPUT>;
     },
   });
 }

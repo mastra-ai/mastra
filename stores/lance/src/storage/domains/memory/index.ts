@@ -17,8 +17,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
 } from '@mastra/core/storage';
 import { LanceDB, resolveLanceConfig } from '../../db';
 import type { LanceDomainConfig } from '../../db';
@@ -563,36 +563,85 @@ export class StoreMemoryLance extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
+
     try {
-      const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
-      const perPage = normalizePerPage(perPageInput, 100);
+      // Validate pagination input before normalization
+      // This ensures page === 0 when perPageInput === false
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
+        },
+        error instanceof Error ? error : new Error('Invalid pagination parameters'),
+      );
+    }
 
-      if (page < 0) {
-        throw new MastraError(
-          {
-            id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { page },
-          },
-          new Error('page must be >= 0'),
-        );
-      }
+    const perPage = normalizePerPage(perPageInput, 100);
 
-      // When perPage is false (get all), ignore page offset
+    // Validate metadata keys to prevent prototype pollution and ensure safe key patterns
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
+        },
+        error instanceof Error ? error : new Error('Invalid metadata key'),
+      );
+    }
+
+    try {
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
       const { field, direction } = this.parseOrderBy(orderBy);
       const table = await this.client.openTable(TABLE_THREADS);
 
-      // Get total count
-      const total = await table.countRows(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
+      // Build WHERE clause
+      const whereClauses: string[] = [];
 
-      // Get ALL matching records (no limit/offset yet - need to sort first)
-      const query = table.query().where(`\`resourceId\` = '${this.escapeSql(resourceId)}'`);
-      const records = await query.toArray();
+      if (filter?.resourceId) {
+        whereClauses.push(`\`resourceId\` = '${this.escapeSql(filter.resourceId)}'`);
+      }
+
+      const whereClause = whereClauses.length > 0 ? whereClauses.join(' AND ') : '';
+
+      // Get ALL matching records (no limit/offset yet - need to filter metadata + sort)
+      // Lance doesn't support nested JSON path queries in SQL WHERE clause
+      const query = whereClause ? table.query().where(whereClause) : table.query();
+      let records = await query.toArray();
+
+      // Apply metadata filters in-memory (AND logic)
+      // Lance stores metadata as a JSON column, not flattened fields
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        records = records.filter((record: any) => {
+          if (!record.metadata) return false;
+
+          // Handle both object and stringified JSON metadata
+          let recordMeta: Record<string, unknown>;
+          if (typeof record.metadata === 'string') {
+            try {
+              recordMeta = JSON.parse(record.metadata);
+            } catch {
+              return false;
+            }
+          } else {
+            recordMeta = record.metadata;
+          }
+
+          // Check all metadata filters match (AND logic)
+          return Object.entries(filter.metadata!).every(([key, value]) => recordMeta[key] === value);
+        });
+      }
+
+      const total = records.length;
 
       // Apply dynamic sorting BEFORE pagination
       records.sort((a, b) => {
@@ -628,7 +677,7 @@ export class StoreMemoryLance extends MemoryStorage {
     } catch (error: any) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LANCE', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('LANCE', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },

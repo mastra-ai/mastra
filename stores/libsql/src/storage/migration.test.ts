@@ -1,6 +1,13 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import { OLD_SPAN_SCHEMA, TABLE_SPANS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { MastraError } from '@mastra/core/error';
+import {
+  OLD_SPAN_SCHEMA,
+  TABLE_SPANS,
+  TABLE_SCHEMAS,
+  TABLE_THREADS,
+  TABLE_WORKFLOW_SNAPSHOT,
+} from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LibSQLDB } from './db';
 import { LibSQLStore } from './index';
@@ -267,6 +274,201 @@ describe('LibSQL Spans Table Migration', () => {
     expect(newSpan.environment).toBe('production');
   });
 
+  it('should deduplicate spans with same (spanId, traceId) during migration and create unique index', async () => {
+    // Step 1: Create table with OLD schema (no unique constraint)
+    const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
+      .map(([colName, colDef]) => {
+        const sqlType =
+          colDef.type === 'text'
+            ? 'TEXT'
+            : colDef.type === 'jsonb'
+              ? 'TEXT'
+              : colDef.type === 'timestamp'
+                ? 'TEXT'
+                : colDef.type === 'boolean'
+                  ? 'INTEGER'
+                  : 'TEXT';
+        const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+        return `"${colName}" ${sqlType} ${nullable}`.trim();
+      })
+      .join(', ');
+
+    await client.execute(`CREATE TABLE IF NOT EXISTS "${TABLE_SPANS}" (${oldColumns})`);
+
+    // Step 2: Insert duplicate data - same (spanId, traceId) with different data
+    // First row: incomplete span (no endedAt), older timestamps
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'dup-span-1',
+        null,
+        'Incomplete Span (older)',
+        'agent_run',
+        null,
+        JSON.stringify({ version: 1 }),
+        null,
+        null,
+        JSON.stringify({ input: 'first' }),
+        null,
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        null, // Not completed
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:00.000Z',
+      ],
+    });
+
+    // Second row: completed span (has endedAt), newer timestamps - this should be kept
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'dup-span-1', // Same spanId!
+        null,
+        'Completed Span (newer)',
+        'agent_run',
+        null,
+        JSON.stringify({ version: 2 }),
+        null,
+        null,
+        JSON.stringify({ input: 'second' }),
+        JSON.stringify({ output: 'result' }),
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:01.000Z', // Completed
+        '2024-01-01T00:00:01.000Z',
+        '2024-01-01T00:00:02.000Z',
+      ],
+    });
+
+    // Third row: another duplicate, completed but older - should be removed
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'dup-span-1', // Same spanId!
+        null,
+        'Old Completed Span',
+        'agent_run',
+        null,
+        JSON.stringify({ version: 0 }),
+        null,
+        null,
+        JSON.stringify({ input: 'oldest' }),
+        JSON.stringify({ output: 'old' }),
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:00.500Z', // Completed but older
+        '2023-12-31T00:00:00.000Z', // Older created
+        '2023-12-31T00:00:00.000Z', // Older updated
+      ],
+    });
+
+    // Add a non-duplicate span
+    await client.execute({
+      sql: `INSERT INTO "${TABLE_SPANS}"
+            ("traceId", "spanId", "parentSpanId", "name", "spanType", "scope", "attributes", "metadata", "links", "input", "output", "error", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'dup-trace-1',
+        'unique-span-1',
+        null,
+        'Unique Span',
+        'tool_call',
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        0,
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:01.000Z',
+        '2024-01-01T00:00:00.000Z',
+        '2024-01-01T00:00:01.000Z',
+      ],
+    });
+
+    // Verify we have duplicates before migration
+    const countBefore = await client.execute(`SELECT COUNT(*) as count FROM "${TABLE_SPANS}"`);
+    expect(Number(countBefore.rows[0]?.count)).toBe(4);
+
+    const duplicatesBefore = await client.execute(`
+      SELECT "spanId", "traceId", COUNT(*) as cnt
+      FROM "${TABLE_SPANS}"
+      GROUP BY "spanId", "traceId"
+      HAVING COUNT(*) > 1
+    `);
+    expect(duplicatesBefore.rows.length).toBe(1); // One duplicate group
+
+    // Step 3: Run migration via migrateSpans() - this is what `npx mastra migrate` does
+    // Note: createTable would throw MIGRATION_REQUIRED error when duplicates exist
+    const result = await dbOps.migrateSpans();
+    expect(result.success).toBe(true);
+    expect(result.duplicatesRemoved).toBeGreaterThan(0);
+
+    // Step 4: Verify duplicates were removed
+    const countAfter = await client.execute(`SELECT COUNT(*) as count FROM "${TABLE_SPANS}"`);
+    expect(Number(countAfter.rows[0]?.count)).toBe(2); // Only 2 unique rows remain
+
+    const duplicatesAfter = await client.execute(`
+      SELECT "spanId", "traceId", COUNT(*) as cnt
+      FROM "${TABLE_SPANS}"
+      GROUP BY "spanId", "traceId"
+      HAVING COUNT(*) > 1
+    `);
+    expect(duplicatesAfter.rows.length).toBe(0); // No more duplicates
+
+    // Step 5: Verify the "best" record was kept (completed, most recently updated)
+    const keptSpan = await client.execute({
+      sql: `SELECT * FROM "${TABLE_SPANS}" WHERE "spanId" = ?`,
+      args: ['dup-span-1'],
+    });
+    expect(keptSpan.rows.length).toBe(1);
+    const span = keptSpan.rows[0] as any;
+    expect(span.name).toBe('Completed Span (newer)'); // The newest completed one was kept
+    expect(span.endedAt).not.toBeNull();
+    expect(JSON.parse(span.attributes)).toEqual({ version: 2 });
+
+    // Step 6: Verify unique index was created
+    const indexes = await client.execute(`PRAGMA index_list("${TABLE_SPANS}")`);
+    const uniqueIndex = indexes.rows.find(
+      (row: any) => row.name === 'mastra_ai_spans_spanid_traceid_idx' && row.unique === 1,
+    );
+    expect(uniqueIndex).toBeDefined();
+
+    // Step 7: Verify unique constraint is enforced - inserting duplicate should fail
+    await expect(
+      client.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'dup-trace-1',
+          'dup-span-1', // Already exists!
+          null,
+          'Should Fail',
+          'agent_run',
+          0,
+          new Date().toISOString(),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      }),
+    ).rejects.toThrow(/UNIQUE constraint failed/);
+  });
+
   it('should allow querying old data via storage API after migration', async () => {
     // Create old schema table using shared client
     const oldColumns = Object.entries(OLD_SPAN_SCHEMA)
@@ -336,5 +538,454 @@ describe('LibSQL Spans Table Migration', () => {
     // New columns should be null
     expect(trace!.spans[0]!.entityType).toBeNull();
     expect(trace!.spans[0]!.entityId).toBeNull();
+  });
+});
+
+/**
+ * JSONB backwards compatibility tests.
+ * Verifies that existing TEXT JSON data works correctly after the JSONB changes.
+ */
+describe('LibSQL JSONB Backwards Compatibility', () => {
+  const testDbPath = ':memory:';
+  let client: Client;
+  let dbOps: LibSQLDB;
+
+  beforeAll(async () => {
+    client = createClient({ url: testDbPath });
+    dbOps = new LibSQLDB({
+      client,
+      maxRetries: 5,
+      initialBackoffMs: 100,
+    });
+  });
+
+  beforeEach(async () => {
+    await client.execute(`DROP TABLE IF EXISTS "${TABLE_THREADS}"`);
+    await client.execute(`DROP TABLE IF EXISTS "${TABLE_WORKFLOW_SNAPSHOT}"`);
+  });
+
+  afterAll(async () => {
+    try {
+      await client.execute(`DROP TABLE IF EXISTS "${TABLE_THREADS}"`);
+      await client.execute(`DROP TABLE IF EXISTS "${TABLE_WORKFLOW_SNAPSHOT}"`);
+    } catch {}
+  });
+
+  describe('threads table - metadata column', () => {
+    it('should read existing TEXT JSON data after JSONB changes', async () => {
+      // Create table with TEXT column (simulating old schema)
+      await client.execute(`
+        CREATE TABLE "${TABLE_THREADS}" (
+          id TEXT PRIMARY KEY,
+          "resourceId" TEXT NOT NULL,
+          title TEXT NOT NULL,
+          metadata TEXT,
+          "createdAt" TEXT NOT NULL,
+          "updatedAt" TEXT NOT NULL
+        )
+      `);
+
+      // Insert data as TEXT (old format)
+      const testMetadata = { key: 'value', nested: { a: 1 }, array: [1, 2, 3] };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [
+          'thread-text-1',
+          'resource-1',
+          'Test Thread',
+          JSON.stringify(testMetadata),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Read via the new select method (which uses json() wrapper)
+      const result = await dbOps.select<any>({
+        tableName: TABLE_THREADS,
+        keys: { id: 'thread-text-1' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.id).toBe('thread-text-1');
+      expect(result.metadata).toEqual(testMetadata);
+    });
+
+    it('should write new data as JSONB and read it back', async () => {
+      // Create table via dbOps (uses JSONB declaration)
+      await dbOps.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+
+      // Insert data via insert (uses jsonb() function)
+      const testMetadata = { newKey: 'newValue', special: 'chars "quotes" and \'apostrophes\'' };
+      await dbOps.insert({
+        tableName: TABLE_THREADS,
+        record: {
+          id: 'thread-jsonb-1',
+          resourceId: 'resource-1',
+          title: 'JSONB Thread',
+          metadata: testMetadata,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Read it back
+      const result = await dbOps.select<any>({
+        tableName: TABLE_THREADS,
+        keys: { id: 'thread-jsonb-1' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.metadata).toEqual(testMetadata);
+    });
+
+    it('should handle mixed TEXT and JSONB rows in same table', async () => {
+      // Create table with TEXT column first
+      await client.execute(`
+        CREATE TABLE "${TABLE_THREADS}" (
+          id TEXT PRIMARY KEY,
+          "resourceId" TEXT NOT NULL,
+          title TEXT NOT NULL,
+          metadata TEXT,
+          "createdAt" TEXT NOT NULL,
+          "updatedAt" TEXT NOT NULL
+        )
+      `);
+
+      // Insert old TEXT row
+      const oldMetadata = { format: 'text', legacy: true };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?)`,
+        args: [
+          'thread-old',
+          'resource-1',
+          'Old Thread',
+          JSON.stringify(oldMetadata),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Insert new JSONB row using jsonb() function
+      const newMetadata = { format: 'jsonb', modern: true };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, jsonb(?), ?, ?)`,
+        args: [
+          'thread-new',
+          'resource-1',
+          'New Thread',
+          JSON.stringify(newMetadata),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Read both via selectMany (uses json() wrapper)
+      const results = await dbOps.selectMany<any>({
+        tableName: TABLE_THREADS,
+        orderBy: 'id ASC',
+      });
+
+      expect(results.length).toBe(2);
+
+      // Old TEXT row should be readable
+      const oldRow = results.find((r: any) => r.id === 'thread-old');
+      expect(oldRow).toBeDefined();
+      expect(oldRow.metadata).toEqual(oldMetadata);
+
+      // New JSONB row should be readable
+      const newRow = results.find((r: any) => r.id === 'thread-new');
+      expect(newRow).toBeDefined();
+      expect(newRow.metadata).toEqual(newMetadata);
+    });
+
+    it('should handle null metadata correctly', async () => {
+      await dbOps.createTable({ tableName: TABLE_THREADS, schema: TABLE_SCHEMAS[TABLE_THREADS] });
+
+      await dbOps.insert({
+        tableName: TABLE_THREADS,
+        record: {
+          id: 'thread-null-meta',
+          resourceId: 'resource-1',
+          title: 'Thread with null metadata',
+          metadata: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await dbOps.select<any>({
+        tableName: TABLE_THREADS,
+        keys: { id: 'thread-null-meta' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.metadata).toBeNull();
+    });
+  });
+
+  describe('workflow_snapshot table - snapshot column', () => {
+    it('should read existing TEXT JSON snapshot after JSONB changes', async () => {
+      // Create table with TEXT column
+      await client.execute(`
+        CREATE TABLE "${TABLE_WORKFLOW_SNAPSHOT}" (
+          workflow_name TEXT NOT NULL,
+          run_id TEXT NOT NULL,
+          "resourceId" TEXT,
+          snapshot TEXT NOT NULL,
+          "createdAt" TEXT NOT NULL,
+          "updatedAt" TEXT NOT NULL,
+          PRIMARY KEY (workflow_name, run_id)
+        )
+      `);
+
+      // Insert snapshot as TEXT
+      const testSnapshot = {
+        runId: 'run-1',
+        status: 'completed',
+        context: { step1: { result: 'success' } },
+      };
+      await client.execute({
+        sql: `INSERT INTO "${TABLE_WORKFLOW_SNAPSHOT}" (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [
+          'test-workflow',
+          'run-1',
+          JSON.stringify(testSnapshot),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ],
+      });
+
+      // Read via select
+      const result = await dbOps.select<any>({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        keys: { workflow_name: 'test-workflow', run_id: 'run-1' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result.snapshot).toEqual(testSnapshot);
+    });
+
+    it('should work with json_extract on both TEXT and JSONB data', async () => {
+      await dbOps.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
+
+      // Insert via dbOps (uses jsonb())
+      await dbOps.insert({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        record: {
+          workflow_name: 'json-extract-test',
+          run_id: 'run-1',
+          snapshot: { runId: 'run-1', status: 'running', value: { key: 'test' } },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      // Query using json_extract - should work on JSONB
+      const result = await client.execute({
+        sql: `SELECT workflow_name, json_extract(snapshot, '$.status') as status FROM "${TABLE_WORKFLOW_SNAPSHOT}" WHERE workflow_name = ?`,
+        args: ['json-extract-test'],
+      });
+
+      expect(result.rows.length).toBe(1);
+      expect(result.rows[0]?.status).toBe('running');
+    });
+  });
+});
+
+/**
+ * LibSQL-specific tests that verify init() throws MastraError when
+ * migration is required (duplicates exist without unique index).
+ * This ensures users are forced to run manual migration before the app can start.
+ */
+describe('LibSQL Migration Required Error', () => {
+  /**
+   * Helper to create the spans table with OLD schema (no unique index)
+   */
+  function getOldColumns(): string {
+    return Object.entries(OLD_SPAN_SCHEMA)
+      .map(([colName, colDef]) => {
+        const sqlType =
+          colDef.type === 'text'
+            ? 'TEXT'
+            : colDef.type === 'jsonb'
+              ? 'TEXT'
+              : colDef.type === 'timestamp'
+                ? 'TEXT'
+                : colDef.type === 'boolean'
+                  ? 'INTEGER'
+                  : 'TEXT';
+        const nullable = colDef.nullable === false ? 'NOT NULL' : '';
+        return `"${colName}" ${sqlType} ${nullable}`.trim();
+      })
+      .join(', ');
+  }
+
+  it('should throw MastraError when init() finds duplicate spans without unique index', async () => {
+    // Use in-memory database for this test
+    const testClient = createClient({ url: ':memory:' });
+
+    try {
+      // Create table with OLD schema (no unique index)
+      const oldColumns = getOldColumns();
+      await testClient.execute(`CREATE TABLE IF NOT EXISTS "${TABLE_SPANS}" (${oldColumns})`);
+
+      // Insert duplicate spans (same traceId + spanId)
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-1',
+          null,
+          'First duplicate',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          null,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:00.000Z',
+        ],
+      });
+
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-1', // Same spanId - creates a duplicate
+          null,
+          'Second duplicate',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:01.000Z',
+        ],
+      });
+
+      // Verify duplicates exist
+      const countResult = await testClient.execute(`SELECT COUNT(*) as count FROM "${TABLE_SPANS}"`);
+      expect(Number(countResult.rows[0]?.count)).toBe(2);
+
+      // Create store and try to init - should throw MastraError
+      const store = new LibSQLStore({
+        id: 'throw-test-store',
+        client: testClient,
+        disableInit: true,
+      });
+
+      // init() should throw MastraError - capture it from a single call
+      let caughtError: unknown;
+      try {
+        await store.init();
+      } catch (error) {
+        caughtError = error;
+      }
+
+      // Verify error has correct type and ID
+      expect(caughtError).toBeInstanceOf(MastraError);
+      expect((caughtError as MastraError).id).toContain('MIGRATION_REQUIRED');
+      expect((caughtError as MastraError).id).toContain('DUPLICATE_SPANS');
+    } finally {
+      testClient.close();
+    }
+  });
+
+  it('should NOT throw when no duplicates exist (auto-migration succeeds)', async () => {
+    // Use in-memory database for this test
+    const testClient = createClient({ url: ':memory:' });
+
+    try {
+      // Create table with OLD schema (no unique index)
+      const oldColumns = getOldColumns();
+      await testClient.execute(`CREATE TABLE IF NOT EXISTS "${TABLE_SPANS}" (${oldColumns})`);
+
+      // Insert unique spans (no duplicates)
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-1',
+          null,
+          'Unique span 1',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:00.000Z',
+        ],
+      });
+
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_SPANS}"
+              ("traceId", "spanId", "parentSpanId", "name", "spanType", "isEvent", "startedAt", "endedAt", "createdAt", "updatedAt")
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'trace-1',
+          'span-2', // Different spanId - unique
+          null,
+          'Unique span 2',
+          'agent_run',
+          0,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:02.000Z',
+          '2024-01-01T00:00:01.000Z',
+          '2024-01-01T00:00:01.000Z',
+        ],
+      });
+
+      // Create store and init - should NOT throw (auto-migration succeeds)
+      const store = new LibSQLStore({
+        id: 'auto-migrate-test-store',
+        client: testClient,
+        disableInit: true,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify unique index was added
+      const indexes = await testClient.execute(`PRAGMA index_list("${TABLE_SPANS}")`);
+      const uniqueIndex = indexes.rows.find(
+        (row: any) => row.name === 'mastra_ai_spans_spanid_traceid_idx' && row.unique === 1,
+      );
+      expect(uniqueIndex).toBeDefined();
+    } finally {
+      testClient.close();
+    }
+  });
+
+  it('should NOT throw when unique index already exists (fresh install)', async () => {
+    // Use in-memory database for this test
+    const testClient = createClient({ url: ':memory:' });
+
+    try {
+      // Create store and init - should create table with unique index (fresh install)
+      const store = new LibSQLStore({
+        id: 'fresh-install-test-store',
+        client: testClient,
+        disableInit: true,
+      });
+
+      await expect(store.init()).resolves.not.toThrow();
+
+      // Verify unique index exists
+      const indexes = await testClient.execute(`PRAGMA index_list("${TABLE_SPANS}")`);
+      const uniqueIndex = indexes.rows.find(
+        (row: any) => row.name === 'mastra_ai_spans_spanid_traceid_idx' && row.unique === 1,
+      );
+      expect(uniqueIndex).toBeDefined();
+    } finally {
+      testClient.close();
+    }
   });
 });

@@ -4,7 +4,7 @@ A sequential agentic workflow that calls two agents to create blog post content.
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm (recommended) or npm
 - Anthropic API key
 

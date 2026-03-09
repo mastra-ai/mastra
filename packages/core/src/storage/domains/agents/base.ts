@@ -1,79 +1,93 @@
 import type {
   StorageAgentType,
+  StorageAgentSnapshotType,
+  StorageResolvedAgentType,
   StorageCreateAgentInput,
   StorageUpdateAgentInput,
   StorageListAgentsInput,
   StorageListAgentsOutput,
-  StorageOrderBy,
-  ThreadOrderBy,
-  ThreadSortDirection,
+  StorageListAgentsResolvedOutput,
 } from '../../types';
-import { StorageDomain } from '../base';
+import { VersionedStorageDomain } from '../versioned';
+import type { VersionBase, CreateVersionInputBase, ListVersionsInputBase, ListVersionsOutputBase } from '../versioned';
 
-export abstract class AgentsStorage extends StorageDomain {
+// ============================================================================
+// Agent Version Types
+// ============================================================================
+
+/**
+ * Represents a stored version of an agent configuration.
+ * The config fields are top-level on the version row (no nested snapshot object).
+ */
+export interface AgentVersion extends StorageAgentSnapshotType, VersionBase {
+  /** ID of the agent this version belongs to */
+  agentId: string;
+}
+
+/**
+ * Input for creating a new agent version.
+ * Config fields are top-level (no nested snapshot object).
+ */
+export interface CreateVersionInput extends StorageAgentSnapshotType, CreateVersionInputBase {
+  /** ID of the agent this version belongs to */
+  agentId: string;
+}
+
+/**
+ * Sort direction for version listings.
+ */
+export type VersionSortDirection = 'ASC' | 'DESC';
+
+/**
+ * Fields that can be used for ordering version listings.
+ */
+export type VersionOrderBy = 'versionNumber' | 'createdAt';
+
+/**
+ * Input for listing agent versions with pagination and sorting.
+ */
+export interface ListVersionsInput extends ListVersionsInputBase {
+  /** ID of the agent to list versions for */
+  agentId: string;
+}
+
+/**
+ * Output for listing agent versions with pagination info.
+ */
+export interface ListVersionsOutput extends ListVersionsOutputBase<AgentVersion> {}
+
+// ============================================================================
+// AgentsStorage Base Class
+// ============================================================================
+
+export abstract class AgentsStorage extends VersionedStorageDomain<
+  StorageAgentType,
+  StorageAgentSnapshotType,
+  StorageResolvedAgentType,
+  AgentVersion,
+  CreateVersionInput,
+  ListVersionsInput,
+  ListVersionsOutput,
+  { agent: StorageCreateAgentInput },
+  StorageUpdateAgentInput,
+  StorageListAgentsInput | undefined,
+  StorageListAgentsOutput,
+  StorageListAgentsResolvedOutput
+> {
+  protected readonly listKey = 'agents';
+  protected readonly versionMetadataFields = [
+    'id',
+    'agentId',
+    'versionNumber',
+    'changedFields',
+    'changeMessage',
+    'createdAt',
+  ] satisfies (keyof AgentVersion)[];
+
   constructor() {
     super({
       component: 'STORAGE',
       name: 'AGENTS',
     });
   }
-
-  /**
-   * Retrieves an agent by its unique identifier.
-   * @param id - The unique identifier of the agent
-   * @returns The agent if found, null otherwise
-   */
-  abstract getAgentById({ id }: { id: string }): Promise<StorageAgentType | null>;
-
-  /**
-   * Creates a new agent in storage.
-   * @param agent - The agent data to create
-   * @returns The created agent with timestamps
-   */
-  abstract createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType>;
-
-  /**
-   * Updates an existing agent in storage.
-   * @param id - The unique identifier of the agent to update
-   * @param updates - The fields to update
-   * @returns The updated agent
-   */
-  abstract updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType>;
-
-  /**
-   * Deletes an agent from storage.
-   * @param id - The unique identifier of the agent to delete
-   */
-  abstract deleteAgent({ id }: { id: string }): Promise<void>;
-
-  /**
-   * Lists all agents with optional pagination.
-   * @param args - Pagination and ordering options
-   * @returns Paginated list of agents
-   */
-  abstract listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput>;
-
-  /**
-   * Parses orderBy input for consistent sorting behavior.
-   */
-  protected parseOrderBy(
-    orderBy?: StorageOrderBy,
-    defaultDirection: ThreadSortDirection = 'DESC',
-  ): { field: ThreadOrderBy; direction: ThreadSortDirection } {
-    return {
-      field: orderBy?.field && orderBy.field in AGENT_ORDER_BY_SET ? orderBy.field : 'createdAt',
-      direction:
-        orderBy?.direction && orderBy.direction in AGENT_SORT_DIRECTION_SET ? orderBy.direction : defaultDirection,
-    };
-  }
 }
-
-const AGENT_ORDER_BY_SET: Record<ThreadOrderBy, true> = {
-  createdAt: true,
-  updatedAt: true,
-};
-
-const AGENT_SORT_DIRECTION_SET: Record<ThreadSortDirection, true> = {
-  ASC: true,
-  DESC: true,
-};

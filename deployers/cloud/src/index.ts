@@ -2,7 +2,6 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { IS_DEFAULT } from '@mastra/deployer/bundler';
 import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -25,10 +24,12 @@ export class CloudDeployer extends Deployer {
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
 
-    if (!bundlerOptions?.[IS_DEFAULT]) {
-      return bundlerOptions;
-    }
-
+    // Always force externals: true for cloud deployments.
+    // The cloud deployer installs all dependencies from npm into node_modules,
+    // so bundling them inline serves no purpose. Bundling inline can also cause
+    // circular module evaluation deadlocks when dynamic imports (e.g. in
+    // MemoryLibSQL.init()) reference chunks that depend back on the entry module,
+    // resulting in "Detected unsettled top-level await" warnings.
     return {
       ...bundlerOptions,
       externals: true,
@@ -44,8 +45,8 @@ export class CloudDeployer extends Deployer {
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = dirname(__filename);
 
-      const playgroundServePath = join(outputDirectory, this.outputDir, 'playground');
-      await copy(join(dirname(__dirname), 'dist/playground'), playgroundServePath, {
+      const studioServePath = join(outputDirectory, this.outputDir, 'studio');
+      await copy(join(dirname(__dirname), join('dist', 'studio')), studioServePath, {
         overwrite: true,
       });
     }
@@ -105,6 +106,7 @@ import { PinoLogger } from '@mastra/loggers';
 import { HttpTransport } from '@mastra/loggers/http';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+
 const startTime = process.env.RUNNER_START_TIME ? new Date(process.env.RUNNER_START_TIME).getTime() : Date.now();
 const createNodeServerStartTime = Date.now();
 
@@ -153,14 +155,17 @@ if (process.env.MASTRA_STORAGE_URL && process.env.MASTRA_STORAGE_AUTH_TOKEN) {
   })
   const vector = new LibSQLVector({
     id: 'mastra-cloud-storage-libsql-vector',
-    connectionUrl: process.env.MASTRA_STORAGE_URL,
+    url: process.env.MASTRA_STORAGE_URL,
     authToken: process.env.MASTRA_STORAGE_AUTH_TOKEN,
   })
 
   await storage.init()
   mastra?.setStorage(storage)
-} else if (mastra?.storage) {
-  mastra.storage.init()
+} else {
+  const userStorage = mastra?.getStorage();
+  if (userStorage && !userStorage.disableInit) {
+    userStorage.init();
+  }
 }
 
 if (mastra?.getStorage()) {
@@ -169,7 +174,7 @@ if (mastra?.getStorage()) {
 
 ${getAuthEntrypoint()}
 
-await createNodeServer(mastra, { playground: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
+await createNodeServer(mastra, { studio: ${this.studio}, swaggerUI: false, tools: getToolExports(tools) });
 
 ${successEntrypoint()}
 

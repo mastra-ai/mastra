@@ -1,11 +1,11 @@
 import { useState, useEffect, useContext, useMemo } from 'react';
 
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 import { CopyIcon, Cpu } from 'lucide-react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useWorkflow } from '@/hooks/use-workflows';
-import { EntityHeader } from '@/components/ui/entity-header';
+import { EntityHeader } from '@/ds/components/EntityHeader';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { Badge } from '@/ds/components/Badge';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
@@ -13,9 +13,10 @@ import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import { toast } from '@/lib/toast';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import { Tabs, TabList, Tab, TabContent } from '@/components/ui/elements/tabs';
+import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { WorkflowStepDetailContent } from './workflow-step-detail';
+import { RequestContextSchemaForm } from '@/domains/request-context';
 
 export interface WorkflowInformationProps {
   workflowId: string;
@@ -92,7 +93,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   }
 
   return (
-    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto border-l-sm border-border1">
+    <div className="grid grid-rows-[auto_1fr] h-full overflow-y-auto">
       <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
         <div className="flex items-center gap-2 pt-2">
           <Tooltip>
@@ -118,10 +119,11 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
         </div>
       </EntityHeader>
 
-      <div className="flex-1 overflow-auto border-t-sm border-border1 flex flex-col">
+      <div className="flex-1 overflow-auto border-t border-border1 flex flex-col">
         <Tabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="h-full">
           <TabList>
             <Tab value="current-run">Current Run</Tab>
+            {workflow?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
             <Tab value="run-options">Run Options</Tab>
             {stepDetail && nodeDetailTabName && (
               <Tab
@@ -171,6 +173,15 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
               )
             ) : null}
           </TabContent>
+
+          {workflow?.requestContextSchema && (
+            <TabContent value="request-context">
+              <div className="p-5">
+                <RequestContextSchemaForm requestContextSchema={workflow.requestContextSchema} />
+              </div>
+            </TabContent>
+          )}
+
           <TabContent value="run-options">
             <TracingRunOptions />
           </TabContent>

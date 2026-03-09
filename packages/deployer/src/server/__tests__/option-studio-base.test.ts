@@ -61,7 +61,7 @@ vi.mock('../welcome', () => ({
 
 describe('Mastra Studio "studioBase" functionality', () => {
   let mockMastra: Mastra;
-  // Mock HTML that matches the real playground structure with <base> tag and relative paths
+  // Mock HTML that matches the real studio structure with <base> tag and relative paths
   const mockIndexHtml = `<!DOCTYPE html>
 <html>
 <head>
@@ -107,7 +107,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       { studioBase: undefined, requestPath: '/__hot-reload-status', desc: 'undefined studioBase' },
     ])('should handle $desc', async ({ studioBase, requestPath }) => {
       vi.mocked(mockMastra.getServer).mockReturnValue(studioBase !== undefined ? { studioBase } : {});
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request(requestPath);
       expect(response.status).toBe(200);
@@ -120,7 +120,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       { studioBase: '//admin//', desc: 'with multiple slashes' },
     ])('should normalize custom studioBase path $desc', async ({ studioBase }) => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/admin/__hot-reload-status');
       expect(response.status).toBe(200);
@@ -128,21 +128,21 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should handle nested studioBase paths', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/api/v1' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/api/v1/__hot-reload-status');
       expect(response.status).toBe(200);
     });
   });
 
-  describe('Playground route prefixing', () => {
+  describe('studio route prefixing', () => {
     it.each([
       { route: '/studio/refresh-events', method: 'GET' },
       { route: '/studio/__refresh', method: 'POST' },
       { route: '/studio/__hot-reload-status', method: 'GET' },
     ])('should prefix $route with studioBase path', async ({ route, method }) => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request(route, { method });
       expect(response.status).toBe(200);
@@ -150,7 +150,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should return response data from __hot-reload-status', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/studio/__hot-reload-status');
       const data = await response.json();
@@ -158,9 +158,9 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(data).toHaveProperty('timestamp');
     });
 
-    it('should not register playground routes when playground is disabled', async () => {
+    it('should not register studio routes when studio is disabled', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: false });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: false });
 
       const response = await app.request('/studio/__hot-reload-status');
       expect([200, 404]).toContain(response.status);
@@ -170,7 +170,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
   describe('HTML placeholder replacement', () => {
     it('should not rewrite asset paths for root studioBase path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/');
       const html = await response.text();
@@ -184,7 +184,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should set base href for custom base path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 3000, host: 'example.com' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/admin');
       const html = await response.text();
@@ -200,7 +200,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should inject studioBase path into MASTRA_STUDIO_BASE_PATH JavaScript variable', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/custom-path', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/custom-path');
       const html = await response.text();
@@ -211,7 +211,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should replace server configuration placeholders', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio', port: 5000, host: 'api.example.com' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/studio');
       const html = await response.text();
@@ -222,7 +222,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should use default port 4111 when server port is not set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/admin');
       const html = await response.text();
@@ -235,7 +235,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       try {
         process.env.MASTRA_HIDE_CLOUD_CTA = 'true';
         vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 4111, host: 'localhost' });
-        const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+        const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
         const response = await app.request('/admin');
         const html = await response.text();
@@ -254,7 +254,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
   describe('Static asset serving with studioBase path', () => {
     it('should serve assets from prefixed path when studioBase path is set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/custom-path', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       // Assets should be accessible at /studioBase-path/assets/*
       const response = await app.request('/custom-path/assets/style.css');
@@ -264,7 +264,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should serve assets from root when studioBase path is root', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/assets/style.css');
       expect([200, 404]).toContain(response.status);
@@ -272,19 +272,19 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should strip studioBase path when rewriting request paths for static assets', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       // The implementation strips the studioBase path prefix when serving static files
-      // so /admin/assets/x.js maps to ./playground/assets/x.js
+      // so /admin/assets/x.js maps to ./studio/assets/x.js
       const response = await app.request('/admin/assets/index.js');
       expect([200, 404]).toContain(response.status);
     });
   });
 
   describe('Route matching logic', () => {
-    it('should serve playground HTML for studioBase path and sub-routes', async () => {
+    it('should serve studio HTML for studioBase path and sub-routes', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       for (const route of ['/studio', '/studio/agents', '/studio/page.html']) {
         const response = await app.request(route);
@@ -295,7 +295,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should serve welcome HTML for routes not matching studioBase path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       for (const route of ['/other', '/stud']) {
         const response = await app.request(route);
@@ -307,17 +307,17 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should skip API routes regardless of studioBase path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/api/agents');
-      // API route returns JSON, not playground HTML
+      // API route returns JSON, not studio HTML
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toContain('application/json');
     });
 
     it('should handle static file requests with studioBase path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/custom-path' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       for (const path of ['/custom-path/mastra.svg', '/custom-path/assets/index.js', '/custom-path/test.js']) {
         const response = await app.request(path);
@@ -327,7 +327,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should not serve static files without studioBase path prefix when studioBase path is set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/custom-path' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/mastra.svg');
       if (response.status === 200) {
@@ -342,7 +342,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
   describe('Deep nested studioBase paths', () => {
     it('should handle deep nested studioBase paths with studioBase tag replacement', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio/v1/app' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const statusResponse = await app.request('/studio/v1/app/__hot-reload-status');
       expect(statusResponse.status).toBe(200);
@@ -360,7 +360,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
   describe('Health check route', () => {
     it('should serve health check at root regardless of studioBase path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/health');
       expect(response.status).toBe(200);
@@ -368,9 +368,9 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(data).toHaveProperty('status');
     });
 
-    it('should serve playground HTML at /studioBase/health, not health check', async () => {
+    it('should serve studio HTML at /studioBase/health, not health check', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/studio/health');
       const html = await response.text();
@@ -385,15 +385,15 @@ describe('Mastra Studio "studioBase" functionality', () => {
       { studioBase: '/v1', desc: 'numeric' },
     ])('should handle $desc studioBase path', async ({ studioBase }) => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request(`${studioBase}/__hot-reload-status`);
       expect(response.status).toBe(200);
     });
 
-    it('should serve welcome HTML when playground is disabled', async () => {
+    it('should serve welcome HTML when studio is disabled', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/studio' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: false });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: false });
 
       const response = await app.request('/');
       const html = await response.text();
@@ -402,7 +402,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
 
     it('should handle case-sensitive studioBase paths', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/Admin' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/Admin/__hot-reload-status');
       expect(response.status).toBe(200);
@@ -415,9 +415,9 @@ describe('Mastra Studio "studioBase" functionality', () => {
       }
     });
 
-    it('should serve playground HTML for all routes under studioBase path', async () => {
+    it('should serve studio HTML for all routes under studioBase path', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/test' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       for (const route of ['/test', '/test/', '/test/agents', '/test/workflows']) {
         const response = await app.request(route);
@@ -436,7 +436,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       'should $isDev ? "register" : "not register" restart handler when isDev=$isDev',
       async ({ isDev, expectedStatus }) => {
         vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin' });
-        const app = await createHonoServer(mockMastra, { tools: {}, playground: true, isDev });
+        const app = await createHonoServer(mockMastra, { tools: {}, studio: true, isDev });
 
         const response = await app.request('/__restart-active-workflow-runs', { method: 'POST' });
         expect(response.status).toBe(expectedStatus);
@@ -456,33 +456,33 @@ describe('Mastra Studio "studioBase" functionality', () => {
     });
 
     it('should use MASTRA_STUDIO_PATH when set', async () => {
-      process.env.MASTRA_STUDIO_PATH = '/custom/path/to/playground';
+      process.env.MASTRA_STUDIO_PATH = '/custom/path/to/studio';
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/');
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toBe('text/html');
       // readFile should be called with the custom path
-      expect(readFile).toHaveBeenCalledWith('/custom/path/to/playground/index.html', 'utf-8');
+      expect(readFile).toHaveBeenCalledWith('/custom/path/to/studio/index.html', 'utf-8');
     });
 
-    it('should default to ./playground relative to cwd when MASTRA_STUDIO_PATH is not set', async () => {
+    it('should default to ./studio relative to cwd when MASTRA_STUDIO_PATH is not set', async () => {
       delete process.env.MASTRA_STUDIO_PATH;
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/');
       expect(response.status).toBe(200);
       expect(response.headers.get('Content-Type')).toBe('text/html');
       // readFile should be called with path relative to cwd
-      expect(readFile).toHaveBeenCalledWith(expect.stringContaining('playground/index.html'), 'utf-8');
+      expect(readFile).toHaveBeenCalledWith(expect.stringContaining('studio/index.html'), 'utf-8');
     });
 
     it('should work with custom studioBase and MASTRA_STUDIO_PATH together', async () => {
       process.env.MASTRA_STUDIO_PATH = '/opt/mastra/studio';
       vi.mocked(mockMastra.getServer).mockReturnValue({ studioBase: '/admin', port: 4111, host: 'localhost' });
-      const app = await createHonoServer(mockMastra, { tools: {}, playground: true });
+      const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
       const response = await app.request('/admin');
       expect(response.status).toBe(200);

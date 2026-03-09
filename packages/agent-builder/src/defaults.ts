@@ -6,6 +6,19 @@ import ignore from 'ignore';
 import { z } from 'zod';
 import { exec, execFile, spawnSWPM, spawnWithOutput } from './utils';
 
+type TaskManagerInputType = {
+  action: 'create' | 'update' | 'list' | 'complete' | 'remove';
+  tasks?: Array<{
+    id: string;
+    content?: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+    priority: 'high' | 'medium' | 'low';
+    dependencies?: string[];
+    notes?: string;
+  }>;
+  taskId?: string;
+};
+
 export class AgentBuilderDefaults {
   static DEFAULT_INSTRUCTIONS = (
     projectPath?: string,
@@ -544,7 +557,7 @@ export const mastra = new Mastra({
             .optional()
             .describe('Tasks to create or update'),
           taskId: z.string().optional().describe('Specific task ID for single task operations'),
-        }),
+        }) as z.Schema<TaskManagerInputType>,
         outputSchema: z.object({
           success: z.boolean(),
           tasks: z.array(
@@ -561,7 +574,7 @@ export const mastra = new Mastra({
           ),
           message: z.string(),
         }),
-        execute: async inputData => {
+        execute: async (inputData: TaskManagerInputType) => {
           return await AgentBuilderDefaults.manageTaskList(inputData);
         },
       }),

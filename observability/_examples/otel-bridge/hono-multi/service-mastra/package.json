@@ -11,8 +11,8 @@
     "lint:fix": "prettier --write '**/*.{js,ts}'"
   },
   "dependencies": {
-    "@hono/node-server": "^1.15.1",
-    "@hono/otel": "^1.0.1",
+    "@hono/node-server": "^1.19.9",
+    "@hono/otel": "^1.1.0",
     "@hono/swagger-ui": "^0.5.2",
     "@mastra/core": "latest",
     "@mastra/hono": "latest",
@@ -27,10 +27,10 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@types/node": "^20.19.0",
+    "@types/node": "^20.19.30",
     "mastra": "latest",
     "prettier": "^3.6.2",
-    "tsx": "^4.19.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

@@ -233,6 +233,16 @@ export class S3Vectors extends MastraVector<S3VectorsFilter> {
   }: QueryVectorParams<S3VectorsFilter>): Promise<QueryResult[]> {
     indexName = normalizeIndexName(indexName);
 
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('S3VECTORS', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for S3 Vectors queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     try {
       if (!Array.isArray(queryVector) || queryVector.length === 0) {
         throw new Error('queryVector must be a non-empty float32 array');

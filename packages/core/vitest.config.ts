@@ -1,14 +1,49 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
-    typecheck: {
-      enabled: true,
-      include: ['src/**/*.test-d.ts'],
+  resolve: {
+    alias: {
+      '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
     },
-    // Increase default timeout for tests that make real API calls to LLMs
-    testTimeout: 120000, // 2 minutes default
+  },
+  test: {
+    projects: [
+      {
+        resolve: {
+          alias: {
+            '@internal/workflow-test-utils': path.resolve(__dirname, '../../workflows/_test-utils/src'),
+          },
+        },
+        test: {
+          name: 'unit:packages/core',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+          exclude: ['src/**/*.e2e.test.ts'],
+          setupFiles: ['@internal/test-utils/setup'],
+          testTimeout: 120000,
+        },
+      },
+      {
+        test: {
+          name: 'e2e:packages/core',
+          environment: 'node',
+          include: ['src/**/*.e2e.test.ts'],
+          setupFiles: ['@internal/test-utils/setup'],
+          testTimeout: 120000,
+        },
+      },
+      {
+        test: {
+          name: 'typecheck:packages/core',
+          environment: 'node',
+          include: [],
+          typecheck: {
+            enabled: true,
+            include: ['src/**/*.test-d.ts'],
+          },
+        },
+      },
+    ],
   },
 });

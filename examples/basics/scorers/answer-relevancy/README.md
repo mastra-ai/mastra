@@ -4,7 +4,7 @@ This example demonstrates how to use Mastra's Answer Relevancy Scorer to evaluat
 
 ## Prerequisites
 
-- Node.js v20.0+
+- Node.js 22.13.0 or later
 - pnpm
 - OpenAI API key
 

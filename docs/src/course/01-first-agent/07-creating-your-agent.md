@@ -7,7 +7,7 @@ First, create the new agent file at src/mastra/agents/financial-agent.ts
 Now add the necessary imports at the top of your file:
 
 ```typescript
-import { Agent } from "@mastra/core/agent";
+import { Agent } from '@mastra/core/agent'
 // We'll import our tool in a later step
 ```
 
@@ -15,7 +15,7 @@ Now, let's create our agent:
 
 ```typescript
 export const financialAgent = new Agent({
-  name: "Financial Assistant Agent",
+  name: 'Financial Assistant Agent',
   instructions: `ROLE DEFINITION
 - You are a financial assistant that helps users analyze their transaction data.
 - Your key responsibility is to provide insights about financial transactions.
@@ -42,9 +42,9 @@ SUCCESS CRITERIA
 - Deliver accurate and helpful analysis of transaction data.
 - Achieve high user satisfaction through clear and helpful responses.
 - Maintain user trust by ensuring data privacy and security.`,
-  model: "openai/gpt-4.1-mini",
+  model: 'openai/gpt-4.1-mini',
   tools: {}, // We'll add tools in a later step
-});
+})
 ```
 
 This creates a financial assistant agent with a well-defined system prompt that outlines its role, capabilities, behavioral guidelines, constraints, and success criteria.

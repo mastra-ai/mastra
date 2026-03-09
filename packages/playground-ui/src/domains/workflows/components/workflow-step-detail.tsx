@@ -22,18 +22,18 @@ export function WorkflowStepDetailContent() {
   return (
     <div className="flex flex-col h-full">
       {/* Header with title and close button */}
-      <div className="flex items-center justify-between px-4 py-3 border-b-sm border-border1 bg-surface1">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border1 bg-surface1">
         <div className="flex items-center gap-2">
           {stepDetail.type === 'map-config' && <List className="w-4 h-4" style={{ color: BADGE_COLORS.map }} />}
           {stepDetail.type === 'nested-graph' && (
             <WorkflowIcon className="w-4 h-4" style={{ color: BADGE_COLORS.workflow }} />
           )}
           <div className="flex flex-col">
-            <Txt variant="ui-md" className="text-icon6 font-medium">
+            <Txt variant="ui-md" className="text-neutral6 font-medium">
               {stepDetail.type === 'map-config' ? `${stepDetail.stepName} Config` : `${stepDetail.stepName} Workflow`}
             </Txt>
             {stepDetail.type === 'map-config' && stepDetail.stepId && stepDetail.stepId !== stepDetail.stepName && (
-              <Txt variant="ui-xs" className="text-icon3">
+              <Txt variant="ui-xs" className="text-neutral3">
                 {stepDetail.stepId}
               </Txt>
             )}
@@ -44,7 +44,7 @@ export function WorkflowStepDetailContent() {
           className="p-1 hover:bg-surface3 rounded transition-colors"
           aria-label="Close"
         >
-          <X className="w-4 h-4 text-icon3" />
+          <X className="w-4 h-4 text-neutral3" />
         </button>
       </div>
 

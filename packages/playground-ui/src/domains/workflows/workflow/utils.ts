@@ -28,8 +28,6 @@ export type Condition =
       conj?: never;
     };
 
-export const pathAlphabet = 'abcdefghijklmnopqrstuvwxyz'.toUpperCase().split('');
-
 const formatMappingLabel = (stepId: string, prevStepIds: string[], nextStepIds: string[]): string => {
   // If not a mapping node, return original ID
   if (!stepId.startsWith('mapping_')) {
@@ -200,6 +198,7 @@ const getStepNodeAndEdge = ({
           mapConfig: stepFlow.step.mapConfig,
           canSuspend: stepFlow.step.canSuspend,
           isForEach: stepFlow.type === 'foreach',
+          metadata: stepFlow.step.metadata,
         },
       },
     ];
@@ -331,6 +330,7 @@ const getStepNodeAndEdge = ({
           withoutBottomHandle: false,
           stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
           canSuspend: _step.canSuspend,
+          metadata: _step.metadata,
         },
       },
       {

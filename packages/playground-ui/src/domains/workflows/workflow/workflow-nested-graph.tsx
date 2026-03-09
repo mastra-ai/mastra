@@ -8,7 +8,7 @@ import { DefaultNode, WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowAfterNode } from './workflow-after-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import { useEffect, useMemo, useState } from 'react';
-import Spinner from '@/components/ui/spinner';
+import { Spinner } from '@/ds/components/Spinner';
 import { NestedNode, WorkflowNestedNode } from './workflow-nested-node';
 import { ZoomSlider } from './zoom-slider';
 import { useCurrentRun } from '../context/use-current-run';

@@ -2,8 +2,8 @@ import { z } from 'zod';
 import type { MastraBase } from '../../../base';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../../processors';
-import type { DynamicArgument } from '../../../types';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ProcessorState } from '../../../processors';
+import type { RequestContext } from '../../../request-context';
 import type { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import type { AgentExecuteOnFinishOptions } from '../../types';
@@ -19,8 +19,18 @@ export type AgentCapabilities = {
   convertTools: Agent['convertTools'];
   runInputProcessors: Agent['__runInputProcessors'];
   executeOnFinish: (args: AgentExecuteOnFinishOptions) => Promise<void>;
-  outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[]>;
-  inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[]>;
+  outputProcessors?:
+    | OutputProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: OutputProcessorOrWorkflow[];
+      }) => Promise<OutputProcessorOrWorkflow[]> | OutputProcessorOrWorkflow[]);
+  inputProcessors?:
+    | InputProcessorOrWorkflow[]
+    | ((args: {
+        requestContext: RequestContext;
+        overrides?: InputProcessorOrWorkflow[];
+      }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
   llm: MastraLLMVNext;
 };
 
@@ -32,7 +42,8 @@ const coreToolSchema = z.object({
     z.any(), // Zod schema or other schema types - validated at tool execution
   ]),
   outputSchema: z.union([z.record(z.string(), z.any()), z.any()]).optional(),
-  execute: z.function(z.tuple([z.any(), z.any()]), z.promise(z.any())).optional(),
+  execute: z.optional(z.function(z.tuple([z.any(), z.any()]), z.promise(z.any()))),
+  toModelOutput: z.optional(z.function(z.tuple([z.any()]), z.any())),
   type: z.union([z.literal('function'), z.literal('provider-defined'), z.undefined()]).optional(),
   args: z.record(z.string(), z.any()).optional(),
 });
@@ -56,6 +67,8 @@ export const prepareMemoryStepOutputSchema = z.object({
   threadExists: z.boolean(),
   thread: storageThreadSchema.optional(),
   messageList: z.instanceof(MessageList),
+  /** Shared processor states map that persists across loop iterations for both input and output processors */
+  processorStates: z.instanceof(Map<string, ProcessorState>),
   /** Tripwire data when input processor triggered abort */
   tripwire: z
     .object({

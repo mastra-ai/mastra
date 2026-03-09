@@ -78,3 +78,53 @@ export function getZodDef(schema: z.ZodTypeAny): any {
   const schemaAny = schema as any;
   return schemaAny._zod?.def ?? schemaAny._def;
 }
+
+/**
+ * Get the inner type from a wrapper schema (nullable, optional, default, effects, branded).
+ * Compatible with both Zod 3 and Zod 4.
+ *
+ * @param schema - The wrapper Zod schema
+ * @param typeName - The Zod type name of the wrapper (e.g., "ZodOptional")
+ * @returns The inner schema, or undefined if not found
+ */
+export function getZodInnerType(schema: z.ZodTypeAny, typeName: string): z.ZodTypeAny | undefined {
+  const schemaAny = schema as any;
+
+  // For nullable, optional, default - the inner type is at _def.innerType
+  if (typeName === 'ZodNullable' || typeName === 'ZodOptional' || typeName === 'ZodDefault') {
+    return schemaAny._zod?.def?.innerType ?? schemaAny._def?.innerType;
+  }
+
+  // For effects - the inner type is at _def.schema
+  if (typeName === 'ZodEffects') {
+    return schemaAny._zod?.def?.schema ?? schemaAny._def?.schema;
+  }
+
+  // For branded - the inner type is at _def.type
+  if (typeName === 'ZodBranded') {
+    return schemaAny._zod?.def?.type ?? schemaAny._def?.type;
+  }
+
+  return undefined;
+}
+
+/**
+ * Unwraps Zod wrapper types (optional, nullable, default, effects, branded)
+ * to find the base schema type. Compatible with both Zod 3 and Zod 4.
+ *
+ * For example, `z.array(z.string()).nullish().default([])` unwraps to `z.array(z.string())`.
+ *
+ * @param schema - The Zod schema to unwrap
+ * @returns The innermost base schema
+ */
+export function unwrapZodType(schema: z.ZodTypeAny): z.ZodTypeAny {
+  let current = schema;
+  while (true) {
+    const typeName = getZodTypeName(current);
+    if (!typeName) break;
+    const inner = getZodInnerType(current, typeName);
+    if (!inner) break;
+    current = inner;
+  }
+  return current;
+}

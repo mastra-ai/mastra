@@ -1,16 +1,14 @@
+import { createUIMessageStream, createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
+import type { InferUIMessageChunk, UIMessage } from '@internal/ai-sdk-v5';
 import type { AgentExecutionOptions } from '@mastra/core/agent';
-
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
-import type { OutputSchema } from '@mastra/core/stream';
-import { createUIMessageStream, createUIMessageStreamResponse } from 'ai';
-import type { InferUIMessageChunk, UIMessage } from 'ai';
 import { toAISdkV5Stream } from './convert-streams';
 
 export type ChatStreamHandlerParams<
   UI_MESSAGE extends UIMessage,
-  OUTPUT extends OutputSchema = undefined,
+  OUTPUT = undefined,
 > = AgentExecutionOptions<OUTPUT> & {
   messages: UI_MESSAGE[];
   resumeData?: Record<string, any>;
@@ -18,7 +16,7 @@ export type ChatStreamHandlerParams<
   trigger?: 'submit-message' | 'regenerate-message';
 };
 
-export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined> = {
+export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT = undefined> = {
   mastra: Mastra;
   agentId: string;
   params: ChatStreamHandlerParams<UI_MESSAGE, OUTPUT>;
@@ -37,7 +35,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extend
  * ```ts
  * // Next.js App Router
  * import { handleChatStream } from '@mastra/ai-sdk';
- * import { createUIMessageStreamResponse } from 'ai';
+ * import { createUIMessageStreamResponse } from '@internal/ai-sdk-v5';
  * import { mastra } from '@/src/mastra';
  *
  * export async function POST(req: Request) {
@@ -51,7 +49,7 @@ export type ChatStreamHandlerOptions<UI_MESSAGE extends UIMessage, OUTPUT extend
  * }
  * ```
  */
-export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT extends OutputSchema = undefined>({
+export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT = undefined>({
   mastra,
   agentId,
   params,
@@ -93,11 +91,17 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT exte
     }
   }
 
+  const mergedProviderOptions = {
+    ...defaultOptions?.providerOptions,
+    ...rest.providerOptions,
+  };
+
   const mergedOptions = {
     ...defaultOptions,
     ...rest,
     ...(runId && { runId }),
     requestContext: requestContext || defaultOptions?.requestContext,
+    ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };
 
   const result = resumeData
@@ -121,7 +125,7 @@ export async function handleChatStream<UI_MESSAGE extends UIMessage, OUTPUT exte
   });
 }
 
-export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
+export type chatRouteOptions<OUTPUT = undefined> = {
   defaultOptions?: AgentExecutionOptions<OUTPUT>;
 } & (
   | {
@@ -182,7 +186,7 @@ export type chatRouteOptions<OUTPUT extends OutputSchema = undefined> = {
  * - If both `agent` and `:agentId` are present, a warning is logged and the fixed `agent` takes precedence
  * - Request context from the incoming request overrides `defaultOptions.requestContext` if both are present
  */
-export function chatRoute<OUTPUT extends OutputSchema = undefined>({
+export function chatRoute<OUTPUT = undefined>({
   path = '/chat/:agentId',
   agent,
   defaultOptions,
@@ -338,7 +342,8 @@ export function chatRoute<OUTPUT extends OutputSchema = undefined>({
         params: {
           ...params,
           requestContext: effectiveRequestContext,
-        },
+          abortSignal: c.req.raw.signal,
+        } as any,
         defaultOptions,
         sendStart,
         sendFinish,

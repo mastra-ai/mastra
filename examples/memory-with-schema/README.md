@@ -17,7 +17,7 @@ OPENAI_API_KEY=<your-api-key>
 And install the following package:
 
 ```bash
-npm install @mastra/libsql@beta
+npm install @mastra/libsql
 ```
 
 ## Adding memory to an agent
@@ -183,6 +183,6 @@ Working memory stores data in `.json` format, which would look similar to the be
 
 ## Related
 
-- [Calling Agents](https://mastra.ai/docs/v1/agents/overview#referencing-an-agent)
-- [Agent Memory](https://mastra.ai/docs/v1/agents/agent-memory)
-- [Serverless Deployment](https://mastra.ai/reference/v1/storage/libsql)
+- [Calling Agents](https://mastra.ai/docs/agents/overview#referencing-an-agent)
+- [Agent Memory](https://mastra.ai/docs/agents/agent-memory)
+- [Serverless Deployment](https://mastra.ai/reference/storage/libsql)

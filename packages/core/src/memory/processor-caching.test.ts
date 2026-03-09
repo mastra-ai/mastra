@@ -36,8 +36,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
     // Mock memory store
     mockMemoryStore = {
       getThreadById: vi.fn().mockResolvedValue(null),
-      getThreadsByResourceId: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
-      listThreadsByResourceId: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
+      listThreads: vi.fn().mockResolvedValue({ threads: [], cursor: null, hasMore: false }),
       saveThread: vi.fn().mockImplementation(({ thread }) => Promise.resolve(thread)),
       deleteThread: vi.fn().mockResolvedValue(undefined),
       listMessages: vi.fn().mockResolvedValue({ messages: [] }),
@@ -91,6 +90,10 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       const processors1 = await memory.getInputProcessors();
       const semanticRecall1 = processors1.find(p => p.id === 'semantic-recall') as SemanticRecall;
 
+      // Clear mock call counts from the dimension probe that happens inside getInputProcessors()
+      // (getEmbeddingDimension() calls doEmbed({ values: ['a'] }) to discover the embedding dimension)
+      vi.mocked(mockEmbedder.doEmbed).mockClear();
+
       // Set up request context
       const requestContext = new RequestContext();
       requestContext.set('MastraMemory', {
@@ -137,7 +140,8 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // Embedder should NOT be called again (cache hit from global cache)
+      // Embedder should NOT be called again (cache hit from global cache,
+      // dimension probe is also cached per memory instance via _embeddingDimensionPromise)
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
     });
 
@@ -187,7 +191,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // doEmbed is called twice: once by getEmbeddingDimension() to probe dimensions,
+      // and once by processInput() for the actual embedding
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
 
       // Get output processors and process the same message
       const outputProcessors = await memory.getOutputProcessors();
@@ -207,8 +213,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // Embedder should NOT be called again (cache hit from global cache)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      // Embedder should NOT be called again (cache hit from global cache,
+      // dimension probe is also cached per memory instance via _embeddingDimensionPromise)
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
     });
 
     it('should share embedding cache across different Memory instances', async () => {
@@ -259,6 +266,9 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
       const processors1 = await memory1.getInputProcessors();
       const semanticRecall1 = processors1.find(p => p.id === 'semantic-recall') as SemanticRecall;
 
+      // Clear mock call counts from the dimension probe that happens inside getInputProcessors()
+      vi.mocked(mockEmbedder.doEmbed).mockClear();
+
       const messageList1 = new MessageList();
       messageList1.add([message], 'input');
 
@@ -269,6 +279,8 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
+      // doEmbed is called twice: once by getEmbeddingDimension() to probe dimensions,
+      // and once by processInput() for the actual embedding
       expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
 
       // Process with second memory instance - should use global cache
@@ -285,8 +297,7 @@ describe('MastraMemory Embedding Cache (Issue #11455)', () => {
         requestContext,
       });
 
-      // Embedder should NOT be called again (cache hit from global cache)
-      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(1);
+      expect(mockEmbedder.doEmbed).toHaveBeenCalledTimes(2);
     });
   });
 

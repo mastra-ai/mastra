@@ -1,11 +1,11 @@
 import { spanTypePrefixes, getSpanTypeUi } from './shared';
 import { SpanRecord } from '@mastra/core/storage';
 import { UISpanType } from '../types';
-import { SearchField } from '@/components/ui/elements';
+import { SearchField } from '@/ds/components/FormFields';
 import { useThrottledCallback } from 'use-debounce';
 import { Fragment, useEffect, useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
-import { CombinedButtons } from '@/components/ui/elements/buttons';
+import { CombinedButtons } from '@/ds/components/CombinedButtons';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Icon } from '@/ds/icons/Icon';
 

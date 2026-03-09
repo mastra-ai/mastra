@@ -148,7 +148,7 @@ export const myMcpServerTwo = new MCPServer({
         text: z.string().describe('The input string.'),
         action: z.enum(['uppercase', 'reverse']).describe('The string action to perform.'),
       }),
-      execute: async input => {
+      execute: async inputData => {
         const { text, action } = inputData;
         if (action === 'uppercase') {
           return text.toUpperCase();
@@ -165,7 +165,7 @@ export const myMcpServerTwo = new MCPServer({
       inputSchema: z.object({
         name: z.string().describe('The name of the person to greet.'),
       }),
-      execute: async input => {
+      execute: async inputData => {
         return `Hello, ${inputData.name}! Welcome to the MCP server.`;
       },
     }),

@@ -5,9 +5,9 @@ import type { MemoryConfig, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import { AISDKV5OutputStream, MastraModelOutput } from '../../../stream';
-import type { OutputSchema } from '../../../stream/base/schema';
+import { MastraModelOutput } from '../../../stream';
 import { createWorkflow } from '../../../workflows';
+import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import type { AgentMethodType } from '../../types';
@@ -17,7 +17,7 @@ import { createPrepareToolsStep } from './prepare-tools-step';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
-interface CreatePrepareStreamWorkflowOptions<OUTPUT extends OutputSchema | undefined = undefined> {
+interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
   threadFromArgs?: (Partial<StorageThreadType> & { id: string }) | undefined;
@@ -40,9 +40,10 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT extends OutputSchema | undef
   agentId: string;
   agentName?: string;
   toolCallId?: string;
+  workspace?: Workspace;
 }
 
-export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefined = undefined>({
+export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   capabilities,
   options,
   threadFromArgs,
@@ -62,6 +63,7 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
   agentId,
   agentName,
   toolCallId,
+  workspace,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -82,7 +84,6 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
     resourceId,
     runId,
     requestContext,
-    agentSpan,
     methodType,
     instructions,
     memoryConfig,
@@ -105,6 +106,7 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
     memory,
     resourceId,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
+    workspace,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -123,10 +125,7 @@ export function createPrepareStreamWorkflow<OUTPUT extends OutputSchema | undefi
   return createWorkflow({
     id: 'execution-workflow',
     inputSchema: z.object({}),
-    outputSchema: z.union([
-      z.instanceof(MastraModelOutput<OUTPUT | undefined>),
-      z.instanceof(AISDKV5OutputStream<OUTPUT | undefined>),
-    ]),
+    outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
     steps: [prepareToolsStep, prepareMemoryStep, streamStep],
     options: {
       tracingPolicy: {
