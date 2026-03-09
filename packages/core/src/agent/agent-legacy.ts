@@ -1031,6 +1031,17 @@ export class AgentLegacyHandler {
 
       // Handle tripwire for output processors
       if (outputProcessorResult.tripwire) {
+        // End agent span with tripwire information from output processor
+        agentSpan?.end({
+          output: { tripwire: outputProcessorResult.tripwire },
+          attributes: {
+            tripwireReason: outputProcessorResult.tripwire.reason,
+            tripwireProcessorId: outputProcessorResult.tripwire.processorId,
+            tripwireRetry: outputProcessorResult.tripwire.retry,
+            tripwireMetadata: outputProcessorResult.tripwire.metadata,
+          },
+        });
+
         const tripwireResult = {
           text: '',
           object: undefined,
@@ -1146,6 +1157,17 @@ export class AgentLegacyHandler {
 
     // Handle tripwire for output processors
     if (outputProcessorResult.tripwire) {
+      // End agent span with tripwire information from output processor
+      agentSpan?.end({
+        output: { tripwire: outputProcessorResult.tripwire },
+        attributes: {
+          tripwireReason: outputProcessorResult.tripwire.reason,
+          tripwireProcessorId: outputProcessorResult.tripwire.processorId,
+          tripwireRetry: outputProcessorResult.tripwire.retry,
+          tripwireMetadata: outputProcessorResult.tripwire.metadata,
+        },
+      });
+
       const tripwireResult = {
         text: '',
         object: undefined,
@@ -1354,11 +1376,26 @@ export class AgentLegacyHandler {
             messageList.add(result.response.messages, 'response');
 
             // Run output processors to save messages
-            await this.capabilities.__runOutputProcessors({
+            const outputProcessorResult = await this.capabilities.__runOutputProcessors({
               requestContext,
               ...observabilityContext,
               messageList,
             });
+
+            // End agent span with tripwire details if output processor aborted
+            if (outputProcessorResult.tripwire) {
+              agentSpan?.end({
+                output: { tripwire: outputProcessorResult.tripwire },
+                attributes: {
+                  tripwireReason: outputProcessorResult.tripwire.reason,
+                  tripwireProcessorId: outputProcessorResult.tripwire.processorId,
+                  tripwireRetry: outputProcessorResult.tripwire.retry,
+                  tripwireMetadata: outputProcessorResult.tripwire.metadata,
+                },
+              });
+              await onFinish?.({ ...result, runId } as any);
+              return;
+            }
 
             const outputText = result.text;
             await after({
@@ -1413,11 +1450,26 @@ export class AgentLegacyHandler {
           }
 
           // Run output processors to save messages
-          await this.capabilities.__runOutputProcessors({
+          const outputProcessorResult = await this.capabilities.__runOutputProcessors({
             requestContext,
             ...observabilityContext,
             messageList,
           });
+
+          // End agent span with tripwire details if output processor aborted
+          if (outputProcessorResult.tripwire) {
+            agentSpan?.end({
+              output: { tripwire: outputProcessorResult.tripwire },
+              attributes: {
+                tripwireReason: outputProcessorResult.tripwire.reason,
+                tripwireProcessorId: outputProcessorResult.tripwire.processorId,
+                tripwireRetry: outputProcessorResult.tripwire.retry,
+                tripwireMetadata: outputProcessorResult.tripwire.metadata,
+              },
+            });
+            await onFinish?.({ ...result, runId } as any);
+            return;
+          }
 
           const outputText = JSON.stringify(result.object);
           await after({
