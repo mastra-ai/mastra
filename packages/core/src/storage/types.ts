@@ -2092,6 +2092,7 @@ export interface DatasetRecord {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown>;
   groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
   version: number;
   createdAt: Date;
   updatedAt: Date;
@@ -2103,6 +2104,7 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -2116,6 +2118,7 @@ export interface DatasetItemRow {
   isDeleted: boolean;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
@@ -2136,6 +2139,7 @@ export interface CreateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface UpdateDatasetInput {
@@ -2145,12 +2149,14 @@ export interface UpdateDatasetInput {
   metadata?: Record<string, unknown>;
   inputSchema?: Record<string, unknown> | null;
   groundTruthSchema?: Record<string, unknown> | null;
+  requestContextSchema?: Record<string, unknown> | null;
 }
 
 export interface AddDatasetItemInput {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -2159,6 +2165,7 @@ export interface UpdateDatasetItemInput {
   datasetId: string;
   input?: unknown;
   groundTruth?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
 }
 
@@ -2198,6 +2205,7 @@ export interface BatchInsertItemsInput {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
   }>;
 }
