@@ -314,6 +314,15 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
     }
   }, [isEndOfListInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
+  // Prune checked IDs that are no longer in the current result set
+  useEffect(() => {
+    setCheckedTraceIds(prev => {
+      const currentIds = new Set(traces.map(t => t.traceId));
+      const pruned = new Set([...prev].filter(id => currentIds.has(id)));
+      return pruned.size === prev.size ? prev : pruned;
+    });
+  }, [traces]);
+
   const { data: selectedTrace, isLoading: isLoadingTrace } = useQuery({
     queryKey: ['trace', selectedTraceId],
     queryFn: () => client.getTrace(selectedTraceId!),
@@ -403,11 +412,13 @@ export function AgentTracesPanel({ agentId }: AgentTracesPanelProps) {
     update: setSelectedTraceId,
   });
 
-  if (tracesError && is403ForbiddenError(tracesError)) {
+  if (tracesError) {
     return (
       <div className="flex h-full items-center justify-center">
         <Txt variant="ui-sm" className="text-neutral3">
-          You don't have permission to view traces.
+          {is403ForbiddenError(tracesError)
+            ? "You don't have permission to view traces."
+            : 'Failed to load traces. Please try again later.'}
         </Txt>
       </div>
     );
