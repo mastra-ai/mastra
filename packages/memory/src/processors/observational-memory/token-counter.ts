@@ -493,7 +493,13 @@ async function resolveImageDimensionsAsync(part: CacheablePart): Promise<{ width
   }
 
   try {
-    const { default: probeImageSize } = await import('probe-image-size');
+    // Dynamic import avoids leaking probe-image-size into the public type surface.
+    // Downstream packages resolve memory source files and lack the ambient d.ts.
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore TS7016 -- probe-image-size ships no types
+    const mod = await import('probe-image-size');
+    const probeImageSize: (src: string, opts?: Record<string, unknown>) => Promise<{ width: number; height: number }> =
+      mod.default;
     const probed = await probeImageSize(url, {
       open_timeout: REMOTE_IMAGE_PROBE_TIMEOUT_MS,
       response_timeout: REMOTE_IMAGE_PROBE_TIMEOUT_MS,
