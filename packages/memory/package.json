@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -40,7 +40,9 @@
     "test:integration": "cd integration-tests && pnpm run test",
     "test:unit": "pnpm vitest run ./src/*",
     "test": "pnpm test:integration && pnpm test:unit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "analyze:om-repro": "node ./scripts/analyze-om-repro.mjs",
+    "sanitize:om-repro": "node ./scripts/sanitize-om-repro.mjs"
   },
   "keywords": [],
   "author": "",
@@ -64,14 +66,15 @@
     "@mastra/core": "workspace:*",
     "@types/json-schema": "^7.0.15",
     "@types/lru-cache": "^7.10.10",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "typescript-eslint": "^8.51.0",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.4.1-0 <2.0.0-0",

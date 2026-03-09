@@ -1,39 +1,150 @@
 /**
- * Component that renders shell command output in the chat view.
+ * Streaming shell output component for the shell passthrough (! command).
+ * Shows a bordered box with live stdout/stderr and a status footer.
  */
 
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import stripAnsi from 'strip-ansi';
 import { theme } from '../theme.js';
 
-export class ShellOutputComponent extends Container {
-  constructor(command: string, stdout: string, stderr: string, exitCode: number) {
+const MAX_LINES = 200;
+
+/** Truncate a string with ANSI codes to a visible width.
+ *  Handles both SGR sequences (\x1b[...m) and OSC 8 hyperlinks (\x1b]8;...;\x07).
+ */
+function truncateAnsi(str: string, maxWidth: number): string {
+  const plain = stripAnsi(str);
+  if (plain.length <= maxWidth) return str;
+
+  const ansiRegex = /\x1b\[[0-9;]*m|\x1b\]8;[^\x07]*\x07/g;
+  let visibleLength = 0;
+  let result = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = ansiRegex.exec(str)) !== null) {
+    // Add text before this ANSI code
+    const textBefore = str.slice(lastIndex, match.index);
+    const remaining = maxWidth - visibleLength;
+    if (textBefore.length <= remaining) {
+      result += textBefore;
+      visibleLength += textBefore.length;
+    } else {
+      result += textBefore.slice(0, remaining - 1) + '…';
+      result += '\x1b]8;;\x07\x1b[0m'; // Close any open hyperlink + reset styles
+      return result;
+    }
+    // Add the ANSI code (doesn't count toward visible length)
+    result += match[0];
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last ANSI code
+  const remainingText = str.slice(lastIndex);
+  const spaceLeft = maxWidth - visibleLength;
+  if (remainingText.length <= spaceLeft) {
+    result += remainingText;
+  } else {
+    result += remainingText.slice(0, spaceLeft - 1) + '…';
+    result += '\x1b]8;;\x07\x1b[0m'; // Close hyperlink + reset
+  }
+
+  return result;
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = ms / 1000;
+  return seconds < 60 ? `${seconds.toFixed(1)}s` : `${Math.floor(seconds / 60)}m${Math.floor(seconds % 60)}s`;
+}
+
+export class ShellStreamComponent extends Container {
+  private command: string;
+  private lines: string[] = [];
+  private trailingPartial = '';
+  private exitCode?: number;
+  private startTime = Date.now();
+
+  constructor(command: string) {
     super();
+    this.command = command;
+    this.rebuild();
+  }
+
+  appendOutput(text: string): void {
+    const combined = this.trailingPartial + text;
+    const parts = combined.split('\n');
+    // Last element is either '' (if text ended with \n) or an incomplete line
+    this.trailingPartial = parts.pop()!;
+    this.lines.push(...parts);
+    if (this.lines.length > MAX_LINES) {
+      this.lines = this.lines.slice(-MAX_LINES);
+    }
+    this.rebuild();
+  }
+
+  finish(exitCode: number): void {
+    // Flush any trailing partial line
+    if (this.trailingPartial) {
+      this.lines.push(this.trailingPartial);
+      this.trailingPartial = '';
+      if (this.lines.length > MAX_LINES) {
+        this.lines = this.lines.slice(-MAX_LINES);
+      }
+    }
+    this.exitCode = exitCode;
+    this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.clear();
     this.addChild(new Spacer(1));
 
-    // Command header
-    const statusIcon = exitCode === 0 ? '✓' : '✗';
-    const statusColor = exitCode === 0 ? 'success' : 'error';
-    this.addChild(
-      new Text(
-        `${theme.fg(statusColor, statusIcon)} ${theme.bold(theme.fg('muted', '$'))} ${theme.fg('text', command)}`,
-        1,
-        0,
-      ),
-    );
+    const border = (char: string) => theme.bold(theme.fg('accent', char));
+    const termWidth = process.stdout.columns || 80;
+    const maxLineWidth = termWidth - 6;
 
-    // Output
-    const output = (stdout + (stderr ? (stdout ? '\n' : '') + stderr : '')).trimEnd();
-    if (output) {
-      // Indent each line by 2 spaces
-      const lines = output.split('\n');
-      for (const line of lines) {
-        this.addChild(new Text(theme.fg('toolOutput', `  ${line}`), 0, 0));
+    const done = this.exitCode !== undefined;
+    const statusIcon = done
+      ? this.exitCode === 0
+        ? theme.fg('success', ' ✓')
+        : theme.fg('error', ' ✗')
+      : theme.fg('muted', ' ⋯');
+
+    const durationStr = done ? theme.fg('muted', ` ${formatDuration(Date.now() - this.startTime)}`) : '';
+    const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('accent', this.command)}${durationStr}${statusIcon}`;
+
+    // Top border
+    this.addChild(new Text(border('┌──'), 0, 0));
+
+    // Output lines with left border
+    const displayLines = [...this.lines];
+    // Include trailing partial if still streaming
+    if (this.trailingPartial && !done) {
+      displayLines.push(this.trailingPartial);
+    }
+    // Remove leading empty lines
+    while (displayLines.length > 0 && displayLines[0] === '') displayLines.shift();
+
+    if (displayLines.length > 0) {
+      const borderedLines = displayLines.map(line => {
+        const truncated = truncateAnsi(line, maxLineWidth);
+        return border('│') + ' ' + truncated;
+      });
+      const displayOutput = borderedLines.join('\n');
+      if (displayOutput.trim()) {
+        this.addChild(new Text(displayOutput, 0, 0));
       }
     }
 
+    // Bottom border with command info
+    this.addChild(new Text(`${border('└──')} ${footerText}`, 0, 0));
+
     // Show exit code if non-zero
-    if (exitCode !== 0) {
-      this.addChild(new Text(theme.fg('error', `  Exit code: ${exitCode}`), 0, 0));
+    if (done && this.exitCode !== 0) {
+      this.addChild(new Text(theme.fg('error', `  Exit code: ${this.exitCode}`), 0, 0));
     }
+
+    this.invalidate();
   }
 }

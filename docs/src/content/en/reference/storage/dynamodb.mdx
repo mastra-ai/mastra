@@ -13,7 +13,7 @@ packages:
 The DynamoDB storage implementation provides a scalable and performant NoSQL database solution for Mastra, leveraging a single-table design pattern with [ElectroDB](https://electrodb.dev/).
 
 :::warning[Observability Not Supported]
-DynamoDB storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to DynamoDB, and Mastra Studio's observability features won't work with DynamoDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+DynamoDB storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to DynamoDB, and Mastra Studio's observability features won't work with DynamoDB as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
 :::
 
 :::warning[Item Size Limit]
@@ -255,7 +255,7 @@ aws dynamodb update-time-to-live \
 1. Go to the DynamoDB console
 1. Select your table
 1. Go to "Additional settings" tab
-1. Under "Time to Live (TTL)", click "Manage TTL"
+1. Under "Time to Live (TTL)", select "Manage TTL"
 1. Enable TTL and specify the attribute name (default: `ttl`)
 
 :::note

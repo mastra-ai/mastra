@@ -5,6 +5,9 @@ packages:
   - "@mastra/daytona"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # DaytonaSandbox
 
 Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, filesystem mounting (S3, GCS), and network isolation.
@@ -17,26 +20,31 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install @mastra/daytona
 ```
 
-Set your Daytona API key in one of three ways:
+Set your Daytona API key in one of three ways.
 
-```bash
-# Shell export
-export DAYTONA_API_KEY=your-api-key
-```
+<Tabs>
+  <TabItem value="shell-export" label="Shell export">
+    ```bash
+    export DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
 
-```bash
-# .env file
-DAYTONA_API_KEY=your-api-key
-```
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
 
-```typescript
-// Passed directly as constructor argument
-new DaytonaSandbox({ apiKey: 'your-api-key' })
-```
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new DaytonaSandbox({ apiKey: 'your-api-key' })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Usage
 
@@ -149,7 +157,7 @@ const result = await sandbox2.executeCommand('cat', ['/tmp/state.txt'])
 console.log(result.stdout) // "session 1"
 ```
 
-If the sandbox is in a stopped or archived state, it is restarted automatically. If it is in a dead state (destroyed, errored), a fresh sandbox is created instead.
+If the sandbox is in a stopped or archived state, it's restarted automatically. If it's in a dead state (destroyed, errored), a fresh sandbox is created instead.
 
 ### Filesystem mounting
 
@@ -429,6 +437,12 @@ const workspace = new Workspace({
     description:
       'The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
   },
+  {
+    name: 'processes',
+    type: 'DaytonaProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
 ]}
 />
 
@@ -494,34 +508,47 @@ await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; 
     isOptional: true,
   },
   {
-    name: 'options.timeout',
-    type: 'number',
-    description: 'Execution timeout in milliseconds. Overrides the instance default.',
+    name: 'options',
+    type: 'Options',
+    description: 'executeCommand options.',
     isOptional: true,
-  },
-  {
-    name: 'options.cwd',
-    type: 'string',
-    description: 'Working directory for the command.',
-    isOptional: true,
-  },
-  {
-    name: 'options.env',
-    type: 'Record<string, string>',
-    description: 'Additional environment variables for this command. Merged with instance-level env.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStdout',
-    type: '(data: string) => void',
-    description: 'Callback for stdout streaming.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStderr',
-    type: '(data: string) => void',
-    description: 'Callback for stderr streaming.',
-    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'timeout',
+            type: 'number',
+            description: 'Execution timeout in milliseconds. Overrides the instance default.',
+            isOptional: true,
+          },
+          {
+            name: 'cwd',
+            type: 'string',
+            description: 'Working directory for the command.',
+            isOptional: true,
+          },
+          {
+            name: 'env',
+            type: 'Record<string, string>',
+            description: 'Additional environment variables for this command. Merged with instance-level env.',
+            isOptional: true,
+          },
+          {
+            name: 'onStdout',
+            type: '(data: string) => void',
+            description: 'Callback for stdout streaming.',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string) => void',
+            description: 'Callback for stderr streaming.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -602,6 +629,28 @@ new DaytonaSandbox({
 }).getInstructions()
 // 'Cloud sandbox with isolated execution (python runtime). Default working directory: /home/daytona. Command timeout: 60s. Running as user: app. 1 volume(s) attached. Network access is blocked.'
 ```
+
+## Background processes
+
+`DaytonaSandbox` includes a built-in process manager for spawning and managing background processes. Processes run in the Daytona cloud sandbox using session-based command execution.
+
+```typescript
+const sandbox = new DaytonaSandbox({ language: 'typescript' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+// Interact with the process
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
+```
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
 ## Mounting Cloud Storage
 
@@ -725,7 +774,7 @@ await daytonaSandbox.fs.uploadFile(Buffer.from('hello'), '/tmp/hello.txt')
 await daytonaSandbox.git.clone('https://github.com/org/repo', '/workspace/repo')
 ```
 
-The `instance` getter throws `SandboxNotReadyError` if the sandbox has not been started yet.
+The `instance` getter throws `SandboxNotReadyError` if the sandbox hasn't been started yet.
 
 ## Sandbox creation modes
 
@@ -741,6 +790,7 @@ Resources are only applied when `image` is set. Passing `resources` without `ima
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)

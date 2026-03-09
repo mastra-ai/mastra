@@ -8,8 +8,9 @@ import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
-import type { DataChunkType } from '../stream/types';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
+import type { ChunkType } from '../stream';
+import type { DataChunkType, LanguageModelUsage, LLMStepResult } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
@@ -99,6 +100,21 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
 }
 
 /**
+ * Resolved generation result passed to processOutputResult.
+ * Contains the same data available in the onFinish callback.
+ */
+export interface OutputResult {
+  /** The accumulated text from all steps */
+  text: string;
+  /** Token usage (cumulative across all steps) */
+  usage: LanguageModelUsage;
+  /** Why the generation finished (e.g. 'stop', 'tool-calls', 'length') */
+  finishReason: string;
+  /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
+  steps: LLMStepResult[];
+}
+
+/**
  * Arguments for processOutputResult method
  */
 export interface ProcessOutputResultArgs<
@@ -106,6 +122,8 @@ export interface ProcessOutputResultArgs<
 > extends ProcessorMessageContext<TTripwireMetadata> {
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /** Resolved generation result with usage, text, steps, and finish reason */
+  result: OutputResult;
 }
 
 /**
@@ -119,6 +137,10 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
+  /** The active assistant response message ID for this step, when this processor is running inside an agent loop */
+  messageId?: string;
+  /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
+  rotateResponseMessageId?: () => string;
 
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
@@ -138,10 +160,10 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
-   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  structuredOutput?: StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -149,16 +171,25 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
-export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort' | 'state'>;
+export type RunProcessInputStepArgs = Omit<
+  ProcessInputStepArgs,
+  'messages' | 'systemMessages' | 'abort' | 'state' | 'messageId' | 'rotateResponseMessageId' | 'retryCount'
+> & {
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
+  retryCount?: number;
+};
 
 /**
  * Result from processInputStep method
  *
- * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
+ * Note: structuredOutput.schema is typed as StandardSchemaWithJSON (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
 export type ProcessInputStepResult = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
+  /** Override the active assistant response message ID for this step */
+  messageId?: string;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
@@ -171,10 +202,10 @@ export type ProcessInputStepResult = {
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
-   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  structuredOutput?: StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
