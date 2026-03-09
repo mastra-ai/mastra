@@ -48,9 +48,10 @@ export function AgentVersionCombobox({
       const isPublished = version.id === activeVersionId;
       const isDraft = activeVersionNumber !== undefined && version.versionNumber > activeVersionNumber;
 
+      const trimmedMessage = version.changeMessage?.trim();
       const description = [
         formatTimestamp(version.createdAt),
-        version.changeMessage && version.changeMessage !== 'Auto-saved after edit' ? version.changeMessage : undefined,
+        trimmedMessage && trimmedMessage !== 'Auto-saved after edit' ? trimmedMessage : undefined,
       ]
         .filter(Boolean)
         .join(' — ');

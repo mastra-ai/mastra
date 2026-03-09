@@ -294,6 +294,7 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
   .extend({
     changeMessage: z
       .string()
+      .trim()
       .max(500)
       .optional()
       .describe('Optional message describing the changes for the auto-created version'),
