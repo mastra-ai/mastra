@@ -1134,12 +1134,14 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       const fieldHash = hasher.h32(field).toString(16);
       const prefix = indexName.slice(0, 63 - '_md__idx'.length - fieldHash.length);
       const metadataIdxName = `"${prefix}_md_${fieldHash}_idx"`;
+      // DDL statements don't support bind parameters, so we must interpolate
+      // the field name as a literal. Escape single quotes to prevent SQL injection.
+      const escapedField = field.replace(/'/g, "''");
       await client.query(
         `
         CREATE INDEX IF NOT EXISTS ${metadataIdxName}
-        ON ${tableName} ((metadata->>$1))
+        ON ${tableName} ((metadata->>'${escapedField}'))
       `,
-        [field],
       );
     }
   }
