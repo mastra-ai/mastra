@@ -1223,6 +1223,13 @@ export interface SwapBufferedToActiveInput {
    * If not provided, the adapter will use the lastObservedAt from the latest activated chunk.
    */
   lastObservedAt?: Date;
+  /**
+   * Refreshed buffered chunks with up-to-date messageTokens.
+   * When provided, the storage layer uses these instead of the persisted chunks
+   * for activation boundary selection, so stale token weights don't cause
+   * over- or under-activation.
+   */
+  bufferedChunks?: BufferedObservationChunk[];
 }
 
 /**
