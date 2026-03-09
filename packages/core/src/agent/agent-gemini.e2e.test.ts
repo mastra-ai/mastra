@@ -1,4 +1,4 @@
-import { setupLLMRecording } from '@internal/llm-recorder';
+import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '..';
@@ -10,8 +10,7 @@ import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
 
-const recorder = setupLLMRecording({
-  name: 'core-src-agent-agent-gemini.e2e',
+const mock = createGatewayMock({
   transformRequest: ({ url, body }) => {
     // Normalize dynamic IDs in the request body so hashes are stable across runs.
     // Workflow suspend/resume injects runId (UUID) and toolCallId into the system instruction.
@@ -28,14 +27,8 @@ const recorder = setupLLMRecording({
     return { url, body: JSON.parse(serialized) };
   },
 });
-beforeAll(() => recorder.start());
-afterAll(async () => {
-  try {
-    await recorder.save();
-  } finally {
-    recorder.stop();
-  }
-});
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;

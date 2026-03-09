@@ -2,9 +2,10 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
+import { createGatewayMock } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
@@ -12,6 +13,10 @@ import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
