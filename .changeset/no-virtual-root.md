@@ -4,7 +4,7 @@
 
 **Absolute paths now resolve to real filesystem locations instead of being treated as workspace-relative.**
 
-Previously, `LocalFilesystem` in contained mode treated absolute paths like `/file.txt` as shorthand for `basePath/file.txt` (a "virtual-root" convention). This could silently resolve paths to unexpected locations — for example, `/Users/caleb/.config/file.txt` would resolve to `basePath/Users/caleb/.config/file.txt` instead of the real path.
+Previously, `LocalFilesystem` in contained mode treated absolute paths like `/file.txt` as shorthand for `basePath/file.txt` (a "virtual-root" convention). This could silently resolve paths to unexpected locations — for example, `/home/user/.config/file.txt` would resolve to `basePath/home/user/.config/file.txt` instead of the real path.
 
 Now:
 - **Absolute paths** (starting with `/`) are real filesystem paths, subject to containment checks
