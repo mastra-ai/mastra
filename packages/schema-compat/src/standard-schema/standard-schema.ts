@@ -115,7 +115,7 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
   // First check: if already StandardSchemaWithJSON, return as-is
   // This handles ArkType, Zod v4 (when it has jsonSchema), and pre-wrapped schemas
   if (isStandardSchemaWithJSON(schema)) {
-    return schema;
+    return schema as StandardSchemaWithJSON<T>;
   }
 
   // Check for Zod v3 schemas (need wrapping to add JSON Schema support)
