@@ -187,12 +187,18 @@ export interface RecordingFile {
 /**
  * Load a recording file, handling both legacy (plain array) and new ({ meta, recordings }) formats.
  */
+function isRecordingFile(raw: unknown): raw is RecordingFile {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const obj = raw as Record<string, unknown>;
+  return Array.isArray(obj.recordings);
+}
+
 function loadRecordingFile(filePath: string, name: string): RecordingFile {
   const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 
   // New format: { meta, recordings }
-  if (raw && typeof raw === 'object' && !Array.isArray(raw) && 'recordings' in raw) {
-    return raw as RecordingFile;
+  if (isRecordingFile(raw)) {
+    return raw;
   }
 
   // Legacy format: plain array of LLMRecording[]
@@ -733,7 +739,6 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       if (!isRecordMode || recordings.length === 0 || saved) {
         return;
       }
-      saved = true;
 
       // Build metadata for the recording file
       const now = new Date().toISOString();
@@ -770,6 +775,8 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
 
       fs.mkdirSync(path.dirname(recordingPath), { recursive: true });
       fs.writeFileSync(recordingPath, JSON.stringify(file, null, 2));
+      saved = true;
+
       const deduped = recordings.length - dedupedRecordings.length;
       console.log(
         `[llm-recorder] Saved ${dedupedRecordings.length} recordings to: ${recordingPath}` +

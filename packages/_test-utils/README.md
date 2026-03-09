@@ -102,13 +102,15 @@ Returns a self-contained instance — no global state. You control the lifecycle
 import { createLLMMock } from '@internal/test-utils';
 ```
 
-#### `createLLMMock(providerOrModel, options?)`
+#### `createLLMMock(model, options?)`
 
-Create a mock for a provider or specific model. Only requests to that provider's API host are intercepted — other providers pass through unaffected.
+Create a mock by wrapping a real AI SDK model instance. The mock reads its `provider` and `modelId` for naming the recording file. MSW intercepts all LLM API traffic.
 
 ```typescript
+import { openai } from '@ai-sdk/openai';
+
 describe('OpenAI agent', () => {
-  const mock = createLLMMock('openai/gpt-4o');
+  const mock = createLLMMock(openai('gpt-4o'));
 
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
@@ -120,13 +122,14 @@ describe('OpenAI agent', () => {
 });
 ```
 
-Accepts provider IDs or model router IDs:
+Works with any AI SDK model instance:
 
 ```typescript
-createLLMMock('openai');                        // mock all OpenAI models
-createLLMMock('openai/gpt-4o');                 // recording tagged with gpt-4o
-createLLMMock('netlify/anthropic/claude-3');     // mock Anthropic via gateway
+createLLMMock(openai('gpt-4o'));         // recording tagged with openai.chat + gpt-4o
+createLLMMock(anthropic('claude-3'));     // recording tagged with anthropic + claude-3
 ```
+
+> **Note**: For gateway/string models like `'openai/gpt-4o'`, use `createGatewayMock()` instead.
 
 The returned `LLMMock` instance has:
 

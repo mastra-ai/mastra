@@ -2123,9 +2123,6 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
       '@types/node':
         specifier: 22.19.13
         version: 22.19.13

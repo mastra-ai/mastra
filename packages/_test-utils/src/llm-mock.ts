@@ -85,12 +85,19 @@ export interface LLMMock {
   readonly recorder: LLMRecorderInstance;
 }
 
+/** Vitest's internal worker state, available at module scope. */
+interface VitestWorkerState {
+  filepath?: string;
+}
+
 /**
  * Get the current test file path from Vitest's worker state.
+ * Note: `expect.getState().testPath` only works inside `it()` blocks,
+ * but our mocks are created at `describe` scope, so we use the worker state.
  */
 function getVitestFilePath(): string | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (globalThis as any).__vitest_worker__?.filepath ?? null;
+  const worker = (globalThis as Record<string, unknown>).__vitest_worker__ as VitestWorkerState | undefined;
+  return worker?.filepath ?? null;
 }
 
 /**
@@ -168,8 +175,11 @@ export function createLLMMock(model: ModelLike, options: MockOptions = {}): LLMM
       recorder.start();
     },
     async saveAndStop() {
-      await recorder.save();
-      recorder.stop();
+      try {
+        await recorder.save();
+      } finally {
+        recorder.stop();
+      }
     },
     recorder,
   };
@@ -240,8 +250,11 @@ export function createGatewayMock(options: MockOptions = {}): GatewayMock {
       recorder.start();
     },
     async saveAndStop() {
-      await recorder.save();
-      recorder.stop();
+      try {
+        await recorder.save();
+      } finally {
+        recorder.stop();
+      }
     },
     recorder,
   };
