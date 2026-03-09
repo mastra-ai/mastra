@@ -27,11 +27,9 @@ import {
   withLLMRecording,
   getLLMTestMode,
   setupLLMRecording,
-  getActiveRecorder
-  
+  getActiveRecorder,
 } from './llm-recorder';
-import type {LLMRecording} from './llm-recorder';
-
+import type { LLMRecording } from './llm-recorder';
 
 /**
  * Mode detection tests
@@ -211,7 +209,12 @@ describe('recording file format', () => {
     const legacyRecordings: LLMRecording[] = [
       {
         hash: 'legacy-hash',
-        request: { url: 'https://api.openai.com/v1/responses', method: 'POST', body: { model: 'gpt-4o' }, timestamp: 1 },
+        request: {
+          url: 'https://api.openai.com/v1/responses',
+          method: 'POST',
+          body: { model: 'gpt-4o' },
+          timestamp: 1,
+        },
         response: { status: 200, statusText: 'OK', headers: {}, body: { id: 'legacy' }, isStreaming: false },
       },
     ];
@@ -277,8 +280,19 @@ describe('recording file format', () => {
           recordings: [
             {
               hash: 'old-hash',
-              request: { url: 'https://api.openai.com/v1/responses', method: 'POST', body: { model: 'gpt-4o', input: 'old' }, timestamp: 1 },
-              response: { status: 200, statusText: 'OK', headers: {}, body: { id: 'old-response' }, isStreaming: false },
+              request: {
+                url: 'https://api.openai.com/v1/responses',
+                method: 'POST',
+                body: { model: 'gpt-4o', input: 'old' },
+                timestamp: 1,
+              },
+              response: {
+                status: 200,
+                statusText: 'OK',
+                headers: {},
+                body: { id: 'old-response' },
+                isStreaming: false,
+              },
             },
           ],
         },

@@ -125,25 +125,26 @@ describe('OpenAI agent', () => {
 Works with any AI SDK model instance:
 
 ```typescript
-createLLMMock(openai('gpt-4o'));         // recording tagged with openai.chat + gpt-4o
-createLLMMock(anthropic('claude-3'));     // recording tagged with anthropic + claude-3
+createLLMMock(openai('gpt-4o')); // recording tagged with openai.chat + gpt-4o
+createLLMMock(anthropic('claude-3')); // recording tagged with anthropic + claude-3
 ```
 
 > **Note**: For gateway/string models like `'openai/gpt-4o'`, use `createGatewayMock()` instead.
 
 The returned `LLMMock` instance has:
 
-| Property / Method | Description |
-|---|---|
-| `providerId` | Extracted provider (e.g. `"openai"`) |
-| `modelId` | Extracted model if present (e.g. `"gpt-4o"`) |
-| `recordingName` | Name used for the recording file |
-| `mode` | Current test mode (`record`, `replay`, `auto`, `live`) |
-| `start()` | Start intercepting requests |
-| `saveAndStop()` | Save recordings and stop intercepting |
-| `recorder` | Underlying `LLMRecorderInstance` for advanced use |
+| Property / Method | Description                                            |
+| ----------------- | ------------------------------------------------------ |
+| `providerId`      | Extracted provider (e.g. `"openai"`)                   |
+| `modelId`         | Extracted model if present (e.g. `"gpt-4o"`)           |
+| `recordingName`   | Name used for the recording file                       |
+| `mode`            | Current test mode (`record`, `replay`, `auto`, `live`) |
+| `start()`         | Start intercepting requests                            |
+| `saveAndStop()`   | Save recordings and stop intercepting                  |
+| `recorder`        | Underlying `LLMRecorderInstance` for advanced use      |
 
 Options:
+
 - `name` — Explicit recording name (auto-derived from test file path if omitted)
 - `recordingsDir` — Directory for recording files (default: `__recordings__` in cwd)
 - `forceRecord` — Force re-record even if recording exists
@@ -160,9 +161,9 @@ Options:
 Extract the provider from a model router ID:
 
 ```typescript
-extractProviderId('openai/gpt-4o');              // 'openai'
-extractProviderId('netlify/anthropic/claude-3');  // 'anthropic'
-extractProviderId('azure-openai/my-deployment');  // 'azure-openai'
+extractProviderId('openai/gpt-4o'); // 'openai'
+extractProviderId('netlify/anthropic/claude-3'); // 'anthropic'
+extractProviderId('azure-openai/my-deployment'); // 'azure-openai'
 ```
 
 #### `extractModelId(modelRouterId)`
@@ -170,9 +171,9 @@ extractProviderId('azure-openai/my-deployment');  // 'azure-openai'
 Extract the model from a model router ID:
 
 ```typescript
-extractModelId('openai/gpt-4o');                 // 'gpt-4o'
-extractModelId('netlify/anthropic/claude-3');     // 'claude-3'
-extractModelId('openai');                         // undefined
+extractModelId('openai/gpt-4o'); // 'gpt-4o'
+extractModelId('netlify/anthropic/claude-3'); // 'claude-3'
+extractModelId('openai'); // undefined
 ```
 
 #### `PROVIDER_HOSTS`

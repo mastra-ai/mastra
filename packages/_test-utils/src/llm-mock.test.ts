@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
-import { createLLMMock, createGatewayMock  } from './llm-mock';
-import type {ModelLike} from './llm-mock';
+import { createLLMMock, createGatewayMock } from './llm-mock';
+import type { ModelLike } from './llm-mock';
 
 function fakeModel(provider: string, modelId: string): ModelLike {
   return { provider, modelId };

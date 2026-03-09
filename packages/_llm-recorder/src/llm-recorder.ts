@@ -576,7 +576,8 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         .catch(() => ({}));
 
       // Extract model from request body for debug logging
-      const model = (body && typeof body === 'object' && 'model' in body) ? (body as Record<string, unknown>).model : undefined;
+      const model =
+        body && typeof body === 'object' && 'model' in body ? (body as Record<string, unknown>).model : undefined;
 
       // Apply user-provided transform before hashing
       let hash: string;
@@ -659,7 +660,9 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
         if (!recording) {
           console.error(`[llm-recorder] No recording found for: ${url}${model ? ` (model: ${model})` : ''}`);
           console.error(`[llm-recorder]   Request hash: ${hash}`);
-          console.error(`[llm-recorder]   Available: ${savedRecordings.map(r => `${r.hash} (${r.request.url})`).join(', ')}`);
+          console.error(
+            `[llm-recorder]   Available: ${savedRecordings.map(r => `${r.hash} (${r.request.url})`).join(', ')}`,
+          );
           throw new Error(
             `No recording found for request: ${url} (hash: ${hash}). Run with UPDATE_RECORDINGS=true to re-record.`,
           );
