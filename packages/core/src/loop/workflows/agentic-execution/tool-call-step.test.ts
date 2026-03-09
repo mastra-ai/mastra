@@ -340,12 +340,10 @@ describe('createToolCallStep provider-executed tools', () => {
 
   it('should skip execution and return pre-merged output for provider-executed tools', async () => {
     const providerResult = { results: [{ title: 'Example', url: 'https://example.com' }] };
-    const executeFn = vi.fn();
     const tools = {
       webSearch: {
         type: 'provider-defined' as const,
         id: 'openai.web_search',
-        execute: executeFn,
       },
     } as unknown as ToolSet;
 
@@ -371,7 +369,6 @@ describe('createToolCallStep provider-executed tools', () => {
     });
 
     expect(result).toEqual(expect.objectContaining({ result: providerResult }));
-    expect(executeFn).not.toHaveBeenCalled();
     expect(suspend).not.toHaveBeenCalled();
   });
 

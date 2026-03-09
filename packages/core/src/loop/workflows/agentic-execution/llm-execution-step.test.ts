@@ -6,8 +6,8 @@ import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
 import type { ExecuteFunctionParams } from '../../../workflows/step';
-import type { OuterLLMRun } from '../../types';
 import { testUsage } from '../../test-utils/utils';
+import type { OuterLLMRun } from '../../types';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createToolCallStep } from './tool-call-step';
 
@@ -144,6 +144,18 @@ describe('createLLMExecutionStep gateway provider tools', () => {
                   input: '{"query":"latest AI agent news"}',
                 },
                 {
+                  type: 'tool-call',
+                  toolCallId: 'call-2',
+                  toolName: 'perplexity_search',
+                  input: '{"query":"latest AI agent funding news"}',
+                },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'call-2',
+                  toolName: 'perplexity_search',
+                  result: { answer: 'fresh gateway funding result' },
+                },
+                {
                   type: 'tool-result',
                   toolCallId: 'call-1',
                   toolName: 'perplexity_search',
@@ -180,14 +192,23 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     } as unknown as OuterLLMRun<typeof tools>);
 
     const llmResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
-    const [toolCall] = llmResult.output.toolCalls ?? [];
+    const toolCalls = llmResult.output.toolCalls ?? [];
+    const toolCallById = Object.fromEntries(toolCalls.map(toolCall => [toolCall.toolCallId, toolCall]));
 
-    expect(toolCall).toEqual(
+    expect(toolCallById['call-1']).toEqual(
       expect.objectContaining({
         toolCallId: 'call-1',
         toolName: 'perplexity_search',
         providerExecuted: true,
         output: { answer: 'fresh gateway result' },
+      }),
+    );
+    expect(toolCallById['call-2']).toEqual(
+      expect.objectContaining({
+        toolCallId: 'call-2',
+        toolName: 'perplexity_search',
+        providerExecuted: true,
+        output: { answer: 'fresh gateway funding result' },
       }),
     );
     expect(llmResult.stepResult.isContinued).toBe(true);
@@ -209,7 +230,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
 
     const toolResult = await toolCallStep.execute({
       ...createExecuteParams(createIterationInput()),
-      inputData: toolCall,
+      inputData: toolCallById['call-1'],
     });
 
     expect(toolResult).toEqual(
