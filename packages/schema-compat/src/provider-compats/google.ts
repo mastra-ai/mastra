@@ -69,6 +69,11 @@ function fixNullableUnionTypes(schema: Record<string, any>): Record<string, any>
     }
   }
 
+  // Recursively fix additionalProperties (e.g., z.record() value schemas)
+  if (result.additionalProperties && typeof result.additionalProperties === 'object') {
+    result.additionalProperties = fixNullableUnionTypes(result.additionalProperties);
+  }
+
   // Recursively fix anyOf/oneOf/allOf
   if (result.anyOf && Array.isArray(result.anyOf)) {
     result.anyOf = result.anyOf.map((s: any) => fixNullableUnionTypes(s));
