@@ -513,7 +513,15 @@ export class ProcessorRunner {
           if (error instanceof TripWire) {
             // Error span for trip-wire abort so it shows as ERROR in traces
             const state = processorStates.get(processor.id);
-            state?.span?.error({ error, endSpan: true });
+            state?.span?.error({
+              error,
+              endSpan: true,
+              attributes: {
+                tripwireReason: error.message,
+                tripwireRetry: error.options?.retry,
+                tripwireMetadata: error.options?.metadata,
+              },
+            });
             return {
               part: null,
               blocked: true,
