@@ -7,6 +7,8 @@ export interface DatasetSaveContextValue {
   threadId: string;
   /** Agent ID for fetching messages via agent memory */
   agentId: string;
+  /** Request context to persist with saved dataset items */
+  requestContext?: Record<string, unknown>;
 }
 
 const DatasetSaveContext = createContext<DatasetSaveContextValue | null>(null);

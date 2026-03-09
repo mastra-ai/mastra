@@ -37,11 +37,13 @@ function DatasetSaveDialog({
   onOpenChange,
   input,
   onInputChange,
+  requestContext,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   input: string;
   onInputChange: (value: string) => void;
+  requestContext?: Record<string, unknown>;
 }) {
   const [groundTruth, setGroundTruth] = useState('');
   const [selectedDatasetId, setSelectedDatasetId] = useState('');
@@ -75,10 +77,12 @@ function DatasetSaveDialog({
     }
 
     try {
+      const hasRequestContext = requestContext && Object.keys(requestContext).length > 0;
       await addItem.mutateAsync({
         datasetId: selectedDatasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
+        ...(hasRequestContext ? { requestContext } : {}),
       });
       const targetDataset = datasets.find(d => d.id === selectedDatasetId);
       toast.success(`Item saved to "${targetDataset?.name}"`);
@@ -165,6 +169,7 @@ export function DatasetSaveAction() {
 }
 
 function DatasetSaveActionInner() {
+  const ctx = useDatasetSaveContext();
   const message = useMessage();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -188,7 +193,7 @@ function DatasetSaveActionInner() {
       >
         <DatabaseIcon className="h-4 w-4" />
       </IconButton>
-      <DatasetSaveDialog open={dialogOpen} onOpenChange={setDialogOpen} input={input} onInputChange={setInput} />
+      <DatasetSaveDialog open={dialogOpen} onOpenChange={setDialogOpen} input={input} onInputChange={setInput} requestContext={ctx?.requestContext} />
     </>
   );
 }
@@ -237,7 +242,7 @@ function SaveFullConversationInner() {
         {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}
         Save full conversation to dataset
       </button>
-      <DatasetSaveDialog open={dialogOpen} onOpenChange={setDialogOpen} input={input} onInputChange={setInput} />
+      <DatasetSaveDialog open={dialogOpen} onOpenChange={setDialogOpen} input={input} onInputChange={setInput} requestContext={ctx.requestContext} />
     </>
   );
 }
