@@ -5,7 +5,6 @@ import imageSize from 'image-size';
 import { Tiktoken } from 'js-tiktoken/lite';
 import type { TiktokenBPE } from 'js-tiktoken/lite';
 import o200k_base from 'js-tiktoken/ranks/o200k_base';
-import probeImageSize from 'probe-image-size';
 
 /**
  * Shared default encoder singleton.
@@ -494,6 +493,7 @@ async function resolveImageDimensionsAsync(part: CacheablePart): Promise<{ width
   }
 
   try {
+    const { default: probeImageSize } = await import('probe-image-size');
     const probed = await probeImageSize(url, {
       open_timeout: REMOTE_IMAGE_PROBE_TIMEOUT_MS,
       response_timeout: REMOTE_IMAGE_PROBE_TIMEOUT_MS,
