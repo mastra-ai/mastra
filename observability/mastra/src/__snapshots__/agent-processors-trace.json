@@ -423,6 +423,15 @@
                   }
                 ]
               },
+              "result": {
+                "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                "usage": {
+                  "inputTokens": 15,
+                  "outputTokens": 25,
+                  "totalTokens": 40
+                },
+                "finishReason": "stop"
+              },
               "retryCount": 0,
               "messages": [
                 {

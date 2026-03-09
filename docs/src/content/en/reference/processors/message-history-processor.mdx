@@ -25,31 +25,31 @@ const processor = new MessageHistory({
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "MessageHistoryOptions",
-description: "Configuration options for the message history processor",
-isOptional: false,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
-{
-name: "storage",
-type: "MemoryStorage",
-description: "Storage instance for retrieving and persisting messages",
-isOptional: false,
-},
-{
-name: "lastMessages",
-type: "number",
-description: "Maximum number of historical messages to retrieve. If not specified, retrieves all messages",
-isOptional: true,
-},
+  {
+    name: 'options',
+    type: 'MessageHistoryOptions',
+    description: 'Configuration options for the message history processor',
+    isOptional: false,
+    properties: [
+      {
+        type: 'MessageHistoryOptions',
+        parameters: [
+          {
+            name: 'storage',
+            type: 'MemoryStorage',
+            description: 'Storage instance for retrieving and persisting messages',
+            isOptional: false,
+          },
+          {
+            name: 'lastMessages',
+            type: 'number',
+            description: 'Maximum number of historical messages to retrieve. If not specified, retrieves all messages',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -57,30 +57,30 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Processor identifier set to 'message-history'",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Processor display name set to 'MessageHistory'",
-isOptional: false,
-},
-{
-name: "processInput",
-type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-description: "Fetches historical messages from storage and adds them to the message list",
-isOptional: false,
-},
-{
-name: "processOutputResult",
-type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList>",
-description: "Persists new messages (user input and assistant response) to storage, excluding system messages",
-isOptional: false,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'message-history'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Processor display name set to 'MessageHistory'",
+    isOptional: false,
+  },
+  {
+    name: 'processInput',
+    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>',
+    description: 'Fetches historical messages from storage and adds them to the message list',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputResult',
+    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList>',
+    description: 'Persists new messages (user input and assistant response) to storage, excluding system messages',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -119,7 +119,7 @@ export const agent = new Agent({
 
 1. Retrieves `threadId` from the request context
 1. Fetches historical messages from storage (ordered by creation date, descending)
-1. Filters out system messages (they should not be stored in the database)
+1. Filters out system messages (they shouldn't be stored in the database)
 1. Merges historical messages with incoming messages, avoiding duplicates by ID
 1. Adds historical messages with `source: 'memory'` tag
 

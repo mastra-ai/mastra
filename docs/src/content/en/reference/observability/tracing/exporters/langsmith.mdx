@@ -33,54 +33,54 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
 
 <PropertiesTable
   props={[
-{
-name: "apiKey",
-type: "string",
-description: "LangSmith API key. Defaults to LANGSMITH_API_KEY env var.",
-required: false,
-},
-{
-name: "projectName",
-type: "string",
-description: "The LangSmith project to send traces to. Overrides LANGCHAIN_PROJECT env var. Defaults to 'default'.",
-required: false,
-},
-{
-name: "apiUrl",
-type: "string",
-description: "LangSmith API URL",
-required: false,
-},
-{
-name: "callerOptions",
-type: "object",
-description: "HTTP client configuration options",
-required: false,
-},
-{
-name: "hideInputs",
-type: "boolean",
-description: "Hide input data in the LangSmith UI",
-required: false,
-},
-{
-name: "hideOutputs",
-type: "boolean",
-description: "Hide output data in the LangSmith UI",
-required: false,
-},
-{
-name: "logLevel",
-type: "'debug' | 'info' | 'warn' | 'error'",
-description: "Logger level (default: 'warn')",
-required: false,
-},
-{
-name: "client",
-type: "Client",
-description: "Pre-configured LangSmith client instance",
-required: false,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'LangSmith API key. Defaults to LANGSMITH_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'projectName',
+    type: 'string',
+    description: "The LangSmith project to send traces to. Overrides LANGCHAIN_PROJECT env var. Defaults to 'default'.",
+    required: false,
+  },
+  {
+    name: 'apiUrl',
+    type: 'string',
+    description: 'LangSmith API URL',
+    required: false,
+  },
+  {
+    name: 'callerOptions',
+    type: 'object',
+    description: 'HTTP client configuration options',
+    required: false,
+  },
+  {
+    name: 'hideInputs',
+    type: 'boolean',
+    description: 'Hide input data in the LangSmith UI',
+    required: false,
+  },
+  {
+    name: 'hideOutputs',
+    type: 'boolean',
+    description: 'Hide output data in the LangSmith UI',
+    required: false,
+  },
+  {
+    name: 'logLevel',
+    type: "'debug' | 'info' | 'warn' | 'error'",
+    description: "Logger level (default: 'warn')",
+    required: false,
+  },
+  {
+    name: 'client',
+    type: 'Client',
+    description: 'Pre-configured LangSmith client instance',
+    required: false,
+  },
 ]}
 />
 
@@ -153,24 +153,24 @@ function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptions
 
 <PropertiesTable
   props={[
-{
-name: "projectName",
-type: "string",
-description: "Override the project name for this span and its children",
-required: false,
-},
-{
-name: "sessionId",
-type: "string",
-description: "Session ID for grouping related traces",
-required: false,
-},
-{
-name: "sessionName",
-type: "string",
-description: "Display name for the session",
-required: false,
-},
+  {
+    name: 'projectName',
+    type: 'string',
+    description: 'Override the project name for this span and its children',
+    required: false,
+  },
+  {
+    name: 'sessionId',
+    type: 'string',
+    description: 'Session ID for grouping related traces',
+    required: false,
+  },
+  {
+    name: 'sessionName',
+    type: 'string',
+    description: 'Display name for the session',
+    required: false,
+  },
 ]}
 />
 

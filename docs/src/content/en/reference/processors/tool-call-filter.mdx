@@ -27,25 +27,26 @@ const filterSpecific = new ToolCallFilter({
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "Options",
-description: "Configuration options for the tool call filter",
-isOptional: true,
-},
-]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
-{
-name: "exclude",
-type: "string[]",
-description: "List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded",
-isOptional: true,
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options for the tool call filter',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'exclude',
+            type: 'string[]',
+            description:
+              'List of specific tool names to exclude. If not provided or undefined, all tool calls are excluded',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -53,24 +54,24 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Processor identifier set to 'tool-call-filter'",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Processor display name set to 'ToolCallFilter'",
-isOptional: false,
-},
-{
-name: "processInput",
-type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-description: "Processes input messages to filter out tool calls and their results based on configuration",
-isOptional: false,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'tool-call-filter'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Processor display name set to 'ToolCallFilter'",
+    isOptional: false,
+  },
+  {
+    name: 'processInput',
+    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>',
+    description: 'Processes input messages to filter out tool calls and their results based on configuration',
+    isOptional: false,
+  },
 ]}
 />
 

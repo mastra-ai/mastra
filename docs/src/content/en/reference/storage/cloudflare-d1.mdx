@@ -11,7 +11,7 @@ packages:
 The Cloudflare D1 storage implementation provides a serverless SQL database solution using Cloudflare D1, supporting relational operations and transactional consistency.
 
 :::warning[Observability Not Supported]
-Cloudflare D1 storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to D1, and Mastra Studio's observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+Cloudflare D1 storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to D1, and Mastra Studio's observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
 :::
 
 :::warning[Row Size Limit]
@@ -78,7 +78,7 @@ In the `Env` type definition, `D1Database: D1Database` serves two purposes:
 - The **property name** (`D1Database`) must match the `binding` name in your `wrangler.toml`
 - The **type** (`: D1Database`) is from `@cloudflare/workers-types` for TypeScript type checking
 
-At runtime, Cloudflare Workers provides the actual D1 database instance via `env.D1Database`. You cannot use `D1Database` directly outside of the worker's context.
+At runtime, Cloudflare Workers provides the actual D1 database instance via `env.D1Database`. You can't use `D1Database` directly outside of the worker's context.
 :::
 
 ### Using with REST API
@@ -125,37 +125,36 @@ Or in `wrangler.jsonc`:
 
 <PropertiesTable
   content={[
-{
-name: "binding",
-type: "D1Database",
-description: "Cloudflare D1 Workers binding (for Workers runtime)",
-isOptional: true,
-},
-{
-name: "accountId",
-type: "string",
-description: "Cloudflare Account ID (for REST API)",
-isOptional: true,
-},
-{
-name: "databaseId",
-type: "string",
-description: "Cloudflare D1 Database ID (for REST API)",
-isOptional: true,
-},
-{
-name: "apiToken",
-type: "string",
-description: "Cloudflare API Token (for REST API)",
-isOptional: true,
-},
-{
-name: "tablePrefix",
-type: "string",
-description:
-"Optional prefix for all table names (useful for environment isolation)",
-isOptional: true,
-},
+  {
+    name: 'binding',
+    type: 'D1Database',
+    description: 'Cloudflare D1 Workers binding (for Workers runtime)',
+    isOptional: true,
+  },
+  {
+    name: 'accountId',
+    type: 'string',
+    description: 'Cloudflare Account ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'databaseId',
+    type: 'string',
+    description: 'Cloudflare D1 Database ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'apiToken',
+    type: 'string',
+    description: 'Cloudflare API Token (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'tablePrefix',
+    type: 'string',
+    description: 'Optional prefix for all table names (useful for environment isolation)',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -228,7 +227,7 @@ export default {
 ```
 
 :::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
 ### Transactions & Consistency

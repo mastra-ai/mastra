@@ -2,6 +2,8 @@ import { appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
+import type { MastraModelConfig } from '@mastra/core/llm';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { getThreadOMMetadata, parseMemoryRequestContext, setThreadOMMetadata } from '@mastra/core/memory';
 import type {
@@ -17,6 +19,7 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import xxhash from 'xxhash-wasm';
 
 const OM_DEBUG_LOG = process.env.OM_DEBUG ? join(process.cwd(), 'om-debug.log') : null;
+
 function omDebug(msg: string) {
   if (!OM_DEBUG_LOG) return;
   try {
@@ -79,6 +82,7 @@ import {
   parseReflectorOutput,
   validateCompression,
 } from './reflector-agent';
+import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import {
   calculateDynamicThreshold,
   calculateProjectedMessageRemoval,
@@ -554,6 +558,51 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
    */
 
   /**
+   * Refresh per-chunk messageTokens from the current in-memory message list.
+   *
+   * Buffered chunks store a messageTokens snapshot from when they were created,
+   * but messages can be edited/sealed between buffering and activation, changing
+   * their token weight. Using stale weights causes projected-removal math to
+   * over- or under-estimate, leading to skipped activations or over-activation.
+   *
+   * Token recount only runs when the full chunk is present in the message list.
+   * Partial recount is skipped because it would undercount and could cause
+   * over-activation of buffered chunks.
+   */
+  private refreshBufferedChunkMessageTokens(
+    chunks: BufferedObservationChunk[],
+    messageList: MessageList,
+  ): BufferedObservationChunk[] {
+    const allMessages = messageList.get.all.db();
+    const messageMap = new Map(allMessages.filter(m => m?.id).map(m => [m.id, m]));
+
+    return chunks.map(chunk => {
+      const chunkMessages = chunk.messageIds.map(id => messageMap.get(id)).filter((m): m is MastraDBMessage => !!m);
+
+      // Only recount when ALL chunk messages are present — partial recount
+      // would undercount and could over-activate buffered chunks.
+      if (chunkMessages.length !== chunk.messageIds.length) {
+        return chunk;
+      }
+
+      const refreshedTokens = this.tokenCounter.countMessages(chunkMessages);
+      const refreshedMessageTokens = chunk.messageIds.reduce<Record<string, number>>((acc, id) => {
+        const msg = messageMap.get(id);
+        if (msg) {
+          acc[id] = this.tokenCounter.countMessages([msg]);
+        }
+        return acc;
+      }, {});
+
+      return {
+        ...chunk,
+        messageTokens: refreshedTokens,
+        messageTokenCounts: refreshedMessageTokens,
+      };
+    });
+  }
+
+  /**
    * Check if we've crossed a new bufferTokens interval boundary.
    * Returns true if async buffering should be triggered.
    *
@@ -696,6 +745,12 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   }
 
   constructor(config: ObservationalMemoryConfig) {
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
+      );
+    }
+
     // Validate that top-level model is not used together with sub-config models
     if (config.model && config.observation?.model) {
       throw new Error(
@@ -928,9 +983,19 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     };
   }> {
     // Helper to get the model config to resolve (handles ModelWithRetries[] by taking first)
-    const getModelToResolve = (model: AgentConfig['model']) => {
+    const getModelToResolve = (model: AgentConfig['model']): Parameters<typeof resolveModelConfig>[0] => {
       if (Array.isArray(model)) {
-        return model[0]?.model ?? 'unknown';
+        return (model[0]?.model ?? 'unknown') as Parameters<typeof resolveModelConfig>[0];
+      }
+      if (typeof model === 'function') {
+        // Wrap to handle functions that may return ModelWithRetries[]
+        return async ctx => {
+          const result = await model(ctx);
+          if (Array.isArray(result)) {
+            return (result[0]?.model ?? 'unknown') as MastraModelConfig;
+          }
+          return result as MastraModelConfig;
+        };
       }
       return model;
     };
@@ -2180,19 +2245,31 @@ ${suggestedResponse}
       // floors are enforced during buffered activation.
       const observedSet = new Set(observedMessageIds);
       const idsToRemove = new Set<string>();
+      const removalOrder: string[] = [];
       let skipped = 0;
       let backoffTriggered = false;
+      const retentionCounter = typeof minRemaining === 'number' ? new TokenCounter() : null;
 
       for (const msg of allMsgs) {
         if (!msg?.id || msg.id === 'om-continuation' || !observedSet.has(msg.id)) {
           continue;
         }
 
-        if (typeof minRemaining === 'number') {
+        const unobservedParts = this.getUnobservedParts(msg);
+        const totalParts = msg.content?.parts?.length ?? 0;
+
+        // Activation can target a message ID whose observed boundary is inside the same message.
+        // In that case, keep the fresh tail visible to the model instead of removing the whole message.
+        if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
+          msg.content.parts = unobservedParts;
+          continue;
+        }
+
+        if (retentionCounter && typeof minRemaining === 'number') {
           const nextRemainingMessages = allMsgs.filter(
             m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id) && m.id !== msg.id,
           );
-          const remainingIfRemoved = this.tokenCounter.countMessages(nextRemainingMessages);
+          const remainingIfRemoved = retentionCounter.countMessages(nextRemainingMessages);
           if (remainingIfRemoved < minRemaining) {
             skipped += 1;
             backoffTriggered = true;
@@ -2201,6 +2278,21 @@ ${suggestedResponse}
         }
 
         idsToRemove.add(msg.id);
+        removalOrder.push(msg.id);
+      }
+
+      if (retentionCounter && typeof minRemaining === 'number' && idsToRemove.size > 0) {
+        let remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+        let remainingTokens = retentionCounter.countMessages(remainingMessages);
+
+        while (remainingTokens < minRemaining && removalOrder.length > 0) {
+          const restoreId = removalOrder.pop()!;
+          idsToRemove.delete(restoreId);
+          skipped += 1;
+          backoffTriggered = true;
+          remainingMessages = allMsgs.filter(m => m?.id && m.id !== 'om-continuation' && !idsToRemove.has(m.id));
+          remainingTokens = retentionCounter.countMessages(remainingMessages);
+        }
       }
 
       omDebug(
@@ -2255,9 +2347,11 @@ ${suggestedResponse}
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
       }
     } else {
-      // No marker found — fall back to source-based clearing
-      const newInput = messageList.clear.input.db();
-      const newOutput = messageList.clear.response.db();
+      // No marker found — save current input/response messages first, then clear.
+      // Keeping them in MessageList until save finishes avoids brief under-inclusion windows
+      // where fresh-next-turn context can disappear during async persistence.
+      const newInput = messageList.get.input.db();
+      const newOutput = messageList.get.response.db();
       const messagesToSave = [...newInput, ...newOutput];
       if (messagesToSave.length > 0) {
         await this.saveMessagesWithSealedIdTracking(messagesToSave, sealedIds, threadId, resourceId, state);
@@ -2265,7 +2359,6 @@ ${suggestedResponse}
     }
 
     // Clear any remaining input/response tracking
-    // (only reached for marker-based and fallback paths, NOT activation path)
     messageList.clear.input.db();
     messageList.clear.response.db();
   }
@@ -2359,11 +2452,24 @@ ${suggestedResponse}
   }
 
   /**
-   * Filter out already-observed messages from message list (step 0 only).
-   * Historical messages loaded from DB may contain observation markers from previous sessions.
+   * Filter out already-observed messages from the in-memory context.
+   *
+   * Marker-boundary pruning is safest at step 0 (historical resume/rebuild), where
+   * list ordering mirrors persisted history.
+   * For step > 0, the list may include mid-loop mutations (sealing/splitting/trim),
+   * so we prefer record-based fallback pruning over position-based marker pruning.
    */
-  private filterAlreadyObservedMessages(messageList: MessageList, record?: ObservationalMemoryRecord): void {
+  private async filterAlreadyObservedMessages(
+    messageList: MessageList,
+    record?: ObservationalMemoryRecord,
+    options?: { useMarkerBoundaryPruning?: boolean },
+  ): Promise<void> {
     const allMessages = messageList.get.all.db();
+    const useMarkerBoundaryPruning = options?.useMarkerBoundaryPruning ?? true;
+    const fallbackCursor = record?.threadId
+      ? getThreadOMMetadata((await this.storage.getThreadById({ threadId: record.threadId }))?.metadata)
+          ?.lastObservedMessageCursor
+      : undefined;
 
     // Find the message with the last observation end marker
     let markerMessageIndex = -1;
@@ -2379,7 +2485,7 @@ ${suggestedResponse}
       }
     }
 
-    if (markerMessage && markerMessageIndex !== -1) {
+    if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
       const messagesToRemove: string[] = [];
       for (let i = 0; i < markerMessageIndex; i++) {
         const msg = allMessages[i];
@@ -2412,14 +2518,23 @@ ${suggestedResponse}
       // for the LLM to see. Only observedMessageIds and lastObservedAt determine what's
       // been truly observed.
 
+      const derivedCursor =
+        fallbackCursor ??
+        this.getLastObservedMessageCursor(
+          allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt),
+        );
       const lastObservedAt = record.lastObservedAt;
       const messagesToRemove: string[] = [];
 
       for (const msg of allMessages) {
         if (!msg?.id || msg.id === 'om-continuation') continue;
 
-        // Remove if explicitly tracked in observedMessageIds or buffered chunks
         if (observedIds.has(msg.id)) {
+          messagesToRemove.push(msg.id);
+          continue;
+        }
+
+        if (derivedCursor && this.isMessageAtOrBeforeCursor(msg, derivedCursor)) {
           messagesToRemove.push(msg.id);
           continue;
         }
@@ -2471,6 +2586,19 @@ ${suggestedResponse}
 
     // Fetch fresh record
     let record = await this.getOrCreateRecord(threadId, resourceId);
+    const reproCaptureEnabled = isOmReproCaptureEnabled();
+    const preRecordSnapshot = reproCaptureEnabled ? (safeCaptureJson(record) as ObservationalMemoryRecord) : null;
+    const preMessagesSnapshot = reproCaptureEnabled
+      ? (safeCaptureJson(messageList.get.all.db()) as MastraDBMessage[])
+      : null;
+    const preSerializedMessageList = reproCaptureEnabled
+      ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
+      : null;
+    const reproCaptureDetails: Record<string, unknown> = {
+      step0Activation: null,
+      thresholdCleanup: null,
+      thresholdReached: false,
+    };
     omDebug(
       `[OM:step] processInputStep step=${stepNumber}: recordId=${record.id}, genCount=${record.generationCount}, obsTokens=${record.observationTokenCount}, bufferedReflection=${record.bufferedReflection ? 'present (' + record.bufferedReflection.length + ' chars)' : 'empty'}, activeObsLen=${record.activeObservations?.length}`,
     );
@@ -2555,6 +2683,14 @@ ${suggestedResponse}
             messageList,
           );
 
+          reproCaptureDetails.step0Activation = {
+            attempted: true,
+            success: activationResult.success,
+            messageTokensActivated: activationResult.messageTokensActivated ?? 0,
+            activatedMessageIds: activationResult.activatedMessageIds ?? [],
+            hadUpdatedRecord: !!activationResult.updatedRecord,
+          };
+
           if (activationResult.success && activationResult.updatedRecord) {
             record = activationResult.updatedRecord;
 
@@ -2592,9 +2728,12 @@ ${suggestedResponse}
             // Explicitly write undefined when omitted so stale values are cleared.
             const thread = await this.storage.getThreadById({ threadId });
             if (thread) {
+              const activatedSet = new Set(activationResult.activatedMessageIds ?? []);
+              const activatedMessages = messageList.get.all.db().filter(msg => msg?.id && activatedSet.has(msg.id));
               const newMetadata = setThreadOMMetadata(thread.metadata, {
                 suggestedResponse: activationResult.suggestedContinuation,
                 currentTask: activationResult.currentTask,
+                lastObservedMessageCursor: this.getLastObservedMessageCursor(activatedMessages),
               });
               await this.storage.updateThread({
                 id: threadId,
@@ -2656,13 +2795,14 @@ ${suggestedResponse}
     // ════════════════════════════════════════════════════════════════════════
     // STEP 2: CHECK THRESHOLD AND OBSERVE IF NEEDED
     // ════════════════════════════════════════════════════════════════════════
+    let didThresholdCleanup = false;
     if (!readOnly) {
       const allMessages = messageList.get.all.db();
       const unobservedMessages = getUnobservedMessages(allMessages, record);
       const otherThreadTokens = unobservedContextBlocks ? this.tokenCounter.countString(unobservedContextBlocks) : 0;
-      const currentObservationTokens = record.observationTokenCount ?? 0;
+      let currentObservationTokens = record.observationTokenCount ?? 0;
 
-      const thresholds = this.calculateObservationThresholds(
+      let thresholds = this.calculateObservationThresholds(
         allMessages,
         unobservedMessages,
         0, // pendingTokens not needed — allMessages covers context
@@ -2670,7 +2810,7 @@ ${suggestedResponse}
         currentObservationTokens,
         record,
       );
-      const { totalPendingTokens, threshold } = thresholds;
+      let { totalPendingTokens, threshold } = thresholds;
 
       // Subtract already-buffered message tokens from the pending count for buffering decisions.
       // Buffered messages are "unobserved" (not yet in activeObservations) but have already been
@@ -2742,6 +2882,7 @@ ${suggestedResponse}
       // THRESHOLD REACHED: Observe and clean up
       // ════════════════════════════════════════════════════════════════════════
       if (stepNumber > 0 && totalPendingTokens >= threshold) {
+        reproCaptureDetails.thresholdReached = true;
         const { observationSucceeded, updatedRecord, activatedMessageIds } = await this.handleThresholdReached(
           messageList,
           record,
@@ -2770,6 +2911,13 @@ ${suggestedResponse}
             typeof this.observationConfig.bufferActivation === 'number'
               ? resolveRetentionFloor(this.observationConfig.bufferActivation, threshold)
               : undefined;
+          reproCaptureDetails.thresholdCleanup = {
+            observationSucceeded,
+            observedIdsCount: observedIds?.length ?? 0,
+            observedIds,
+            minRemaining,
+            updatedRecordObservedIds: updatedRecord.observedMessageIds,
+          };
           omDebug(
             `[OM:cleanup] observedIds=${observedIds?.length ?? 'undefined'}, ids=${observedIds?.join(',') ?? 'none'}, updatedRecord.observedMessageIds=${JSON.stringify(updatedRecord.observedMessageIds)}, minRemaining=${minRemaining ?? 'n/a'}`,
           );
@@ -2782,6 +2930,7 @@ ${suggestedResponse}
             observedIds,
             minRemaining,
           );
+          didThresholdCleanup = true;
 
           // Clean up sealed IDs for activated messages (prevents memory leak)
           if (activatedMessageIds?.length) {
@@ -2816,10 +2965,14 @@ ${suggestedResponse}
     );
 
     // ════════════════════════════════════════════════════════════════════════
-    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES (step 0 only)
+    // STEP 4: FILTER OUT ALREADY-OBSERVED MESSAGES
+    // - step 0: use marker-boundary pruning + record fallback (historical resume)
+    // - step >0: use record fallback only (avoid position-based marker over-pruning mid-loop)
     // ════════════════════════════════════════════════════════════════════════
-    if (stepNumber === 0) {
-      this.filterAlreadyObservedMessages(messageList, record);
+    // If step-level cleanup already ran after threshold handling, skip this pass to avoid
+    // a second timestamp-based prune that can undercut retention-floor guarantees.
+    if (!didThresholdCleanup) {
+      await this.filterAlreadyObservedMessages(messageList, record, { useMarkerBoundaryPruning: stepNumber === 0 });
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -2868,6 +3021,34 @@ ${suggestedResponse}
 
       // Persist the computed token count so the UI can display it on page load
       this.storage.setPendingMessageTokens(freshRecord.id, totalPendingTokens).catch(() => {});
+
+      if (reproCaptureEnabled && preRecordSnapshot && preMessagesSnapshot && preSerializedMessageList) {
+        writeProcessInputStepReproCapture({
+          threadId,
+          resourceId,
+          stepNumber,
+          args,
+          preRecord: preRecordSnapshot,
+          postRecord: freshRecord,
+          preMessages: preMessagesSnapshot,
+          preBufferedChunks: getBufferedChunks(preRecordSnapshot),
+          preContextTokenCount: this.tokenCounter.countMessages(preMessagesSnapshot),
+          preSerializedMessageList,
+          postBufferedChunks: getBufferedChunks(freshRecord),
+          postContextTokenCount: this.tokenCounter.countMessages(contextMessages),
+          messageList,
+          details: {
+            ...reproCaptureDetails,
+            totalPendingTokens,
+            threshold,
+            effectiveObservationTokensThreshold,
+            currentObservationTokens,
+            otherThreadTokens,
+            contextMessageCount: contextMessages.length,
+          },
+          debug: omDebug,
+        });
+      }
     }
 
     return messageList;
@@ -3143,6 +3324,32 @@ ${formattedMessages}
   }
 
   /**
+   * Compute a cursor pointing at the latest message by createdAt.
+   * Used to derive a stable observation boundary for replay pruning.
+   */
+  private getLastObservedMessageCursor(messages: MastraDBMessage[]): { createdAt: string; id: string } | undefined {
+    let latest: MastraDBMessage | undefined;
+    for (const msg of messages) {
+      if (!msg?.id || !msg.createdAt) continue;
+      if (!latest || new Date(msg.createdAt).getTime() > new Date(latest.createdAt!).getTime()) {
+        latest = msg;
+      }
+    }
+    return latest ? { createdAt: new Date(latest.createdAt!).toISOString(), id: latest.id } : undefined;
+  }
+
+  /**
+   * Check if a message is at or before a cursor (by createdAt then id).
+   */
+  private isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { createdAt: string; id: string }): boolean {
+    if (!msg.createdAt) return false;
+    const msgIso = new Date(msg.createdAt).toISOString();
+    if (msgIso < cursor.createdAt) return true;
+    if (msgIso === cursor.createdAt && msg.id === cursor.id) return true;
+    return false;
+  }
+
+  /**
    * Wrap observations in a thread attribution tag.
    * Used in resource scope to track which thread observations came from.
    */
@@ -3380,6 +3587,7 @@ ${formattedMessages}
         const newMetadata = setThreadOMMetadata(thread.metadata, {
           suggestedResponse: result.suggestedContinuation,
           currentTask: result.currentTask,
+          lastObservedMessageCursor: this.getLastObservedMessageCursor(messagesToObserve),
         });
         await this.storage.updateThread({
           id: threadId,
@@ -3889,6 +4097,12 @@ ${formattedMessages}
       }
     }
 
+    // Refresh chunk token weights from the current message list so projection
+    // math uses accurate values instead of stale buffering-time snapshots.
+    const refreshedChunks = messageList
+      ? this.refreshBufferedChunkMessageTokens(freshChunks, messageList)
+      : freshChunks;
+
     // Perform partial swap with bufferActivation
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
@@ -3902,7 +4116,7 @@ ${formattedMessages}
     const bufferTokens = this.observationConfig.bufferTokens ?? 0;
     const retentionFloor = resolveRetentionFloor(bufferActivation, messageTokensThreshold);
     const projectedMessageRemoval = calculateProjectedMessageRemoval(
-      freshChunks,
+      refreshedChunks,
       bufferActivation,
       messageTokensThreshold,
       effectivePendingTokens,
@@ -3918,7 +4132,7 @@ ${formattedMessages}
     }
 
     omDebug(
-      `[OM:tryActivate] swapping: freshChunks=${freshChunks.length}, bufferActivation=${bufferActivation}, activationRatio=${activationRatio}, forceMax=${forceMaxActivation}, totalChunkTokens=${freshChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
+      `[OM:tryActivate] swapping: freshChunks=${refreshedChunks.length}, bufferActivation=${bufferActivation}, activationRatio=${activationRatio}, forceMax=${forceMaxActivation}, totalChunkTokens=${refreshedChunks.reduce((s, c) => s + (c.tokenCount ?? 0), 0)}`,
     );
     const activationResult = await this.storage.swapBufferedToActive({
       id: freshRecord.id,
@@ -3926,6 +4140,7 @@ ${formattedMessages}
       messageTokensThreshold,
       currentPendingTokens: effectivePendingTokens,
       forceMaxActivation,
+      bufferedChunks: refreshedChunks,
     });
     omDebug(
       `[OM:tryActivate] swapResult: chunksActivated=${activationResult.chunksActivated}, tokensActivated=${activationResult.messageTokensActivated}, obsTokensActivated=${activationResult.observationTokensActivated}, activatedCycleIds=${activationResult.activatedCycleIds.join(',')}`,
@@ -4648,6 +4863,7 @@ ${formattedMessages}
             lastObservedAt: threadLastObservedAt.toISOString(),
             suggestedResponse: result.suggestedContinuation,
             currentTask: result.currentTask,
+            lastObservedMessageCursor: this.getLastObservedMessageCursor(threadMessages),
           });
           await this.storage.updateThread({
             id: threadId,
