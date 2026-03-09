@@ -1,6 +1,11 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent/index.js';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 // Test configuration for different providers
 const testConfigs = [
