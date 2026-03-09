@@ -12,14 +12,14 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 The `createContextPrecisionScorer()` function creates a scorer that evaluates how relevant and well-positioned retrieved context pieces are for generating expected outputs. It uses **Mean Average Precision (MAP)** to reward systems that place relevant context earlier in the sequence.
 
-It is especially useful for these use cases:
+It's especially useful for these use cases:
 
 ## RAG System Evaluation
 
 Ideal for evaluating retrieved context in RAG pipelines where:
 
 - Context ordering matters for model performance
-- You need to measure retrieval quality beyond simple relevance
+- You need to measure retrieval quality beyond basic relevance
 - Early relevant context is more valuable than later relevant context
 
 ## Context Window Optimization
@@ -131,7 +131,7 @@ The reason field explains:
 Use results to:
 
 - **Improve retrieval**: Filter out irrelevant context before ranking
-- **Optimize ranking**: Ensure relevant context appears early
+- **Optimize ranking**: Ensure relevant context surfaces early
 - **Tune chunk size**: Balance context detail vs. relevance precision
 - **Evaluate embeddings**: Test different embedding models for better retrieval
 

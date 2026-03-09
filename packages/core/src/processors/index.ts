@@ -9,7 +9,7 @@ import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
-import type { DataChunkType } from '../stream/types';
+import type { DataChunkType, LanguageModelUsage, LLMStepResult } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
@@ -99,6 +99,21 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
 }
 
 /**
+ * Resolved generation result passed to processOutputResult.
+ * Contains the same data available in the onFinish callback.
+ */
+export interface OutputResult {
+  /** The accumulated text from all steps */
+  text: string;
+  /** Token usage (cumulative across all steps) */
+  usage: LanguageModelUsage;
+  /** Why the generation finished (e.g. 'stop', 'tool-calls', 'length') */
+  finishReason: string;
+  /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
+  steps: LLMStepResult[];
+}
+
+/**
  * Arguments for processOutputResult method
  */
 export interface ProcessOutputResultArgs<
@@ -106,6 +121,8 @@ export interface ProcessOutputResultArgs<
 > extends ProcessorMessageContext<TTripwireMetadata> {
   /** Per-processor state that persists across all method calls within this request */
   state: Record<string, unknown>;
+  /** Resolved generation result with usage, text, steps, and finish reason */
+  result: OutputResult;
 }
 
 /**
@@ -119,6 +136,10 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
+  /** The active assistant response message ID for this step, when this processor is running inside an agent loop */
+  messageId?: string;
+  /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
+  rotateResponseMessageId?: () => string;
 
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
@@ -149,7 +170,14 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
-export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort' | 'state'>;
+export type RunProcessInputStepArgs = Omit<
+  ProcessInputStepArgs,
+  'messages' | 'systemMessages' | 'abort' | 'state' | 'messageId' | 'rotateResponseMessageId' | 'retryCount'
+> & {
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
+  retryCount?: number;
+};
 
 /**
  * Result from processInputStep method
@@ -159,6 +187,8 @@ export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 's
  */
 export type ProcessInputStepResult = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
+  /** Override the active assistant response message ID for this step */
+  messageId?: string;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
