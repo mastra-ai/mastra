@@ -4,6 +4,7 @@ export const Sizes = {
   'icon-sm': '12px',
   'form-sm': '1.5rem',
   'form-md': '2rem',
+  'form-default': '2.25rem',
   'form-lg': '2.5rem',
   'header-default': '48px',
   'table-header': '28px',

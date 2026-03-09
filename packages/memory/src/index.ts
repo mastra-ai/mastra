@@ -44,6 +44,8 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  ObservationalMemoryRecord,
+  BufferedObservationChunk,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -68,6 +70,7 @@ const CHARS_PER_TOKEN = 4;
 
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
+const VECTOR_DELETE_BATCH_SIZE = 100;
 
 const isZodObject = (v: ZodTypeAny): v is ZodObject<any, any, any> => v instanceof ZodObject;
 
@@ -154,13 +157,26 @@ export class Memory extends MastraMemory {
       vectorSearchString?: string;
       threadId: string;
     },
-  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
+  ): Promise<{
+    messages: MastraDBMessage[];
+    usage?: { tokens: number };
+    total: number;
+    page: number;
+    perPage: number | false;
+    hasMore: boolean;
+  }> {
     const { threadId, resourceId, perPage: perPageArg, page, orderBy, threadConfig, vectorSearchString, filter } = args;
     const config = this.getMergedThreadConfig(threadConfig || {});
     if (resourceId) await this.validateThreadIsOwnedByResource(threadId, resourceId, config);
 
     // Use perPage from args if provided, otherwise use threadConfig.lastMessages
     const perPage = perPageArg !== undefined ? perPageArg : config.lastMessages;
+
+    // lastMessages: false means "disable conversation history entirely".
+    // When the resolved perPage is false from config (not an explicit caller override),
+    // return empty messages. This prevents recall() from treating false as "no limit"
+    // and returning ALL messages when the user intended to disable history.
+    const historyDisabledByConfig = config.lastMessages === false && perPageArg === undefined;
 
     // When limiting messages (perPage !== false) without explicit orderBy, we need to:
     // 1. Query DESC to get the NEWEST messages (not oldest)
@@ -187,6 +203,7 @@ export class Memory extends MastraMemory {
       hasWorkingMemorySchema: Boolean(config.workingMemory?.schema),
       workingMemoryEnabled: config.workingMemory?.enabled,
       semanticRecallEnabled: Boolean(config.semanticRecall),
+      historyDisabledByConfig,
     });
 
     const defaultRange = DEFAULT_MESSAGE_RANGE;
@@ -216,6 +233,11 @@ export class Memory extends MastraMemory {
     }
 
     let usage: { tokens: number } | undefined;
+
+    // If history is disabled and there's no semantic recall to perform, return empty immediately
+    if (historyDisabledByConfig && (!config.semanticRecall || !vectorSearchString || !this.vector)) {
+      return { messages: [], usage: undefined, total: 0, page: page ?? 0, perPage: 0, hasMore: false };
+    }
 
     if (config?.semanticRecall && vectorSearchString && this.vector) {
       const result = await this.embedMessageContent(vectorSearchString!);
@@ -251,10 +273,15 @@ export class Memory extends MastraMemory {
 
     // Get raw messages from storage
     const memoryStore = await this.getMemoryStore();
+
+    // When history is disabled by config, use perPage: 0 so only semantic recall
+    // include results are returned (not the full message history)
+    const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
+
     const paginatedResult = await memoryStore.listMessages({
       threadId,
       resourceId,
-      perPage,
+      perPage: effectivePerPage,
       page,
       orderBy: effectiveOrderBy,
       filter,
@@ -283,7 +310,8 @@ export class Memory extends MastraMemory {
     // Always return mastra-db format (V2)
     const messages = list.get.all.db();
 
-    return { messages, usage };
+    const { total, page: resultPage, perPage: resultPerPage, hasMore } = paginatedResult;
+    return { messages, usage, total, page: resultPage, perPage: resultPerPage, hasMore };
   }
 
   async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
@@ -377,6 +405,48 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     await memoryStore.deleteThread({ threadId });
+    if (this.vector) {
+      void this.deleteThreadVectors(threadId);
+    }
+  }
+
+  /**
+   * Lists all vector indexes that match the memory messages prefix.
+   * Handles separator differences across vector store backends (e.g. '_' vs '-').
+   */
+  private async getMemoryVectorIndexes(): Promise<string[]> {
+    if (!this.vector) return [];
+    const separator = this.vector.indexSeparator ?? '_';
+    const prefix = `memory${separator}messages`;
+    const indexes = await this.vector.listIndexes();
+    return indexes.filter(name => name.startsWith(prefix));
+  }
+
+  /**
+   * Deletes all vector embeddings associated with a thread.
+   * This is called internally by deleteThread to clean up orphaned vectors.
+   *
+   * @param threadId - The ID of the thread whose vectors should be deleted
+   */
+  private async deleteThreadVectors(threadId: string): Promise<void> {
+    try {
+      const memoryIndexes = await this.getMemoryVectorIndexes();
+
+      await Promise.all(
+        memoryIndexes.map(async (indexName: string) => {
+          try {
+            await this.vector!.deleteVectors({
+              indexName,
+              filter: { thread_id: threadId },
+            });
+          } catch {
+            this.logger.debug(`Failed to delete vectors for thread ${threadId} in ${indexName}, skipping`);
+          }
+        }),
+      );
+    } catch {
+      this.logger.debug(`Failed to clean up vectors for thread ${threadId}`);
+    }
   }
 
   async updateWorkingMemory({
@@ -406,28 +476,40 @@ export class Memory extends MastraMemory {
       );
     }
 
-    const memoryStore = await this.getMemoryStore();
-    if (scope === 'resource' && resourceId) {
-      // Update working memory in resource table
-      await memoryStore.updateResource({
-        resourceId,
-        workingMemory,
-      });
-    } else {
-      // Update working memory in thread metadata (existing behavior)
-      const thread = await this.getThreadById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread ${threadId} not found`);
-      }
+    // Use mutex to prevent race conditions when multiple concurrent calls update the same resource/thread
+    const mutexKey = scope === 'resource' ? `resource-${resourceId}` : `thread-${threadId}`;
+    const mutex = this.updateWorkingMemoryMutexes.has(mutexKey)
+      ? this.updateWorkingMemoryMutexes.get(mutexKey)!
+      : new Mutex();
+    this.updateWorkingMemoryMutexes.set(mutexKey, mutex);
+    const release = await mutex.acquire();
 
-      await memoryStore.updateThread({
-        id: threadId,
-        title: thread.title || 'Untitled Thread',
-        metadata: {
-          ...thread.metadata,
+    try {
+      const memoryStore = await this.getMemoryStore();
+      if (scope === 'resource' && resourceId) {
+        // Update working memory in resource table
+        await memoryStore.updateResource({
+          resourceId,
           workingMemory,
-        },
-      });
+        });
+      } else {
+        // Update working memory in thread metadata (existing behavior)
+        const thread = await this.getThreadById({ threadId });
+        if (!thread) {
+          throw new Error(`Thread ${threadId} not found`);
+        }
+
+        await memoryStore.updateThread({
+          id: threadId,
+          title: thread.title || '',
+          metadata: {
+            ...thread.metadata,
+            workingMemory,
+          },
+        });
+      }
+    } finally {
+      release();
     }
   }
 
@@ -470,19 +552,37 @@ export class Memory extends MastraMemory {
       const template = await this.getWorkingMemoryTemplate({ memoryConfig });
 
       let reason = '';
+
+      // Normalize content for comparison (handles whitespace variations)
+      // This catches template duplicates even when LLM returns slightly different whitespace
+      const normalizeForComparison = (str: string) => str.replace(/\s+/g, ' ').trim();
+      const normalizedNewMemory = normalizeForComparison(workingMemory);
+      const normalizedTemplate = template?.content ? normalizeForComparison(template.content) : '';
+
       if (existingWorkingMemory) {
         if (searchString && existingWorkingMemory?.includes(searchString)) {
           workingMemory = existingWorkingMemory.replace(searchString, workingMemory);
           reason = `found and replaced searchString with newMemory`;
         } else if (
           existingWorkingMemory.includes(workingMemory) ||
-          template?.content?.trim() === workingMemory.trim()
+          template?.content?.trim() === workingMemory.trim() ||
+          // Also check normalized versions to catch template variations with different whitespace
+          normalizedNewMemory === normalizedTemplate
         ) {
           return {
             success: false,
             reason: `attempted to insert duplicate data into working memory. this entry was skipped`,
           };
         } else {
+          // Before appending, check if the new content is essentially the empty template
+          // This prevents template duplication when the LLM sends the template again
+          if (normalizedNewMemory === normalizedTemplate) {
+            return {
+              success: false,
+              reason: `attempted to append empty template to working memory. this entry was skipped`,
+            };
+          }
+
           if (searchString) {
             reason = `attempted to replace working memory string that doesn't exist. Appending to working memory instead.`;
           } else {
@@ -494,7 +594,7 @@ export class Memory extends MastraMemory {
             `
 ${workingMemory}`;
         }
-      } else if (workingMemory === template?.content) {
+      } else if (workingMemory === template?.content || normalizedNewMemory === normalizedTemplate) {
         return {
           success: false,
           reason: `try again when you have data to add. newMemory was equal to the working memory template`,
@@ -503,8 +603,16 @@ ${workingMemory}`;
         reason = `started new working memory`;
       }
 
-      // remove empty template insertions which models sometimes duplicate
-      workingMemory = template?.content ? workingMemory.replaceAll(template?.content, '') : workingMemory;
+      // Remove empty template insertions which models sometimes duplicate
+      // Use both exact and normalized matching to catch variations
+      if (template?.content) {
+        workingMemory = workingMemory.replaceAll(template.content, '');
+        // Also try to remove template with normalized line endings
+        const templateWithUnixLineEndings = template.content.replace(/\r\n/g, '\n');
+        const templateWithWindowsLineEndings = template.content.replace(/\n/g, '\r\n');
+        workingMemory = workingMemory.replaceAll(templateWithUnixLineEndings, '');
+        workingMemory = workingMemory.replaceAll(templateWithWindowsLineEndings, '');
+      }
 
       const scope = config.workingMemory.scope || 'resource';
 
@@ -536,7 +644,7 @@ ${workingMemory}`;
 
         await memoryStore.updateThread({
           id: threadId,
-          title: thread.title || 'Untitled Thread',
+          title: thread.title || '',
           metadata: {
             ...thread.metadata,
             workingMemory,
@@ -1191,27 +1299,26 @@ Notes:
 
         if (messageIdsNeedingDeletion.size > 0) {
           try {
-            const indexes = await this.vector.listIndexes();
-            const memoryIndexes = indexes.filter(name => name.startsWith('memory_messages'));
+            const memoryIndexes = await this.getMemoryVectorIndexes();
+            const idsToDelete = [...messageIdsNeedingDeletion];
 
-            for (const indexName of memoryIndexes) {
-              for (const messageId of messageIdsNeedingDeletion) {
-                try {
-                  await this.vector.deleteVectors({
-                    indexName,
-                    filter: { message_id: messageId },
-                  });
-                } catch {
-                  // Ignore errors if vectors don't exist for this message
-                  this.logger.debug(
-                    `No existing vectors found for message ${messageId} in ${indexName}, skipping delete`,
-                  );
+            await Promise.all(
+              memoryIndexes.map(async indexName => {
+                for (let i = 0; i < idsToDelete.length; i += VECTOR_DELETE_BATCH_SIZE) {
+                  const batch = idsToDelete.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+                  try {
+                    await this.vector!.deleteVectors({
+                      indexName,
+                      filter: { message_id: { $in: batch } },
+                    });
+                  } catch {
+                    this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+                  }
                 }
-              }
-            }
+              }),
+            );
           } catch {
-            // Ignore errors if no indexes exist yet
-            this.logger.debug(`No memory indexes found to delete from`);
+            this.logger.debug(`Failed to clean up old vectors during message update`);
           }
         }
 
@@ -1279,13 +1386,43 @@ Notes:
       throw new Error('All message IDs must be non-empty strings');
     }
 
-    // Delete from storage
+    // Delete from storage, then fire-and-forget vector cleanup
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.deleteMessages(messageIds);
 
-    // TODO: Delete from vector store if semantic recall is enabled
-    // This would require getting the messages first to know their threadId/resourceId
-    // and then querying the vector store to delete associated embeddings
+    await memoryStore.deleteMessages(messageIds);
+    if (this.vector) {
+      void this.deleteMessageVectors(messageIds);
+    }
+  }
+
+  /**
+   * Deletes vector embeddings for specific messages.
+   * This is called internally by deleteMessages to clean up orphaned vectors.
+   *
+   * @param messageIds - The IDs of the messages whose vectors should be deleted
+   */
+  private async deleteMessageVectors(messageIds: string[]): Promise<void> {
+    try {
+      const memoryIndexes = await this.getMemoryVectorIndexes();
+
+      await Promise.all(
+        memoryIndexes.map(async (indexName: string) => {
+          for (let i = 0; i < messageIds.length; i += VECTOR_DELETE_BATCH_SIZE) {
+            const batch = messageIds.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+            try {
+              await this.vector!.deleteVectors({
+                indexName,
+                filter: { message_id: { $in: batch } },
+              });
+            } catch {
+              this.logger.debug(`Failed to delete vector batch in ${indexName} (batch offset ${i}), skipping`);
+            }
+          }
+        }),
+      );
+    } catch {
+      this.logger.debug(`Failed to clean up vectors for deleted messages`);
+    }
   }
 
   /**
@@ -1347,20 +1484,17 @@ Notes:
   ): Promise<StorageCloneThreadOutput> {
     const memoryStore = await this.getMemoryStore();
     const result = await memoryStore.cloneThread(args);
-
-    // If semantic recall is enabled, embed the cloned messages
     const config = this.getMergedThreadConfig(memoryConfig);
-    if (this.vector && config.semanticRecall && result.clonedMessages.length > 0) {
-      await this.embedClonedMessages(result.clonedMessages, config);
-    }
+
+    // Fetch source thread once for working memory and OM cloning
+    const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
+    const sourceResourceId = sourceThread?.resourceId;
 
     // Copy working memory from source thread to cloned thread.
     // Thread-scoped: always copy since each thread has its own working memory.
     // Resource-scoped: only copy when the clone uses a different resourceId (same resourceId shares memory naturally).
     if (config.workingMemory?.enabled) {
       const scope = config.workingMemory.scope || 'resource';
-      const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
-      const sourceResourceId = sourceThread?.resourceId;
       const shouldCopy =
         scope === 'thread' || (scope === 'resource' && args.resourceId && args.resourceId !== sourceResourceId);
 
@@ -1381,7 +1515,160 @@ Notes:
       }
     }
 
+    // Clone observational memory if supported.
+    // Thread-scoped: always clone since each thread has its own OM.
+    // Resource-scoped: only clone when the resourceId changes (same resourceId shares OM naturally).
+    if (memoryStore.supportsObservationalMemory && sourceResourceId) {
+      try {
+        await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
+      } catch (error) {
+        // Rollback the already-persisted clone to avoid orphaned threads
+        try {
+          await memoryStore.deleteThread({ threadId: result.thread.id });
+        } catch (rollbackError) {
+          this.logger.error('Failed to rollback cloned thread after OM clone failure', rollbackError);
+        }
+        throw error;
+      }
+    }
+
+    // Embed cloned messages only after OM cloning succeeds, so rollback doesn't leave orphan vectors
+    if (this.vector && config.semanticRecall && result.clonedMessages.length > 0) {
+      await this.embedClonedMessages(result.clonedMessages, config);
+    }
+
     return result;
+  }
+
+  /**
+   * Clone observational memory records when cloning a thread.
+   * Thread-scoped: always cloned to the new thread.
+   * Resource-scoped: cloned only when the resourceId changes (same resourceId shares OM naturally).
+   * All stored message/thread IDs are remapped to the cloned IDs.
+   */
+  private async cloneObservationalMemory(
+    memoryStore: MemoryStorage,
+    sourceThreadId: string,
+    sourceResourceId: string,
+    result: StorageCloneThreadOutput,
+  ): Promise<void> {
+    // Look up OM for thread-scoped first (threadId + resourceId), then resource-scoped (null + resourceId)
+    let sourceOM = await memoryStore.getObservationalMemory(sourceThreadId, sourceResourceId);
+    if (!sourceOM) {
+      sourceOM = await memoryStore.getObservationalMemory(null, sourceResourceId);
+    }
+    if (!sourceOM) return;
+
+    const clonedThreadId = result.thread.id;
+    const clonedResourceId = result.thread.resourceId;
+    const resourceChanged = clonedResourceId !== sourceResourceId;
+
+    // Resource-scoped OM with same resourceId: shared naturally, no clone needed
+    if (sourceOM.scope === 'resource' && !resourceChanged) return;
+
+    // Build source → clone message ID map
+    const messageIdMap = result.messageIdMap ?? {};
+    const hasher = await this.hasher;
+
+    const cloned = this.remapObservationalMemoryRecord(sourceOM, {
+      newThreadId: sourceOM.scope === 'thread' ? clonedThreadId : null,
+      newResourceId: clonedResourceId,
+      messageIdMap,
+      sourceThreadId: resourceChanged ? sourceThreadId : undefined,
+      clonedThreadId: resourceChanged ? clonedThreadId : undefined,
+      hasher: resourceChanged ? hasher : undefined,
+    });
+    const now = new Date();
+    cloned.id = crypto.randomUUID();
+    cloned.createdAt = now;
+    cloned.updatedAt = now;
+    await memoryStore.insertObservationalMemoryRecord(cloned);
+  }
+
+  /**
+   * Create a remapped copy of an OM record with new thread/message IDs.
+   */
+  private remapObservationalMemoryRecord(
+    record: ObservationalMemoryRecord,
+    opts: {
+      newThreadId: string | null;
+      newResourceId: string;
+      messageIdMap: Record<string, string>;
+      sourceThreadId?: string;
+      clonedThreadId?: string;
+      hasher?: Awaited<ReturnType<typeof xxhash>>;
+    },
+  ): ObservationalMemoryRecord {
+    const { newThreadId, newResourceId, messageIdMap, sourceThreadId, clonedThreadId, hasher } = opts;
+    const cloned: ObservationalMemoryRecord = { ...record };
+
+    cloned.threadId = newThreadId;
+    cloned.resourceId = newResourceId;
+
+    // Remap observedMessageIds — drop any IDs not present in the clone's message set
+    if (Array.isArray(cloned.observedMessageIds)) {
+      cloned.observedMessageIds = cloned.observedMessageIds
+        .map(id => messageIdMap[id])
+        .filter((id): id is string => Boolean(id));
+    } else {
+      cloned.observedMessageIds = undefined;
+    }
+
+    // Remap deprecated bufferedMessageIds
+    if (Array.isArray(cloned.bufferedMessageIds)) {
+      cloned.bufferedMessageIds = cloned.bufferedMessageIds
+        .map(id => messageIdMap[id])
+        .filter((id): id is string => Boolean(id));
+    } else {
+      cloned.bufferedMessageIds = undefined;
+    }
+
+    // Remap bufferedObservationChunks
+    if (Array.isArray(cloned.bufferedObservationChunks)) {
+      cloned.bufferedObservationChunks = cloned.bufferedObservationChunks.map(
+        (chunk: BufferedObservationChunk): BufferedObservationChunk => ({
+          ...chunk,
+          messageIds: Array.isArray(chunk.messageIds)
+            ? chunk.messageIds.map((id: string) => messageIdMap[id]).filter((id): id is string => Boolean(id))
+            : [],
+        }),
+      );
+    } else {
+      cloned.bufferedObservationChunks = undefined;
+    }
+
+    // For resource-scoped OM cloned to a new resource, remap thread tags in text fields
+    if (sourceThreadId && clonedThreadId && hasher) {
+      const sourceObscured = hasher.h32ToString(sourceThreadId);
+      const clonedObscured = hasher.h32ToString(clonedThreadId);
+
+      if (sourceObscured !== clonedObscured) {
+        const replaceThreadTags = (text: string | undefined): string | undefined => {
+          if (!text) return text;
+          return text.replaceAll(`<thread id="${sourceObscured}">`, `<thread id="${clonedObscured}">`);
+        };
+
+        cloned.activeObservations = replaceThreadTags(cloned.activeObservations) ?? '';
+        cloned.bufferedReflection = replaceThreadTags(cloned.bufferedReflection);
+
+        if (cloned.bufferedObservationChunks) {
+          cloned.bufferedObservationChunks = cloned.bufferedObservationChunks.map(
+            (chunk: BufferedObservationChunk): BufferedObservationChunk => ({
+              ...chunk,
+              observations: replaceThreadTags(chunk.observations) ?? chunk.observations,
+            }),
+          );
+        }
+      }
+    }
+
+    // Reset transient state flags
+    cloned.isObserving = false;
+    cloned.isReflecting = false;
+    cloned.isBufferingObservation = false;
+    cloned.isBufferingReflection = false;
+
+    return cloned;
   }
 
   /**
@@ -1696,6 +1983,12 @@ Notes:
       );
     }
 
+    if (!coreFeatures.has('request-response-id-rotation')) {
+      throw new Error(
+        'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
+      );
+    }
+
     // Dynamic import to avoid loading OM code when not needed and to prevent
     // import errors when paired with an older @mastra/core version
     const { ObservationalMemory } = await import('./processors/observational-memory');
@@ -1715,6 +2008,7 @@ Notes:
             bufferTokens: omConfig.observation.bufferTokens,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
+            instruction: omConfig.observation.instruction,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1725,6 +2019,7 @@ Notes:
             providerOptions: omConfig.reflection.providerOptions,
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
+            instruction: omConfig.reflection.instruction,
           }
         : undefined,
     });

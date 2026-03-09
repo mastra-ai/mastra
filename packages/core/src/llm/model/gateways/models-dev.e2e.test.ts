@@ -53,9 +53,11 @@ describe('ModelsDevGateway - Real API Integration', () => {
     }
 
     if (providers.vercel) {
-      expect(providers.vercel.url).toBe('https://ai-gateway.vercel.sh/v1');
+      // No URL override — createGateway uses its own default base URL
+      expect(providers.vercel.url).toBeUndefined();
       expect(providers.vercel.apiKeyEnvVar).toBe('AI_GATEWAY_API_KEY');
-      expect(providers.vercel.apiKeyHeader).toBe('Authorization');
+      // apiKeyHeader is undefined for installed packages (auth handled by SDK)
+      expect(providers.vercel.apiKeyHeader).toBeUndefined();
       // Vercel should have models like deepseek/deepseek-r1
       expect(providers.vercel.models.some(m => m.startsWith('deepseek/'))).toBe(true);
     }

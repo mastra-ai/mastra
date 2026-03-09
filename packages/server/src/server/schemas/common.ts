@@ -139,6 +139,24 @@ export const partialQuerySchema = z.object({
 });
 
 // ============================================================================
+// Status Schemas
+// ============================================================================
+
+/**
+ * Status filter for get-by-id endpoints.
+ * Controls which version is resolved:
+ * - 'published' (default) — resolve with the active (published) version.
+ * - 'draft' — resolve with the latest version (which may be ahead of the published one).
+ */
+export const statusQuerySchema = z.object({
+  status: z
+    .enum(['draft', 'published', 'archived'])
+    .optional()
+    .default('published')
+    .describe('Which version to resolve: published (active version) or draft (latest version)'),
+});
+
+// ============================================================================
 // Logging Schemas
 // ============================================================================
 

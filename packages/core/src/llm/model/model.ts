@@ -22,7 +22,7 @@ import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
-import { SpanType } from '../../observability';
+import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
 import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
@@ -128,10 +128,10 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
 
     this.logger.debug(`[LLM] - Generating text`, {
       runId,
@@ -163,7 +163,7 @@ export class MastraLLMV1 extends MastraBase {
       }
     }
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -292,6 +292,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Generate text failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -304,14 +312,14 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: GenerateObjectWithMessagesArgs<Z>): Promise<GenerateObjectResult<Z>> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
 
     this.logger.debug(`[LLM] - Generating a text object`, { runId });
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -396,6 +404,14 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger.error('[LLM] - Generate object failed', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
@@ -419,6 +435,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Generate object schema conversion failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -437,10 +461,11 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
-    tracingContext,
     ...rest
   }: StreamTextWithMessagesArgs<Tools, Z>): StreamTextResult<Tools, Z> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
+
     this.logger.debug(`[LLM] - Streaming text`, {
       runId,
       threadId,
@@ -465,7 +490,7 @@ export class MastraLLMV1 extends MastraBase {
       }
     }
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -598,6 +623,32 @@ export class MastraLLMV1 extends MastraBase {
           resourceId,
         });
       },
+      onError: ({ error }) => {
+        const mastraError = new MastraError(
+          {
+            id: 'LLM_STREAM_TEXT_AI_SDK_STREAMING_ERROR',
+            domain: ErrorDomain.LLM,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              modelId: model.modelId,
+              modelProvider: model.provider,
+              runId: runId ?? 'unknown',
+              threadId: threadId ?? 'unknown',
+              resourceId: resourceId ?? 'unknown',
+            },
+          },
+          error,
+        );
+        this.logger.error('[LLM] - Stream text error', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
+        llmSpan?.error({ error: mastraError });
+      },
       ...rest,
       messages,
       experimental_output: schema
@@ -625,6 +676,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Stream text failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -638,16 +697,17 @@ export class MastraLLMV1 extends MastraBase {
     resourceId,
     onFinish,
     structuredOutput,
-    tracingContext,
     ...rest
   }: StreamObjectWithMessagesArgs<T>): StreamObjectResult<T> {
     const model = this.#model;
+    const observabilityContext = resolveObservabilityContext(rest);
+
     this.logger.debug(`[LLM] - Streaming structured output`, {
       runId,
       messages,
     });
 
-    const llmSpan = tracingContext.currentSpan?.createChildSpan({
+    const llmSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${model.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
@@ -744,6 +804,32 @@ export class MastraLLMV1 extends MastraBase {
             resourceId,
           });
         },
+        onError: ({ error }) => {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_STREAM_OBJECT_AI_SDK_STREAMING_ERROR',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+              },
+            },
+            error,
+          );
+          this.logger.error('[LLM] - Stream object error', {
+            error: mastraError,
+            runId,
+            threadId,
+            resourceId,
+            modelId: model.modelId,
+            modelProvider: model.provider,
+          });
+          llmSpan?.error({ error: mastraError });
+        },
         messages,
         // @ts-expect-error - output in our implementation can only be object or array
         output,
@@ -768,6 +854,14 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger.error('[LLM] - Stream object failed', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
@@ -792,6 +886,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Stream object schema conversion failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
