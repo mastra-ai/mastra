@@ -700,8 +700,7 @@ export class MemoryMSSQL extends MemoryStorage {
       // When perPage is 0, we only need included messages — skip COUNT and data queries
       if (perPage === 0 && include && include.length > 0) {
         const includeMessages = await this._getIncludedMessages({ include });
-        const list = new MessageList().add(includeMessages ?? [], 'memory');
-        const messages = list.get.all.db();
+        const messages = this._parseAndFormatMessages(includeMessages ?? [], 'v2') as MastraDBMessage[];
         return {
           messages: direction === 'DESC' ? messages.reverse() : messages,
           total: 0,

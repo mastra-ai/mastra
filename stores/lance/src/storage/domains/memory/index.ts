@@ -705,18 +705,48 @@ export class StoreMemoryLance extends MemoryStorage {
 
     // Phase 2: Fetch full threads for context windows (each unique thread loaded once)
     const threadIdsToFetch = [...new Set<string>(targetRecords.map((r: any) => r.thread_id as string))];
-    const allThreadMessages: any[] = [];
+    const threadCache = new Map<string, any[]>();
     for (const tid of threadIdsToFetch) {
       const threadRecords = await table
         .query()
         .where(`thread_id = '${this.escapeSql(tid)}'`)
         .toArray();
-      allThreadMessages.push(...threadRecords);
+      threadRecords.sort((a: any, b: any) => a.createdAt - b.createdAt);
+      threadCache.set(tid, threadRecords);
     }
-    allThreadMessages.sort((a, b) => a.createdAt - b.createdAt);
 
-    const contextMessages = this.processMessagesWithContext(allThreadMessages, include);
-    return contextMessages.map((row: any) => this.normalizeMessage(row));
+    // Process context windows per-thread to avoid cross-thread contamination
+    const targetThreadMap = new Map<string, any>();
+    for (const r of targetRecords) {
+      targetThreadMap.set(r.id, r.thread_id);
+    }
+
+    // Group include items by thread
+    const includeByThread = new Map<string, typeof include>();
+    for (const item of include) {
+      const tid = targetThreadMap.get(item.id);
+      if (!tid) continue;
+      const items = includeByThread.get(tid) ?? [];
+      items.push(item);
+      includeByThread.set(tid, items);
+    }
+
+    // Process each thread separately, then combine
+    const seen = new Set<string>();
+    const allContextMessages: any[] = [];
+    for (const [tid, threadInclude] of includeByThread) {
+      const threadMessages = threadCache.get(tid) ?? [];
+      const contextMessages = this.processMessagesWithContext(threadMessages, threadInclude);
+      for (const msg of contextMessages) {
+        if (!seen.has(msg.id)) {
+          seen.add(msg.id);
+          allContextMessages.push(msg);
+        }
+      }
+    }
+
+    allContextMessages.sort((a, b) => a.createdAt - b.createdAt);
+    return allContextMessages.map((row: any) => this.normalizeMessage(row));
   }
 
   /**
