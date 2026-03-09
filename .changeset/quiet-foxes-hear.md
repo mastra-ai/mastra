@@ -6,4 +6,4 @@
 '@mastra/cloudflare': patch
 ---
 
-Fixed slow semantic recall by skipping unnecessary full thread loads and queries when only semantic recall results are needed. Previously, all thread messages were fetched even when only the recalled messages were required. (Fixes #11702)
+Improved semantic recall performance for large message histories. Semantic recall no longer loads entire threads when only the recalled messages are needed, eliminating delays that previously scaled with total message count. (Fixes #11702)
