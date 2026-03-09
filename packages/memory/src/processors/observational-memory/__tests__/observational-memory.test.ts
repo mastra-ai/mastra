@@ -8946,8 +8946,12 @@ describe('Single-thread replay red tests', () => {
     );
 
     const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    let releaseSave!: () => void;
+    const saveBlocked = new Promise<void>(resolve => {
+      releaseSave = resolve;
+    });
     (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
-      await new Promise(resolve => setTimeout(resolve, 25));
+      await saveBlocked;
       return originalSave(...args);
     };
 
@@ -8961,13 +8965,13 @@ describe('Single-thread replay red tests', () => {
       undefined,
     );
 
-    await new Promise(resolve => setTimeout(resolve, 5));
-
+    // Assert intermediate state before save completes.
     const duringRaceText = getModelVisibleText(messageList);
 
     // Keep this assertion as a debug signal for post-activation under-inclusion windows.
     expect(duringRaceText).toContain('fresh-next-turn');
 
+    releaseSave();
     await cleanupPromise;
   });
 
