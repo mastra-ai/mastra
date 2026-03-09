@@ -79,7 +79,7 @@ Chroma Cloud powers serverless vector and full-text search. It's extremely fast,
 
 ## Running a Chroma Server
 
-If you are a Chroma Cloud user, simply provide the `ChromaVector` constructor your API key, tenant, and database name.
+If you are a Chroma Cloud user, provide the `ChromaVector` constructor your API key, tenant, and database name.
 
 When you install the `@mastra/chroma` package, you get access to the [Chroma CLI](https://docs.trychroma.com/docs/cli/db), which can set these as environment variables for you: `chroma db connect [DB-NAME] --env-file`.
 
@@ -119,7 +119,7 @@ Otherwise, you have several options for setting up your single-node Chroma serve
 
 Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS **distributed** Chroma.
 
-`forkIndex` lets you fork an existing Chroma index instantly. Operations on the forked index do not affect the original one. Learn more on the [Chroma docs](https://docs.trychroma.com/cloud/collection-forking).
+`forkIndex` lets you fork an existing Chroma index instantly. Operations on the forked index don't affect the original one. Learn more on the [Chroma docs](https://docs.trychroma.com/cloud/collection-forking).
 
 <PropertiesTable
   content={[

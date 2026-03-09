@@ -1,9 +1,11 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
 import { resolveObservabilityContext } from '../../observability';
+import type { PublicSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -54,7 +56,7 @@ export interface SystemPromptDetection {
   /** End position in text */
   end: number;
   /** Redacted value if available */
-  redacted_value: string | null;
+  redacted_value?: string | null;
 }
 
 export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'> {
@@ -250,7 +252,6 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
   ): Promise<SystemPromptDetectionResult> {
     try {
       const model = await this.detectionAgent.getModel();
-      let result: any;
 
       const baseDetectionSchema = z.object({
         type: z.string().describe('Type of system prompt detected'),
@@ -279,22 +280,31 @@ export class SystemPromptScrubber implements Processor<'system-prompt-scrubber'>
             })
           : baseSchema;
 
+      let result: SystemPromptDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        result = await this.detectionAgent.generate(text, {
+        const response = await this.detectionAgent.generate(text, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           ...observabilityContext,
         });
+
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
-        result = await this.detectionAgent.generateLegacy(text, {
-          output: schema,
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        const response = await this.detectionAgent.generateLegacy(text, {
+          output: standardSchemaToJSONSchema(standardSchema),
           ...observabilityContext,
         });
+
+        result = response.object as SystemPromptDetectionResult;
       }
 
-      return result.object as SystemPromptDetectionResult;
+      return result;
     } catch (error) {
       console.warn('[SystemPromptScrubber] Detection agent failed:', error);
       return {

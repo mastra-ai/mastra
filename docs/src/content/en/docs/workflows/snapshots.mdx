@@ -158,7 +158,7 @@ export const mastra = new Mastra({
 1. **Ensure Serializability**: Any data that needs to be included in the snapshot must be serializable (convertible to JSON).
 1. **Minimize Snapshot Size**: Avoid storing large data objects directly in the workflow context. Instead, store references to them (like IDs) and retrieve the data when needed.
 1. **Handle Resume Context Carefully**: When resuming a workflow, carefully consider what context to provide. This will be merged with the existing snapshot data.
-1. **Set Up Proper Monitoring**: Implement monitoring for suspended workflows, especially long-running ones, to ensure they are properly resumed.
+1. **Set Up Proper Monitoring**: Implement monitoring for suspended workflows, especially long-running ones, to ensure they're properly resumed.
 1. **Consider Storage Scaling**: For applications with many suspended workflows, ensure your storage solution is appropriately scaled.
 
 ## Custom snapshot metadata

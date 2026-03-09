@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-clerk",
-  "version": "1.0.1-alpha.0",
+  "version": "1.0.1",
   "description": "Mastra Clerk Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^9.37.0",

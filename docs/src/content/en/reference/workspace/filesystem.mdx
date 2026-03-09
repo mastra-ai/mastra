@@ -32,11 +32,24 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
     description: 'File path relative to basePath',
   },
   {
-    name: 'options.encoding',
-    type: "'utf-8' | 'binary'",
-    description: 'Text or binary encoding',
+    name: 'options',
+    type: 'Options',
+    description: 'readFile options.',
     isOptional: true,
-    defaultValue: "'utf-8'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'encoding',
+            type: "'utf-8' | 'binary'",
+            description: 'Text or binary encoding',
+            isOptional: true,
+            defaultValue: "'utf-8'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -67,18 +80,31 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
     description: 'File content',
   },
   {
-    name: 'options.recursive',
-    type: 'boolean',
-    description: "Create parent directories if they don't exist",
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'options.overwrite',
-    type: 'boolean',
-    description: 'Overwrite existing file',
-    isOptional: true,
-    defaultValue: 'true',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: "Create parent directories if they don't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite existing file',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -102,18 +128,31 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
     description: 'File path',
   },
   {
-    name: 'options.force',
-    type: 'boolean',
-    description: "Don't throw error if file doesn't exist",
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw error if file doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 ### `appendFile(path, content)`
 
-Append content to a file, creating it if it does not already exist. Parent directories are created automatically.
+Append content to a file, creating it if it doesn't already exist. Parent directories are created automatically.
 
 ```typescript
 await filesystem.appendFile('/logs/app.log', 'New log entry\n')
@@ -159,11 +198,24 @@ await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
     description: 'Destination file path',
   },
   {
-    name: 'options.overwrite',
-    type: 'boolean',
-    description: 'Overwrite destination if it exists',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'true',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -191,11 +243,24 @@ await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
     description: 'Destination file path',
   },
   {
-    name: 'options.overwrite',
-    type: 'boolean',
-    description: 'Overwrite destination if it exists',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'true',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -240,11 +305,24 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
     description: 'Directory path',
   },
   {
-    name: 'options.recursive',
-    type: 'boolean',
-    description: 'Create parent directories',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Create parent directories',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -268,18 +346,31 @@ await filesystem.rmdir('/docs/nested', { recursive: true })
     description: 'Directory path',
   },
   {
-    name: 'options.recursive',
-    type: 'boolean',
-    description: 'Remove contents recursively',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'options.force',
-    type: 'boolean',
-    description: "Don't throw if directory doesn't exist",
-    isOptional: true,
-    defaultValue: 'false',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Remove contents recursively',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw if directory doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

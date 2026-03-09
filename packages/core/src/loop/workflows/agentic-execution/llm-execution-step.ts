@@ -1,7 +1,7 @@
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
-import { APICallError } from '@internal/ai-sdk-v5';
+import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
@@ -16,6 +16,7 @@ import { createObservabilityContext, executeWithContextSync } from '../../../obs
 import type { ProcessorStreamWriter } from '../../../processors/index';
 import { PrepareStepProcessor } from '../../../processors/processors/prepare-step';
 import { ProcessorRunner } from '../../../processors/runner';
+import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
@@ -29,6 +30,9 @@ import type {
   TextStartPayload,
 } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import type { ToolToConvert } from '../../../tools/tool-builder/builder';
+import { isMastraTool } from '../../../tools/toolchecks';
+import { makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows';
 import type { Workspace } from '../../../workspace/workspace';
 import type { LoopConfig, OuterLLMRun } from '../../types';
@@ -387,7 +391,7 @@ async function processOutputStream<OUTPUT = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error'].includes(chunk.payload.stepResult.reason),
+            isContinued: !['stop', 'error', 'length'].includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -546,9 +550,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
 
-      const messageId = inputData.isTaskCompleteCheckFailed
+      let currentMessageId = inputData.isTaskCompleteCheckFailed
         ? `${messageIdPassed}-${currentIteration}`
-        : messageIdPassed;
+        : inputData.messageId || messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
 
@@ -583,6 +587,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
 
         const currentStep: {
+          messageId: string;
           model: MastraLanguageModel;
           tools?: TOOLS | undefined;
           toolChoice?: ToolChoice<TOOLS> | undefined;
@@ -592,6 +597,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
           workspace?: Workspace;
         } = {
+          messageId: currentMessageId,
           model,
           tools,
           toolChoice,
@@ -631,6 +637,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               requestContext,
               model,
               steps: inputData.output?.steps || [],
+              messageId: currentStep.messageId,
+              rotateResponseMessageId: () => {
+                currentMessageId = _internal?.generateId?.() ?? generateId();
+                currentStep.messageId = currentMessageId;
+                return currentMessageId;
+              },
               tools,
               toolChoice,
               activeTools: activeTools as string[] | undefined,
@@ -642,6 +654,35 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               abortSignal: options?.abortSignal,
             });
             Object.assign(currentStep, processInputStepResult);
+
+            // Convert any raw Mastra Tool objects returned by processors into CoreTool format.
+            // Processors like ToolSearchProcessor return raw Tool instances that lack requestContext binding.
+            if (processInputStepResult.tools && currentStep.tools) {
+              const convertedTools: Record<string, unknown> = {};
+              for (const [name, tool] of Object.entries(currentStep.tools)) {
+                if (isMastraTool(tool)) {
+                  convertedTools[name] = makeCoreTool(
+                    tool as ToolToConvert,
+                    {
+                      name,
+                      runId,
+                      threadId: _internal?.threadId,
+                      resourceId: _internal?.resourceId,
+                      logger,
+                      agentName: agentId,
+                      requestContext: requestContext || new RequestContext(),
+                      outputWriter,
+                      workspace: currentStep.workspace,
+                    },
+                    undefined,
+                    autoResumeSuspendedTools,
+                  );
+                } else {
+                  convertedTools[name] = tool;
+                }
+              }
+              currentStep.tools = convertedTools as TOOLS;
+            }
           } catch (error) {
             // Handle TripWire from processInputStep - emit tripwire chunk and signal abort
             if (error instanceof TripWire) {
@@ -679,7 +720,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     },
                   }),
                   messageList,
-                  messageId,
+                  messageId: currentStep.messageId,
                   options: { runId },
                 }),
                 runState,
@@ -689,6 +730,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.error('Error in processInputStep processors:', error);
             throw error;
           }
+        }
+
+        // Store activeTools on _internal so toolCallStep can enforce them
+        if (_internal) {
+          _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
         }
 
         const runState = new AgenticRunState({
@@ -817,7 +863,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     payload: {
                       request: request || {},
                       warnings: warnings || [],
-                      messageId: messageId,
+                      messageId: currentStep.messageId,
                     },
                   });
                 },
@@ -838,7 +884,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
           stream: modelResult as ReadableStream<ChunkType<OUTPUT>>,
           messageList,
-          messageId,
+          messageId: currentStep.messageId,
           options: {
             runId,
             toolCallStreaming,
@@ -863,7 +909,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputStream,
             includeRawChunks,
             tools: currentStep.tools,
-            messageId,
+            messageId: currentStep.messageId,
             messageList,
             runState,
             options,
@@ -965,7 +1011,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         const text = outputStream._getImmediateText();
 
         return bail({
-          messageId,
+          messageId: outputStream.messageId,
           stepResult: {
             reason: 'tripwire',
             warnings,
@@ -1012,7 +1058,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       if (toolCalls.length > 0) {
         const message: MastraDBMessage = {
-          id: messageId,
+          id: outputStream.messageId,
           role: 'assistant' as const,
           content: {
             format: 2,
@@ -1166,7 +1212,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Without this, the LLM sees the rejected assistant response in its prompt on retry,
       // which confuses models and often causes empty text responses.
       if (shouldRetry) {
-        messageList.removeByIds([messageId]);
+        messageList.removeByIds([outputStream.messageId]);
       }
 
       // Build retry feedback text if retrying
@@ -1189,13 +1235,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
       // - OR finishReason indicates more work (e.g., tool-use)
-      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error'].includes(finishReason));
+      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error', 'length'].includes(finishReason));
 
       // Increment processor retry count if we're retrying
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;
 
       return {
-        messageId,
+        messageId: outputStream.messageId,
         stepResult: {
           reason: stepReason,
           warnings,

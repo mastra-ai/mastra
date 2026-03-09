@@ -79,18 +79,31 @@ Each real-time voice provider may support different options for the `connect()` 
 <PropertiesTable
   content={[
   {
-    name: 'options.timeout',
-    type: 'number',
-    description: 'Connection timeout in milliseconds',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: '30000',
-  },
-  {
-    name: 'options.reconnect',
-    type: 'boolean',
-    description: 'Whether to automatically reconnect on connection loss',
-    isOptional: true,
-    defaultValue: 'false',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'timeout',
+            type: 'number',
+            description: 'Connection timeout in milliseconds',
+            isOptional: true,
+            defaultValue: '30000',
+          },
+          {
+            name: 'reconnect',
+            type: 'boolean',
+            description: 'Whether to automatically reconnect on connection loss',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

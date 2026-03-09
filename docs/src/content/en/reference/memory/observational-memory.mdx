@@ -253,9 +253,9 @@ OM persists token payload estimates so repeated counting can reuse prior tiktoke
 
 - Part-level cache: `part.providerMetadata.mastra`.
 - String-content fallback cache: message-level metadata when no parts exist.
-- Cache entries are ignored and recomputed if cache version/tokenizer source does not match.
-- Per-message and per-conversation overhead are always recomputed at runtime and are not cached.
-- `data-*` and `reasoning` parts are skipped and do not receive cache entries.
+- Cache entries are ignored and recomputed if cache version/tokenizer source doesn't match.
+- Per-message and per-conversation overhead are always recomputed at runtime and aren't cached.
+- `data-*` and `reasoning` parts are skipped and don't receive cache entries.
 
 ## Examples
 
@@ -461,7 +461,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering is not supported with `scope: 'resource'` and is automatically disabled in resource scope.
+Async buffering isn't supported with `scope: 'resource'` and is automatically disabled in resource scope.
 
 :::
 
