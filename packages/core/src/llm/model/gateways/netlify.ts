@@ -188,16 +188,18 @@ export class NetlifyGateway extends MastraModelGateway {
   }): Promise<LanguageModelV2> {
     const baseURL = await this.buildUrl(`${providerId}/${modelId}`);
 
+    const mastraHeaders = { 'User-Agent': MASTRA_USER_AGENT, ...headers };
+
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey, baseURL, headers }).responses(modelId);
+        return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
         return createGoogleGenerativeAI({
           baseURL: `${baseURL}/v1beta/`,
           apiKey,
           headers: {
             'user-agent': 'google-genai-sdk/',
-            ...(headers ? headers : {}),
+            ...mastraHeaders,
           },
         }).chat(modelId);
       case 'anthropic':
@@ -206,14 +208,17 @@ export class NetlifyGateway extends MastraModelGateway {
           baseURL: `${baseURL}/v1/`,
           headers: {
             'anthropic-version': '2023-06-01',
-            'User-Agent': MASTRA_USER_AGENT,
-            ...(headers ? headers : {}),
+            ...mastraHeaders,
           },
         })(modelId);
       default:
-        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
-          modelId,
-        );
+        return createOpenAICompatible({
+          name: providerId,
+          apiKey,
+          baseURL,
+          headers: mastraHeaders,
+          supportsStructuredOutputs: true,
+        }).chatModel(modelId);
     }
   }
 }
