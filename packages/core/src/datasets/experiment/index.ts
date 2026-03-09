@@ -140,7 +140,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         datasetVersion: v.datasetVersion,
         input: v.input,
         groundTruth: v.groundTruth,
-      requestContext: v.requestContext,
+        requestContext: v.requestContext,
         metadata: v.metadata,
       }));
     } else {
@@ -186,11 +186,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
       execFn = (item, itemSignal) => {
-      // Merge global request context with per-item request context (item takes precedence)
-      const mergedRequestContext =
-        globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
-      return executeTarget(target, targetType, item, { signal: itemSignal, requestContext: mergedRequestContext });
-    };
+        // Merge global request context with per-item request context (item takes precedence)
+        const mergedRequestContext =
+          globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
+        return executeTarget(target, targetType, item, { signal: itemSignal, requestContext: mergedRequestContext });
+      };
     } else {
       throw new Error('No task: provide targetType+targetId or task');
     }
