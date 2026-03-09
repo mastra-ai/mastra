@@ -15,7 +15,7 @@ describe('AgentObservationalMemory token display', () => {
 
   it('uses the live observation window token count for the observations header label', () => {
     expect(source).toContain(
-      "const observationTokenCount =\n    streamProgress?.windows?.active?.observations?.tokens ?? record?.observationTokenCount ?? 0;",
+      'const observationTokenCount =\n    streamProgress?.windows?.active?.observations?.tokens ?? record?.observationTokenCount ?? 0;',
     );
 
     expect(source).toContain('const tokenCount = observationTokenCount;');
