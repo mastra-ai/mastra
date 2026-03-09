@@ -585,7 +585,7 @@ Build-time configuration for server features. These options control development 
 | - | - | - | - |
 | `swaggerUI` | `boolean` | `false` | Enable Swagger UI at `/swagger-ui` for interactive API exploration (requires `openAPIDocs` to be `true`) |
 | `apiReqLogs` | `boolean` | `false` | Enable API request logging to the console |
-| `openAPIDocs` | `boolean` | `false` | Enable OpenAPI specification at `/openapi.json` (also available at `/api/openapi.json`). Built-in Mastra routes use `servers: [{url: "/api"}]` while custom routes get a per-path `servers: [{url: "/"}]` override. |
+| `openAPIDocs` | `boolean` | `false` | Enable OpenAPI specification at `/api/openapi.json`. Built-in Mastra routes use `servers: [{url: "/api"}]` while custom routes get a per-path `servers: [{url: "/"}]` override. |
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

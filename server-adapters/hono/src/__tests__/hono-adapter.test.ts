@@ -482,7 +482,7 @@ describe('Hono Server Adapter', () => {
       }
     });
 
-    it('should serve the OpenAPI spec at both /api/openapi.json and /openapi.json', async () => {
+    it('should serve the OpenAPI spec at /api/openapi.json', async () => {
       const mastra = new Mastra({});
       const app = new Hono();
 
@@ -505,12 +505,6 @@ describe('Hono Server Adapter', () => {
       const prefixedSpec = await prefixedResponse.json();
       expect(prefixedSpec.openapi).toBe('3.1.0');
       expect(prefixedSpec.servers).toEqual([{ url: '/api' }]);
-
-      const rootResponse = await fetch(`http://localhost:${port}/openapi.json`);
-      expect(rootResponse.status).toBe(200);
-      const rootSpec = await rootResponse.json();
-      expect(rootSpec.openapi).toBe('3.1.0');
-      expect(rootSpec.servers).toEqual([{ url: '/api' }]);
     });
 
     it('should set per-path servers override on custom routes in the spec', async () => {
@@ -560,10 +554,6 @@ describe('Hono Server Adapter', () => {
 
       expect(spec.paths['/health']).toBeDefined();
       expect(spec.paths['/health'].servers).toEqual([{ url: '/' }]);
-
-      const rootResponse = await fetch(`http://localhost:${port}/openapi.json`);
-      const rootSpec = await rootResponse.json();
-      expect(rootSpec.paths['/health'].servers).toEqual([{ url: '/' }]);
     });
 
     it('should not add servers override to custom routes when no prefix is used', async () => {

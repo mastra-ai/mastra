@@ -641,19 +641,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       };
 
       await this.registerOpenAPIRoute(this.app, { ...specConfig, path: this.openapiPath }, { prefix: this.prefix });
-
-      // Also serve the spec at the root path (e.g. /openapi.json) for backwards
-      // compatibility — pre-V1 served it at the root.
-      if (this.prefix) {
-        const openApiSpec = this.buildOpenAPISpec(specConfig, this.prefix);
-        const rootOpenApiRoute: ServerRoute = {
-          method: 'GET',
-          path: this.openapiPath,
-          responseType: 'json',
-          handler: async () => openApiSpec,
-        };
-        await this.registerRoute(this.app, rootOpenApiRoute, { prefix: '' });
-      }
     }
   }
 
