@@ -9,6 +9,12 @@ function renderPlain(component: ModelSelectSubmenu): string[] {
   return component.render(WIDTH).map(line => stripAnsi(line));
 }
 
+function kittyPrintable(char: string): string {
+  const cp = char.codePointAt(0);
+  if (cp === undefined) throw new Error('Expected a printable character');
+  return `\x1b[${cp};1u`;
+}
+
 describe('ModelSelectSubmenu', () => {
   it('filters models when typing search text and selects filtered result on enter', () => {
     const requestRender = vi.fn();
@@ -67,8 +73,8 @@ describe('ModelSelectSubmenu', () => {
       { requestRender } as unknown as TUI,
     );
 
-    for (const codepoint of [99, 111, 100, 101, 120]) {
-      submenu.handleInput(`\x1b[${codepoint};1u`);
+    for (const ch of 'codex') {
+      submenu.handleInput(kittyPrintable(ch));
     }
 
     const lines = renderPlain(submenu).join('\n');
