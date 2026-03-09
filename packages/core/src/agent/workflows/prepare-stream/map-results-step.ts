@@ -107,38 +107,52 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     // Check for tripwire and return early if triggered
     if (result.tripwire) {
-      // End agent span with tripwire information
-      agentSpan?.end({
-        output: { tripwire: memoryData.tripwire },
-        attributes: {
-          tripwireReason: memoryData.tripwire?.reason,
-          tripwireProcessorId: memoryData.tripwire?.processorId,
-          tripwireRetry: memoryData.tripwire?.retry,
-          tripwireMetadata: memoryData.tripwire?.metadata,
-        },
-      });
+      try {
+        const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
 
-      const agentModel = await capabilities.getModel({ requestContext: result.requestContext! });
+        if (!isSupportedLanguageModel(agentModel)) {
+          throw new MastraError({
+            id: 'MAP_RESULTS_STEP_UNSUPPORTED_MODEL',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: 'Tripwire handling requires a v2/v3 model',
+          });
+        }
 
-      if (!isSupportedLanguageModel(agentModel)) {
-        throw new MastraError({
-          id: 'MAP_RESULTS_STEP_UNSUPPORTED_MODEL',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'Tripwire handling requires a v2/v3 model',
+        const modelOutput = await getModelOutputForTripwire<OUTPUT>({
+          tripwire: memoryData.tripwire!,
+          runId,
+          ...resolveObservabilityContext(observabilityContext),
+          options: options,
+          model: agentModel,
+          messageList: memoryData.messageList,
         });
+
+        // End agent span with tripwire information after fallback completes
+        agentSpan?.end({
+          output: { tripwire: memoryData.tripwire },
+          attributes: {
+            tripwireReason: memoryData.tripwire?.reason,
+            tripwireProcessorId: memoryData.tripwire?.processorId,
+            tripwireRetry: memoryData.tripwire?.retry,
+            tripwireMetadata: memoryData.tripwire?.metadata,
+          },
+        });
+
+        return bail(modelOutput);
+      } catch (error) {
+        // End agent span with error so failures aren't masked
+        agentSpan?.end({
+          output: { tripwire: memoryData.tripwire },
+          attributes: {
+            tripwireReason: memoryData.tripwire?.reason,
+            tripwireProcessorId: memoryData.tripwire?.processorId,
+            tripwireRetry: memoryData.tripwire?.retry,
+            tripwireMetadata: memoryData.tripwire?.metadata,
+          },
+        });
+        throw error;
       }
-
-      const modelOutput = await getModelOutputForTripwire<OUTPUT>({
-        tripwire: memoryData.tripwire!,
-        runId,
-        ...resolveObservabilityContext(observabilityContext),
-        options: options,
-        model: agentModel,
-        messageList: memoryData.messageList,
-      });
-
-      return bail(modelOutput);
     }
 
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
