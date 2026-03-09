@@ -2849,6 +2849,9 @@ importers:
       '@internal/llm-recorder':
         specifier: workspace:*
         version: link:../_llm-recorder
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
@@ -4148,6 +4151,9 @@ importers:
       '@internal/storage-test-utils':
         specifier: workspace:*
         version: link:../../stores/_test-utils
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../_test-utils
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
