@@ -10,6 +10,12 @@ import { z } from 'zod';
 
 import { createRoute } from '../../server-adapter/routes/route-builder';
 import type {
+  agentIdPathParams,
+  serializedAgentSchema,
+  listAgentsResponseSchema,
+  agentExecutionBodySchema,
+} from '../agents';
+import type {
   RouteMap,
   RouteContract,
   InferPathParams,
@@ -17,6 +23,7 @@ import type {
   InferBody,
   InferResponse,
 } from '../route-contracts';
+import type { workflowIdPathParams, createWorkflowRunBodySchema, createWorkflowRunResponseSchema } from '../workflows';
 
 // ============================================================================
 // Helpers
@@ -26,7 +33,6 @@ import type {
 type Expect<T extends true> = T;
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type IsNever<T> = [T] extends [never] ? true : false;
-type IsNotNever<T> = [T] extends [never] ? false : true;
 
 // ============================================================================
 // RouteMap key tests — verify that specific routes exist in the map
@@ -57,56 +63,63 @@ type _Invalid1 = RouteContract<'GET /this/does/not/exist'>;
 type _Invalid2 = RouteContract<'INVALID /agents'>;
 
 // ============================================================================
-// InferPathParams tests — verify path parameter inference
+// InferPathParams tests — exact schema type assertions
 // ============================================================================
 
 type GetAgentPathParams = InferPathParams<RouteMap['GET /agents/:agentId']>;
-type _TestAgentPathParams = Expect<Equal<GetAgentPathParams, { agentId: string }>>;
+type _TestAgentPathParams = Expect<Equal<GetAgentPathParams, z.infer<typeof agentIdPathParams>>>;
 
 // Routes without path params should return never
 type AuthCapPathParams = InferPathParams<RouteMap['GET /auth/capabilities']>;
 type _TestAuthCapPathParams = Expect<IsNever<AuthCapPathParams>>;
 
-// Workflow path params
+// Workflow path params pinned to exact schema output
 type CreateRunPathParams = InferPathParams<RouteMap['POST /workflows/:workflowId/create-run']>;
-type _TestWorkflowPathParams = Expect<CreateRunPathParams extends { workflowId: string } ? true : false>;
+type _TestWorkflowPathParams = Expect<Equal<CreateRunPathParams, z.infer<typeof workflowIdPathParams>>>;
 
 // ============================================================================
-// InferResponse tests — verify response type inference
+// InferResponse tests — exact schema type assertions
 // ============================================================================
 
-// GET /agents should return an array-like response (not never)
+// GET /agents response pinned to listAgentsResponseSchema output
 type ListAgentsResponse = InferResponse<RouteMap['GET /agents']>;
-type _AssertListAgentsResponse = Expect<IsNotNever<ListAgentsResponse>>;
+type _AssertListAgentsResponse = Expect<Equal<ListAgentsResponse, z.infer<typeof listAgentsResponseSchema>>>;
 
-// GET /agents/:agentId should return a single agent response (not never)
+// GET /agents/:agentId response pinned to serializedAgentSchema output
 type GetAgentResponse = InferResponse<RouteMap['GET /agents/:agentId']>;
-type _AssertGetAgentResponse = Expect<IsNotNever<GetAgentResponse>>;
+type _AssertGetAgentResponse = Expect<Equal<GetAgentResponse, z.infer<typeof serializedAgentSchema>>>;
 
-// Agent response should have expected fields
-type _TestAgentResponseHasName = Expect<GetAgentResponse extends { name: string } ? true : false>;
+// POST /workflows/:workflowId/create-run response pinned to exact schema
+type CreateRunResponse = InferResponse<RouteMap['POST /workflows/:workflowId/create-run']>;
+type _AssertCreateRunResponse = Expect<Equal<CreateRunResponse, z.infer<typeof createWorkflowRunResponseSchema>>>;
 
 // ============================================================================
-// InferBody tests — verify request body inference
+// InferBody tests — exact schema type assertions
 // ============================================================================
 
-// POST routes with body schemas should not be never
+// POST generate body pinned to agentExecutionBodySchema output
 type GenerateBody = InferBody<RouteMap['POST /agents/:agentId/generate']>;
-type _AssertGenerateBody = Expect<IsNotNever<GenerateBody>>;
-type _TestGenerateBodyHasMessages = Expect<GenerateBody extends { messages: unknown } ? true : false>;
+type _AssertGenerateBody = Expect<Equal<GenerateBody, z.infer<typeof agentExecutionBodySchema>>>;
+
+// POST create-run body pinned to exact schema
+type CreateRunBody = InferBody<RouteMap['POST /workflows/:workflowId/create-run']>;
+type _AssertCreateRunBody = Expect<Equal<CreateRunBody, z.infer<typeof createWorkflowRunBodySchema>>>;
 
 // GET routes without body should return never
 type ListAgentsBody = InferBody<RouteMap['GET /agents']>;
 type _AssertListAgentsBodyNever = Expect<IsNever<ListAgentsBody>>;
 
 // ============================================================================
-// InferQueryParams tests — verify query parameter inference
+// InferQueryParams tests — exact schema type assertions
 // ============================================================================
 
-// GET /agents has a query param schema (partial)
+// GET /agents has an inline query schema — pin to exact shape
 type ListAgentsQuery = InferQueryParams<RouteMap['GET /agents']>;
-type _AssertListAgentsQuery = Expect<IsNotNever<ListAgentsQuery>>;
-type _TestListAgentsQueryHasPartial = Expect<ListAgentsQuery extends { partial?: unknown } ? true : false>;
+type _AssertListAgentsQuery = Expect<Equal<ListAgentsQuery, { partial?: string }>>;
+
+// POST routes without query params should return never
+type GenerateQuery = InferQueryParams<RouteMap['POST /agents/:agentId/generate']>;
+type _AssertGenerateQueryNever = Expect<IsNever<GenerateQuery>>;
 
 // ============================================================================
 // Route method/path verification — ensure route metadata is preserved

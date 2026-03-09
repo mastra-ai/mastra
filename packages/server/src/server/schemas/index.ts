@@ -8,8 +8,7 @@ export type {
   RouteContract,
 } from './route-contracts';
 
-// Re-export the SERVER_ROUTES runtime value and type-level tuple
-export { SERVER_ROUTES } from '../server-adapter/routes';
+// Re-export only the type-level route types (no runtime import of handler graph)
 export type { ServerRoutes, ServerRoute } from '../server-adapter/routes';
 
 // Re-export all Zod schemas for direct use.
