@@ -65,7 +65,7 @@ import { makeCoreTool, createMastraProxy, ensureToolProperties, isZodType, deepM
 import type { ToolOptions } from '../utils';
 import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
-import { createWorkflow, createStep, isProcessor } from '../workflows';
+import { createWorkflow, createStep, isProcessor, compactWorkflowResult } from '../workflows';
 import type { AnyWorkflow, OutputWriter, Step, WorkflowResult } from '../workflows';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
@@ -3502,6 +3502,28 @@ export class Agent<
           inputSchema: extendedInputSchema,
           outputSchema,
           mastra: this.#mastra,
+          // Transform the raw workflow result into a compact format for the model.
+          // The raw result is preserved in the stored message; only the model sees this.
+          toModelOutput: (output: unknown) => {
+            if (!output || typeof output !== 'object') return output;
+            const out = output as Record<string, unknown>;
+            // For error results, return as-is (already compact)
+            if ('error' in out) return out;
+
+            const rawResult = out.result;
+
+            // If the nested result is a full workflow result (e.g. from the
+            // || fallback or deserialized history), compact it.
+            if (rawResult && typeof rawResult === 'object' && !Array.isArray(rawResult) && 'steps' in rawResult) {
+              const compacted = compactWorkflowResult(rawResult as Record<string, unknown>);
+              return { ...compacted, runId: out.runId };
+            }
+
+            return {
+              result: out.result,
+              runId: out.runId,
+            };
+          },
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
@@ -3585,7 +3607,13 @@ export class Agent<
               }
 
               if (result?.status === 'success') {
-                const workflowOutput = result?.result || result;
+                // Use 'in' check instead of || to avoid falsy-value bugs
+                // (result.result could be null, 0, "", false).
+                // When result has no typed output, fall back to a compact summary.
+                const workflowOutput =
+                  'result' in result
+                    ? result.result
+                    : compactWorkflowResult(result as unknown as Record<string, unknown>);
                 return { result: workflowOutput, runId: run.runId };
               } else if (result?.status === 'failed') {
                 const workflowOutputError = result?.error;

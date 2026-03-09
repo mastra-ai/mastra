@@ -509,3 +509,25 @@ export function cleanStepResult(stepResult: unknown): unknown {
 
   return cleaned;
 }
+
+/**
+ * Strips verbose step data from a workflow result, keeping only the fields
+ * useful for model consumption. This avoids sending the full execution log
+ * (with duplicated payloads/outputs for every step) to the model context.
+ *
+ * Accepts either a `FormattedWorkflowResult` or a `WorkflowResult`.
+ * If the input does not look like a workflow result (no `steps` field),
+ * it is returned as-is.
+ */
+export function compactWorkflowResult(result: Record<string, unknown>): Record<string, unknown> {
+  if (!('steps' in result)) {
+    return result;
+  }
+  const compact: Record<string, unknown> = { status: result.status };
+  if (result.result !== undefined) compact.result = result.result;
+  if (result.stepExecutionPath) compact.stepExecutionPath = result.stepExecutionPath;
+  if (result.error) compact.error = result.error;
+  if (result.suspended) compact.suspended = result.suspended;
+  if (result.suspendPayload) compact.suspendPayload = result.suspendPayload;
+  return compact;
+}

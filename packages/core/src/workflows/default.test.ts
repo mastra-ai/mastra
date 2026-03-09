@@ -7,6 +7,7 @@ import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { DefaultExecutionEngine } from './default';
 import type { FormattedWorkflowResult, StepResult } from './types';
+import { compactWorkflowResult } from './utils';
 
 class TestableExecutionEngine extends DefaultExecutionEngine {
   async fmtReturnValuePublic(
@@ -334,5 +335,98 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
     expect(result.steps.step1.payload).toBe(circular);
+  });
+});
+
+describe('compactWorkflowResult', () => {
+  it('should strip steps from a full FormattedWorkflowResult', () => {
+    const full: Record<string, unknown> = {
+      status: 'success',
+      steps: {
+        step1: { status: 'success', output: { value: 1 }, payload: { input: true }, startedAt: 1, endedAt: 2 },
+        step2: { status: 'success', output: { value: 2 }, payload: { value: 1 }, startedAt: 3, endedAt: 4 },
+      },
+      input: { input: true },
+      result: { value: 2 },
+      stepExecutionPath: ['step1', 'step2'],
+    };
+
+    const compact = compactWorkflowResult(full);
+
+    expect(compact).toEqual({
+      status: 'success',
+      result: { value: 2 },
+      stepExecutionPath: ['step1', 'step2'],
+    });
+    expect(compact).not.toHaveProperty('steps');
+    expect(compact).not.toHaveProperty('input');
+  });
+
+  it('should preserve error and suspended fields when present', () => {
+    const full: Record<string, unknown> = {
+      status: 'failed',
+      steps: { step1: { status: 'failed', error: new Error('boom') } },
+      input: {},
+      error: { message: 'boom', name: 'Error' },
+    };
+
+    const compact = compactWorkflowResult(full);
+
+    expect(compact).toEqual({
+      status: 'failed',
+      error: { message: 'boom', name: 'Error' },
+    });
+  });
+
+  it('should preserve suspended fields', () => {
+    const full: Record<string, unknown> = {
+      status: 'suspended',
+      steps: { step1: { status: 'suspended' } },
+      input: {},
+      suspended: [['step1']],
+      suspendPayload: { step1: { data: 'please resume' } },
+    };
+
+    const compact = compactWorkflowResult(full);
+
+    expect(compact).toEqual({
+      status: 'suspended',
+      suspended: [['step1']],
+      suspendPayload: { step1: { data: 'please resume' } },
+    });
+  });
+
+  it('should return non-workflow results as-is', () => {
+    const plain = { foo: 'bar', count: 42 };
+    const compact = compactWorkflowResult(plain);
+    expect(compact).toBe(plain);
+  });
+
+  it('should omit result when it is undefined', () => {
+    const full: Record<string, unknown> = {
+      status: 'success',
+      steps: { step1: { status: 'success', output: undefined } },
+      input: {},
+    };
+
+    const compact = compactWorkflowResult(full);
+
+    expect(compact).toEqual({ status: 'success' });
+    expect(compact).not.toHaveProperty('result');
+  });
+
+  it('should preserve falsy result values (null, 0, empty string, false)', () => {
+    for (const falsyValue of [null, 0, '', false]) {
+      const full: Record<string, unknown> = {
+        status: 'success',
+        steps: { step1: { status: 'success', output: falsyValue } },
+        input: {},
+        result: falsyValue,
+      };
+
+      const compact = compactWorkflowResult(full);
+
+      expect(compact).toHaveProperty('result', falsyValue);
+    }
   });
 });
