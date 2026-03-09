@@ -102,7 +102,7 @@ export interface RouteSchemas<
 }
 
 export type ServerRoute<
-  TParams = never,
+  TParams = Record<string, unknown>,
   TResponse = unknown,
   TResponseType extends ResponseType = ResponseType,
   TSchemas extends RouteSchemas = RouteSchemas,
@@ -113,7 +113,9 @@ export type ServerRoute<
   path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream', defaults to 'stream'
-  handler: ServerRouteHandler<TParams, TResponse, TResponseType>;
+  // Method signature is bivariant in params, allowing heterogeneous route arrays
+  // while still preserving specific param types on individual routes.
+  handler(params: TParams & ServerContext): ReturnType<ServerRouteHandler<TParams, TResponse, TResponseType>>;
   pathParamSchema?: z.ZodSchema;
   queryParamSchema?: z.ZodSchema;
   bodySchema?: z.ZodSchema;
