@@ -866,7 +866,7 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     expect(layer.shouldApply()).toBe(true);
   });
 
-  it('should not apply for OpenAI models with structured outputs', () => {
+  it('should apply for OpenAI models with structured outputs', () => {
     const modelInfo: ModelInformation = {
       provider: 'openai',
       modelId: 'gpt-4o',
@@ -874,7 +874,7 @@ describe('OpenAISchemaCompatLayer - shouldApply', () => {
     };
 
     const layer = new OpenAISchemaCompatLayer(modelInfo);
-    expect(layer.shouldApply()).toBe(false);
+    expect(layer.shouldApply()).toBe(true);
   });
 
   it('should not apply for non-OpenAI models', () => {
@@ -1297,5 +1297,87 @@ describe('OpenAISchemaCompatLayer - agent network defaultCompletionSchema with f
 
     expect(strictModeEnabled).toBe(true);
     expect(allPropsRequired(jsonSchema).valid).toBe(true);
+  });
+});
+
+describe('OpenAISchemaCompatLayer - processToAISDKSchema', () => {
+  const modelInfo: ModelInformation = {
+    provider: 'openai',
+    modelId: 'gpt-4o',
+    supportsStructuredOutputs: false,
+  };
+
+  it('should add additionalProperties: false to nested objects in anyOf (from optional)', () => {
+    const schema = z.object({
+      name: z.string(),
+      importSpec: z
+        .object({
+          module: z.string(),
+          names: z.array(z.string()).min(1),
+          isDefault: z.boolean().optional(),
+        })
+        .optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+
+    const aiSdkSchema = layer.processToAISDKSchema(schema);
+    const resultSchema = (aiSdkSchema as any).jsonSchema;
+
+    // Root should have additionalProperties: false
+    expect(resultSchema.additionalProperties).toBe(false);
+
+    // All properties should be required
+    expect(resultSchema.required).toContain('name');
+    expect(resultSchema.required).toContain('importSpec');
+
+    // The importSpec should have been processed
+    const importSpecSchema = resultSchema.properties?.importSpec;
+    expect(importSpecSchema).toBeDefined();
+
+    // Find all object-typed nodes in anyOf and ensure they have additionalProperties: false
+    if (importSpecSchema?.anyOf) {
+      const objectVariant = importSpecSchema.anyOf.find((s: any) => s.type === 'object' || s.properties);
+      if (objectVariant) {
+        expect(objectVariant.additionalProperties).toBe(false);
+      }
+    }
+  });
+
+  it('should ensure all properties are required in tool schemas', () => {
+    const schema = z.object({
+      name: z.string(),
+      details: z.string().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const aiSdkSchema = layer.processToAISDKSchema(schema);
+
+    const jsonSchema = (aiSdkSchema as any).jsonSchema;
+
+    // All properties should be required (OpenAI strict mode)
+    expect(jsonSchema.required).toContain('name');
+    expect(jsonSchema.required).toContain('details');
+  });
+
+  it('should preserve validation in the returned AI SDK schema', () => {
+    const schema = z.object({
+      name: z.string(),
+      age: z.number().optional(),
+    });
+
+    const layer = new OpenAISchemaCompatLayer(modelInfo);
+    const aiSdkSchema = layer.processToAISDKSchema(schema);
+
+    // Valid input should pass
+    const validResult = aiSdkSchema.validate!({ name: 'John', age: null });
+    expect(validResult.success).toBe(true);
+    if (validResult.success) {
+      expect(validResult.value).toEqual({ name: 'John', age: undefined });
+    }
+
+    // Invalid input should fail
+    const invalidResult = aiSdkSchema.validate!({ name: 123 });
+    expect(invalidResult.success).toBe(false);
   });
 });
