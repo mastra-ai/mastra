@@ -93,7 +93,7 @@ function DatasetSaveDialog({
     } catch (error) {
       toast.error(`Failed to save item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [input, groundTruth, selectedDatasetId, addItem, datasets, onOpenChange, onInputChange]);
+  }, [input, groundTruth, selectedDatasetId, requestContext, addItem, datasets, onOpenChange, onInputChange]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
