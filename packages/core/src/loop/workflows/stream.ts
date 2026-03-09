@@ -88,7 +88,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
           }
 
-          if (messageId && !('transient' in processedChunk && processedChunk.transient)) {
+          // If a processor rewrote the chunk to a non-data type, skip persistence
+          if (
+            typeof processedChunk.type === 'string' &&
+            processedChunk.type.startsWith('data-') &&
+            messageId &&
+            !('transient' in processedChunk && processedChunk.transient)
+          ) {
             const dataPart = {
               type: processedChunk.type as `data-${string}`,
               data: 'data' in processedChunk ? processedChunk.data : undefined,

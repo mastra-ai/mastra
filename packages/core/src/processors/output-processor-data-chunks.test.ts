@@ -86,7 +86,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
         text: z.string(),
       }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-moderation', data: { flagged: false, text: inputData.text } });
+        await writer!.custom({ type: 'data-moderation', data: { flagged: false, text: inputData.text } });
         return `Processed: ${inputData.text}`;
       },
     });
@@ -137,7 +137,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool that emits custom data chunks',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-moderation', data: { flagged: false } });
+        await writer!.custom({ type: 'data-moderation', data: { flagged: false } });
         return `Processed: ${inputData.text}`;
       },
     });
@@ -185,7 +185,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool that emits sensitive data chunks',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-sensitive', data: { secret: 'classified' } });
+        await writer!.custom({ type: 'data-sensitive', data: { secret: 'classified' } });
         return `Processed: ${inputData.text}`;
       },
     });
@@ -224,7 +224,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool that emits custom data chunks',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
+        await writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
         return `Processed: ${inputData.text}`;
       },
     });
@@ -274,7 +274,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool that emits debug data chunks',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-debug', data: { step: 1, detail: 'internal state' } });
+        await writer!.custom({ type: 'data-debug', data: { step: 1, detail: 'internal state' } });
         return `Processed: ${inputData.text}`;
       },
     });
@@ -337,9 +337,9 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool that emits multiple data chunks',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-progress', data: { step: 1, status: 'started' } });
-        writer!.custom({ type: 'data-progress', data: { step: 2, status: 'processing' } });
-        writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
+        await writer!.custom({ type: 'data-progress', data: { step: 1, status: 'started' } });
+        await writer!.custom({ type: 'data-progress', data: { step: 2, status: 'processing' } });
+        await writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
         return `Processed: ${inputData.text}`;
       },
     });
@@ -390,7 +390,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool that emits custom data chunks',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
+        await writer!.custom({ type: 'data-metrics', data: { latency: 42 } });
         return `Processed: ${inputData.text}`;
       },
     });
@@ -459,7 +459,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-pipeline', data: { original: true } });
+        await writer!.custom({ type: 'data-pipeline', data: { original: true } });
         return `Done: ${inputData.text}`;
       },
     });
@@ -524,7 +524,7 @@ describe('Output Processor Data Chunks (#13341)', () => {
       description: 'A test tool',
       inputSchema: z.object({ text: z.string() }),
       execute: async (inputData, { writer }) => {
-        writer!.custom({ type: 'data-info', data: { value: 1 } });
+        await writer!.custom({ type: 'data-info', data: { value: 1 } });
         return `Done: ${inputData.text}`;
       },
     });
