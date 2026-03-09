@@ -39,7 +39,9 @@ async function writeDtsFiles() {
 
           await writeFile(
             targetPath,
-            `export * from './${relative(dirname(targetPath), file).replace(/[/\\]index\.d\.ts$/, '').replaceAll('\\', '/')}';`,
+            `export * from './${relative(dirname(targetPath), file)
+              .replace(/[/\\]index\.d\.ts$/, '')
+              .replaceAll('\\', '/')}';`,
           );
         } else {
           const targetPath = join(rootPath, key) + '.d.ts';
@@ -47,7 +49,9 @@ async function writeDtsFiles() {
 
           await writeFile(
             targetPath,
-            `export * from './${relative(dirname(targetPath), file).replace(/[/\\]index\.d\.ts$/, '').replaceAll('\\', '/')}';`,
+            `export * from './${relative(dirname(targetPath), file)
+              .replace(/[/\\]index\.d\.ts$/, '')
+              .replaceAll('\\', '/')}';`,
           );
         }
       }
