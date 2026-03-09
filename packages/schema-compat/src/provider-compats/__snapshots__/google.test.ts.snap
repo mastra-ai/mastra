@@ -188,10 +188,16 @@ exports[`GoogleSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > sh
   "properties": {
     "metadata": {
       "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean",
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+          {
+            "type": "boolean",
+          },
         ],
       },
       "type": "object",
@@ -652,9 +658,13 @@ exports[`GoogleSchemaCompatLayer > processZodType - Complex Schemas > should han
       "type": "string",
     },
     "unionField": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1144,9 +1154,13 @@ exports[`GoogleSchemaCompatLayer > processZodType - Unions > should handle optio
       "type": "string",
     },
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1163,9 +1177,13 @@ exports[`GoogleSchemaCompatLayer > processZodType - Unions > should handle simpl
   "additionalProperties": false,
   "properties": {
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
