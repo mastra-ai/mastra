@@ -105,6 +105,14 @@ export interface HarnessSubagent {
 
   /** Optional stop condition for this subagent's execution loop */
   stopWhen?: LoopOptions['stopWhen'];
+
+  /**
+   * Workspace tool keys (after any renames) the model is allowed to call.
+   * When set, workspace tools not in this list are hidden via `prepareStep`.
+   * Non-workspace tools are never affected. When omitted, all workspace
+   * tools are visible.
+   */
+  allowedWorkspaceTools?: string[];
 }
 
 /**
