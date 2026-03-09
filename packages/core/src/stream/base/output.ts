@@ -544,6 +544,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             }
             case 'tool-call':
+              // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
+              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+                return;
+              }
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
               const toolCallPayload = chunk.payload;
