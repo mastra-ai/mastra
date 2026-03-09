@@ -43,6 +43,7 @@ export default function Observability() {
   });
   const [selectedDateFrom, setSelectedDateFrom] = useState<Date | undefined>(undefined);
   const [selectedDateTo, setSelectedDateTo] = useState<Date | undefined>(undefined);
+  const [groupByThread, setGroupByThread] = useState<boolean>(false);
   const [dialogIsOpen, setDialogIsOpen] = useState<boolean>(false);
   const { data: agents = {}, isLoading: isLoadingAgents } = useAgents();
   const { data: workflows, isLoading: isLoadingWorkflows } = useWorkflows();
@@ -126,6 +127,7 @@ export default function Observability() {
     setDialogIsOpen(false);
     setSelectedDateFrom(undefined);
     setSelectedDateTo(undefined);
+    setGroupByThread(false);
   };
 
   const handleDataChange = (value: Date | undefined, type: 'from' | 'to') => {
@@ -230,6 +232,8 @@ export default function Observability() {
               selectedDateFrom={selectedDateFrom}
               selectedDateTo={selectedDateTo}
               isLoading={isTracesLoading || isLoadingAgents || isLoadingWorkflows}
+              groupByThread={groupByThread}
+              onGroupByThreadChange={setGroupByThread}
             />
 
             {isTracesLoading ? (
@@ -244,6 +248,7 @@ export default function Observability() {
                 filtersApplied={Boolean(filtersApplied)}
                 isFetchingNextPage={isFetchingNextPage}
                 hasNextPage={hasNextPage}
+                groupByThread={groupByThread}
               />
             )}
           </div>
