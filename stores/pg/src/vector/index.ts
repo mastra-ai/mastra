@@ -685,8 +685,15 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     metric,
     type,
     vectorType = 'vector',
-  }: Omit<CreateIndexParams, 'metric'> & { metric?: PgMetric; type: IndexType | undefined; vectorType?: VectorType }) {
-    const input = indexName + dimension + metric + (type || 'ivfflat') + vectorType; // ivfflat is default
+    metadataIndexes,
+  }: Omit<CreateIndexParams, 'metric'> & {
+    metric?: PgMetric;
+    type: IndexType | undefined;
+    vectorType?: VectorType;
+    metadataIndexes?: string[];
+  }) {
+    const input =
+      indexName + dimension + metric + (type || 'ivfflat') + vectorType + (metadataIndexes?.toSorted().join(',') ?? '');
     return (await this.hasher).h32(input);
   }
   private cachedIndexExists(indexName: string, newKey: number) {
@@ -805,6 +812,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       type: indexConfig.type,
       metric,
       vectorType,
+      metadataIndexes,
     });
     if (this.cachedIndexExists(indexName, indexCacheKey)) {
       // we already saw this index get created since the process started, no need to recreate it
