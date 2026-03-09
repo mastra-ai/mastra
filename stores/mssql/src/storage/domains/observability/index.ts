@@ -60,6 +60,12 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       this.needsConnect = false;
     }
     await this.db.createTable({ tableName: TABLE_SPANS, schema: SPAN_SCHEMA });
+    // Add requestContext column for backwards compatibility with existing databases
+    await this.db.alterTable({
+      tableName: TABLE_SPANS,
+      schema: SPAN_SCHEMA,
+      ifNotExists: ['requestContext'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

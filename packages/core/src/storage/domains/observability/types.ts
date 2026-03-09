@@ -61,6 +61,7 @@ const linksField = z.array(z.unknown()).describe('References to related spans in
 const inputField = z.unknown().describe('Input data passed to the span');
 const outputField = z.unknown().describe('Output data returned from the span');
 const errorField = z.unknown().describe('Error info - presence indicates failure (status derived from this)');
+const requestContextField = z.record(z.unknown()).describe('Snapshot of the RequestContext');
 const isEventField = z.boolean().describe('Whether this is an event (point-in-time) vs a span (duration)');
 const startedAtField = z.date().describe('When the span started');
 const endedAtField = z.date().describe('When the span ended (null = running, status derived from this)');
@@ -162,6 +163,7 @@ export const spanRecordSchema = z
     input: inputField.nullish(),
     output: outputField.nullish(),
     error: errorField.nullish(),
+    requestContext: requestContextField.nullish(),
     endedAt: endedAtField.nullish(),
 
     // Database timestamps

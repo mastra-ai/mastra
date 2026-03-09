@@ -54,6 +54,8 @@ interface BaseSpan<TType extends SpanType> {
     details?: Record<string, any>
   }
 
+  /** Snapshot of the RequestContext */
+  requestContext?: Record<string, any>
   /** Is an event span? (occurs at startTime, has no endTime) */
   isEvent: boolean
 }
