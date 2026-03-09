@@ -355,6 +355,34 @@ describe('PgVector', () => {
           expect(stats.type).toBe('ivfflat');
           expect(stats.config.lists).toBe(100);
         });
+
+        it('should create btree indexes on specified metadata fields', async () => {
+          const metadataIdxTestIndex = 'test_metadata_idx';
+          try {
+            await vectorDB.deleteIndex({ indexName: metadataIdxTestIndex });
+          } catch {}
+
+          await vectorDB.createIndex({
+            indexName: metadataIdxTestIndex,
+            dimension: 3,
+            metadataIndexes: ['thread_id', 'resource_id'],
+          });
+
+          // Verify the metadata indexes were created
+          const client = await vectorDB.pool.connect();
+          try {
+            const result = await client.query(
+              `SELECT indexname FROM pg_indexes WHERE tablename = $1 AND indexname LIKE '%metadata%'`,
+              [metadataIdxTestIndex],
+            );
+            const indexNames = result.rows.map((r: { indexname: string }) => r.indexname);
+            expect(indexNames).toContain(`${metadataIdxTestIndex}_metadata_thread_id_idx`);
+            expect(indexNames).toContain(`${metadataIdxTestIndex}_metadata_resource_id_idx`);
+          } finally {
+            client.release();
+            await vectorDB.deleteIndex({ indexName: metadataIdxTestIndex });
+          }
+        });
       });
 
       describe('Index Recreation Logic', () => {

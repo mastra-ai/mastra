@@ -82,6 +82,16 @@ interface PgCreateIndexParams extends Omit<CreateIndexParams, 'metric'> {
    * Use 'sparsevec' for BM25/TF-IDF and other sparse embeddings
    */
   vectorType?: VectorType;
+  /**
+   * Metadata fields to create btree indexes for.
+   * This improves query performance when filtering vectors by these metadata fields.
+   *
+   * Each entry creates a btree index on `metadata->>'field_name'`.
+   *
+   * Example: `['thread_id', 'resource_id']` creates indexes that speed up
+   * queries filtering by `thread_id` or `resource_id` in the metadata JSONB column.
+   */
+  metadataIndexes?: string[];
 }
 
 interface PgDefineIndexParams {
@@ -741,6 +751,7 @@ export class PgVector extends MastraVector<PGVectorFilter> {
     indexConfig = {},
     buildIndex = true,
     vectorType = 'vector',
+    metadataIndexes,
   }: PgCreateIndexParams): Promise<void> {
     // Normalize metric for bit vectors: default to 'hamming' unless explicitly 'hamming' or 'jaccard'
     const metric: PgMetric =
@@ -896,6 +907,10 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
           if (buildIndex) {
             await this.setupIndex({ indexName, metric, indexConfig, vectorType }, client);
+          }
+
+          if (metadataIndexes?.length) {
+            await this.createMetadataIndexes(tableName, indexName, metadataIndexes, client);
           }
         } catch (error: any) {
           this.createdIndexes.delete(indexName);
@@ -1095,6 +1110,23 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       await client.query(indexSQL);
     });
+  }
+
+  private async createMetadataIndexes(
+    tableName: string,
+    indexName: string,
+    metadataFields: string[],
+    client: pg.PoolClient,
+  ) {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
+    for (const field of metadataFields) {
+      const parsedField = parseSqlIdentifier(field, 'metadata field name');
+      const metadataIdxName = `"${parsedIndexName}_metadata_${parsedField}_idx"`;
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS ${metadataIdxName}
+        ON ${tableName} ((metadata->>'${parsedField}'))
+      `);
+    }
   }
 
   private async installVectorExtension(client: pg.PoolClient) {
