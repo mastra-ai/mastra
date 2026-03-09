@@ -275,6 +275,7 @@
     "@internal/ai-v6": "workspace:*",
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
+    "@internal/llm-recorder": "workspace:*",
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.6",
