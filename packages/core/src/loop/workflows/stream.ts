@@ -32,6 +32,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
+      // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
+      const requestContext = rest.requestContext ?? new RequestContext();
+
       // Create a ProcessorRunner for data-* chunks so they go through output processors
       const hasOutputProcessors = rest.outputProcessors && rest.outputProcessors.length > 0;
       const dataChunkProcessorRunner = hasOutputProcessors
@@ -61,7 +64,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               chunk,
               (rest.processorStates ?? dataChunkProcessorStates!) as Map<string, ProcessorState<OUTPUT>>,
               undefined, // observabilityContext
-              rest.requestContext,
+              requestContext,
               messageList,
               0,
             );
@@ -177,8 +180,6 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       const run = await agenticLoopWorkflow.createRun({
         runId,
       });
-
-      const requestContext = rest.requestContext ?? new RequestContext();
 
       if (requireToolApproval) {
         requestContext.set('__mastra_requireToolApproval', true);
