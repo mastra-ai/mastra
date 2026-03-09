@@ -600,10 +600,7 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
         for await (const _chunk of resumeStream.fullStream) {
         }
-        console.log('stream 123');
         const toolResults = await resumeStream.toolResults;
-
-        console.log('toolResults', JSON.stringify(toolResults, null, 2));
         toolCall = toolResults?.find((result: any) => result.payload.toolName === 'agent-userAgent')?.payload;
 
         const text = toolCall?.result?.text;
