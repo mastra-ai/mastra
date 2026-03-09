@@ -262,7 +262,7 @@ describe('analyzeEntry', () => {
     // (Test will timeout if there's an infinite loop issue)
   });
 
-  it('should deduplicate Rollup instances when analyzeCache is provided (#12843)', async () => {
+  it('should deduplicate Rollup instances when analyzeCache is provided', async () => {
     const entryFilePath = join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts');
 
     const analyzeCache = new Map();

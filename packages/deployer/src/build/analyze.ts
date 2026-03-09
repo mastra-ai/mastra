@@ -349,7 +349,6 @@ If you think your configuration is valid, please open an issue.`);
   // Track external dependencies with their version info
   const allUsedExternals = new Map<string, ExternalDependencyInfo>();
   // Shared cache prevents re-analyzing the same workspace package across entries and recursive calls.
-  // This fixes hangs in large monorepos where the same packages were analyzed repeatedly (#12843).
   const analyzeCache = new Map<string, Awaited<ReturnType<typeof analyzeEntry>>>();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
