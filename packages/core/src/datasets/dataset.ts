@@ -320,7 +320,7 @@ export class Dataset {
 
     const run = await experimentsStore.createExperiment({
       datasetId: this.id,
-      datasetVersion: dataset.version,
+      datasetVersion: targetVersion,
       targetType: config.targetType ?? 'agent',
       targetId: config.targetId ?? 'inline',
       totalItems: items.length,

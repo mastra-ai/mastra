@@ -342,6 +342,27 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
+  it('startExperimentAsync records the resolved version in experiment record', async () => {
+    // Add two items → dataset version becomes 2
+    await ds.addItem({ input: { prompt: 'A' } });
+    await ds.addItem({ input: { prompt: 'B' } });
+
+    // Run experiment pinned to version 1 (only first item visible)
+    const result = await ds.startExperimentAsync({
+      task: async () => 'ok',
+      scorers: [],
+      version: 1,
+    });
+
+    const experiment = await experimentsStorage.getExperimentById({ id: result.experimentId });
+    expect(experiment).not.toBeNull();
+    expect(experiment!.datasetVersion).toBe(1);
+    expect(result.totalItems).toBe(1);
+
+    // Wait for fire-and-forget to complete
+    await new Promise(r => setTimeout(r, 500));
+  });
+
   // 23b. startExperimentAsync — throws on empty dataset
   it('startExperimentAsync throws EXPERIMENT_NO_ITEMS when dataset has no items', async () => {
     // Dataset has no items — do NOT add any
