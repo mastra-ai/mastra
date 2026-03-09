@@ -288,30 +288,32 @@ describe('Output Processor Data Chunks (#13341)', () => {
       outputProcessors: [new TransientMarkingProcessor()],
     });
 
-    const stream = await agent.stream('Call the tool with text "hello"', {
-      maxSteps: 5,
-    });
+    try {
+      const stream = await agent.stream('Call the tool with text "hello"', {
+        maxSteps: 5,
+      });
 
-    const dataChunks: any[] = [];
-    for await (const chunk of stream.fullStream) {
-      if (chunk.type === 'data-debug') {
-        dataChunks.push(chunk);
+      const dataChunks: any[] = [];
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'data-debug') {
+          dataChunks.push(chunk);
+        }
       }
+
+      // The chunk should still appear in the stream
+      expect(dataChunks).toHaveLength(1);
+      expect(dataChunks[0].data).toEqual({ step: 1, detail: 'internal state' });
+      expect(dataChunks[0].transient).toBe(true);
+
+      // messageList.add should NOT have been called with a data-debug part
+      const dataDebugAdds = addSpy.mock.calls.filter(([messages]) => {
+        const msgs = Array.isArray(messages) ? messages : [messages];
+        return msgs.some((m: any) => m.content?.parts?.some((p: any) => p.type === 'data-debug'));
+      });
+      expect(dataDebugAdds).toHaveLength(0);
+    } finally {
+      addSpy.mockRestore();
     }
-
-    // The chunk should still appear in the stream
-    expect(dataChunks).toHaveLength(1);
-    expect(dataChunks[0].data).toEqual({ step: 1, detail: 'internal state' });
-    expect(dataChunks[0].transient).toBe(true);
-
-    // messageList.add should NOT have been called with a data-debug part
-    const dataDebugAdds = addSpy.mock.calls.filter(([messages]) => {
-      const msgs = Array.isArray(messages) ? messages : [messages];
-      return msgs.some((m: any) => m.content?.parts?.some((p: any) => p.type === 'data-debug'));
-    });
-    expect(dataDebugAdds).toHaveLength(0);
-
-    addSpy.mockRestore();
   });
 
   it('should process multiple data-* chunks from a single tool execution', async () => {
