@@ -3,6 +3,6 @@
 '@mastra/server-hono': patch
 ---
 
-Fixed OpenAPI spec to correctly represent custom route paths
+Fixed OpenAPI spec for custom route paths
 
-- Custom routes registered via `registerApiRoute` are served at the root path (e.g. `/health`), not under `/api`. The OpenAPI spec now adds a per-path `servers: [{url: "/"}]` override on custom route path items so that clients resolve them correctly instead of incorrectly prepending `/api`.
+- Custom routes registered via `registerApiRoute` are served at the root path (e.g. `/health`), not under `/api`. The OpenAPI spec now correctly represents this so that API tools and clients using the spec will resolve them to the correct URL.
