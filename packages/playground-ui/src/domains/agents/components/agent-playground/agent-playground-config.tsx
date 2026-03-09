@@ -40,25 +40,28 @@ function CollapsibleSection({
 
   return (
     <div className="border-b border-border1">
-      <button
-        type="button"
-        className="flex items-center gap-2 w-full px-4 py-3 hover:bg-surface3 transition-colors"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <Icon size="sm" className="text-neutral3">
-          {isOpen ? <ChevronDown /> : <ChevronRight />}
-        </Icon>
-        <Icon size="sm" className="text-neutral3">
-          {icon}
-        </Icon>
-        <Txt variant="ui-sm" className="font-medium text-neutral5">
-          {title}
-        </Txt>
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex items-center gap-2 px-4 py-3 hover:bg-surface3 transition-colors">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <Icon size="sm" className="text-neutral3">
+            {isOpen ? <ChevronDown /> : <ChevronRight />}
+          </Icon>
+          <Icon size="sm" className="text-neutral3">
+            {icon}
+          </Icon>
+          <Txt as="span" variant="ui-sm" className="font-medium text-neutral5">
+            {title}
+          </Txt>
+        </button>
+        <span className="ml-auto flex items-center gap-2">
           {headerAction}
           {badge}
-        </div>
-      </button>
+        </span>
+      </div>
       {isOpen && <div className="px-4 pb-4">{children}</div>}
     </div>
   );
@@ -520,23 +523,25 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
               icon={<Cpu />}
               defaultOpen
               headerAction={
-                <button
-                  type="button"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setShowPreview(prev => !prev);
-                  }}
-                  className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
-                    showPreview ? 'bg-accent1/10 text-accent1' : 'text-neutral3 hover:text-neutral5 hover:bg-surface3',
-                  )}
-                >
-                  <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
-                  {showPreview ? 'Edit' : 'Preview'}
-                </button>
+                readOnly ? undefined : (
+                  <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setShowPreview(prev => !prev);
+                    }}
+                    className={cn(
+                      'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
+                      showPreview ? 'bg-accent1/10 text-accent1' : 'text-neutral3 hover:text-neutral5 hover:bg-surface3',
+                    )}
+                  >
+                    <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
+                    {showPreview ? 'Edit' : 'Preview'}
+                  </button>
+                )
               }
             >
-              {showPreview ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
+              {readOnly || showPreview ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
             </CollapsibleSection>
 
             <CollapsibleSection
