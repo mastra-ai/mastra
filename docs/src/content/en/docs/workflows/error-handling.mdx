@@ -173,7 +173,7 @@ const pipelineWorkflow = createWorkflow({
 
 ### Error handling in callbacks
 
-Errors thrown inside callbacks are caught and logged—they will not affect the workflow result or cause it to fail. This ensures that callback issues don't break your workflows in production.
+Errors thrown inside callbacks are caught and logged—they won't affect the workflow result or cause it to fail. This ensures that callback issues don't break your workflows in production.
 
 ```typescript prettier:false
 options: {

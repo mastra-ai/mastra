@@ -147,7 +147,7 @@ const server = new MastraServer({ app, mastra })
 await server.init()
 ```
 
-The [`server.onError`](/reference/configuration#serveronerror) hook is also supported. When configured, it is called before the error propagates to middleware, and its response is used directly:
+The [`server.onError`](/reference/configuration#serveronerror) hook is also supported. When configured, it's called before the error propagates to middleware, and its response is used directly:
 
 ```typescript title="src/mastra/index.ts"
 const mastra = new Mastra({
