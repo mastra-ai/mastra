@@ -176,6 +176,21 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     return result;
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
@@ -323,9 +338,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (perPage === 0 && include && include.length > 0) {
         const includeMessages = await this._getIncludedMessages({ include });
         const list = new MessageList().add(includeMessages ?? [], 'memory');
-        const messages = list.get.all.db();
         return {
-          messages: direction === 'DESC' ? messages.reverse() : messages,
+          messages: this._sortMessages(list.get.all.db(), field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -381,22 +395,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -502,9 +501,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
         }
         const list = new MessageList().add(includeMessages, 'memory');
-        const messages = list.get.all.db();
         return {
-          messages: direction === 'DESC' ? messages.reverse() : messages,
+          messages: this._sortMessages(list.get.all.db(), field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -560,22 +558,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       const hasMore = perPageInput !== false && offset + perPage < total;

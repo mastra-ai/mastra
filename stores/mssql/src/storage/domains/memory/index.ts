@@ -508,6 +508,25 @@ export class MemoryMSSQL extends MemoryStorage {
     }
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    const mult = direction === 'ASC' ? 1 : -1;
+    return messages.sort((a, b) => {
+      const aVal = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bVal = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aVal == null || bVal == null) {
+        return aVal == null && bVal == null ? a.id.localeCompare(b.id) : aVal == null ? 1 : -1;
+      }
+
+      const diff =
+        (typeof aVal === 'number' && typeof bVal === 'number'
+          ? aVal - bVal
+          : String(aVal).localeCompare(String(bVal))) * mult;
+
+      return diff !== 0 ? diff : a.id.localeCompare(b.id);
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
@@ -702,7 +721,7 @@ export class MemoryMSSQL extends MemoryStorage {
         const includeMessages = await this._getIncludedMessages({ include });
         const messages = this._parseAndFormatMessages(includeMessages ?? [], 'v2') as MastraDBMessage[];
         return {
-          messages: direction === 'DESC' ? messages.reverse() : messages,
+          messages: this._sortMessages(messages, field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,

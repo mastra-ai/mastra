@@ -278,9 +278,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       if (perPageForQuery === 0 && include && include.length > 0) {
         const includeResult = await this._getIncludedMessages({ include });
         const list = new MessageList().add(includeResult, 'memory');
-        const messages = list.get.all.db();
         return {
-          messages: direction === 'DESC' ? messages.reverse() : messages,
+          messages: this._sortMessages(list.get.all.db(), field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -385,27 +384,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(paginatedMessages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        // Handle tiebreaker for stable sorting
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -448,6 +427,25 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         hasMore: false,
       };
     }
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (aValue === bValue) {
+        return a.id.localeCompare(b.id);
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
   }
 
   private async _getIncludedMessages({

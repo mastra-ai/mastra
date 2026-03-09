@@ -473,6 +473,23 @@ export class StoreMemoryUpstash extends MemoryStorage {
     return messageData.threadId || null;
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const getVal = (msg: MastraDBMessage): number => {
+        if (field === 'createdAt') {
+          return new Date(msg.createdAt).getTime();
+        }
+        const value = (msg as Record<string, unknown>)[field];
+        if (typeof value === 'number') return value;
+        if (value instanceof Date) return value.getTime();
+        return 0;
+      };
+      const aValue = getVal(a);
+      const bValue = getVal(b);
+      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+    });
+  }
+
   private async _getIncludedMessages(include: StorageListMessagesInput['include']): Promise<MastraDBMessage[]> {
     if (!include?.length) return [];
 
@@ -658,9 +675,8 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // When perPage is 0, we only need included messages — skip thread load entirely
       if (perPage === 0 && include && include.length > 0) {
         const list = new MessageList().add(includedMessages, 'memory');
-        const messages = list.get.all.db();
         return {
-          messages: direction === 'DESC' ? messages.reverse() : messages,
+          messages: this._sortMessages(list.get.all.db(), field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -710,30 +726,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
         filter?.dateRange,
       );
 
-      // Type-safe field accessor helper
-      const getFieldValue = (msg: MastraDBMessage): number => {
-        if (field === 'createdAt') {
-          return new Date(msg.createdAt).getTime();
-        }
-        // Access other fields with type-safe casting
-        const value = (msg as Record<string, unknown>)[field];
-        if (typeof value === 'number') {
-          return value;
-        }
-        if (value instanceof Date) {
-          return value.getTime();
-        }
-        // Handle missing/undefined values - treat as 0 for numeric comparison
-        return 0;
-      };
-
       // Always sort messages by the sort field/direction before pagination
       // This ensures consistent ordering whether orderBy is explicit or uses the default (createdAt ASC)
-      messagesData.sort((a, b) => {
-        const aValue = getFieldValue(a);
-        const bValue = getFieldValue(b);
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+      this._sortMessages(messagesData, field, direction);
 
       const total = messagesData.length;
 
@@ -770,11 +765,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // because MessageList.get.all.db() sorts by createdAt ASC internally
       // Always sort by createdAt (or specified field) to ensure consistent chronological ordering
       // This is critical when `include` parameter brings in messages from semantic recall
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = getFieldValue(a);
-        const bValue = getFieldValue(b);
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+      finalMessages = this._sortMessages(finalMessages, field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false

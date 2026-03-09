@@ -646,6 +646,28 @@ export class MemoryPG extends MemoryStorage {
    *    instead of sequential scans. This fixes GitHub issue #11702 where semantic
    *    recall latency scaled linearly with message count (~30s for 7.4k messages).
    */
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
+      if (aValue == null) return 1;
+      if (bValue == null) return -1;
+
+      if (aValue === bValue) {
+        return a.id.localeCompare(b.id);
+      }
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
@@ -870,9 +892,8 @@ export class MemoryPG extends MemoryStorage {
         }
         const messagesWithParsedContent = includeMessages.map(row => this.parseRow(row));
         const list = new MessageList().add(messagesWithParsedContent, 'memory');
-        const messages = list.get.all.db();
         return {
-          messages: direction === 'DESC' ? messages.reverse() : messages,
+          messages: this._sortMessages(list.get.all.db(), field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -915,27 +936,7 @@ export class MemoryPG extends MemoryStorage {
       const messagesWithParsedContent = messages.map(row => this.parseRow(row));
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      let finalMessages = list.get.all.db();
-
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
-        if (aValue == null) return 1;
-        if (bValue == null) return -1;
-
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
@@ -1062,10 +1063,9 @@ export class MemoryPG extends MemoryStorage {
 
         const messagesWithParsedContent = includeMessages.map(row => this.parseRow(row));
         const list = new MessageList().add(messagesWithParsedContent, 'memory');
-        const finalMessages = list.get.all.db();
 
         return {
-          messages: direction === 'DESC' ? finalMessages.reverse() : finalMessages,
+          messages: this._sortMessages(list.get.all.db(), field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -1108,27 +1108,7 @@ export class MemoryPG extends MemoryStorage {
       const messagesWithParsedContent = messages.map(row => this.parseRow(row));
 
       const list = new MessageList().add(messagesWithParsedContent, 'memory');
-      let finalMessages = list.get.all.db();
-
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        if (aValue == null && bValue == null) return a.id.localeCompare(b.id);
-        if (aValue == null) return 1;
-        if (bValue == null) return -1;
-
-        if (aValue === bValue) {
-          return a.id.localeCompare(b.id);
-        }
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       const hasMore = perPageInput !== false && offset + perPage < total;
 

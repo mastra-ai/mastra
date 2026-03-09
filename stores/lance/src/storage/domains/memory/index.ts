@@ -377,9 +377,8 @@ export class StoreMemoryLance extends MemoryStorage {
       if (perPage === 0 && include && include.length > 0) {
         const includedMessages = await this._getIncludedMessages(table, include);
         const list = new MessageList().add(includedMessages, 'memory');
-        const messages = list.get.all.db();
         return {
-          messages: direction === 'DESC' ? messages.reverse() : messages,
+          messages: this._sortMessages(list.get.all.db(), field, direction),
           total: 0,
           page,
           perPage: perPageForResponse,
@@ -442,20 +441,7 @@ export class StoreMemoryLance extends MemoryStorage {
       let finalMessages = list.get.all.db();
 
       // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
-        const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
-
-        // Handle null/undefined - treat as "smallest" values
-        if (aValue == null && bValue == null) return 0;
-        if (aValue == null) return direction === 'ASC' ? -1 : 1;
-        if (bValue == null) return direction === 'ASC' ? 1 : -1;
-
-        if (typeof aValue === 'string' && typeof bValue === 'string') {
-          return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-        }
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      });
+      finalMessages = this._sortMessages(finalMessages, field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -680,6 +666,22 @@ export class StoreMemoryLance extends MemoryStorage {
         error,
       );
     }
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue = field === 'createdAt' ? new Date(a.createdAt).getTime() : (a as any)[field];
+      const bValue = field === 'createdAt' ? new Date(b.createdAt).getTime() : (b as any)[field];
+
+      if (aValue == null && bValue == null) return 0;
+      if (aValue == null) return direction === 'ASC' ? -1 : 1;
+      if (bValue == null) return direction === 'ASC' ? 1 : -1;
+
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        return direction === 'ASC' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+      }
+      return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+    });
   }
 
   private async _getIncludedMessages(

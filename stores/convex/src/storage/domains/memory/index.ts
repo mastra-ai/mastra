@@ -221,9 +221,8 @@ export class MemoryConvex extends MemoryStorage {
     if (perPage === 0 && include && include.length > 0) {
       const messages = await this._getIncludedMessages(include);
       const list = new MessageList().add(messages, 'memory');
-      const result = list.get.all.db();
       return {
-        messages: direction === 'DESC' ? result.reverse() : result,
+        messages: this._sortMessages(list.get.all.db(), field, direction),
         total: 0,
         page,
         perPage: perPageForResponse,
@@ -286,18 +285,7 @@ export class MemoryConvex extends MemoryStorage {
       }
     }
 
-    messages.sort((a, b) => {
-      const aValue =
-        field === 'createdAt' || field === 'updatedAt' ? new Date((a as any)[field]).getTime() : (a as any)[field];
-      const bValue =
-        field === 'createdAt' || field === 'updatedAt' ? new Date((b as any)[field]).getTime() : (b as any)[field];
-      if (typeof aValue === 'number' && typeof bValue === 'number') {
-        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-      }
-      return direction === 'ASC'
-        ? String(aValue).localeCompare(String(bValue))
-        : String(bValue).localeCompare(String(aValue));
-    });
+    this._sortMessages(messages, field, direction);
 
     const hasMore =
       include && include.length > 0
@@ -522,6 +510,21 @@ export class MemoryConvex extends MemoryStorage {
 
     await this.saveResource({ resource: updated });
     return updated;
+  }
+
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const aValue =
+        field === 'createdAt' || field === 'updatedAt' ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue =
+        field === 'createdAt' || field === 'updatedAt' ? new Date((b as any)[field]).getTime() : (b as any)[field];
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
   }
 
   private async _getIncludedMessages(
