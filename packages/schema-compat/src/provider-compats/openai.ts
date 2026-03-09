@@ -7,6 +7,7 @@ import type { Targets } from 'zod-to-json-schema';
 import type { Schema } from '../json-schema';
 import { jsonSchema } from '../json-schema';
 import { isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import { transformNullToUndefined } from '../null-to-undefined';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { ZodType } from '../schema.types';
 import type { ModelInformation } from '../types';
@@ -142,12 +143,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
    * which causes OpenAI strict mode to reject tool schemas missing additionalProperties: false.
    */
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
-    // Process Zod type for runtime validation (optional → nullable transform)
-    const processedSchema = this.processZodType(zodSchema);
-
-    // Convert original schema to JSON Schema (before processZodType transforms which
-    // introduce ZodTransform/ZodPipe that zodToJsonSchema can't serialize properly)
+    // Convert to JSON Schema from the original Zod schema
     const jsonSchemaResult = zodToJsonSchema(zodSchema, this.getSchemaTarget());
+
+    // Capture the original JSON Schema (before OpenAI fixes) for null→undefined transform.
+    // This tells us which properties were originally optional (not in `required`).
+    const originalJsonSchema = JSON.parse(JSON.stringify(jsonSchemaResult));
 
     // Apply the same JSON Schema fixes as processToJSONSchema
     traverse(jsonSchemaResult, {
@@ -164,9 +165,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     const fixedSchema = this.fixAdditionalProperties(jsonSchemaResult);
     const finalSchema = ensureAllPropertiesRequired(fixedSchema);
 
+    // Use a null→undefined transform in validate so OpenAI's null values for
+    // optional fields are accepted by schemas that reject null (e.g., Zod .optional()).
     return jsonSchema(finalSchema, {
-      validate: value => {
-        const result = processedSchema.safeParse(value);
+      validate: (value: unknown) => {
+        const transformed = transformNullToUndefined(value, originalJsonSchema);
+        const result = zodSchema.safeParse(transformed);
         return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
       },
     });

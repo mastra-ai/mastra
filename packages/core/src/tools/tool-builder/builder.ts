@@ -644,16 +644,7 @@ export class CoreToolBuilder extends MastraBase {
 
       processedInputSchema = jsonSchema(inputJsonSchema);
     } else {
-      if (applicableLayer && originalSchema) {
-        // Get the transformed Zod schema (with constraints removed/modified)
-        processedInputSchema = applicableLayer.processZodType(originalSchema) as z.ZodTypeAny;
-        // Convert to AI SDK Schema for the LLM
-        processedInputSchema = applyCompatLayer({
-          schema: processedInputSchema,
-          compatLayers: schemaCompatLayers,
-          mode: 'aiSdkSchema',
-        });
-      } else if (originalSchema) {
+      if (originalSchema) {
         processedInputSchema = applyCompatLayer({
           schema: originalSchema,
           compatLayers: schemaCompatLayers,

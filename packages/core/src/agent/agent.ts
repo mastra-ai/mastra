@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TextPart, UIMessage } from '@internal/ai-sdk-v4';
-import { OpenAIReasoningSchemaCompatLayer, OpenAISchemaCompatLayer, applyCompatLayer } from '@mastra/schema-compat';
-import type { ModelInformation } from '@mastra/schema-compat';
+import { wrapSchemaWithNullTransform } from '@mastra/schema-compat';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema, z as z3 } from 'zod/v3';
@@ -4084,40 +4083,24 @@ export class Agent<
 
     const llm = (await this.getLLM({ requestContext, model: options.model })) as MastraLLMVNext;
 
-    // Apply OpenAI schema compatibility layer for structured output
-    // The schema is already StandardSchemaWithJSON (converted at API boundary in generate/stream)
-    // but may need OpenAI-specific transforms for optional fields
+    // Apply null→undefined transform for OpenAI structured output validation.
+    // OpenAI strict mode sends null for optional fields, but schemas like Zod's .optional()
+    // reject null. The wrapper transforms null→undefined for non-required fields before
+    // validation, working with any schema type (Zod, ArkType, JSON Schema, etc.).
     //
     // Skip when structuredOutput.model is provided because the StructuredOutputProcessor will
-    // create its own inner agent call, which will apply its own compat layer. Applying it here
-    // would convert the schema to JSONSchema7, which the processor can't properly re-convert.
+    // create its own inner agent call, which will apply its own transform.
     if ('structuredOutput' in options && options.structuredOutput?.schema && !options.structuredOutput?.model) {
       const structuredOutputModel = llm.getModel();
-
       const targetProvider = structuredOutputModel.provider;
       const targetModelId = structuredOutputModel.modelId;
-      // Only apply OpenAI compat transforms for OpenAI models
-      if (targetProvider.includes('openai') || targetModelId.includes('openai')) {
-        const modelInfo: ModelInformation = {
-          provider: targetProvider,
-          modelId: targetModelId,
-          supportsStructuredOutputs: false, // Set to false to enable transform
-        };
 
-        const compatLayers = [new OpenAIReasoningSchemaCompatLayer(modelInfo), new OpenAISchemaCompatLayer(modelInfo)];
-        // Apply OpenAI compat transforms (unwraps StandardSchemaWithJSON, processes, re-wraps)
-        // For OpenAI models, this converts .optional() → .nullable().transform() for compatibility
-        const processedSchema = applyCompatLayer({
-          schema: options.structuredOutput.schema,
-          compatLayers,
-          mode: 'jsonSchema',
-        });
-        // Create a new structuredOutput object to avoid mutating the original
+      if (targetProvider.includes('openai') || targetModelId?.includes('openai')) {
         options = {
           ...options,
           structuredOutput: {
             ...options.structuredOutput,
-            schema: processedSchema,
+            schema: wrapSchemaWithNullTransform(options.structuredOutput.schema as any) as any,
           },
         };
       }
