@@ -95,7 +95,7 @@ function PastRunRow({
       </Icon>
       <ExperimentStatusBadge status={experiment.status} />
       <Txt variant="ui-xs" className="text-neutral2 shrink-0">
-        {formatTimestamp(experiment.startedAt)}
+        {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
       </Txt>
       <Txt variant="ui-sm" className="text-neutral5 truncate flex-1">
         {experiment.datasetName}
@@ -288,7 +288,7 @@ function ExperimentResultsPanel({ experiment, onBack }: { experiment: AgentExper
         <div className="flex-1" />
         <ExperimentStatusBadge status={experiment.status} />
         <Txt variant="ui-xs" className="text-neutral2">
-          {experiment.datasetName} &middot; {formatTimestamp(experiment.startedAt)}
+          {experiment.datasetName} &middot; {experiment.startedAt ? formatTimestamp(experiment.startedAt) : '-'}
         </Txt>
       </div>
 
