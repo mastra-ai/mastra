@@ -292,6 +292,34 @@ export class MemoryLibSQL extends MemoryStorage {
         );
       }
 
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value === null) {
+            conditions.push(`json_extract(content, '$.metadata.${key}') IS NULL`);
+          } else if (typeof value === 'boolean') {
+            conditions.push(`json_extract(content, '$.metadata.${key}') = ?`);
+            queryParams.push(value ? 1 : 0);
+          } else if (typeof value === 'number') {
+            conditions.push(`json_extract(content, '$.metadata.${key}') = ?`);
+            queryParams.push(value);
+          } else if (typeof value === 'string') {
+            conditions.push(`json_extract(content, '$.metadata.${key}') = ?`);
+            queryParams.push(value);
+          } else {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${typeof value}`,
+              details: { key, valueType: typeof value },
+            });
+          }
+        }
+      }
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
       // Get total count
@@ -454,6 +482,34 @@ export class MemoryLibSQL extends MemoryStorage {
         queryParams.push(
           filter.dateRange.end instanceof Date ? filter.dateRange.end.toISOString() : filter.dateRange.end,
         );
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value === null) {
+            conditions.push(`json_extract(content, '$.metadata.${key}') IS NULL`);
+          } else if (typeof value === 'boolean') {
+            conditions.push(`json_extract(content, '$.metadata.${key}') = ?`);
+            queryParams.push(value ? 1 : 0);
+          } else if (typeof value === 'number') {
+            conditions.push(`json_extract(content, '$.metadata.${key}') = ?`);
+            queryParams.push(value);
+          } else if (typeof value === 'string') {
+            conditions.push(`json_extract(content, '$.metadata.${key}') = ?`);
+            queryParams.push(value);
+          } else {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${typeof value}`,
+              details: { key, valueType: typeof value },
+            });
+          }
+        }
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;

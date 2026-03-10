@@ -60,9 +60,9 @@ await memory?.recall({ threadId: 'user-123' })
   },
   {
     name: 'filter',
-    type: '{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }',
+    type: '{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }; metadata?: Record<string, unknown> }',
     description:
-      'Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date. Use `startExclusive` or `endExclusive` to exclude boundary dates (useful for cursor-based pagination).',
+      'Filter options for message retrieval. Supports `dateRange` to filter messages by creation date (use `startExclusive` or `endExclusive` to exclude boundary dates for cursor-based pagination), and `metadata` to filter by message metadata key-value pairs. All specified metadata pairs must match (AND logic). Supported value types are string, number, boolean, and null.',
     isOptional: true,
   },
   {

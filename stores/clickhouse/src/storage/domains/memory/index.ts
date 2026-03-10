@@ -270,6 +270,19 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         dataParams.toDate = endDate;
       }
 
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIndex}`;
+          dataQuery += ` AND JSONExtractRaw(content, 'metadata', '${key}') = {${paramName}:String}`;
+          dataParams[paramName] = JSON.stringify(value);
+          metadataIndex++;
+        }
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
@@ -328,6 +341,17 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} parseDateTime64BestEffort({toDate:String}, 3)`;
         countParams.toDate = endDate;
+      }
+
+      // Add metadata filters to count query (AND logic)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          const paramName = `metadata${metadataIndex}`;
+          countQuery += ` AND JSONExtractRaw(content, 'metadata', '${key}') = {${paramName}:String}`;
+          countParams[paramName] = JSON.stringify(value);
+          metadataIndex++;
+        }
       }
 
       const countResult = await this.client.query({

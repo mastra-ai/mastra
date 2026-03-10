@@ -72,7 +72,7 @@ export abstract class MemoryStorage extends StorageDomain {
   async listMessagesByResourceId(_args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
     throw new Error(
       `Resource-scoped message listing is not implemented by this storage adapter (${this.constructor.name}). ` +
-        `Use an adapter that supports Observational Memory (pg, libsql, mongodb) or disable observational memory.`,
+        `Use an adapter that supports Observational Memory (pg, libsql, mongodb, cloudflare-d1, mssql) or disable observational memory.`,
     );
   }
 

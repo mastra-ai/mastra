@@ -15,6 +15,7 @@ import {
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -689,12 +690,50 @@ export class MemoryMSSQL extends MemoryStorage {
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
 
-      const { sql: actualWhereClause = '', params: whereParams } = prepareWhereClause(
+      const { sql: baseWhereClause = '', params: whereParams } = prepareWhereClause(
         filters,
         TABLE_SCHEMAS[TABLE_MESSAGES],
       );
+
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      let metadataWhereClause = '';
+      const metadataParams: Record<string, any> = {};
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError({
+              id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+              details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+            });
+          }
+
+          if (value === null) {
+            metadataWhereClause += ` AND JSON_VALUE(content, '$.metadata.${key}') IS NULL`;
+          } else {
+            const paramName = `msgMeta${metadataIndex}`;
+            metadataWhereClause += ` AND JSON_VALUE(content, '$.metadata.${key}') = @${paramName}`;
+            if (typeof value === 'string') {
+              metadataParams[paramName] = value;
+            } else if (typeof value === 'boolean') {
+              metadataParams[paramName] = value ? 'true' : 'false';
+            } else {
+              metadataParams[paramName] = String(value);
+            }
+          }
+          metadataIndex++;
+        }
+      }
+
+      const actualWhereClause = baseWhereClause + metadataWhereClause;
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
+        Object.entries(metadataParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
       };
 
       // Get total count
@@ -798,6 +837,208 @@ export class MemoryMSSQL extends MemoryStorage {
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resourceId: resourceId ?? '' },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+
+    if (page < 0) {
+      throw new MastraError({
+        id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_PAGE'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Page number must be non-negative',
+        details: { resourceId, page },
+      });
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      // Determine sort field and direction
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      const orderByStatement = `ORDER BY [${field}] ${direction}, [seq_id] ${direction}`;
+
+      const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.schema) });
+      const baseQuery = `SELECT seq_id, id, content, role, type, [createdAt], thread_id AS threadId, resourceId FROM ${tableName}`;
+
+      const filters: Record<string, any> = {
+        resourceId,
+        ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
+      };
+
+      const { sql: baseWhereClause = '', params: whereParams } = prepareWhereClause(
+        filters,
+        TABLE_SCHEMAS[TABLE_MESSAGES],
+      );
+
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      let metadataWhereClause = '';
+      const metadataParams: Record<string, any> = {};
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        let metadataIndex = 0;
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError({
+              id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+              details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+            });
+          }
+
+          if (value === null) {
+            metadataWhereClause += ` AND JSON_VALUE(content, '$.metadata.${key}') IS NULL`;
+          } else {
+            const paramName = `resMeta${metadataIndex}`;
+            metadataWhereClause += ` AND JSON_VALUE(content, '$.metadata.${key}') = @${paramName}`;
+            if (typeof value === 'string') {
+              metadataParams[paramName] = value;
+            } else if (typeof value === 'boolean') {
+              metadataParams[paramName] = value ? 'true' : 'false';
+            } else {
+              metadataParams[paramName] = String(value);
+            }
+          }
+          metadataIndex++;
+        }
+      }
+
+      const actualWhereClause = baseWhereClause + metadataWhereClause;
+      const bindWhereParams = (req: sql.Request) => {
+        Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
+        Object.entries(metadataParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
+      };
+
+      // Get total count
+      const countRequest = this.pool.request();
+      bindWhereParams(countRequest);
+      const countResult = await countRequest.query(`SELECT COUNT(*) as total FROM ${tableName}${actualWhereClause}`);
+      const total = parseInt(countResult.recordset[0]?.total, 10) || 0;
+
+      const fetchBaseMessages = async (): Promise<any[]> => {
+        const request = this.pool.request();
+        bindWhereParams(request);
+
+        if (perPageInput === false) {
+          const result = await request.query(`${baseQuery}${actualWhereClause} ${orderByStatement}`);
+          return result.recordset || [];
+        }
+
+        request.input('offset', offset);
+        request.input('limit', perPage > 2147483647 ? sql.BigInt : sql.Int, perPage);
+        const result = await request.query(
+          `${baseQuery}${actualWhereClause} ${orderByStatement} OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY`,
+        );
+        return result.recordset || [];
+      };
+
+      // Get paginated messages
+      const baseRows = perPage === 0 ? [] : await fetchBaseMessages();
+      const messages: any[] = [...baseRows];
+      const seqById = new Map<string, number>();
+      messages.forEach(msg => {
+        if (typeof msg.seq_id === 'number') seqById.set(msg.id, msg.seq_id);
+      });
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Add included messages with context (if any), excluding duplicates
+      if (include?.length) {
+        const messageIds = new Set(messages.map(m => m.id));
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (includeMessages) {
+          for (const msg of includeMessages) {
+            if (!messageIds.has(msg.id)) {
+              messages.push(msg);
+              messageIds.add(msg.id);
+              if (typeof msg.seq_id === 'number') seqById.set(msg.id, msg.seq_id);
+            }
+          }
+        }
+      }
+
+      const paginatedCount = baseRows.length;
+
+      // Parse and format messages to V2
+      const formatted = this._parseAndFormatMessages(messages, 'v2') as MastraDBMessage[];
+
+      // Sort all messages (paginated + included) for final output
+      const finalMessages = formatted.sort((a, b) => {
+        const seqA = seqById.get(a.id);
+        const seqB = seqById.get(b.id);
+        if (seqA != null && seqB != null) {
+          return direction === 'ASC' ? seqA - seqB : seqB - seqA;
+        }
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      const hasMore = perPageInput === false ? false : offset + paginatedCount < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LIST_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            resourceId,
           },
         },
         error,

@@ -12,6 +12,8 @@ import {
   createStorageErrorId,
   ensureDate,
   filterByDateRange,
+  jsonValueEquals,
+  safelyParseJSON,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -693,6 +695,17 @@ export class StoreMemoryUpstash extends MemoryStorage {
         (msg: MastraDBMessage) => new Date(msg.createdAt),
         filter?.dateRange,
       );
+
+      // Apply metadata filtering (AND logic - all key-value pairs must match)
+      this.validateMetadataKeys(filter?.metadata);
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        messagesData = messagesData.filter((msg: any) => {
+          const content = safelyParseJSON(msg.content);
+          const msgMetadata = content?.metadata;
+          if (!msgMetadata) return false;
+          return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+        });
+      }
 
       // Determine sort field and direction, default to ASC (oldest first)
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');

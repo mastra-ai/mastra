@@ -10,6 +10,7 @@ import {
   normalizePerPage,
   calculatePagination,
   safelyParseJSON,
+  jsonValueEquals,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -303,24 +304,54 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
-      // Get total count
-      const total = await collection.countDocuments(query);
+      // Validate metadata filter keys
+      const hasMetadataFilter = filter?.metadata && Object.keys(filter.metadata).length > 0;
+      if (hasMetadataFilter) {
+        this.validateMetadataKeys(filter?.metadata);
+      }
 
+      let total: number;
       const messages: any[] = [];
 
-      // Step 1: Get paginated messages from the thread first (without excluding included ones)
-      if (perPage !== 0) {
+      if (hasMetadataFilter) {
+        // When filtering by metadata, we must fetch all matching messages first because
+        // content (which contains metadata) is stored as a JSON string in MongoDB and
+        // cannot be queried with native MongoDB operators. We filter in JS then paginate.
         const sortObj: any = { [field]: sortOrder };
-        let cursor = collection.find(query).sort(sortObj).skip(offset);
+        const allRows = await collection.find(query).sort(sortObj).toArray();
+        const allParsed = allRows.map((row: any) => this.parseRow(row));
 
-        // Only apply limit if not unlimited
-        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-        if (perPageInput !== false) {
-          cursor = cursor.limit(perPage);
+        // Apply metadata filtering (AND logic - all key-value pairs must match)
+        const filtered = allParsed.filter((msg: MastraDBMessage) => {
+          const msgMetadata = (msg.content as MastraMessageContentV2)?.metadata;
+          if (!msgMetadata) return false;
+          return Object.entries(filter!.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+        });
+
+        total = filtered.length;
+
+        if (perPage !== 0) {
+          const end = perPageInput === false ? filtered.length : offset + perPage;
+          messages.push(...filtered.slice(offset, end));
         }
+      } else {
+        // No metadata filter — use efficient DB-level pagination
+        total = await collection.countDocuments(query);
 
-        const dataResult = await cursor.toArray();
-        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+        // Step 1: Get paginated messages from the thread first (without excluding included ones)
+        if (perPage !== 0) {
+          const sortObj: any = { [field]: sortOrder };
+          let cursor = collection.find(query).sort(sortObj).skip(offset);
+
+          // Only apply limit if not unlimited
+          // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+          if (perPageInput !== false) {
+            cursor = cursor.limit(perPage);
+          }
+
+          const dataResult = await cursor.toArray();
+          messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+        }
       }
 
       // Only return early if there are no messages AND no includes to process
@@ -465,24 +496,54 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
-      // Get total count
-      const total = await collection.countDocuments(query);
+      // Validate metadata filter keys
+      const hasMetadataFilter = filter?.metadata && Object.keys(filter.metadata).length > 0;
+      if (hasMetadataFilter) {
+        this.validateMetadataKeys(filter?.metadata);
+      }
 
+      let total: number;
       const messages: any[] = [];
 
-      // Step 1: Get paginated messages
-      if (perPage !== 0) {
+      if (hasMetadataFilter) {
+        // When filtering by metadata, we must fetch all matching messages first because
+        // content (which contains metadata) is stored as a JSON string in MongoDB and
+        // cannot be queried with native MongoDB operators. We filter in JS then paginate.
         const sortObj: any = { [field]: sortOrder };
-        let cursor = collection.find(query).sort(sortObj).skip(offset);
+        const allRows = await collection.find(query).sort(sortObj).toArray();
+        const allParsed = allRows.map((row: any) => this.parseRow(row));
 
-        // Only apply limit if not unlimited
-        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-        if (perPageInput !== false) {
-          cursor = cursor.limit(perPage);
+        // Apply metadata filtering (AND logic - all key-value pairs must match)
+        const filtered = allParsed.filter((msg: MastraDBMessage) => {
+          const msgMetadata = (msg.content as MastraMessageContentV2)?.metadata;
+          if (!msgMetadata) return false;
+          return Object.entries(filter!.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+        });
+
+        total = filtered.length;
+
+        if (perPage !== 0) {
+          const end = perPageInput === false ? filtered.length : offset + perPage;
+          messages.push(...filtered.slice(offset, end));
         }
+      } else {
+        // No metadata filter — use efficient DB-level pagination
+        total = await collection.countDocuments(query);
 
-        const dataResult = await cursor.toArray();
-        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+        // Step 1: Get paginated messages
+        if (perPage !== 0) {
+          const sortObj: any = { [field]: sortOrder };
+          let cursor = collection.find(query).sort(sortObj).skip(offset);
+
+          // Only apply limit if not unlimited
+          // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+          if (perPageInput !== false) {
+            cursor = cursor.limit(perPage);
+          }
+
+          const dataResult = await cursor.toArray();
+          messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+        }
       }
 
       // Only return early if there are no messages AND no includes to process

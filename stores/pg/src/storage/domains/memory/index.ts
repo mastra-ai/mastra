@@ -829,8 +829,19 @@ export class MemoryPG extends MemoryStorage {
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
-        conditions.push(`COALESCE("createdAtZ", "createdAt") ${endOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt") ${endOp} ${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          conditions.push(`content::jsonb -> 'metadata' @> ${paramIndex}::jsonb`);
+          queryParams.push(JSON.stringify({ [key]: value }));
+          paramIndex++;
+        }
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -840,7 +851,7 @@ export class MemoryPG extends MemoryStorage {
       const total = parseInt(countResult.count, 10);
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT ${paramIndex++} OFFSET ${paramIndex++}`;
       const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
       const messages: MessageRowFromDB[] = [...(rows || [])];
 
@@ -993,8 +1004,19 @@ export class MemoryPG extends MemoryStorage {
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
-        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
+        conditions.push(`"createdAt" ${endOp} ${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          conditions.push(`content::jsonb -> 'metadata' @> ${paramIndex}::jsonb`);
+          queryParams.push(JSON.stringify({ [key]: value }));
+          paramIndex++;
+        }
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1004,7 +1026,7 @@ export class MemoryPG extends MemoryStorage {
       const total = parseInt(countResult.count, 10);
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      const dataQuery = `${selectStatement} FROM ${tableName} ${whereClause} ${orderByStatement} LIMIT ${paramIndex++} OFFSET ${paramIndex++}`;
       const rows = await this.#db.client.manyOrNone(dataQuery, [...queryParams, limitValue, offset]);
       const messages: MessageRowFromDB[] = [...(rows || [])];
 

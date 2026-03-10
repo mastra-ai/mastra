@@ -5,9 +5,11 @@ import type { StorageThreadType, MastraMessageV1, MastraDBMessage } from '@mastr
 import {
   createStorageErrorId,
   filterByDateRange,
+  jsonValueEquals,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  safelyParseJSON,
   TABLE_THREADS,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
@@ -415,6 +417,17 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         (msg: MastraDBMessage) => new Date(msg.createdAt),
         filter?.dateRange,
       );
+
+      // Apply metadata filtering (AND logic - all key-value pairs must match)
+      this.validateMetadataKeys(filter?.metadata);
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        allThreadMessages = allThreadMessages.filter((msg: any) => {
+          const content = safelyParseJSON(msg.content);
+          const msgMetadata = content?.metadata;
+          if (!msgMetadata) return false;
+          return Object.entries(filter.metadata!).every(([key, value]) => jsonValueEquals(msgMetadata[key], value));
+        });
+      }
 
       // Sort messages by the specified field and direction
       allThreadMessages.sort((a: MastraDBMessage, b: MastraDBMessage) => {

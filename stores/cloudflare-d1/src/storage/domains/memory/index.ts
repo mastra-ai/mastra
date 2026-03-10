@@ -17,6 +17,7 @@ import {
 import type {
   StorageResourceType,
   StorageListMessagesInput,
+  StorageListMessagesByResourceIdInput,
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -778,6 +779,36 @@ export class MemoryStorageD1 extends MemoryStorage {
         queryParams.push(endDate);
       }
 
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError(
+              {
+                id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+                details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+              },
+              new Error('Invalid metadata filter value type'),
+            );
+          }
+
+          if (value === null) {
+            query += ` AND json_extract(content, '$.metadata.${key}') IS NULL`;
+          } else if (typeof value === 'boolean') {
+            query += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            queryParams.push(value ? 1 : 0);
+          } else {
+            query += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            queryParams.push(value);
+          }
+        }
+      }
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       query += ` ORDER BY "${field}" ${direction}`;
@@ -825,6 +856,21 @@ export class MemoryStorageD1 extends MemoryStorage {
         const endOp = dateRange.endExclusive ? '<' : '<=';
         countQuery += ` AND createdAt ${endOp} ?`;
         countParams.push(endDate);
+      }
+
+      // Add metadata filters to count query (must match data query)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value === null) {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') IS NULL`;
+          } else if (typeof value === 'boolean') {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            countParams.push(value ? 1 : 0);
+          } else {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            countParams.push(value);
+          }
+        }
       }
 
       const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {
@@ -914,6 +960,246 @@ export class MemoryStorageD1 extends MemoryStorage {
           details: {
             threadId: Array.isArray(threadId) ? threadId.join(',') : threadId,
             resourceId: resourceId ?? '',
+          },
+        },
+        error,
+      );
+      this.logger?.error?.(mastraError.toString());
+      this.logger?.trackException?.(mastraError);
+      return {
+        messages: [],
+        total: 0,
+        page,
+        perPage: perPageForResponse,
+        hasMore: false,
+      };
+    }
+  }
+
+  public async listMessagesByResourceId(
+    args: StorageListMessagesByResourceIdInput,
+  ): Promise<StorageListMessagesOutput> {
+    const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+
+    if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { resourceId: resourceId ?? '' },
+        },
+        new Error('resourceId is required'),
+      );
+    }
+
+    if (page < 0) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { page },
+        },
+        new Error('page must be >= 0'),
+      );
+    }
+
+    const perPage = normalizePerPage(perPageInput, 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
+
+      let query = `
+        SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
+        FROM ${fullTableName}
+        WHERE resourceId = ?
+      `;
+      const queryParams: any[] = [resourceId];
+
+      const dateRange = filter?.dateRange;
+      if (dateRange?.start) {
+        const startDate =
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        query += ` AND createdAt ${startOp} ?`;
+        queryParams.push(startDate);
+      }
+
+      if (dateRange?.end) {
+        const endDate =
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        query += ` AND createdAt ${endOp} ?`;
+        queryParams.push(endDate);
+      }
+
+      // Add metadata filters if provided (AND logic)
+      // Message metadata is nested inside content column at content.metadata
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        this.validateMetadataKeys(filter.metadata);
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value !== null && typeof value === 'object') {
+            throw new MastraError(
+              {
+                id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'INVALID_METADATA_VALUE'),
+                domain: ErrorDomain.STORAGE,
+                category: ErrorCategory.USER,
+                text: `Metadata filter value for key "${key}" must be a scalar type (string, number, boolean, or null), got ${Array.isArray(value) ? 'array' : 'object'}`,
+                details: { key, valueType: Array.isArray(value) ? 'array' : 'object' },
+              },
+              new Error('Invalid metadata filter value type'),
+            );
+          }
+
+          if (value === null) {
+            query += ` AND json_extract(content, '$.metadata.${key}') IS NULL`;
+          } else if (typeof value === 'boolean') {
+            query += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            queryParams.push(value ? 1 : 0);
+          } else {
+            query += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            queryParams.push(value);
+          }
+        }
+      }
+
+      // Build ORDER BY clause
+      const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+      query += ` ORDER BY "${field}" ${direction}`;
+
+      // Apply pagination
+      if (perPage !== Number.MAX_SAFE_INTEGER) {
+        query += ` LIMIT ? OFFSET ?`;
+        queryParams.push(perPage, offset);
+      }
+
+      const results = await this.#db.executeQuery({ sql: query, params: queryParams });
+
+      // Parse message content
+      const paginatedMessages = (isArrayOfRecords(results) ? results : []).map((message: Record<string, any>) => {
+        const processedMsg: Record<string, any> = {};
+        for (const [key, value] of Object.entries(message)) {
+          if (key === `type` && value === `v2`) continue;
+          processedMsg[key] = deserializeValue(value);
+        }
+        return processedMsg;
+      });
+
+      const paginatedCount = paginatedMessages.length;
+
+      // Get total count
+      let countQuery = `SELECT count() as count FROM ${fullTableName} WHERE resourceId = ?`;
+      const countParams: any[] = [resourceId];
+
+      if (dateRange?.start) {
+        const startDate =
+          dateRange.start instanceof Date ? serializeDate(dateRange.start) : serializeDate(new Date(dateRange.start));
+        const startOp = dateRange.startExclusive ? '>' : '>=';
+        countQuery += ` AND createdAt ${startOp} ?`;
+        countParams.push(startDate);
+      }
+
+      if (dateRange?.end) {
+        const endDate =
+          dateRange.end instanceof Date ? serializeDate(dateRange.end) : serializeDate(new Date(dateRange.end));
+        const endOp = dateRange.endExclusive ? '<' : '<=';
+        countQuery += ` AND createdAt ${endOp} ?`;
+        countParams.push(endDate);
+      }
+
+      // Add metadata filters to count query (must match data query)
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          if (value === null) {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') IS NULL`;
+          } else if (typeof value === 'boolean') {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            countParams.push(value ? 1 : 0);
+          } else {
+            countQuery += ` AND json_extract(content, '$.metadata.${key}') = ?`;
+            countParams.push(value);
+          }
+        }
+      }
+
+      const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {
+        count: number;
+      }[];
+      const total = countResult?.[0]?.count ?? 0;
+
+      // Only return early if there are no messages AND no includes to process
+      if (total === 0 && paginatedMessages.length === 0 && (!include || include.length === 0)) {
+        return {
+          messages: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // Add included messages with context (if any), excluding duplicates
+      const messageIds = new Set(paginatedMessages.map((m: any) => m.id));
+      if (include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages(include);
+
+        if (includeMessages) {
+          // Deduplicate: only add messages that aren't already in the paginated results
+          for (const includeMsg of includeMessages) {
+            if (!messageIds.has(includeMsg.id)) {
+              paginatedMessages.push(includeMsg);
+              messageIds.add(includeMsg.id);
+            }
+          }
+        }
+      }
+
+      // Use MessageList for proper deduplication and format conversion to V2
+      const list = new MessageList().add(paginatedMessages as MastraMessageV1[] | MastraDBMessage[], 'memory');
+      let finalMessages = list.get.all.db();
+
+      // Sort all messages (paginated + included) for final output
+      finalMessages = finalMessages.sort((a, b) => {
+        const isDateField = field === 'createdAt' || field === 'updatedAt';
+        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+        // Handle tiebreaker for stable sorting
+        if (aValue === bValue) {
+          return a.id.localeCompare(b.id);
+        }
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+        }
+        // Fallback to string comparison for non-numeric fields
+        return direction === 'ASC'
+          ? String(aValue).localeCompare(String(bValue))
+          : String(bValue).localeCompare(String(aValue));
+      });
+
+      const hasMore = perPageInput === false ? false : offset + paginatedCount < total;
+
+      return {
+        messages: finalMessages,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore,
+      };
+    } catch (error: any) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_D1', 'LIST_MESSAGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to list messages for resource ${resourceId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          details: {
+            resourceId,
           },
         },
         error,
