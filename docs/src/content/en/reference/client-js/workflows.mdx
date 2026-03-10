@@ -9,7 +9,7 @@ packages:
 
 The Workflows API provides methods to interact with and execute automated workflows in Mastra.
 
-## Getting All Workflows
+## Getting all workflows
 
 Retrieve a list of all available workflows:
 
@@ -17,7 +17,7 @@ Retrieve a list of all available workflows:
 const workflows = await mastraClient.listWorkflows()
 ```
 
-## Working with a Specific Workflow
+## Working with a specific workflow
 
 Get an instance of a specific workflow by its ID:
 
@@ -31,7 +31,7 @@ export const testWorkflow = createWorkflow({
 const workflow = mastraClient.getWorkflow('city-workflow')
 ```
 
-## Workflow Methods
+## Workflow methods
 
 ### details()
 

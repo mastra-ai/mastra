@@ -14,7 +14,7 @@ import TabItem from "@theme/TabItem";
 
 The `createVectorQueryTool()` function creates a tool for semantic search over vector stores. It supports filtering, reranking, database-specific configurations, and integrates with various vector store backends.
 
-## Basic Usage
+## Basic usage
 
 ```typescript
 import { createVectorQueryTool } from '@mastra/rag'
@@ -285,7 +285,7 @@ The tool returns an object with:
 }
 ```
 
-## Default Tool Description
+## Default tool description
 
 The default description focuses on:
 
@@ -293,11 +293,11 @@ The default description focuses on:
 - Answering user questions
 - Retrieving factual content
 
-## Result Handling
+## Result handling
 
 The tool determines the number of results to return based on the user's query, with a default of 10 results. This can be adjusted based on the query requirements.
 
-## Example with Filters
+## Example with filters
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -328,7 +328,7 @@ For detailed filter syntax and store-specific capabilities, see the [Metadata Fi
 
 For an example of how agent-driven filtering works, see the [Agent-Driven Metadata Filtering](https://github.com/mastra-ai/mastra/tree/main/examples/basics/rag/filter-rag) example.
 
-## Example with Reranking
+## Example with reranking
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -358,7 +358,7 @@ Reranking improves result quality by combining:
 
 The reranker processes the initial vector search results and returns a reordered list optimized for relevance.
 
-## Example with Custom Description
+## Example with custom description
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -372,7 +372,7 @@ const queryTool = createVectorQueryTool({
 
 This example shows how to customize the tool description for a specific use case while maintaining its core purpose of information retrieval.
 
-## Database-Specific Configuration Examples
+## Database-specific configuration examples
 
 The `databaseConfig` parameter allows you to leverage unique features and optimizations specific to each vector database. These configurations are automatically applied during query execution.
 
@@ -531,7 +531,7 @@ This approach allows you to:
 - Adjust performance parameters based on load
 - Apply different filtering strategies per request
 
-## Example: Using Request Context
+## Example: Using request context
 
 ```typescript
 const queryTool = createVectorQueryTool({
@@ -570,7 +570,7 @@ For more information on request context, please see:
 - [Agent Request Context](/docs/server/request-context)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)
 
-## Usage Without a Mastra Server
+## Usage without a Mastra server
 
 The tool can be used by itself to retrieve documents matching a query:
 
@@ -597,7 +597,7 @@ const queryResult = await vectorQueryTool.execute({ queryText: 'foo', topK: 1 },
 console.log(queryResult.sources)
 ```
 
-## Dynamic Vector Store for Multi-Tenant Applications
+## Dynamic vector store for multi-tenant applications
 
 For multi-tenant applications where each tenant has isolated data (e.g., separate PostgreSQL schemas), you can pass a resolver function instead of a static vector store instance. The function receives the request context and can return the appropriate vector store for the current tenant:
 
@@ -653,7 +653,7 @@ This pattern is similar to how `Agent.memory` supports dynamic configuration and
 - **Database isolation**: Route to different database instances per tenant
 - **Dynamic configuration**: Adjust vector store settings based on request context
 
-## Tool Details
+## Tool details
 
 The tool is created with:
 

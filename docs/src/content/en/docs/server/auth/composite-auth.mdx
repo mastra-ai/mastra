@@ -86,7 +86,7 @@ async authenticateToken(token, request) {
 }
 ```
 
-## Provider Order
+## Provider order
 
 The order of providers matters. Place the most common authentication method first for better performance:
 
@@ -104,7 +104,7 @@ new CompositeAuth([
 ])
 ```
 
-## Multiple OAuth Providers
+## Multiple OAuth providers
 
 Support users from different identity providers:
 
@@ -131,7 +131,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Migration Example
+## Migration example
 
 Migrate from JWT to Clerk while maintaining backwards compatibility:
 
@@ -163,7 +163,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## With Custom Providers
+## With custom providers
 
 Combine built-in providers with custom implementations:
 

@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Interfaces
 
-## Core Interfaces
+## Core interfaces
 
 ### ObservabilityInstance
 
@@ -180,7 +180,7 @@ interface SpanOutputProcessor {
 }
 ```
 
-## Span Types
+## Span types
 
 ### SpanType
 
@@ -246,7 +246,7 @@ Union type for cases that need to handle any span.
 type AnySpan = Span<keyof SpanTypeMap>
 ```
 
-## Span Attributes
+## Span attributes
 
 ### AgentRunAttributes
 
@@ -431,7 +431,7 @@ interface WorkflowStepAttributes {
 }
 ```
 
-## Options Types
+## Options types
 
 ### StartSpanOptions
 
@@ -522,7 +522,7 @@ interface ErrorSpanOptions<TType extends SpanType> {
 }
 ```
 
-## Context Types
+## Context types
 
 ### TracingContext
 
@@ -610,7 +610,7 @@ interface TracingPolicy {
 }
 ```
 
-## Configuration Types
+## Configuration types
 
 ### ObservabilityInstanceConfig
 
@@ -660,7 +660,7 @@ interface ObservabilityRegistryConfig {
 }
 ```
 
-## Sampling Types
+## Sampling types
 
 ### SamplingStrategy
 
@@ -685,7 +685,7 @@ interface CustomSamplerOptions {
 }
 ```
 
-## Config Selector Types
+## Config selector types
 
 ### ConfigSelector
 
@@ -709,7 +709,7 @@ interface ConfigSelectorOptions {
 }
 ```
 
-## Internal Spans
+## Internal spans
 
 ### InternalSpans
 

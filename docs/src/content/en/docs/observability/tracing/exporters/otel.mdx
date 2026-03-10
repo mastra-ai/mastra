@@ -51,7 +51,7 @@ All providers support zero-config setup via environment variables. Set the appro
 | Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
 | Laminar | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional) |
 
-## Provider Configurations
+## Provider configurations
 
 ### MLflow
 
@@ -382,7 +382,7 @@ new OtelExporter({
 })
 ```
 
-## OpenTelemetry Semantic Conventions
+## OpenTelemetry semantic conventions
 
 The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai), ensuring compatibility with observability platforms:
 
@@ -405,7 +405,7 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](http
 - `gen_ai.request.temperature` - Sampling temperature
 - `gen_ai.response.finish_reasons` - Completion reasons
 
-## Protocol Selection Guide
+## Protocol selection guide
 
 Choose the right protocol package based on your provider:
 

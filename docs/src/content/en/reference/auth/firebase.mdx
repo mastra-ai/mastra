@@ -106,7 +106,7 @@ The following environment variables are automatically used when constructor opti
 ]}
 />
 
-## Default Authorization Behavior
+## Default authorization behavior
 
 By default, `MastraAuthFirebase` uses Firestore to manage user access:
 
@@ -115,7 +115,7 @@ By default, `MastraAuthFirebase` uses Firestore to manage user access:
 1. If the document exists, the user is authorized; otherwise, access is denied
 1. The Firestore database used is determined by the `databaseId` parameter or environment variables
 
-## Firebase User Type
+## Firebase user type
 
 The `FirebaseUser` type used in the `authorizeUser` function corresponds to Firebase's `DecodedIdToken` interface, which includes:
 

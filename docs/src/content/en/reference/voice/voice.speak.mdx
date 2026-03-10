@@ -53,7 +53,7 @@ Returns a `Promise<NodeJS.ReadableStream | void>` where:
 - `NodeJS.ReadableStream`: A stream of audio data that can be played or saved
 - `void`: When using a realtime voice provider that emits audio through events instead of returning it directly
 
-## Provider-Specific Options
+## Provider-specific options
 
 Each voice provider may support additional options specific to their implementation. Here are some examples:
 
@@ -277,7 +277,7 @@ const audioWithOptions = await voice.speak('Hello with options!', {
 
 See the [CompositeVoice reference](/reference/voice/composite-voice) for more details on AI SDK integration.
 
-## Realtime Voice Providers
+## Realtime voice providers
 
 When using realtime voice providers like `OpenAIRealtimeVoice`, the `speak()` method behaves differently:
 

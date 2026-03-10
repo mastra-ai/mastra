@@ -11,7 +11,7 @@ packages:
 
 The Agents API provides methods to interact with Mastra AI agents, including generating responses, streaming interactions, and managing agent tools.
 
-## Getting All Agents
+## Getting all agents
 
 Retrieve a list of all available agents:
 
@@ -21,7 +21,7 @@ const agents = await mastraClient.listAgents()
 
 Returns a record of agent IDs to their serialized agent configurations.
 
-## Working with a Specific Agent
+## Working with a specific agent
 
 Get an instance of a specific agent by its ID:
 
@@ -35,7 +35,7 @@ export const myAgent = new Agent({
 const agent = mastraClient.getAgent('my-agent')
 ```
 
-## Agent Methods
+## Agent methods
 
 ### details()
 
@@ -264,7 +264,7 @@ if (output.finishReason === 'suspended') {
 }
 ```
 
-## Client Tools
+## Client tools
 
 Client-side tools allow you to execute custom functions on the client side when the agent requests them.
 
@@ -315,7 +315,7 @@ response.processDataStream({
 })
 ```
 
-## Stored Agents
+## Stored agents
 
 Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, memory, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated.
 
@@ -397,7 +397,7 @@ Get an instance of a specific stored agent:
 const storedAgent = mastraClient.getStoredAgent('my-agent')
 ```
 
-## Stored Agent Methods
+## Stored agent methods
 
 ### details()
 

@@ -9,7 +9,7 @@ packages:
 
 Mastra provides a unified `createScorer` factory that allows you to define custom scorers for evaluating input/output pairs. You can use either native JavaScript functions or LLM-based prompt objects for each evaluation step. Custom scorers can be added to Agents and Workflow steps.
 
-## How to Create a Custom Scorer
+## How to create a custom scorer
 
 Use the `createScorer` factory to define your scorer with a name, description, and optional judge configuration. Then chain step methods to build your evaluation pipeline. You must provide at least a `generateScore` step.
 
@@ -42,7 +42,7 @@ const scorer = createScorer({
   })
 ```
 
-## createScorer Options
+## createScorer options
 
 <PropertiesTable
   content={[
@@ -105,7 +105,7 @@ The judge only runs for steps defined as **prompt objects** (`preprocess`, `anal
 
 When a prompt-object step runs, its structured LLM output is stored in the corresponding result field (`preprocessStepResult`, `analyzeStepResult`, or the value consumed by `calculateScore` in `generateScore`).
 
-## Type Safety
+## Type safety
 
 You can specify input/output types when creating scorers for better type inference and IntelliSense support:
 
@@ -161,7 +161,7 @@ const customScorer = createScorer<CustomInput, CustomOutput>({
 
 Using these types provides autocomplete, compile-time validation, and better documentation for your scoring logic.
 
-## Trace Scoring with Agent Types
+## Trace scoring with agent types
 
 When you use `type: 'agent'`, your scorer is compatible for both adding directly to agents and scoring traces from agent interactions. The scorer automatically transforms trace data into the proper agent input/output format:
 
@@ -187,7 +187,7 @@ const mastra = new Mastra({
 })
 ```
 
-## Step Method Signatures
+## Step method signatures
 
 ### preprocess
 

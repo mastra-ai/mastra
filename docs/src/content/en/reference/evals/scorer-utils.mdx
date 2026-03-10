@@ -25,7 +25,7 @@ import {
 } from '@mastra/evals/scorers/utils'
 ```
 
-## Message Extraction
+## Message extraction
 
 ### getAssistantMessageFromRunOutput
 
@@ -109,7 +109,7 @@ Extracts text content from all assistant response messages as an array.
 
 **Returns:** `string[]` - Array of text strings from each assistant message.
 
-## Reasoning Extraction
+## Reasoning extraction
 
 ### getReasoningFromRunOutput
 
@@ -173,7 +173,7 @@ const reasoningQualityScorer = createScorer({
 
 **Returns:** `string | undefined` - The reasoning text, or undefined if no reasoning is present.
 
-## System Message Extraction
+## System message extraction
 
 ### getSystemMessagesFromRunInput
 
@@ -204,7 +204,7 @@ Combines all system messages into a single prompt string, joined with double new
 
 **Returns:** `string` - Combined system prompt string.
 
-## Tool Call Extraction
+## Tool call extraction
 
 ### extractToolCalls
 
@@ -251,7 +251,7 @@ type ToolCallInfo = {
 }
 ```
 
-## Test Utilities
+## Test utilities
 
 These utilities help create test data for scorer development.
 
@@ -301,7 +301,7 @@ const result = await myScorer.run({
 })
 ```
 
-## Complete Example
+## Complete example
 
 Here's a complete example showing how to use multiple utilities together:
 

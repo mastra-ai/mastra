@@ -142,13 +142,13 @@ const mastra = new Mastra({
 })
 ```
 
-## OpenTelemetry Setup Requirements
+## OpenTelemetry setup requirements
 
 The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
 
 See the [OtelBridge Guide](/docs/observability/tracing/bridges/otel#configuration) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
 
-## Tags Support
+## Tags support
 
 The OtelBridge supports trace tagging for categorization and filtering. Tags are only applied to root spans and are included as the `mastra.tags` attribute on native OTEL spans.
 

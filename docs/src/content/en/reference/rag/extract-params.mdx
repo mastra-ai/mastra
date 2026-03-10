@@ -70,7 +70,7 @@ The `extract` parameter accepts the following fields:
 ]}
 />
 
-## Extractor Arguments
+## Extractor arguments
 
 ### TitleExtractorsArgs
 
@@ -277,7 +277,7 @@ const chunks = await doc.chunk({
 // }
 ```
 
-## Document Grouping for Title Extraction
+## Document grouping for title extraction
 
 When using the `TitleExtractor`, you can group multiple chunks together for title extraction by specifying a shared `docId` in the `metadata` field of each chunk. All chunks with the same `docId` will receive the same extracted title. If no `docId` is set, each chunk is treated as its own document for title extraction.
 

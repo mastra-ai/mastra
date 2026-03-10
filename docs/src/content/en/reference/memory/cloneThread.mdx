@@ -152,7 +152,7 @@ The cloned thread's metadata includes a `clone` property with:
 ]}
 />
 
-## Extended Usage Example
+## Extended usage example
 
 ```typescript title="src/test-clone.ts"
 import { mastra } from './mastra'
@@ -198,7 +198,7 @@ const response = await agent.generate("Let's try a different approach", {
 })
 ```
 
-## Vector Embeddings
+## Vector embeddings
 
 When the Memory instance has semantic recall enabled (with a vector store and embedder configured), `cloneThread()` automatically creates vector embeddings for all cloned messages. This ensures that semantic search works correctly on the cloned thread.
 
@@ -227,7 +227,7 @@ const results = await memory.recall({
 })
 ```
 
-## Observational Memory
+## Observational memory
 
 When [Observational Memory](/docs/memory/observational-memory) is enabled, `cloneThread()` automatically clones the OM records associated with the source thread. The behavior depends on the OM scope:
 

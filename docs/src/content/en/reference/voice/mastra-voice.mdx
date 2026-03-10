@@ -190,7 +190,7 @@ class MyVoiceProvider extends MastraVoice {
 ]}
 />
 
-## Abstract Methods
+## Abstract methods
 
 These methods must be implemented by unknown class extending MastraVoice.
 
@@ -252,7 +252,7 @@ Purpose:
 - Providers can include additional metadata about each voice
 - Used to discover available voices for text-to-speech conversion
 
-## Optional Methods
+## Optional methods
 
 These methods have default implementations but can be overridden by voice providers that support speech-to-speech capabilities.
 
@@ -362,7 +362,7 @@ Purpose:
 - Removes a previously registered event listener
 - Used to clean up event handlers when they're no longer needed
 
-## Event System
+## Event system
 
 The MastraVoice class includes an event system for real-time communication. Standard event types include:
 
@@ -386,7 +386,7 @@ The MastraVoice class includes an event system for real-time communication. Stan
 ]}
 />
 
-## Protected Properties
+## Protected properties
 
 <PropertiesTable
   content={[
@@ -417,7 +417,7 @@ The MastraVoice class includes an event system for real-time communication. Stan
 ]}
 />
 
-## Telemetry Support
+## Telemetry support
 
 MastraVoice includes built-in telemetry support through the `traced` method, which wraps method calls with performance tracking and error monitoring.
 

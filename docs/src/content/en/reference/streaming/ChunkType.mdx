@@ -11,7 +11,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 The `ChunkType` type defines the mastra format of stream chunks that can be emitted during streaming responses from agents.
 
-## Base Properties
+## Base properties
 
 All chunks include these base properties:
 
@@ -62,7 +62,7 @@ All chunks include these base properties:
 ]}
 />
 
-## Text Chunks
+## Text chunks
 
 ### text-start
 
@@ -180,7 +180,7 @@ Signals the end of text generation.
 ]}
 />
 
-## Reasoning Chunks
+## Reasoning chunks
 
 ### reasoning-start
 
@@ -353,7 +353,7 @@ Contains the reasoning signature from models that support advanced reasoning (li
 ]}
 />
 
-## Tool Chunks
+## Tool chunks
 
 ### tool-call
 
@@ -684,7 +684,7 @@ An error occurred during tool execution.
 ]}
 />
 
-## Source and File Chunks
+## Source and file chunks
 
 ### source
 
@@ -795,7 +795,7 @@ Contains file data.
 ]}
 />
 
-## Control Chunks
+## Control chunks
 
 ### start
 
@@ -1086,7 +1086,7 @@ Stream was aborted.
 ]}
 />
 
-## Object and Output Chunks
+## Object and output chunks
 
 ### object
 
@@ -1171,7 +1171,7 @@ Contains output from workflow step execution, used primarily for usage tracking 
 ]}
 />
 
-## Metadata and Special Chunks
+## Metadata and special chunks
 
 ### response-metadata
 
@@ -1337,7 +1337,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-## Related Types
+## Related types
 
 - [.stream()](./agents/stream) - Method that returns streams emitting these chunks
 - [MastraModelOutput](./agents/MastraModelOutput) - The stream object that emits these chunks

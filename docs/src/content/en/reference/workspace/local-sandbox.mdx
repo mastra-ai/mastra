@@ -343,7 +343,7 @@ const instructions = sandbox.getInstructions({ requestContext })
 
 To override the default output, pass an `instructions` option to the constructor. See [constructor parameters](#constructor-parameters).
 
-## Path Resolution
+## Path resolution
 
 ### Relative paths and execution context
 
@@ -392,7 +392,7 @@ When native isolation is enabled (`seatbelt` or `bwrap`), spawned processes are 
 
 See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
-## Static Methods
+## Static methods
 
 ### `detectIsolation()`
 
@@ -403,7 +403,7 @@ const detection = LocalSandbox.detectIsolation()
 // { backend: 'seatbelt', available: true, message: 'Seatbelt available on macOS' }
 ```
 
-## Environment Isolation
+## Environment isolation
 
 By default, `LocalSandbox` only includes `PATH` in the environment. This allows commands to run while preventing accidental exposure of API keys and secrets.
 
@@ -429,7 +429,7 @@ const devSandbox = new LocalSandbox({
 })
 ```
 
-## Native OS Sandboxing
+## Native OS sandboxing
 
 `LocalSandbox` supports native OS-level sandboxing for additional security:
 

@@ -8,7 +8,7 @@ packages:
 
 Mastra provides a unified `createScorer` factory that allows you to build custom evaluation logic using either JavaScript functions or LLM-based prompt objects for each step. This flexibility lets you choose the best approach for each part of your evaluation pipeline.
 
-## The Four-Step Pipeline
+## The four-step pipeline
 
 All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
@@ -19,7 +19,7 @@ All scorers in Mastra follow a consistent four-step evaluation pipeline:
 
 Each step can use either **functions** or **prompt objects** (LLM-based evaluation), giving you the flexibility to combine deterministic algorithms with AI judgment as needed.
 
-## Functions vs Prompt Objects
+## Functions vs prompt objects
 
 **Functions** use JavaScript for deterministic logic. They're ideal for:
 
@@ -39,7 +39,7 @@ Each step can use either **functions** or **prompt objects** (LLM-based evaluati
 
 You can mix and match approaches within a single scorer - for example, use a function for preprocessing data and an LLM for analyzing quality.
 
-## Initializing a Scorer
+## Initializing a scorer
 
 Every scorer starts with the `createScorer` factory function, which requires an id and description, and optionally accepts a type specification and judge configuration.
 
@@ -119,7 +119,7 @@ const myScorer = createScorer({
 })
 ```
 
-## Step-by-Step Breakdown
+## Step-by-step breakdown
 
 ### preprocess Step (Optional)
 

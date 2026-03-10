@@ -9,7 +9,7 @@ packages:
 
 Abstract base class for implementing custom model gateways. Gateways handle provider-specific logic for accessing language models, including provider configuration, authentication, URL construction, and model instantiation.
 
-## Class Overview
+## Class overview
 
 ```typescript
 import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm'
@@ -60,7 +60,7 @@ class MyCustomGateway extends MastraModelGateway {
 }
 ```
 
-## Required Properties
+## Required properties
 
 <PropertiesTable
   content={[
@@ -78,7 +78,7 @@ class MyCustomGateway extends MastraModelGateway {
 ]}
 />
 
-## Required Methods
+## Required methods
 
 ### fetchProviders()
 
@@ -201,7 +201,7 @@ Creates a language model instance.
 
 **Returns:** `Promise<LanguageModelV2> | LanguageModelV2`
 
-## Instance Methods
+## Instance methods
 
 ### getId()
 
@@ -209,7 +209,7 @@ Returns the gateway's unique identifier.
 
 **Returns:** `string` - The gateway's `id` property
 
-## Model ID Format
+## Model ID format
 
 For true gateways, the gateway ID is used as a prefix and models are accessed using this format:
 
@@ -221,7 +221,7 @@ Examples:
 
 - Gateway with `id = 'custom'`: `'custom/my-provider/model-1'`
 
-## Built-in Implementations
+## Built-in implementations
 
 - **NetlifyGateway** - Netlify AI Gateway integration
 - **ModelsDevGateway** - Registry of OpenAI-compatible providers

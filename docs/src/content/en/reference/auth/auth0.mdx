@@ -90,7 +90,7 @@ The following environment variables are automatically used when constructor opti
 ]}
 />
 
-## Default Authorization Behavior
+## Default authorization behavior
 
 By default, `MastraAuthAuth0` validates Auth0 JWT tokens and allows access to all authenticated users:
 
@@ -102,7 +102,7 @@ By default, `MastraAuthAuth0` validates Auth0 JWT tokens and allows access to al
 
 If all validations pass, the user is considered authorized. To implement custom authorization logic (e.g., role-based access control), provide a custom `authorizeUser` function.
 
-## Auth0 User Type
+## Auth0 user type
 
 The `Auth0User` type used in the `authorizeUser` function corresponds to the decoded JWT token payload, which typically includes:
 

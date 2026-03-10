@@ -90,7 +90,7 @@ The following environment variables are automatically used when constructor opti
 ]}
 />
 
-## Default Authorization Behavior
+## Default authorization behavior
 
 By default, `MastraAuthWorkos` implements role-based authorization that checks for admin access:
 
@@ -105,7 +105,7 @@ This means that by default, only users with admin privileges in at least one org
 
 To implement custom authorization logic (e.g., allow all authenticated users, check for specific roles, or implement custom business logic), provide a custom `authorizeUser` function.
 
-## WorkOS User Type
+## WorkOS user type
 
 The `WorkosUser` type used in the `authorizeUser` function corresponds to the JWT token payload returned by WorkOS. WorkOS allows administrators to set up custom JWT templates, so the exact structure may vary based on your configuration. Here's an example of what the user object might look like:
 

@@ -311,7 +311,7 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
 }
 ```
 
-## Span Lifecycle Events
+## Span lifecycle events
 
 Events emitted during the span lifecycle.
 
@@ -341,7 +341,7 @@ type TracingEvent =
 
 Exporters receive these events to process and send trace data to observability platforms.
 
-## Union Types
+## Union types
 
 ### AnySpan
 
@@ -359,7 +359,7 @@ type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>
 
 Union type for cases that need to handle any exported span type.
 
-## NO-OP Spans
+## NO-OP spans
 
 When tracing is disabled (sampling returns false), NO-OP spans are returned:
 

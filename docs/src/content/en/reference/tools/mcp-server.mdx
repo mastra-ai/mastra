@@ -168,7 +168,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 ]}
 />
 
-## Exposing Agents as Tools
+## Exposing agents as tools
 
 A powerful feature of `MCPServer` is its ability to automatically expose your Mastra Agents as callable tools. When you provide agents in the `agents` property of the configuration:
 
@@ -715,7 +715,7 @@ async executeTool(
 ]}
 />
 
-## Resource Handling
+## Resource handling
 
 ### What are MCP Resources?
 
@@ -842,7 +842,7 @@ Example:
 await serverWithResources.resources.notifyListChanged()
 ```
 
-## Prompt Handling
+## Prompt handling
 
 ### What are MCP Prompts?
 
@@ -1175,7 +1175,7 @@ type ElicitResult = {
 }
 ```
 
-## OAuth Protection
+## OAuth protection
 
 To protect your MCP server with OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `createOAuthMiddleware` function:
 
@@ -1308,7 +1308,7 @@ const customMiddleware = createOAuthMiddleware({
 ]}
 />
 
-## Authentication Context
+## Authentication context
 
 Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. This allows you to pass authentication info, user context, or any custom data from your HTTP middleware to your MCP tools.
 
@@ -1488,7 +1488,7 @@ app.all('/mcp', async (req, res) => {
 app.listen(3000)
 ```
 
-## Related Information
+## Related information
 
 - For connecting to MCP servers in Mastra, see the [MCPClient documentation](./mcp-client).
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

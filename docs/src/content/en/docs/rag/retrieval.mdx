@@ -26,7 +26,7 @@ After storing embeddings, you need to retrieve relevant chunks to answer user qu
 
 Mastra provides flexible retrieval options with support for semantic search, filtering, and re-ranking.
 
-## How Retrieval Works
+## How retrieval works
 
 1. The user's query is converted to an embedding using the same model used for document embeddings
 1. This embedding is compared to stored embeddings using vector similarity
@@ -36,7 +36,7 @@ Mastra provides flexible retrieval options with support for semantic search, fil
 - Re-ranked for better relevance
 - Processed through a knowledge graph
 
-## Basic Retrieval
+## Basic retrieval
 
 The simplest approach is direct semantic search. This method uses vector similarity to find chunks that are semantically similar to the query:
 
@@ -85,7 +85,7 @@ Results include both the text content and a similarity score:
 ]
 ```
 
-## Advanced Retrieval options
+## Advanced retrieval options
 
 ### Metadata Filtering
 

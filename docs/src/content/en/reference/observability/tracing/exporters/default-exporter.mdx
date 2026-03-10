@@ -131,7 +131,7 @@ async shutdown(): Promise<void>
 
 Flushes remaining buffered events and performs cleanup.
 
-## Automatic Strategy Selection
+## Automatic strategy selection
 
 When `strategy: 'auto'` (default), the exporter queries the storage adapter for its capabilities:
 
@@ -151,7 +151,7 @@ The exporter will:
 1. Fall back to the first supported strategy if preferred isn't available
 1. Log a warning if a user-specified strategy isn't supported
 
-## Batching Behavior
+## Batching behavior
 
 ### Flush Triggers
 

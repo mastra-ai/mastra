@@ -108,7 +108,7 @@ Bridges provide bidirectional integration with external tracing systems. Unlike 
 
 You can use both together — a bridge for context propagation and exporters to send traces to additional destinations.
 
-## Sampling Strategies
+## Sampling strategies
 
 Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs. In production environments with high traffic, collecting every trace can be expensive and unnecessary. Sampling strategies let you capture a representative subset of traces while ensuring you don't miss critical information about errors or important operations.
 
@@ -184,7 +184,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Multi-Config Setup
+## Multi-config setup
 
 Complex applications often require different tracing configurations for different scenarios. You might want detailed traces with full sampling during development, sampled traces sent to external providers in production, and specialized configurations for specific features or customer segments. The `configSelector` function enables dynamic configuration selection at runtime, allowing you to route traces based on request context, environment variables, feature flags, or any custom logic.
 
@@ -326,7 +326,7 @@ Remember: A single trace can be sent to multiple exporters. You don't need separ
 
 :::
 
-## Adding Custom Metadata
+## Adding custom metadata
 
 Custom metadata allows you to attach additional context to your traces, making it easier to debug issues and understand system behavior in production. Metadata can include business logic details, performance metrics, user context, or any information that helps you understand what happened during execution.
 
@@ -572,7 +572,7 @@ execute: async (inputData, context) => {
 
 This gives you fine-grained control over which child spans include RequestContext metadata. Root spans (agent/workflow executions) always extract metadata automatically, while child spans only extract when you explicitly pass `requestContext`.
 
-## Creating Child Spans
+## Creating child spans
 
 Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries, API calls, file operations, or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
 
@@ -611,7 +611,7 @@ execute: async (inputData, context) => {
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
 
-## Span Formatting
+## Span formatting
 
 Mastra provides two ways to transform span data before it reaches your observability platform: **span processors** and **custom span formatters**. Both allow you to modify, filter, or enrich trace data, but they operate at different levels and serve different purposes.
 
@@ -810,7 +810,7 @@ const exporter = new LangfuseExporter({
 Async formatters add latency to span export. Keep async operations fast (under 100ms) to avoid slowing down your application. Consider using caching for frequently accessed data.
 :::
 
-## Serialization Options
+## Serialization options
 
 Serialization options control how span data (input, output, and attributes) is truncated before export. This is useful when working with large payloads, deeply nested objects, or when you need to optimize trace storage.
 
@@ -871,7 +871,7 @@ serializationOptions: {
 
 All options are optional — if not specified, they fall back to the defaults shown above.
 
-## Retrieving Trace IDs
+## Retrieving trace IDs
 
 When you execute agents or workflows with tracing enabled, the response includes a `traceId` that you can use to look up the full trace in your observability platform. This is useful for debugging, customer support, or correlating traces with other events in your system.
 
@@ -927,7 +927,7 @@ Once you have a trace ID, you can:
 
 The trace ID is only available when tracing is enabled. If tracing is disabled or sampling excludes the request, `traceId` will be `undefined`.
 
-## Integrating with External Tracing Systems
+## Integrating with external tracing systems
 
 When running Mastra agents or workflows within applications that have existing distributed tracing (OpenTelemetry, Datadog, etc.), you can connect Mastra traces to your parent trace context. This creates a unified view of your entire request flow, making it easier to understand how Mastra operations fit into the broader system.
 
@@ -1033,7 +1033,7 @@ app.post('/api/analyze', async (req, res) => {
 
 This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
 
-## Flushing Traces in Serverless Environments
+## Flushing traces in serverless environments
 
 In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflare Workers, runtime instances can be reused across multiple requests. The `flush()` method allows you to ensure all buffered spans are exported before the runtime terminates, without shutting down the exporter (which would prevent future exports).
 
@@ -1083,7 +1083,7 @@ export async function POST(req: Request) {
 
 Use `flush()` when you need to ensure data is exported but want to keep the exporter ready for future requests. Use `shutdown()` only when the application is terminating.
 
-## What Gets Traced
+## What gets traced
 
 Mastra automatically creates spans for:
 

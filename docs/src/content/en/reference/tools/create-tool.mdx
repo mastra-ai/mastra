@@ -80,7 +80,7 @@ The tool still returns the full `execute` result to your application, while the 
 - `type: 'json'`
 - `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
 
-## Example with MCP Annotations
+## Example with MCP annotations
 
 When exposing tools via MCP (Model Context Protocol), you can add annotations to describe tool behavior and customize how clients display the tool. These MCP-specific properties are grouped under the `mcp` property:
 
@@ -298,7 +298,7 @@ The `createTool()` function returns a `Tool` object.
 ]}
 />
 
-## Tool Lifecycle Hooks
+## Tool lifecycle hooks
 
 Tools support lifecycle hooks that allow you to monitor and react to different stages of tool execution. These hooks are particularly useful for logging, analytics, validation, and real-time updates during streaming.
 
@@ -399,7 +399,7 @@ Additionally:
 
 Hook errors are caught and logged automatically, but don't prevent tool execution from continuing. If a hook throws an error, it will be logged to the console but won't fail the tool call.
 
-## MCP Tool Annotations
+## MCP tool annotations
 
 When exposing tools via the Model Context Protocol (MCP), you can provide annotations that describe tool behavior. These annotations help MCP clients like OpenAI Apps SDK understand how to present and handle your tools.
 

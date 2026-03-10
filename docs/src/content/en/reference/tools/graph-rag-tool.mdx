@@ -184,7 +184,7 @@ The tool returns an object with:
 }
 ```
 
-## Default Tool Description
+## Default tool description
 
 The default description focuses on:
 
@@ -208,7 +208,7 @@ const graphTool = createGraphRAGTool({
 })
 ```
 
-## Example with Custom Description
+## Example with custom description
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -222,7 +222,7 @@ const graphTool = createGraphRAGTool({
 
 This example shows how to customize the tool description for a specific use case while maintaining its core purpose of relationship analysis.
 
-## Example: Using Request Context
+## Example: Using request context
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -258,7 +258,7 @@ For more information on request context, please see:
 - [Agent Request Context](/docs/server/request-context)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)
 
-## Dynamic Vector Store for Multi-Tenant Applications
+## Dynamic vector store for multi-tenant applications
 
 For multi-tenant applications where each tenant has isolated data, you can pass a resolver function instead of a static vector store:
 

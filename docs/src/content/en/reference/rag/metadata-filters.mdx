@@ -9,7 +9,7 @@ packages:
 
 Mastra provides a unified metadata filtering syntax across all vector stores, based on MongoDB/Sift query syntax. Each vector store translates these filters into their native format.
 
-## Basic Example
+## Basic example
 
 ```typescript
 import { PgVector } from '@mastra/pg'
@@ -31,7 +31,7 @@ const results = await store.query({
 })
 ```
 
-## Supported Operators
+## Supported operators
 
 <OperatorsTable
   title="Basic Comparison"
@@ -195,7 +195,7 @@ const results = await store.query({
 ]}
 />
 
-## Common Rules and Restrictions
+## Common rules and restrictions
 
 1. Field names can't:
    - Contain dots (.) unless referring to nested fields
@@ -231,7 +231,7 @@ const results = await store.query({
    - Valid: `{ "$and": [{ "field": { "$gt": 100 } }] }`
    - Invalid: `{ "$and": [{ "$gt": 100 }] }`
 
-## Store-Specific Notes
+## Store-specific notes
 
 ### Astra
 
