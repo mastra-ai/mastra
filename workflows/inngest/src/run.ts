@@ -19,6 +19,7 @@ import type {
   WorkflowResult,
   WorkflowStreamEvent,
 } from '@mastra/core/workflows';
+import { suppressTracing } from '@opentelemetry/core';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import type { InngestEngineType } from './types';
@@ -74,13 +75,14 @@ export class InngestRun<
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        const response = await fetch(
-          `${this.inngest.apiBaseUrl ?? 'https://api.inngest.com'}/v1/events/${eventId}/runs`,
-          {
+        // Suppress OTel auto-instrumentation on polling fetch calls to avoid
+        // excessive trace noise (see https://github.com/mastra-ai/mastra/issues/13892)
+        const response = await suppressTracing(() =>
+          fetch(`${this.inngest.apiBaseUrl ?? 'https://api.inngest.com'}/v1/events/${eventId}/runs`, {
             headers: {
               Authorization: `Bearer ${process.env.INNGEST_SIGNING_KEY}`,
             },
-          },
+          }),
         );
 
         // Handle rate limiting with retry
