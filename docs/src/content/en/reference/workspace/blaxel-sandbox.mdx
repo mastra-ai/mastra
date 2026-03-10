@@ -220,7 +220,7 @@ const workspace = new Workspace({
   mounts: {
     '/data': new GCSFilesystem({
       bucket: 'my-bucket',
-      serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
     }),
   },
   sandbox: new BlaxelSandbox(),
