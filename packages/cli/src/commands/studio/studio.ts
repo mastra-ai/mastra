@@ -17,6 +17,24 @@ interface StudioOptions {
   requestContextPresets?: string;
 }
 
+function normalizeBasePath(basePath: string): string {
+  const trimmed = basePath.trim();
+
+  if (trimmed === '' || trimmed === '/') {
+    return '';
+  }
+
+  let normalized = trimmed.replace(/\/+/g, '/');
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  if (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1);
+  }
+
+  return normalized;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -28,7 +46,7 @@ export async function studio(
   },
 ) {
   // Load environment variables from .env files
-  config({ path: [options.env || '.env.production', '.env'] });
+  config({ path: [options.env || '.env.production', '.env'], quiet: true });
 
   // Load and validate request context presets if provided
   let requestContextPresetsJson = '';
@@ -76,9 +94,9 @@ export async function studio(
   }
 }
 
-const createServer = (builtStudioPath: string, options: StudioOptions, requestContextPresetsJson: string) => {
+export const createServer = (builtStudioPath: string, options: StudioOptions, requestContextPresetsJson: string) => {
   const indexHtmlPath = join(builtStudioPath, 'index.html');
-  const basePath = '';
+  const basePath = normalizeBasePath(process.env.MASTRA_STUDIO_BASE_PATH ?? '');
 
   const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
 
@@ -95,19 +113,32 @@ const createServer = (builtStudioPath: string, options: StudioOptions, requestCo
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson));
 
   const server = http.createServer((req, res) => {
-    const url = req.url || basePath;
+    const url = req.url || '/';
+    const queryStart = url.indexOf('?');
+    const rawPathname = queryStart >= 0 ? url.slice(0, queryStart) : url;
+    const query = queryStart >= 0 ? url.slice(queryStart + 1) : '';
+    const pathname = rawPathname || '/';
 
+    const pathWithoutBase =
+      basePath && pathname.startsWith(`${basePath}/`)
+        ? pathname.slice(basePath.length)
+        : pathname === basePath
+          ? '/'
+          : pathname;
     // Let static assets be served by serve-handler
-    const isStaticAsset =
-      url.includes('/assets/') ||
-      url.includes('/dist/assets/') ||
-      url.includes('/mastra.svg') ||
-      url.includes('/favicon.ico');
+    const isAssetsPath = /(^|\/)assets\//.test(pathWithoutBase);
+    const isDistAssetsPath = /(^|\/)dist\/assets\//.test(pathWithoutBase);
+    const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
+    const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
 
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       return res.end(html);
+    }
+
+    if (basePath && pathWithoutBase !== pathname) {
+      req.url = query ? `${pathWithoutBase}?${query}` : pathWithoutBase;
     }
 
     return handler(req, res, {

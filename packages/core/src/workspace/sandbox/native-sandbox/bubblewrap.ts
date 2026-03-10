@@ -32,15 +32,13 @@ const DEFAULT_READONLY_BINDS = [
 /**
  * Build the bwrap command arguments for the given configuration.
  *
- * @param command - The command to run inside the sandbox
- * @param args - Arguments for the command
+ * @param command - The full shell command string to run inside the sandbox
  * @param workspacePath - The workspace directory (mounted read-write)
  * @param config - Additional sandbox configuration
  * @returns Wrapped command and arguments for bwrap
  */
 export function buildBwrapCommand(
   command: string,
-  args: string[],
   workspacePath: string,
   config: NativeSandboxConfig,
 ): { command: string; args: string[] } {
@@ -48,7 +46,7 @@ export function buildBwrapCommand(
   if (config.bwrapArgs && config.bwrapArgs.length > 0) {
     return {
       command: 'bwrap',
-      args: [...config.bwrapArgs, '--', command, ...args],
+      args: [...config.bwrapArgs, '--', 'sh', '-c', command],
     };
   }
 
@@ -111,8 +109,8 @@ export function buildBwrapCommand(
   // Die with parent (clean up if the parent process dies)
   bwrapArgs.push('--die-with-parent');
 
-  // Add the command separator and actual command
-  bwrapArgs.push('--', command, ...args);
+  // Add the command separator and run via sh -c for shell interpretation
+  bwrapArgs.push('--', 'sh', '-c', command);
 
   return {
     command: 'bwrap',

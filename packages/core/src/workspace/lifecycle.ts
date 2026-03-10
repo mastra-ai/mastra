@@ -1,47 +1,64 @@
 /**
- * Shared Lifecycle Interface
+ * Workspace Lifecycle Interfaces
  *
- * Defines common lifecycle methods for workspace providers (filesystem, sandbox).
- * All methods are optional - implementations provide what they need.
+ * Defines lifecycle contracts for workspace providers (filesystem, sandbox).
+ * The base `Lifecycle` holds shared members while `FilesystemLifecycle` and
+ * `SandboxLifecycle` add the methods each provider kind actually uses.
  */
 
 // =============================================================================
-// Lifecycle Interface
+// Base Lifecycle Interface
 // =============================================================================
 
 /**
- * Common lifecycle interface for workspace providers.
+ * Shared lifecycle base for workspace providers.
  *
- * Both filesystem and sandbox providers can implement any of these methods
- * based on their requirements. The Workspace class will call available
- * methods in the appropriate order.
+ * Contains status tracking, destroy, readiness check, and info retrieval.
+ * Provider-specific lifecycle methods live in the extended interfaces:
+ * - {@link FilesystemLifecycle} adds `init()`
+ * - {@link SandboxLifecycle} adds `start()` / `stop()`
  *
  * @typeParam TInfo - The type returned by getInfo() (e.g., FilesystemInfo, SandboxInfo)
- *
- * @example
- * ```typescript
- * // A simple local provider might only implement init
- * class LocalFilesystem implements WorkspaceFilesystem {
- *   async init() {
- *     await fs.mkdir(this.basePath, { recursive: true });
- *   }
- * }
- *
- * // A cloud provider might implement the full lifecycle
- * class CloudSandbox implements WorkspaceSandbox {
- *   async init() { // provision template }
- *   async start() { // spin up instance }
- *   async stop() { // pause instance }
- *   async destroy() { // terminate instance }
- *   async isReady() { return this.status === 'running'; }
- *   async getInfo() { return { ...metadata }; }
- * }
- * ```
  */
 export interface Lifecycle<TInfo = unknown> {
   /** Current status */
   status: ProviderStatus;
 
+  /** Error message when status is 'error' */
+  error?: string;
+
+  /**
+   * Clean up all resources.
+   *
+   * Called when the workspace is being permanently shut down.
+   * Use for operations like:
+   * - Terminating cloud instances
+   * - Closing all connections
+   * - Cleaning up temporary files
+   */
+  destroy?(): void | Promise<void>;
+
+  /** @deprecated Use `status === 'running'` instead. */
+  isReady?(): boolean | Promise<boolean>;
+
+  /**
+   * Get status and metadata.
+   *
+   * Returns information about the current state of the provider.
+   */
+  getInfo?(): TInfo | Promise<TInfo>;
+}
+
+// =============================================================================
+// Filesystem Lifecycle
+// =============================================================================
+
+/**
+ * Lifecycle interface for filesystem providers (two-phase: init → destroy).
+ *
+ * @typeParam TInfo - The type returned by getInfo()
+ */
+export interface FilesystemLifecycle<TInfo = unknown> extends Lifecycle<TInfo> {
   /**
    * One-time setup operations.
    *
@@ -53,7 +70,18 @@ export interface Lifecycle<TInfo = unknown> {
    * - Installing dependencies
    */
   init?(): void | Promise<void>;
+}
 
+// =============================================================================
+// Sandbox Lifecycle
+// =============================================================================
+
+/**
+ * Lifecycle interface for sandbox providers (three-phase: start → stop → destroy).
+ *
+ * @typeParam TInfo - The type returned by getInfo()
+ */
+export interface SandboxLifecycle<TInfo = unknown> extends Lifecycle<TInfo> {
   /**
    * Begin active operation.
    *
@@ -76,35 +104,6 @@ export interface Lifecycle<TInfo = unknown> {
    * - Flushing buffers
    */
   stop?(): void | Promise<void>;
-
-  /**
-   * Clean up all resources.
-   *
-   * Called when the workspace is being permanently shut down.
-   * Use for operations like:
-   * - Terminating cloud instances
-   * - Closing all connections
-   * - Cleaning up temporary files
-   */
-  destroy?(): void | Promise<void>;
-
-  /**
-   * Check if ready for operations.
-   *
-   * Returns true if the provider is ready to handle requests.
-   * Use for checking:
-   * - Connection health
-   * - Instance status
-   * - Resource availability
-   */
-  isReady?(): boolean | Promise<boolean>;
-
-  /**
-   * Get status and metadata.
-   *
-   * Returns information about the current state of the provider.
-   */
-  getInfo?(): TInfo | Promise<TInfo>;
 }
 
 // =============================================================================

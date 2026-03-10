@@ -12,24 +12,24 @@ By default, Mastra automatically exposes registered agents and workflows via its
 Routes are provided with a helper `registerApiRoute()` from `@mastra/core/server`. Routes can live in the same file as the `Mastra` instance but separating them helps keep configuration concise.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute("/my-custom-route", {
-        method: "GET",
-        handler: async (c) => {
-          const mastra = c.get("mastra");
-          const agent = await mastra.getAgent("my-agent");
+      registerApiRoute('/my-custom-route', {
+        method: 'GET',
+        handler: async c => {
+          const mastra = c.get('mastra')
+          const agent = await mastra.getAgent('my-agent')
 
-          return c.json({ message: "Custom route" });
+          return c.json({ message: 'Custom route' })
         },
       }),
     ],
   },
-});
+})
 ```
 
 Once registered, a custom route will be accessible from the root of the server. For example:
@@ -45,27 +45,27 @@ Each route's handler receives the Hono `Context`. Within the handler you can acc
 To add route-specific middleware pass a `middleware` array when calling `registerApiRoute()`.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute("/my-custom-route", {
-        method: "GET",
+      registerApiRoute('/my-custom-route', {
+        method: 'GET',
         middleware: [
           async (c, next) => {
-            console.log(`${c.req.method} ${c.req.url}`);
-            await next();
+            console.log(`${c.req.method} ${c.req.url}`)
+            await next()
           },
         ],
-        handler: async (c) => {
-          return c.json({ message: "Custom route with middleware" });
+        handler: async c => {
+          return c.json({ message: 'Custom route with middleware' })
         },
       }),
     ],
   },
-});
+})
 ```
 
 ## OpenAPI Documentation
@@ -73,56 +73,56 @@ export const mastra = new Mastra({
 Custom routes can include OpenAPI metadata to appear in the Swagger UI alongside Mastra server routes. Pass an `openapi` option with standard OpenAPI operation fields.
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
-import { z } from "zod";
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { z } from 'zod'
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute("/items/:itemId", {
-        method: "GET",
+      registerApiRoute('/items/:itemId', {
+        method: 'GET',
         openapi: {
-          summary: "Get item by ID",
-          description: "Retrieves a single item by its unique identifier",
-          tags: ["Items"],
+          summary: 'Get item by ID',
+          description: 'Retrieves a single item by its unique identifier',
+          tags: ['Items'],
           parameters: [
             {
-              name: "itemId",
-              in: "path",
+              name: 'itemId',
+              in: 'path',
               required: true,
-              description: "The item ID",
-              schema: { type: "string" },
+              description: 'The item ID',
+              schema: { type: 'string' },
             },
           ],
           responses: {
             200: {
-              description: "Item found",
+              description: 'Item found',
               content: {
-                "application/json": {
+                'application/json': {
                   schema: {
-                    type: "object",
+                    type: 'object',
                     properties: {
-                      id: { type: "string" },
-                      name: { type: "string" },
+                      id: { type: 'string' },
+                      name: { type: 'string' },
                     },
                   },
                 },
               },
             },
             404: {
-              description: "Item not found",
+              description: 'Item not found',
             },
           },
         },
-        handler: async (c) => {
-          const itemId = c.req.param("itemId");
-          return c.json({ id: itemId, name: "Example Item" });
+        handler: async c => {
+          const itemId = c.req.param('itemId')
+          return c.json({ id: itemId, name: 'Example Item' })
         },
       }),
     ],
   },
-});
+})
 ```
 
 ### Using Zod Schemas
@@ -130,56 +130,56 @@ export const mastra = new Mastra({
 Zod schemas in the `openapi` configuration are converted to JSON Schema when the OpenAPI document is generated:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
-import { z } from "zod";
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { z } from 'zod'
 
 const ItemSchema = z.object({
   id: z.string(),
   name: z.string(),
   price: z.number(),
-});
+})
 
 const CreateItemSchema = z.object({
   name: z.string().min(1),
   price: z.number().positive(),
-});
+})
 
 export const mastra = new Mastra({
   server: {
     apiRoutes: [
-      registerApiRoute("/items", {
-        method: "POST",
+      registerApiRoute('/items', {
+        method: 'POST',
         openapi: {
-          summary: "Create a new item",
-          tags: ["Items"],
+          summary: 'Create a new item',
+          tags: ['Items'],
           requestBody: {
             required: true,
             content: {
-              "application/json": {
+              'application/json': {
                 schema: CreateItemSchema,
               },
             },
           },
           responses: {
             201: {
-              description: "Item created",
+              description: 'Item created',
               content: {
-                "application/json": {
+                'application/json': {
                   schema: ItemSchema,
                 },
               },
             },
           },
         },
-        handler: async (c) => {
-          const body = await c.req.json();
-          return c.json({ id: "new-id", ...body }, 201);
+        handler: async c => {
+          const body = await c.req.json()
+          return c.json({ id: 'new-id', ...body }, 201)
         },
       }),
     ],
   },
-});
+})
 ```
 
 ### Viewing in Swagger UI
@@ -196,7 +196,7 @@ export const mastra = new Mastra({
       // Your routes...
     ],
   },
-});
+})
 ```
 
 ## Authentication
@@ -204,9 +204,9 @@ export const mastra = new Mastra({
 When authentication is configured on your Mastra server, custom API routes require authentication by default. To make a route publicly accessible, set `requiresAuth: false`:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { registerApiRoute } from "@mastra/core/server";
-import { MastraJwtAuth } from "@mastra/auth";
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { MastraJwtAuth } from '@mastra/auth'
 
 export const mastra = new Mastra({
   server: {
@@ -215,28 +215,28 @@ export const mastra = new Mastra({
     }),
     apiRoutes: [
       // Protected route (default behavior)
-      registerApiRoute("/protected-data", {
-        method: "GET",
-        handler: async (c) => {
+      registerApiRoute('/protected-data', {
+        method: 'GET',
+        handler: async c => {
           // Access authenticated user from request context
-          const user = c.get("requestContext").get("user");
-          return c.json({ message: "Authenticated user", user });
+          const user = c.get('requestContext').get('user')
+          return c.json({ message: 'Authenticated user', user })
         },
       }),
 
       // Public route (no authentication required)
-      registerApiRoute("/webhooks/github", {
-        method: "POST",
+      registerApiRoute('/webhooks/github', {
+        method: 'POST',
         requiresAuth: false, // Explicitly opt out of authentication
-        handler: async (c) => {
-          const payload = await c.req.json();
+        handler: async c => {
+          const payload = await c.req.json()
           // Process webhook without authentication
-          return c.json({ received: true });
+          return c.json({ received: true })
         },
       }),
     ],
   },
-});
+})
 ```
 
 ### Authentication behavior
@@ -252,13 +252,13 @@ export const mastra = new Mastra({
 When a request is authenticated, the user object is available in the request context:
 
 ```typescript
-registerApiRoute("/user-profile", {
-  method: "GET",
-  handler: async (c) => {
-    const requestContext = c.get("requestContext");
-    const user = requestContext.get("user");
+registerApiRoute('/user-profile', {
+  method: 'GET',
+  handler: async c => {
+    const requestContext = c.get('requestContext')
+    const user = requestContext.get('user')
 
-    return c.json({ user });
+    return c.json({ user })
   },
 })
 ```

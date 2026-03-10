@@ -375,7 +375,7 @@ function main(): void {
 try {
   main();
 } catch (error) {
-  if (process.env.CI) {
+  if (process.env.REQUIRE_PACKAGE_DOCS) {
     console.error('Failed to generate package docs:', error);
     process.exit(1);
   }

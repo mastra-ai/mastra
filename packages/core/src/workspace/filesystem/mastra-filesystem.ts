@@ -37,6 +37,23 @@ import type {
 } from './filesystem';
 
 /**
+ * Lifecycle hook that fires during filesystem state transitions.
+ * Receives the filesystem instance so users can inspect state, log, etc.
+ */
+export type FilesystemLifecycleHook = (args: { filesystem: WorkspaceFilesystem }) => void | Promise<void>;
+
+/**
+ * Options for the MastraFilesystem base class constructor.
+ * Providers extend this to add their own options while inheriting lifecycle hooks.
+ */
+export interface MastraFilesystemOptions {
+  /** Called after the filesystem reaches 'ready' status */
+  onInit?: FilesystemLifecycleHook;
+  /** Called before the filesystem is destroyed */
+  onDestroy?: FilesystemLifecycleHook;
+}
+
+/**
  * Abstract base class for filesystem providers with logger support and lifecycle management.
  *
  * Providers that extend this class automatically receive the Mastra logger
@@ -81,6 +98,9 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   /** Current status of the filesystem */
   abstract status: ProviderStatus;
 
+  /** Error message when status is 'error' */
+  error?: string;
+
   // ---------------------------------------------------------------------------
   // Lifecycle Promise Tracking (prevents race conditions)
   // ---------------------------------------------------------------------------
@@ -91,8 +111,15 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
   /** Promise for _destroy() to prevent race conditions from concurrent calls */
   private _destroyPromise?: Promise<void>;
 
-  constructor(options: { name: string }) {
+  /** Lifecycle callbacks */
+  private readonly _onInit?: FilesystemLifecycleHook;
+  private readonly _onDestroy?: FilesystemLifecycleHook;
+
+  constructor(options: { name: string } & MastraFilesystemOptions) {
     super({ name: options.name, component: RegisteredLogger.WORKSPACE });
+
+    this._onInit = options.onInit;
+    this._onDestroy = options.onDestroy;
   }
 
   // ---------------------------------------------------------------------------
@@ -143,12 +170,22 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
    */
   private async _executeInit(): Promise<void> {
     this.status = 'initializing';
+    this.error = undefined;
 
     try {
       await this.init();
       this.status = 'ready';
+
+      // Fire onInit callback after filesystem is ready — treat failure as non-fatal
+      // so that a bad callback doesn't kill an otherwise healthy filesystem
+      try {
+        await this._onInit?.({ filesystem: this });
+      } catch (error) {
+        this.logger.warn('onInit callback failed', { error });
+      }
     } catch (error) {
       this.status = 'error';
+      this.error = error instanceof Error ? error.message : String(error);
       this.logger.error('Failed to initialize filesystem', { error, id: this.id });
       throw error;
     }
@@ -247,6 +284,9 @@ export abstract class MastraFilesystem extends MastraBase implements WorkspaceFi
     this.status = 'destroying';
 
     try {
+      // Fire onDestroy callback before destroying
+      await this._onDestroy?.({ filesystem: this });
+
       await this.destroy();
       this.status = 'destroyed';
     } catch (error) {

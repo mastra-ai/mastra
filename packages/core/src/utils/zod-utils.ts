@@ -1,11 +1,15 @@
-import type { z } from 'zod';
+import type { z } from 'zod/v4';
+
+type ZodTypeAny = z.ZodType<any, any>;
+type ZodObjectAny = z.ZodObject<any>;
+type ZodArrayAny = z.ZodArray<any>;
 
 /**
  * Checks if a value is a Zod type
  * @param value - The value to check
  * @returns True if the value is a Zod type, false otherwise
  */
-export function isZodType(value: unknown): value is z.ZodType {
+export function isZodType(value: unknown): value is ZodTypeAny {
   // Check if it's a Zod schema by looking for common Zod properties and methods
   return (
     typeof value === 'object' &&
@@ -31,7 +35,7 @@ export function isZodType(value: unknown): value is z.ZodType {
  * @param schema - The Zod schema to get the type name from
  * @returns The Zod type name string (e.g., "ZodString", "ZodOptional") or undefined
  */
-export function getZodTypeName(schema: z.ZodTypeAny): string | undefined {
+export function getZodTypeName(schema: ZodTypeAny): string | undefined {
   const schemaAny = schema as any;
 
   // Zod 3 structure: _def.typeName = "ZodString", "ZodOptional", etc.
@@ -54,9 +58,9 @@ export function getZodTypeName(schema: z.ZodTypeAny): string | undefined {
  * @param value - The value to check (can be any type)
  * @returns True if the value is a ZodArray
  */
-export function isZodArray(value: unknown): value is z.ZodArray<z.ZodTypeAny> {
+export function isZodArray(value: unknown): value is ZodArrayAny {
   if (!isZodType(value)) return false;
-  return getZodTypeName(value as z.ZodTypeAny) === 'ZodArray';
+  return getZodTypeName(value as ZodTypeAny) === 'ZodArray';
 }
 
 /**
@@ -64,9 +68,9 @@ export function isZodArray(value: unknown): value is z.ZodArray<z.ZodTypeAny> {
  * @param value - The value to check (can be any type)
  * @returns True if the value is a ZodObject
  */
-export function isZodObject(value: unknown): value is z.ZodObject<any> {
+export function isZodObject(value: unknown): value is ZodObjectAny {
   if (!isZodType(value)) return false;
-  return getZodTypeName(value as z.ZodTypeAny) === 'ZodObject';
+  return getZodTypeName(value as ZodTypeAny) === 'ZodObject';
 }
 
 /**
@@ -74,7 +78,7 @@ export function isZodObject(value: unknown): value is z.ZodObject<any> {
  * @param schema - The Zod schema
  * @returns The def object
  */
-export function getZodDef(schema: z.ZodTypeAny): any {
+export function getZodDef(schema: ZodTypeAny): any {
   const schemaAny = schema as any;
   return schemaAny._zod?.def ?? schemaAny._def;
 }

@@ -19,6 +19,9 @@
  * ```
  */
 
+import posixPath from 'node:path/posix';
+
+import type { RequestContext } from '../../request-context';
 import { PermissionError } from '../errors';
 import { callLifecycle } from '../lifecycle';
 import type { ProviderStatus } from '../lifecycle';
@@ -27,6 +30,7 @@ import type {
   FileContent,
   FileEntry,
   FileStat,
+  FilesystemInfo,
   ReadOptions,
   WriteOptions,
   ListOptions,
@@ -37,9 +41,11 @@ import type {
 /**
  * Configuration for CompositeFilesystem.
  */
-export interface CompositeFilesystemConfig {
+export interface CompositeFilesystemConfig<
+  TMounts extends Record<string, WorkspaceFilesystem> = Record<string, WorkspaceFilesystem>,
+> {
   /** Map of mount paths to filesystem instances */
-  mounts: Record<string, WorkspaceFilesystem>;
+  mounts: TMounts;
 }
 
 interface ResolvedMount {
@@ -53,17 +59,36 @@ interface ResolvedMount {
  *
  * Routes file operations to the appropriate underlying filesystem based on path.
  * Supports cross-mount operations (copy/move between different filesystems).
+ *
+ * The generic parameter preserves the concrete types of mounted filesystems,
+ * enabling typed access via `mounts.get()`.
+ *
+ * @example
+ * ```typescript
+ * const cfs = new CompositeFilesystem({
+ *   mounts: {
+ *     '/local': new LocalFilesystem({ basePath: './data' }),
+ *     '/s3': new S3Filesystem({ bucket: 'my-bucket' }),
+ *   },
+ * });
+ *
+ * cfs.mounts.get('/local') // LocalFilesystem
+ * cfs.mounts.get('/s3')    // S3Filesystem
+ * ```
  */
-export class CompositeFilesystem implements WorkspaceFilesystem {
+export class CompositeFilesystem<
+  TMounts extends Record<string, WorkspaceFilesystem> = Record<string, WorkspaceFilesystem>,
+> implements WorkspaceFilesystem {
   readonly id: string;
   readonly name = 'CompositeFilesystem';
   readonly provider = 'composite';
 
+  readonly readOnly?: boolean;
   status: ProviderStatus = 'ready';
 
   private readonly _mounts: Map<string, WorkspaceFilesystem>;
 
-  constructor(config: CompositeFilesystemConfig) {
+  constructor(config: CompositeFilesystemConfig<TMounts>) {
     this.id = `cfs-${Date.now().toString(36)}`;
     this._mounts = new Map();
 
@@ -75,6 +100,9 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     if (this._mounts.size === 0) {
       throw new Error('CompositeFilesystem requires at least one mount');
     }
+
+    // Composite is read-only when every mount is read-only
+    this.readOnly = [...this._mounts.values()].every(fs => fs.readOnly) || undefined;
 
     // Validate no nested mount paths (e.g., /data and /data/sub)
     const mountPaths = [...this._mounts.keys()];
@@ -96,9 +124,30 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
   /**
    * Get the mounts map.
+   * Returns a typed map where `get()` preserves the concrete filesystem type per mount path.
    */
-  get mounts(): ReadonlyMap<string, WorkspaceFilesystem> {
-    return this._mounts;
+  get mounts(): ReadonlyMountMap<TMounts> {
+    return this._mounts as unknown as ReadonlyMountMap<TMounts>;
+  }
+
+  /**
+   * Get status and metadata for this composite filesystem.
+   * Includes info from each mounted filesystem in `metadata.mounts`.
+   */
+  async getInfo(): Promise<FilesystemInfo> {
+    const mounts: Record<string, FilesystemInfo | null> = {};
+    for (const [mountPath, fs] of this._mounts) {
+      mounts[mountPath] = (await fs.getInfo?.()) ?? null;
+    }
+
+    return {
+      id: this.id,
+      name: this.name,
+      provider: this.provider,
+      status: this.status,
+      readOnly: this.readOnly,
+      metadata: { mounts },
+    };
   }
 
   /**
@@ -119,9 +168,21 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     return resolved?.mountPath;
   }
 
+  /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   * Strips the mount prefix and delegates to the underlying filesystem.
+   */
+  resolveAbsolutePath(path: string): string | undefined {
+    const r = this.resolveMount(path);
+    if (!r) return undefined;
+    return r.fs.resolveAbsolutePath?.(r.fsPath);
+  }
+
   private normalizePath(path: string): string {
     if (!path || path === '/') return '/';
-    let n = path.startsWith('/') ? path : `/${path}`;
+    // posix.normalize resolves dot segments (./foo → foo, a/../b → b)
+    let n = posixPath.normalize(path);
+    if (!n.startsWith('/')) n = `/${n}`;
     if (n.length > 1 && n.endsWith('/')) n = n.slice(0, -1);
     return n;
   }
@@ -170,6 +231,8 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
               icon: fs.icon,
               displayName: fs.displayName,
               description: fs.description,
+              status: fs.status,
+              error: fs.error,
             };
           }
 
@@ -206,18 +269,18 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
   async init(): Promise<void> {
     this.status = 'initializing';
-    const errors: Error[] = [];
-    for (const fs of this._mounts.values()) {
+    for (const [mountPath, fs] of this._mounts.entries()) {
       try {
         await callLifecycle(fs, 'init');
       } catch (e) {
-        errors.push(e instanceof Error ? e : new Error(String(e)));
+        // Individual mount failed - it will have status='error'
+        // Log but continue with other mounts
+        const message = e instanceof Error ? e.message : String(e);
+        console.warn(`[CompositeFilesystem] Mount "${mountPath}" failed to initialize: ${message}`);
       }
     }
-    if (errors.length > 0) {
-      this.status = 'error';
-      throw new AggregateError(errors, 'Some filesystems failed to initialize');
-    }
+    // CompositeFilesystem is ready even if some mounts failed
+    // Operations on errored mounts will be handled by the underlying filesystem
     this.status = 'ready';
   }
 
@@ -327,12 +390,15 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     if (this.isVirtualPath(path)) return true;
     const r = this.resolveMount(path);
     if (!r) return false;
+    // Mount point root always exists (even if errored)
+    if (r.fsPath === '/') return true;
     return r.fs.exists(r.fsPath);
   }
 
   async stat(path: string): Promise<FileStat> {
+    const normalized = this.normalizePath(path);
+
     if (this.isVirtualPath(path)) {
-      const normalized = this.normalizePath(path);
       const parts = normalized.split('/').filter(Boolean);
       const now = new Date();
       return {
@@ -347,6 +413,21 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
 
     const r = this.resolveMount(path);
     if (!r) throw new Error(`No mount for path: ${path}`);
+
+    // Mount point root always returns directory stat (even if errored)
+    if (r.fsPath === '/') {
+      const parts = normalized.split('/').filter(Boolean);
+      const now = new Date();
+      return {
+        name: parts[parts.length - 1] || '',
+        path: normalized,
+        type: 'directory',
+        size: 0,
+        createdAt: now,
+        modifiedAt: now,
+      };
+    }
+
     return r.fs.stat(r.fsPath);
   }
 
@@ -366,6 +447,8 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
     if (this.isVirtualPath(path)) return true;
     const r = this.resolveMount(path);
     if (!r) return false;
+    // Mount point root is always a directory (even if errored)
+    if (r.fsPath === '/') return true;
     try {
       const stat = await r.fs.stat(r.fsPath);
       return stat.type === 'directory';
@@ -378,7 +461,7 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
    * Get instructions describing the mounted filesystems.
    * Used by agents to understand available storage locations.
    */
-  getInstructions(): string {
+  getInstructions(_opts?: { requestContext?: RequestContext }): string {
     const mountDescriptions = Array.from(this._mounts.entries())
       .map(([mountPath, fs]) => {
         const name = fs.displayName || fs.provider;
@@ -387,6 +470,62 @@ export class CompositeFilesystem implements WorkspaceFilesystem {
       })
       .join('\n');
 
-    return `Mounted filesystems:\n${mountDescriptions}\nFiles written via workspace tools are accessible at the same paths in sandbox commands.`;
+    return `Filesystem mount points:\n${mountDescriptions}`;
   }
+}
+
+/**
+ * Distributive mapped type that produces a union of correlated `[key, value]` tuples.
+ *
+ * For `{ '/local': LocalFilesystem, '/s3': S3Filesystem }` this yields:
+ * `['/local', LocalFilesystem] | ['/s3', S3Filesystem]`
+ *
+ * This enables discriminated-union narrowing when iterating entries without destructuring:
+ * ```typescript
+ * for (const entry of mounts.entries()) {
+ *   if (entry[0] === '/local') {
+ *     entry[1] // LocalFilesystem
+ *   }
+ * }
+ * ```
+ */
+export type MountMapEntry<TMounts extends Record<string, WorkspaceFilesystem>> = {
+  [K in string & keyof TMounts]: [K, TMounts[K]];
+}[string & keyof TMounts];
+
+/**
+ * A read-only view of mounted filesystems with typed per-key access.
+ *
+ * Unlike `ReadonlyMap<string, WorkspaceFilesystem>`, this preserves the
+ * concrete filesystem type for each mount path via an overloaded `get()`.
+ *
+ * Iteration methods return correlated `[key, value]` tuples ({@link MountMapEntry})
+ * so that checking `entry[0]` narrows `entry[1]` to the concrete filesystem type.
+ *
+ * @example
+ * ```typescript
+ * const mounts = cfs.mounts;
+ * mounts.get('/local') // LocalFilesystem
+ * mounts.get('/s3')    // S3Filesystem
+ * ```
+ */
+export interface ReadonlyMountMap<TMounts extends Record<string, WorkspaceFilesystem>> {
+  /** Get a mounted filesystem by path. Returns the concrete type for known mount paths. */
+  get<K extends string & keyof TMounts>(key: K): TMounts[K];
+  get(key: string): WorkspaceFilesystem | undefined;
+
+  has(key: string): boolean;
+  readonly size: number;
+
+  keys(): IterableIterator<string & keyof TMounts>;
+  values(): IterableIterator<TMounts[keyof TMounts & string]>;
+  entries(): IterableIterator<MountMapEntry<TMounts>>;
+  forEach(
+    callbackfn: (
+      value: TMounts[keyof TMounts & string],
+      key: string & keyof TMounts,
+      map: ReadonlyMountMap<TMounts>,
+    ) => void,
+  ): void;
+  [Symbol.iterator](): IterableIterator<MountMapEntry<TMounts>>;
 }

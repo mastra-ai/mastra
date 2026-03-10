@@ -1,11 +1,14 @@
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
-import z from 'zod';
+import z from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
-import type { TracingContext } from '../../observability';
+import type { ObservabilityContext } from '../../observability';
+import { resolveObservabilityContext } from '../../observability';
+import type { PublicSchema } from '../../schema';
+import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
 import type { Processor } from '../index';
 
@@ -153,13 +156,15 @@ export class ModerationProcessor implements Processor<'moderation'> {
     });
   }
 
-  async processInput(args: {
-    messages: MastraDBMessage[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<MastraDBMessage[]> {
+  async processInput(
+    args: {
+      messages: MastraDBMessage[];
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MastraDBMessage[]> {
     try {
-      const { messages, abort, tracingContext } = args;
+      const { messages, abort, ...rest } = args;
+      const observabilityContext = resolveObservabilityContext(rest);
 
       if (messages.length === 0) {
         return messages;
@@ -177,7 +182,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
           continue;
         }
 
-        const moderationResult = await this.moderateContent(textContent, false, tracingContext);
+        const moderationResult = await this.moderateContent(textContent, false, observabilityContext);
         results.push(moderationResult);
 
         if (this.isModerationFlagged(moderationResult)) {
@@ -201,23 +206,26 @@ export class ModerationProcessor implements Processor<'moderation'> {
     }
   }
 
-  async processOutputResult(args: {
-    messages: MastraDBMessage[];
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<MastraDBMessage[]> {
+  async processOutputResult(
+    args: {
+      messages: MastraDBMessage[];
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MastraDBMessage[]> {
     return this.processInput(args);
   }
 
-  async processOutputStream(args: {
-    part: ChunkType;
-    streamParts: ChunkType[];
-    state: Record<string, any>;
-    abort: (reason?: string) => never;
-    tracingContext?: TracingContext;
-  }): Promise<ChunkType | null | undefined> {
+  async processOutputStream(
+    args: {
+      part: ChunkType;
+      streamParts: ChunkType[];
+      state: Record<string, any>;
+      abort: (reason?: string) => never;
+    } & Partial<ObservabilityContext>,
+  ): Promise<ChunkType | null | undefined> {
     try {
-      const { part, streamParts, abort, tracingContext } = args;
+      const { part, streamParts, abort, ...rest } = args;
+      const observabilityContext = resolveObservabilityContext(rest);
 
       // Only process text-delta chunks for moderation
       if (part.type !== 'text-delta') {
@@ -227,7 +235,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
       // Build context from chunks based on chunkWindow (streamParts includes the current part)
       const contentToModerate = this.buildContextFromChunks(streamParts);
 
-      const moderationResult = await this.moderateContent(contentToModerate, true, tracingContext);
+      const moderationResult = await this.moderateContent(contentToModerate, true, observabilityContext);
 
       if (this.isModerationFlagged(moderationResult)) {
         this.handleFlaggedContent(moderationResult, this.strategy, abort);
@@ -255,7 +263,7 @@ export class ModerationProcessor implements Processor<'moderation'> {
   private async moderateContent(
     content: string,
     isStream = false,
-    tracingContext?: TracingContext,
+    observabilityContext?: ObservabilityContext,
   ): Promise<ModerationResult> {
     const prompt = this.createModerationPrompt(content, isStream);
 
@@ -279,29 +287,36 @@ export class ModerationProcessor implements Processor<'moderation'> {
           .nullable(),
         reason: z.string().describe('Brief explanation of why content was flagged').nullable(),
       });
-      let response;
+
+      let result: ModerationResult;
       if (isSupportedLanguageModel(model)) {
-        response = await this.moderationAgent.generate(prompt, {
+        const response = await this.moderationAgent.generate(prompt, {
           structuredOutput: {
-            schema,
             ...(this.structuredOutputOptions ?? {}),
+            schema,
           },
           modelSettings: {
             temperature: 0,
           },
           providerOptions: this.providerOptions,
-          tracingContext,
+          ...observabilityContext,
         });
+
+        if (!response.object) {
+          throw new Error('Structured output returned no object');
+        }
+        result = response.object;
       } else {
-        response = await this.moderationAgent.generateLegacy(prompt, {
-          output: schema,
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        const response = await this.moderationAgent.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
           temperature: 0,
           providerOptions: this.providerOptions as SharedV2ProviderOptions,
-          tracingContext,
+          ...observabilityContext,
         });
-      }
 
-      const result = response.object satisfies ModerationResult;
+        result = response.object as ModerationResult;
+      }
 
       return result;
     } catch (error) {

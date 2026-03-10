@@ -116,7 +116,7 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/cloudflare-deployer',
+          id: 'deployment/cloudflare',
           label: 'Cloudflare',
         },
         {
@@ -249,6 +249,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'migrations/network-to-supervisor',
+          label: '.network() → Supervisor Pattern',
+        },
+        {
+          type: 'doc',
           id: 'migrations/ai-sdk-v4-to-v5',
           label: 'AI SDK v4 → v5',
         },
@@ -263,6 +268,11 @@ const sidebars = {
           type: 'doc',
           id: 'guide/chef-michel',
           label: 'Agents: Chef Michel',
+        },
+        {
+          type: 'doc',
+          id: 'guide/research-coordinator',
+          label: 'Supervisor Pattern: Research Coordinator',
         },
         {
           type: 'doc',
@@ -298,6 +308,21 @@ const sidebars = {
           type: 'doc',
           id: 'guide/github-actions-pr-description',
           label: 'GitHub Actions: PR Description',
+        },
+        {
+          type: 'doc',
+          id: 'guide/code-review-bot',
+          label: 'Skills: Code Review Bot',
+        },
+        {
+          type: 'doc',
+          id: 'guide/docs-manager',
+          label: 'Filesystem: Docs Manager',
+        },
+        {
+          type: 'doc',
+          id: 'guide/dev-assistant',
+          label: 'Workspace: Dev Assistant',
         },
       ],
     },

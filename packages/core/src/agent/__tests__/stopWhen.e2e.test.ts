@@ -1,12 +1,17 @@
 import { openai } from '@ai-sdk/openai-v5';
+import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import type { ChunkType } from '../../stream';
 import { createTool } from '../../tools/tool';
 import { Agent } from '../agent';
 
 config();
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('agent.stopWhen', () => {
   const weatherTool = createTool({

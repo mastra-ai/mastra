@@ -205,7 +205,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -215,7 +215,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-1',
-              title: 'New Thread 2024-01-01T00:00:00.000Z', // Starts with "New Thread" to trigger title generation
+              title: '', // Empty title triggers title generation
             },
           },
         });
@@ -394,7 +394,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -405,7 +405,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-premium',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext,
@@ -426,7 +426,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -437,7 +437,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-standard',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: standardContext,
@@ -758,7 +758,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -768,7 +768,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-bool',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -792,7 +792,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -802,7 +802,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-bool-false',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -813,20 +813,17 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(agentCallCount).toBe(1); // But main agent should still be called
     });
 
-    it('should generate title for pre-created thread with any title (issue #11757)', async () => {
-      // This test validates that generateTitle works for pre-created threads with ANY title.
-      // When generateTitle: true is configured, title generation should trigger on the first
-      // user message, regardless of the initial title. No metadata flags are needed.
-      // See: https://github.com/mastra-ai/mastra/issues/11757
+    it('should not generate title for pre-created threads (thread already exists)', async () => {
+      // Pre-created threads already exist in the DB, so threadExists is true.
+      // Title generation only fires when the thread is newly created by the agent.
+      // If apps pre-create threads for URL routing, they should set the title themselves.
       let titleGenerationCallCount = 0;
       let agentCallCount = 0;
-      let updatedThreadTitle = '';
 
       const mockMemory = new MockMemory();
 
-      // Pre-create the thread with a CUSTOM title (simulating client SDK pre-creation)
-      // This is a common pattern: apps create threads before the first message for URL routing
-      const customTitle = 'New Chat'; // Any custom title - generateTitle should still work
+      // Pre-create the thread (simulating client SDK pre-creation)
+      const customTitle = 'New Chat';
       const threadId = 'pre-created-thread-custom-title';
       await mockMemory.saveThread({
         thread: {
@@ -838,20 +835,10 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         },
       });
 
-      // Override getMergedThreadConfig to return generateTitle: true
       mockMemory.getMergedThreadConfig = () => {
         return {
           generateTitle: true,
         };
-      };
-
-      // Track when createThread is called to update title
-      const originalCreateThread = mockMemory.createThread.bind(mockMemory);
-      mockMemory.createThread = async (params: any) => {
-        if (params.title && params.title !== customTitle) {
-          updatedThreadTitle = params.title;
-        }
-        return originalCreateThread(params);
       };
 
       let testModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -925,27 +912,152 @@ function titleGenerationTests(version: 'v1' | 'v2') {
         await agent.generateLegacy('Help me with my coding project', {
           memory: {
             resource: 'user-123',
-            thread: threadId, // Use existing thread ID (not object with title)
+            thread: threadId,
           },
         });
       } else {
         await agent.generate('Help me with my coding project', {
           memory: {
             resource: 'user-123',
-            thread: threadId, // Use existing thread ID (not object with title)
+            thread: threadId,
           },
         });
       }
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Title generation should trigger because:
-      // 1. generateTitle: true is configured
-      // 2. This is the first user message (no existing user messages in memory)
-      // The initial title ("New Chat") doesn't matter - generateTitle option wins
+      // Title generation should NOT trigger because the thread already existed
+      expect(titleGenerationCallCount).toBe(0);
+      expect(agentCallCount).toBe(1);
+
+      // Thread should keep its original title
+      const thread = await mockMemory.getThreadById({ threadId });
+      expect(thread?.title).toBe(customTitle);
+    });
+
+    it('should generate title for pre-created threads with no messages (issue #13145)', async () => {
+      // When a thread is pre-created (e.g., to store metadata or for URL routing)
+      // but has no messages yet, the first conversation message should still trigger
+      // title generation. The current behavior incorrectly skips title generation
+      // because threadExists is true, even though this is the first turn.
+      let titleGenerationCallCount = 0;
+      let agentCallCount = 0;
+
+      const mockMemory = new MockMemory();
+
+      // Pre-create the thread without a title (simulating client SDK pre-creation)
+      // With the fix, createThread() uses empty string when no title is provided,
+      // so title generation correctly fires on the first conversation message.
+      const threadId = 'pre-created-thread-no-messages';
+      await mockMemory.saveThread({
+        thread: {
+          id: threadId,
+          title: '',
+          resourceId: 'user-123',
+          createdAt: new Date('2026-02-17T15:12:05.337Z'),
+          updatedAt: new Date('2026-02-17T15:12:05.337Z'),
+        },
+      });
+
+      mockMemory.getMergedThreadConfig = () => {
+        return {
+          generateTitle: true,
+        };
+      };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Help with coding project',
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Agent Response',
+              };
+            }
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Help with coding project',
+                content: [{ type: 'text', text: 'Help with coding project' }],
+                warnings: [],
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: 'Agent Response',
+                content: [{ type: 'text', text: 'Agent Response' }],
+                warnings: [],
+              };
+            }
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'pre-created-thread-title-gen-agent',
+        name: 'Pre-created Thread Title Gen Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      // Send first message to the pre-created thread (no messages exist yet)
+      if (version === 'v1') {
+        await agent.generateLegacy('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId,
+          },
+        });
+      } else {
+        await agent.generate('Help me with my coding project', {
+          memory: {
+            resource: 'user-123',
+            thread: threadId,
+          },
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Title generation SHOULD trigger because this is the first conversation
+      // turn on the thread, even though the thread was pre-created
       expect(titleGenerationCallCount).toBe(1);
-      expect(agentCallCount).toBe(1); // Main agent should still be called
-      expect(updatedThreadTitle).toBe('Help with coding project');
+      expect(agentCallCount).toBe(1);
+
+      // Thread title should be updated with the generated title
+      const thread = await mockMemory.getThreadById({ threadId });
+      expect(thread?.title).toBe('Help with coding project');
     });
 
     it('should handle errors in title generation gracefully', async () => {
@@ -1184,7 +1296,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1194,7 +1306,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-undefined',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1388,7 +1500,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -1399,7 +1511,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-ja',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: japaneseContext,
@@ -1422,7 +1534,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -1433,7 +1545,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-en',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
           requestContext: englishContext,
@@ -1561,7 +1673,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1571,7 +1683,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-custom-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1701,7 +1813,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -1711,7 +1823,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-default',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2048,7 +2160,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2058,7 +2170,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-1',
             thread: {
               id: 'thread-empty-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2086,7 +2198,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2096,7 +2208,7 @@ function titleGenerationTests(version: 'v1' | 'v2') {
             resource: 'user-2',
             thread: {
               id: 'thread-null-instructions',
-              title: 'New Thread 2024-01-01T00:00:00.000Z',
+              title: '',
             },
           },
         });
@@ -2106,6 +2218,262 @@ function titleGenerationTests(version: 'v1' | 'v2') {
 
       // Verify that default instructions were used when null was returned
       expect(capturedPrompt).toContain('you will generate a short title');
+    });
+
+    it('should not generate title on subsequent messages when lastMessages is disabled', async () => {
+      // This test validates the fix for the bug where generateTitle fires on every turn
+      // when MessageHistory is not loaded (e.g., lastMessages is disabled).
+      // The fix uses threadExists instead of remembered.db() to determine first turn.
+      //
+      // Root cause: when lastMessages is false, the MessageHistory processor is not added,
+      // so messageList.get.remembered.db() always returns empty, making the old
+      // isFirstUserMessage check always true.
+      let titleGenerationCallCount = 0;
+      let agentCallCount = 0;
+
+      const mockMemory = new MockMemory();
+
+      // Directly set threadConfig to disable lastMessages and enable generateTitle.
+      // We can't use enableMessageHistory: false because undefined gets lost in deepMerge
+      // with the default lastMessages: 10. We need lastMessages: false to properly disable it.
+      (mockMemory as any).threadConfig = { lastMessages: false, generateTitle: true };
+
+      let testModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        testModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 5, completionTokens: 10 },
+                text: 'Generated Title',
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { promptTokens: 10, completionTokens: 20 },
+                text: 'Agent Response',
+              };
+            }
+          },
+        });
+      } else {
+        testModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                text: 'Generated Title',
+                content: [{ type: 'text', text: 'Generated Title' }],
+                warnings: [],
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                text: 'Agent Response',
+                content: [{ type: 'text', text: 'Agent Response' }],
+                warnings: [],
+              };
+            }
+          },
+          doStream: async options => {
+            const messages = options.prompt;
+            const isForTitle = messages.some((msg: any) => msg.content?.includes?.('you will generate a short title'));
+
+            if (isForTitle) {
+              titleGenerationCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Generated Title' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                  },
+                ]),
+              };
+            } else {
+              agentCallCount++;
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Agent Response' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            }
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'no-message-history-title-agent',
+        name: 'No Message History Title Agent',
+        instructions: 'test agent',
+        model: testModel,
+        memory: mockMemory,
+      });
+
+      const threadId = 'thread-no-history';
+
+      // First call - should generate title
+      if (version === 'v1') {
+        await agent.generateLegacy('First message', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: threadId,
+              title: '',
+            },
+          },
+        });
+      } else {
+        await agent.generate('First message', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: threadId,
+              title: '',
+            },
+          },
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(titleGenerationCallCount).toBe(1);
+      expect(agentCallCount).toBe(1);
+
+      // Second call to the same thread - should NOT generate title again
+      if (version === 'v1') {
+        await agent.generateLegacy('Second message', {
+          memory: {
+            resource: 'user-1',
+            thread: threadId,
+          },
+        });
+      } else {
+        await agent.generate('Second message', {
+          memory: {
+            resource: 'user-1',
+            thread: threadId,
+          },
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(titleGenerationCallCount).toBe(1);
+      expect(agentCallCount).toBe(2);
+
+      // Verify the thread has the generated title
+      const thread = await mockMemory.getThreadById({ threadId });
+      expect(thread).toBeDefined();
+      expect(thread?.title).toBe('Generated Title');
+    });
+  });
+
+  describe(`${version} - title generation with file parts`, () => {
+    it('should not throw TypeError when message contains file parts', async () => {
+      const agent = new Agent({
+        id: 'file-title-test-agent',
+        name: 'File Title Test Agent',
+        instructions: 'test agent',
+        model: dummyModel,
+      });
+
+      // File part input with text - this previously caused a TypeError
+      // because generateTitleFromUserMessage accessed part.data on UI-format parts
+      // which use part.url instead
+      const result = await agent.generateTitleFromUserMessage({
+        message: {
+          role: 'user',
+          content: [
+            { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+            { type: 'text' as const, text: 'Describe this image' },
+          ],
+        },
+      });
+
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should generate title when message contains only a file part', async () => {
+      const agent = new Agent({
+        id: 'file-only-title-test-agent',
+        name: 'File Only Title Test Agent',
+        instructions: 'test agent',
+        model: dummyModel,
+      });
+
+      const result = await agent.generateTitleFromUserMessage({
+        message: {
+          role: 'user',
+          content: [{ type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' }],
+        },
+      });
+
+      expect(typeof result).toBe('string');
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('should handle file parts after .ui() conversion uses url/mediaType (regression)', async () => {
+      // Verify that MessageList.aiV5.ui() converts core-format file parts (data/mimeType)
+      // into UI-format (url/mediaType), which is what generateTitleFromUserMessage
+      // iterates over. The original bug was that the code read part.data/part.mimeType
+      // on UI-format parts where those properties are undefined.
+      const { MessageList } = await import('../../agent/message-list/message-list');
+      const uiMessage = new MessageList()
+        .add(
+          {
+            role: 'user',
+            content: [
+              { type: 'file' as const, data: 'data:image/png;base64,iVBOR', mimeType: 'image/png' },
+              { type: 'text' as const, text: 'Describe this image' },
+            ],
+          },
+          'user',
+        )
+        .get.all.aiV5.ui()
+        .at(-1);
+
+      expect(uiMessage).toBeDefined();
+      const filePart = uiMessage!.parts.find((p: any) => p.type === 'file') as any;
+      expect(filePart).toBeDefined();
+      // UI format uses url/mediaType, not data/mimeType
+      expect(filePart.url).toBeDefined();
+      expect(filePart.mediaType).toBe('image/png');
     });
   });
 }

@@ -1,6 +1,8 @@
 import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
+import type { ZodError } from 'zod';
+import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
@@ -79,6 +81,50 @@ export type MastraAuthConfig<TUser = unknown> = {
   }[];
 };
 
+export type HttpLoggingConfig = {
+  /**
+   * Enable HTTP request logging
+   */
+  enabled: boolean;
+  /**
+   * Log level for HTTP requests
+   * @default 'info'
+   */
+  level?: 'debug' | 'info' | 'warn';
+  /**
+   * Paths to exclude from logging (e.g., health checks)
+   * @example ['/health', '/ready', '/metrics']
+   */
+  excludePaths?: string[];
+  /**
+   * Include request headers in logs
+   * @default false
+   */
+  includeHeaders?: boolean;
+  /**
+   * Include query parameters in logs
+   * @default false
+   */
+  includeQueryParams?: boolean;
+  /**
+   * Headers to redact from logs (if includeHeaders is true)
+   * @default ['authorization', 'cookie']
+   */
+  redactHeaders?: string[];
+};
+
+export type ValidationErrorContext = 'query' | 'body' | 'path';
+
+export type ValidationErrorResponse = {
+  status: number;
+  body: unknown;
+};
+
+export type ValidationErrorHook = (
+  error: ZodError,
+  context: ValidationErrorContext,
+) => ValidationErrorResponse | undefined | void;
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -149,9 +195,22 @@ export type ServerConfig = {
     swaggerUI?: boolean;
     /**
      * Enable API request logging
+     * - Set to `true` for default logging (info level, redacts auth headers)
+     * - Set to an object for custom configuration
      * @default false
+     * @example
+     * // Simple enable
+     * apiReqLogs: true
+     *
+     * // Advanced configuration
+     * apiReqLogs: {
+     *   enabled: true,
+     *   level: 'debug',
+     *   excludePaths: ['/health', '/ready'],
+     *   includeQueryParams: true,
+     * }
      */
-    apiReqLogs?: boolean;
+    apiReqLogs?: boolean | HttpLoggingConfig;
     /**
      * Enable OpenAPI documentation
      * @default false
@@ -165,9 +224,60 @@ export type ServerConfig = {
   bodySizeLimit?: number;
 
   /**
-   * Authentication configuration for the server
+   * Authentication configuration for the server.
+   *
+   * Handles WHO the user is (authentication only).
+   * For authorization (WHAT the user can do), use the `rbac` option.
    */
   auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * Role-based access control (RBAC) provider for EE (Enterprise Edition).
+   *
+   * Handles WHAT the user can do (authorization).
+   * Use this to enable permission-based access control in Studio.
+   *
+   * RBAC is separate from authentication:
+   * - `auth` handles WHO the user is (authentication)
+   * - `rbac` handles WHAT the user can do (authorization)
+   *
+   * You can mix providers - e.g., use Better Auth for authentication
+   * and StaticRBACProvider for authorization.
+   *
+   * @example Using StaticRBACProvider with role definitions
+   * ```typescript
+   * import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth/ee';
+   *
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: myAuthProvider,
+   *     rbac: new StaticRBACProvider({
+   *       roles: DEFAULT_ROLES,
+   *       getUserRoles: (user) => [user.role],
+   *     }),
+   *   },
+   * });
+   * ```
+   *
+   * @example Using MastraRBACClerk with role mapping
+   * ```typescript
+   * import { MastraAuthClerk, MastraRBACClerk } from '@mastra/auth-clerk';
+   *
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: new MastraAuthClerk({ clerk }),
+   *     rbac: new MastraRBACClerk({
+   *       clerk,
+   *       roleMapping: {
+   *         "org:admin": ["*"],
+   *         "org:member": ["agents:read", "workflows:read"],
+   *       },
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  rbac?: IRBACProvider<any>;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.
@@ -205,4 +315,35 @@ export type ServerConfig = {
    * ```
    */
   onError?: (err: Error, c: Context) => Response | Promise<Response>;
+
+  /**
+   * Custom validation error handler for the server. Called when a request fails
+   * Zod schema validation (query parameters, request body, or path parameters).
+   *
+   * Return a `{ status, body }` object to override the default 400 response,
+   * or return `undefined` to fall back to the default behavior.
+   *
+   * @param error - The ZodError from schema validation
+   * @param context - Which part of the request failed: 'query', 'body', or 'path'
+   *
+   * @example
+   * ```ts
+   * const mastra = new Mastra({
+   *   server: {
+   *     onValidationError: (error, context) => ({
+   *       status: 422,
+   *       body: {
+   *         ok: false,
+   *         errors: error.issues.map(i => ({
+   *           path: i.path.join('.'),
+   *           message: i.message,
+   *         })),
+   *         source: context,
+   *       },
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  onValidationError?: ValidationErrorHook;
 };

@@ -45,6 +45,8 @@ import {
   cloneThreadResponseSchema,
   getObservationalMemoryQuerySchema,
   getObservationalMemoryResponseSchema,
+  awaitBufferStatusBodySchema,
+  awaitBufferStatusResponseSchema,
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
@@ -495,6 +497,70 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   },
 });
 
+export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
+  method: 'POST',
+  path: '/memory/observational-memory/buffer-status',
+  responseType: 'json',
+  bodySchema: awaitBufferStatusBodySchema,
+  responseSchema: awaitBufferStatusResponseSchema,
+  summary: 'Await observational memory buffering completion',
+  description:
+    'Blocks until any in-flight buffering operations complete for the given thread/resource, then returns the updated record',
+  tags: ['Memory'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }: MemoryContext) => {
+    try {
+      const agent = await getAgentFromContext({ mastra, agentId, requestContext });
+      if (!agent) {
+        throw new HTTPException(404, { message: 'Agent not found' });
+      }
+
+      const omConfig = await getOMConfigFromAgent(agent, requestContext);
+      if (!omConfig?.enabled) {
+        throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
+      }
+
+      // Resolve the OM processor to call waitForBuffering
+      const omProcessor = await agent.resolveProcessorById('observational-memory', requestContext);
+      if (!omProcessor || typeof (omProcessor as any).waitForBuffering !== 'function') {
+        throw new HTTPException(400, { message: 'Observational Memory processor not available' });
+      }
+
+      // Block until buffering completes (30s timeout)
+      await (omProcessor as any).waitForBuffering(threadId, resourceId);
+
+      // After buffering, fetch the updated record
+      const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
+      if (!memory) {
+        throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
+      }
+
+      let memoryStore: MemoryStorage | undefined;
+      try {
+        memoryStore = await memory.storage.getStore('memory');
+      } catch {
+        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+      }
+      if (!memoryStore) {
+        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+      }
+
+      const effectiveResourceId = resourceId;
+      if (!effectiveResourceId) {
+        throw new HTTPException(400, { message: 'resourceId is required' });
+      }
+
+      const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
+      const record = await memoryStore.getObservationalMemory(omThreadId, effectiveResourceId);
+
+      return { record: record ?? null };
+    } catch (error) {
+      console.error('Error awaiting buffer status', error);
+      return handleError(error, 'Error awaiting buffer status');
+    }
+  },
+});
+
 export const LIST_THREADS_ROUTE = createRoute({
   method: 'GET',
   path: '/memory/threads',
@@ -619,7 +685,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
   description: 'Returns a paginated list of messages in a conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({
+  handler: (async ({
     mastra,
     agentId,
     threadId,
@@ -630,7 +696,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     include,
     filter,
     requestContext,
-  }) => {
+  }: any) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -693,7 +759,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
     } catch (error) {
       return handleError(error, 'Error getting messages');
     }
-  },
+  }) as any,
 });
 
 export const GET_WORKING_MEMORY_ROUTE = createRoute({

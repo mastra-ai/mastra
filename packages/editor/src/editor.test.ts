@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { Agent, Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -850,5 +852,531 @@ describe('Stored Agents via MastraEditor', () => {
       expect(tools['test-tool']).toBeDefined();
       expect(tools['test-tool'].description).toBe('A test tool');
     });
+  });
+
+  describe('conditional fields', () => {
+    it('should resolve conditional tools based on request context', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      const toolA = createTool({
+        id: 'tool-a',
+        description: 'Tool A',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async () => ({ output: 'a' }),
+      });
+      const toolB = createTool({
+        id: 'tool-b',
+        description: 'Tool B',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async () => ({ output: 'b' }),
+      });
+
+      await agentsStore?.create({
+        agent: {
+          id: 'conditional-tools-agent',
+          name: 'Conditional Tools Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: [
+            {
+              value: { 'tool-a': {} },
+              rules: {
+                operator: 'AND' as const,
+                conditions: [{ field: 'tier', operator: 'equals' as const, value: 'premium' }],
+              },
+            },
+            {
+              value: { 'tool-b': {} },
+              // No rules = unconditional, always included
+            },
+          ],
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({
+        storage,
+        tools: { 'tool-a': toolA, 'tool-b': toolB },
+        editor,
+      });
+
+      const agent = await editor.agent.getById('conditional-tools-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      // With premium tier context → should accumulate both tool-a (matched) and tool-b (unconditional)
+      const premiumCtx = new RequestContext([['tier', 'premium']]);
+      const premiumTools = await agent!.listTools({ requestContext: premiumCtx });
+      expect(premiumTools['tool-a']).toBeDefined();
+      expect(premiumTools['tool-b']).toBeDefined();
+
+      // With no context → should only get tool-b (unconditional); tool-a rule doesn't match
+      const defaultCtx = new RequestContext();
+      const defaultTools = await agent!.listTools({ requestContext: defaultCtx });
+      expect(defaultTools['tool-b']).toBeDefined();
+      expect(defaultTools['tool-a']).toBeUndefined();
+    });
+
+    it('should resolve conditional model based on request context', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      // With accumulation, the fallback (no rules) comes first so it always
+      // applies, and conditional variants override specific keys on top.
+      await agentsStore?.create({
+        agent: {
+          id: 'conditional-model-agent',
+          name: 'Conditional Model Agent',
+          instructions: 'Test',
+          model: [
+            {
+              // Base/default model — always included (no rules)
+              value: { provider: 'openai', name: 'gpt-4o-mini', temperature: 0.5 },
+            },
+            {
+              // Premium override — merges on top when matched
+              value: { provider: 'anthropic', name: 'claude-3-opus', temperature: 0.9, topP: 0.95 },
+              rules: {
+                operator: 'AND' as const,
+                conditions: [{ field: 'tier', operator: 'equals' as const, value: 'premium' }],
+              },
+            },
+          ],
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({ storage, editor });
+
+      const agent = await editor.agent.getById('conditional-model-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      // Premium context: base {openai/gpt-4o-mini} merged with {anthropic/claude-3-opus} → anthropic wins
+      const premiumCtx = new RequestContext([['tier', 'premium']]);
+      const premiumModel = await agent!.getModel({ requestContext: premiumCtx });
+      expect(premiumModel.modelId).toBe('claude-3-opus');
+      expect(premiumModel.provider).toBe('anthropic');
+
+      // Model-level settings should be forwarded into defaultOptions.modelSettings
+      const premiumOpts = await agent!.getDefaultOptions({ requestContext: premiumCtx });
+      expect(premiumOpts.modelSettings?.temperature).toBe(0.9);
+      expect(premiumOpts.modelSettings?.topP).toBe(0.95);
+
+      // Default context: only base applies → openai/gpt-4o-mini
+      const defaultCtx = new RequestContext();
+      const defaultModel = await agent!.getModel({ requestContext: defaultCtx });
+      expect(defaultModel.modelId).toBe('gpt-4o-mini');
+      expect(defaultModel.provider).toBe('openai');
+
+      // Default context model settings
+      const defaultOpts = await agent!.getDefaultOptions({ requestContext: defaultCtx });
+      expect(defaultOpts.modelSettings?.temperature).toBe(0.5);
+    });
+
+    it('should resolve conditional workflows based on request context', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      const workflowA = createWorkflow({
+        id: 'workflow-a',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step-a',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }),
+        )
+        .commit();
+
+      const workflowB = createWorkflow({
+        id: 'workflow-b',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step-b',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: async () => ({}),
+          }),
+        )
+        .commit();
+
+      await agentsStore?.create({
+        agent: {
+          id: 'conditional-wf-agent',
+          name: 'Conditional WF Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          workflows: [
+            {
+              value: ['workflow-a'],
+              rules: {
+                operator: 'AND' as const,
+                conditions: [{ field: 'env', operator: 'equals' as const, value: 'production' }],
+              },
+            },
+            {
+              value: ['workflow-b'],
+            },
+          ],
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({
+        storage,
+        workflows: { 'workflow-a': workflowA, 'workflow-b': workflowB },
+        editor,
+      });
+
+      const agent = await editor.agent.getById('conditional-wf-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const { RequestContext } = await import('@mastra/core/request-context');
+
+      // Production: accumulates workflow-a (matched) + workflow-b (unconditional)
+      const prodCtx = new RequestContext([['env', 'production']]);
+      const prodWorkflows = await agent!.listWorkflows({ requestContext: prodCtx });
+      expect(Object.keys(prodWorkflows)).toContain('workflow-a');
+      expect(Object.keys(prodWorkflows)).toContain('workflow-b');
+
+      // Development: only workflow-b (unconditional); workflow-a rule doesn't match
+      const devCtx = new RequestContext([['env', 'development']]);
+      const devWorkflows = await agent!.listWorkflows({ requestContext: devCtx });
+      expect(Object.keys(devWorkflows)).toContain('workflow-b');
+      expect(Object.keys(devWorkflows)).not.toContain('workflow-a');
+    });
+
+    it('should pass requestContextSchema to the Agent instance when present', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-with-rcs',
+          name: 'Agent With Request Context Schema',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          requestContextSchema: {
+            type: 'object',
+            properties: {
+              tier: { type: 'string', enum: ['free', 'premium'] },
+              locale: { type: 'string' },
+            },
+            required: ['tier'],
+          },
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({ storage, editor });
+
+      const agent = await editor.agent.getById('agent-with-rcs');
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent!.requestContextSchema).toBeDefined();
+    });
+
+    it('should not set requestContextSchema when not provided in stored agent', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      await agentsStore?.create({
+        agent: {
+          id: 'agent-no-rcs',
+          name: 'Agent Without RCS',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({ storage, editor });
+
+      const agent = await editor.agent.getById('agent-no-rcs');
+      expect(agent).toBeInstanceOf(Agent);
+      expect(agent!.requestContextSchema).toBeUndefined();
+    });
+
+    it('should handle static fields alongside conditional fields', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      await agentsStore?.create({
+        agent: {
+          id: 'mixed-agent',
+          name: 'Mixed Agent',
+          instructions: 'Test',
+          // Static model
+          model: { provider: 'openai', name: 'gpt-4' },
+          // Conditional tools
+          tools: [
+            {
+              value: { 'test-tool': { description: 'Premium tool' } },
+              rules: {
+                operator: 'AND' as const,
+                conditions: [{ field: 'tier', operator: 'equals' as const, value: 'premium' }],
+              },
+            },
+            {
+              value: { 'test-tool': {} },
+            },
+          ],
+          // Static defaultOptions
+          defaultOptions: { maxSteps: 10 },
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({
+        storage,
+        tools: { 'test-tool': mockTool },
+        editor,
+      });
+
+      const agent = await editor.agent.getById('mixed-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      // Static model should work normally
+      const { RequestContext } = await import('@mastra/core/request-context');
+      const ctx = new RequestContext();
+      const model = await agent!.getModel({ requestContext: ctx });
+      expect(model.modelId).toBe('gpt-4');
+      expect(model.provider).toBe('openai');
+
+      // With no context: only the unconditional fallback matches → test-tool with no description override
+      const defaultTools = await agent!.listTools({ requestContext: ctx });
+      expect(defaultTools['test-tool']).toBeDefined();
+      expect(defaultTools['test-tool'].description).toBe('A test tool');
+
+      // With premium context: both variants match → later unconditional fallback's `test-tool` (no override)
+      // merges on top of the conditional variant's `test-tool` (description override 'Premium tool')
+      // Since object merge is shallow and the unconditional variant comes second, its empty config wins
+      const premiumCtx = new RequestContext([['tier', 'premium']]);
+      const premiumTools = await agent!.listTools({ requestContext: premiumCtx });
+      expect(premiumTools['test-tool']).toBeDefined();
+    });
+
+    it('should handle conditional variant with OR rule group', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+
+      const toolX = createTool({
+        id: 'tool-x',
+        description: 'Tool X',
+        inputSchema: z.object({ input: z.string() }),
+        outputSchema: z.object({ output: z.string() }),
+        execute: async () => ({ output: 'x' }),
+      });
+
+      await agentsStore?.create({
+        agent: {
+          id: 'or-rules-agent',
+          name: 'OR Rules Agent',
+          instructions: 'Test',
+          model: { provider: 'openai', name: 'gpt-4' },
+          tools: [
+            {
+              value: { 'tool-x': {} },
+              rules: {
+                operator: 'OR' as const,
+                conditions: [
+                  { field: 'role', operator: 'equals' as const, value: 'admin' },
+                  { field: 'role', operator: 'equals' as const, value: 'superadmin' },
+                ],
+              },
+            },
+            {
+              value: {},
+              // fallback: no tools
+            },
+          ],
+        },
+      });
+
+      const editor = new MastraEditor();
+      const mastra = new Mastra({
+        storage,
+        tools: { 'tool-x': toolX },
+        editor,
+      });
+
+      const agent = await editor.agent.getById('or-rules-agent');
+      expect(agent).toBeInstanceOf(Agent);
+
+      const { RequestContext } = await import('@mastra/core/request-context');
+
+      // Admin should get tool-x
+      const adminCtx = new RequestContext([['role', 'admin']]);
+      const adminTools = await agent!.listTools({ requestContext: adminCtx });
+      expect(adminTools['tool-x']).toBeDefined();
+
+      // Superadmin should also get tool-x
+      const superCtx = new RequestContext([['role', 'superadmin']]);
+      const superTools = await agent!.listTools({ requestContext: superCtx });
+      expect(superTools['tool-x']).toBeDefined();
+
+      // Regular user should get empty tools (fallback)
+      const userCtx = new RequestContext([['role', 'user']]);
+      const userTools = await agent!.listTools({ requestContext: userCtx });
+      expect(userTools['tool-x']).toBeUndefined();
+    });
+  });
+});
+
+// ============================================================================
+// applyStoredOverrides
+// ============================================================================
+
+describe('agent.applyStoredOverrides', () => {
+  it('should return the code agent unchanged when no stored config exists', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'code-only-agent',
+      name: 'Code Only',
+      instructions: 'Original instructions',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({ storage, editor, agents: { codeAgent } });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    expect(result).toBe(codeAgent); // same reference, no mutation
+    const instructions = await result.getInstructions({ requestContext: new RequestContext() });
+    expect(instructions).toBe('Original instructions');
+  });
+
+  it('should override instructions when stored config has instructions', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+
+    // Create a stored config for the same ID as the code agent
+    await agentsStore?.create({
+      agent: {
+        id: 'override-agent',
+        name: 'Override Agent',
+        instructions: 'Stored instructions override',
+        model: { provider: 'openai', name: 'gpt-4o' },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'override-agent',
+      name: 'Code Agent',
+      instructions: 'Original code instructions',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({ storage, editor, agents: { codeAgent } });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const instructions = await result.getInstructions({ requestContext: new RequestContext() });
+    expect(instructions).toBe('Stored instructions override');
+  });
+
+  it('should NOT override model — model is never overridden from stored config', async () => {
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+
+    await agentsStore?.create({
+      agent: {
+        id: 'model-override-agent',
+        name: 'Model Override Agent',
+        instructions: 'Test',
+        model: { provider: 'anthropic', name: 'claude-sonnet-4-20250514' },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'model-override-agent',
+      name: 'Code Agent',
+      instructions: 'Test',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({ storage, editor, agents: { codeAgent } });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    // Model should remain the code-defined value — stored config model is never applied
+    expect(result.model).toBe('openai/gpt-4o');
+  });
+
+  it('should merge tools — stored tools override code tools, code-only tools preserved', async () => {
+    const anotherTool = createTool({
+      id: 'another-tool',
+      description: 'Another tool',
+      inputSchema: z.object({ x: z.string() }),
+      outputSchema: z.object({ y: z.string() }),
+      execute: async ({ x }) => ({ y: x }),
+    });
+
+    const storage = new InMemoryStore();
+    const agentsStore = await storage.getStore('agents');
+
+    // Stored config references 'test-tool' with a description override
+    await agentsStore?.create({
+      agent: {
+        id: 'tools-merge-agent',
+        name: 'Tools Merge Agent',
+        instructions: 'Test',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        tools: {
+          'test-tool': { description: 'Overridden description' },
+        },
+      },
+    });
+
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'tools-merge-agent',
+      name: 'Code Agent',
+      instructions: 'Test',
+      model: 'openai/gpt-4o',
+      tools: {
+        'test-tool': mockTool,
+        'another-tool': anotherTool,
+      },
+    });
+
+    const mastra = new Mastra({
+      storage,
+      editor,
+      agents: { codeAgent },
+      tools: { 'test-tool': mockTool, 'another-tool': anotherTool },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const tools = await result.listTools();
+
+    // 'another-tool' from code should be preserved
+    expect(tools['another-tool']).toBeDefined();
+
+    // 'test-tool' should have the stored description override
+    expect(tools['test-tool']).toBeDefined();
+    expect(tools['test-tool'].description).toBe('Overridden description');
+  });
+
+  it('should not fail when editor is not registered with Mastra', async () => {
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'orphan-agent',
+      name: 'Orphan',
+      instructions: 'Test',
+      model: 'openai/gpt-4o',
+    });
+
+    // applyStoredOverrides should handle the error gracefully and return the agent unchanged
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    expect(result).toBe(codeAgent);
   });
 });
