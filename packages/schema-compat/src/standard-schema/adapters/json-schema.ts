@@ -1,6 +1,7 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
 import Ajv from 'ajv';
 import type { JSONSchema7 } from 'json-schema';
+import traverse from 'json-schema-traverse';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -180,6 +181,19 @@ export class JsonSchemaWrapper<Input = unknown, Output = Input> implements Stand
           // For unknown targets, don't add $schema
           break;
       }
+    }
+
+    if (options?.libraryOptions?.override) {
+      const override = options.libraryOptions.override as (ctx: { jsonSchema: traverse.SchemaObject }) => void;
+      traverse(clonedSchema, {
+        cb: {
+          post: schema => {
+            override({
+              jsonSchema: schema,
+            });
+          },
+        },
+      });
     }
 
     return clonedSchema;

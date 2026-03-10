@@ -7,8 +7,11 @@ import {
   useLinkComponent,
   useIsCmsAvailable,
   useStoredPromptBlocks,
+  Header,
+  HeaderTitle,
+  MainContentLayout,
+  PromptBlocksTable,
 } from '@mastra/playground-ui';
-import { Header, HeaderTitle, MainContentLayout, PromptBlocksTable } from '@mastra/playground-ui';
 import { FileTextIcon, Plus } from 'lucide-react';
 import { Link } from 'react-router';
 

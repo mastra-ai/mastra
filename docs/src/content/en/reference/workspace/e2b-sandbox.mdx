@@ -17,7 +17,7 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install @mastra/e2b
 ```
 
@@ -48,56 +48,57 @@ const agent = new Agent({
 
 <PropertiesTable
   content={[
-{
-name: "apiKey",
-type: "string",
-description: "E2B API key. Falls back to E2B_API_KEY environment variable.",
-isOptional: true,
-},
-{
-name: "timeout",
-type: "number",
-description: "Execution timeout in milliseconds",
-isOptional: true,
-defaultValue: "300000 (5 minutes)",
-},
-{
-name: "template",
-type: "string | TemplateBuilder | function",
-description: "Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.",
-isOptional: true,
-},
-{
-name: "env",
-type: "Record<string, string>",
-description: "Environment variables to set in the sandbox",
-isOptional: true,
-},
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this sandbox instance",
-isOptional: true,
-defaultValue: "Auto-generated",
-},
-{
-name: "domain",
-type: "string",
-description: "Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var.",
-isOptional: true,
-},
-{
-name: "apiUrl",
-type: "string",
-description: "API URL for self-hosted E2B. Falls back to E2B_API_URL env var.",
-isOptional: true,
-},
-{
-name: "accessToken",
-type: "string",
-description: "Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var.",
-isOptional: true,
-},
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'E2B API key. Falls back to E2B_API_KEY environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Execution timeout in milliseconds',
+    isOptional: true,
+    defaultValue: '300000 (5 minutes)',
+  },
+  {
+    name: 'template',
+    type: 'string | TemplateBuilder | function',
+    description:
+      'Sandbox template specification. Can be a template ID string, a TemplateBuilder, or a function that customizes the default template.',
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables to set in the sandbox',
+    isOptional: true,
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'domain',
+    type: 'string',
+    description: 'Domain for self-hosted E2B. Falls back to E2B_DOMAIN env var.',
+    isOptional: true,
+  },
+  {
+    name: 'apiUrl',
+    type: 'string',
+    description: 'API URL for self-hosted E2B. Falls back to E2B_API_URL env var.',
+    isOptional: true,
+  },
+  {
+    name: 'accessToken',
+    type: 'string',
+    description: 'Access token for authentication. Falls back to E2B_ACCESS_TOKEN env var.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -105,155 +106,70 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Sandbox instance identifier",
-},
-{
-name: "name",
-type: "string",
-description: "Provider name ('E2BSandbox')",
-},
-{
-name: "provider",
-type: "string",
-description: "Provider identifier ('e2b')",
-},
-{
-name: "status",
-type: "ProviderStatus",
-description: "'pending' | 'initializing' | 'ready' | 'error'",
-},
-{
-name: "supportsMounting",
-type: "boolean",
-description: "Always true - E2B sandboxes support mounting cloud filesystems",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('E2BSandbox')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('e2b')",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'pending' | 'initializing' | 'ready' | 'error'",
+  },
+  {
+    name: 'supportsMounting',
+    type: 'boolean',
+    description: 'Always true - E2B sandboxes support mounting cloud filesystems',
+  },
+  {
+    name: 'processes',
+    type: 'E2BProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
 ]}
 />
 
-## Methods
+## Background processes
 
-### `start()`
-
-Initialize and start the sandbox. Creates the E2B sandbox instance and mounts any configured filesystems.
+`E2BSandbox` includes a built-in process manager for spawning and managing background processes. Processes run in the E2B cloud sandbox using the E2B SDK's `commands.run()` with `background: true`.
 
 ```typescript
+const sandbox = new E2BSandbox({ id: 'dev-sandbox' })
 await sandbox.start()
-```
 
-Called automatically on first command execution or by `workspace.init()`.
-
-### `stop()`
-
-Stop the sandbox and release resources.
-
-```typescript
-await sandbox.stop()
-```
-
-### `destroy()`
-
-Clean up sandbox resources completely.
-
-```typescript
-await sandbox.destroy()
-```
-
-### `executeCommand(command, args?, options?)`
-
-Execute a shell command in the sandbox.
-
-```typescript
-const result = await sandbox.executeCommand('ls', ['-la'])
-const npmResult = await sandbox.executeCommand('npm', ['install', 'lodash'], {
-  timeout: 60000,
-  cwd: '/app',
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
 })
+
+// Interact with the process
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
 ```
 
-**Parameters:**
-
-<PropertiesTable
-  content={[
-{
-name: "command",
-type: "string",
-description: "Command to execute",
-},
-{
-name: "args",
-type: "string[]",
-description: "Command arguments",
-isOptional: true,
-},
-{
-name: "options.timeout",
-type: "number",
-description: "Execution timeout in milliseconds",
-isOptional: true,
-},
-{
-name: "options.cwd",
-type: "string",
-description: "Working directory for the command",
-isOptional: true,
-},
-{
-name: "options.env",
-type: "Record<string, string>",
-description: "Additional environment variables",
-isOptional: true,
-},
-{
-name: "options.onStdout",
-type: "(data: string) => void",
-description: "Callback for stdout streaming",
-isOptional: true,
-},
-{
-name: "options.onStderr",
-type: "(data: string) => void",
-description: "Callback for stderr streaming",
-isOptional: true,
-},
-]}
-/>
-
-### `canMount(filesystem)`
-
-Check if a filesystem can be mounted into this sandbox.
+The E2B process manager supports reconnecting to processes that were spawned externally or before a reconnection. Call `get(pid)` with a PID to connect to an existing process:
 
 ```typescript
-const canMount = sandbox.canMount(s3Filesystem)
-// true for S3Filesystem and GCSFilesystem
+const handle = await sandbox.processes.get(existingPid)
+if (handle) {
+  console.log(handle.stdout)
+}
 ```
 
-### `mount(filesystem, mountPath)`
-
-Mount a filesystem into the sandbox at the specified path.
-
-```typescript
-await sandbox.mount(s3Filesystem, '/mnt/data')
-```
-
-### `unmount(mountPath)`
-
-Unmount a previously mounted filesystem.
-
-```typescript
-await sandbox.unmount('/mnt/data')
-```
-
-### `getInfo()`
-
-Get sandbox status and resource information.
-
-```typescript
-const info = await sandbox.getInfo()
-// { id: '...', name: 'E2BSandbox', provider: 'e2b', status: 'ready', supportsMounting: true }
-```
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
 ## Mounting Cloud Storage
 
@@ -384,6 +300,7 @@ This is optional—`gcsfuse` is installed automatically at mount time if not pre
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)

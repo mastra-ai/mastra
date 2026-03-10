@@ -16,6 +16,7 @@ import * as path from 'node:path';
 import type { RequestContext } from '../../request-context';
 
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
+import { expandTilde } from '../filesystem/fs-utils';
 import type { FilesystemMountConfig, MountResult } from '../filesystem/mount';
 import type { ProviderStatus } from '../lifecycle';
 import type { InstructionsOption } from '../types';
@@ -66,7 +67,7 @@ function normalizeMountPath(mountPath: string): string {
 /**
  * Local sandbox provider configuration.
  */
-export interface LocalSandboxOptions extends MastraSandboxOptions {
+export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** Working directory for command execution */
@@ -174,7 +175,7 @@ export class LocalSandbox extends MastraSandbox {
 
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
-    this.workingDirectory = options.workingDirectory ?? path.join(process.cwd(), '.sandbox');
+    this.workingDirectory = expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox'));
     this.env = options.env ?? {};
     this._nativeSandboxConfig = {
       ...options.nativeSandbox,

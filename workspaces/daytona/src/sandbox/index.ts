@@ -8,7 +8,7 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
+import { Daytona, DaytonaError, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
 import type {
   CreateSandboxFromImageParams,
   CreateSandboxFromSnapshotParams,
@@ -17,19 +17,21 @@ import type {
 } from '@daytonaio/sdk';
 import type {
   SandboxInfo,
+  ProviderStatus,
+  MastraSandboxOptions,
   WorkspaceFilesystem,
   MountResult,
   FilesystemMountConfig,
-  ProviderStatus,
   MountManager,
-  MastraSandboxOptions,
+  CommandResult,
+  ExecuteCommandOptions,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 
 import { compact } from '../utils/compact';
 import { shellQuote } from '../utils/shell-quote';
 import { mountS3, mountGCS, LOG_PREFIX, runCommand } from './mounts';
-import type { DaytonaMountConfig, DaytonaS3MountConfig, DaytonaGCSMountConfig, MountContext } from './mounts';
+import type { DaytonaMountConfig, MountContext } from './mounts';
 import { DaytonaProcessManager } from './process-manager';
 import type { DaytonaResources } from './types';
 
@@ -85,7 +87,7 @@ const SANDBOX_DEAD_PATTERNS: RegExp[] = [
 /**
  * Daytona sandbox provider configuration.
  */
-export interface DaytonaSandboxOptions extends MastraSandboxOptions {
+export interface DaytonaSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance */
   id?: string;
   /** API key for authentication. Falls back to DAYTONA_API_KEY env var. */
@@ -206,6 +208,7 @@ export class DaytonaSandbox extends MastraSandbox {
   private _daytona: Daytona | null = null;
   private _sandbox: Sandbox | null = null;
   private _createdAt: Date | null = null;
+  private _workingDir: string | null = null;
   private _isRetrying = false;
 
   private readonly timeout: number;
@@ -314,12 +317,12 @@ export class DaytonaSandbox extends MastraSandbox {
       this._createdAt = existing.createdAt ? new Date(existing.createdAt) : new Date();
       this.logger.debug(`${LOG_PREFIX} Reconnected to existing sandbox ${existing.id} for: ${this.id}`);
 
-      // Clean up stale mounts from previous config
-      // (processPending is called by base class after start completes)
+      // Reconcile FUSE mounts — clean up stale mounts from a previous session
       const expectedPaths = Array.from(this.mounts.entries.keys());
       this.logger.debug(`${LOG_PREFIX} Running mount reconciliation...`);
       await this.reconcileMounts(expectedPaths);
       this.logger.debug(`${LOG_PREFIX} Mount reconciliation complete`);
+      await this.detectWorkingDir();
       return;
     }
 
@@ -363,13 +366,22 @@ export class DaytonaSandbox extends MastraSandbox {
 
     this.logger.debug(`${LOG_PREFIX} Created sandbox ${this._sandbox.id} for logical ID: ${this.id}`);
     this._createdAt = new Date();
+    await this.detectWorkingDir();
   }
 
   /**
    * Stop the Daytona sandbox.
-   * Stops the sandbox instance and releases the reference.
+   * Unmounts all filesystems, then stops the sandbox.
    */
   async stop(): Promise<void> {
+    for (const mountPath of [...this.mounts.entries.keys()]) {
+      try {
+        await this.unmount(mountPath);
+      } catch {
+        // Best-effort unmount; sandbox may already be dead
+      }
+    }
+
     if (this._sandbox && this._daytona) {
       try {
         await this._daytona.stop(this._sandbox);
@@ -461,6 +473,10 @@ export class DaytonaSandbox extends MastraSandbox {
     const mountInfo = mountCount > 0 ? ` ${mountCount} filesystem(s) mounted via FUSE.` : '';
     parts.push(`Cloud sandbox with isolated execution (${this.language} runtime).${mountInfo}`);
 
+    if (this._workingDir) {
+      parts.push(`Default working directory: ${this._workingDir}.`);
+    }
+
     parts.push(`Command timeout: ${Math.ceil(this.timeout / 1000)}s.`);
 
     parts.push(`Running as user: ${this.sandboxUser ?? 'daytona'}.`);
@@ -477,6 +493,25 @@ export class DaytonaSandbox extends MastraSandbox {
   }
 
   // ---------------------------------------------------------------------------
+  // Command Execution
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Execute a command in the sandbox and return the result.
+   */
+  async executeCommand(
+    command: string,
+    args: string[] = [],
+    options: ExecuteCommandOptions = {},
+  ): Promise<CommandResult> {
+    await this.ensureRunning();
+    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+    const handle = await this.processes!.spawn(fullCommand, options);
+    const result = await handle.wait();
+    return { ...result, command, args };
+  }
+
+  // ---------------------------------------------------------------------------
   // Mount Support
   // ---------------------------------------------------------------------------
 
@@ -490,6 +525,7 @@ export class DaytonaSandbox extends MastraSandbox {
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
+    const sandbox = this._sandbox;
 
     this.logger.debug(`${LOG_PREFIX} Mounting "${mountPath}"...`);
 
@@ -512,7 +548,7 @@ export class DaytonaSandbox extends MastraSandbox {
       return { success: true, mountPath };
     } else if (existingMount === 'mismatched') {
       // Different config - unmount and re-mount
-      this.logger.debug(`${LOG_PREFIX} Config mismatch, unmounting to re-mount with new config...`);
+      this.logger.debug(`${LOG_PREFIX} Config mismatch at "${mountPath}", unmounting to re-mount with new config...`);
       await this.unmount(mountPath);
     } else if (existingMount === 'unmanaged') {
       const error = `Mount path "${mountPath}" is already mounted by an unmanaged source`;
@@ -520,16 +556,20 @@ export class DaytonaSandbox extends MastraSandbox {
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
       return { success: false, mountPath, error };
     }
-    this.logger.debug(`${LOG_PREFIX} Config type: ${config.type}`);
 
     // Mark as mounting (handles direct mount() calls; MountManager also sets this for processPending)
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
+    this.logger.debug(`${LOG_PREFIX} Config type: ${config.type}`);
 
-    // Check if directory exists and is non-empty (would shadow existing files)
+    // Reject non-empty directories — mounting would shadow existing files.
+    // Skip the check if the path is already a mount point (stuck FUSE from a failed
+    // prior unmount): its contents are remote objects, not local files to protect.
     try {
+      const quotedPath = shellQuote(mountPath);
       const checkResult = await runCommand(
-        this._sandbox,
-        `[ -d ${shellQuote(mountPath)} ] && [ "$(ls -A ${shellQuote(mountPath)} 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
+        sandbox,
+        `[ -d ${quotedPath} ] && ! mountpoint -q ${quotedPath} 2>/dev/null && ` +
+          `[ "$(ls -A ${quotedPath} 2>/dev/null)" ] && echo "non-empty" || echo "ok"`,
         { timeout: MOUNT_COMMAND_TIMEOUT_MS },
       );
       if (checkResult.output.trim() === 'non-empty') {
@@ -538,60 +578,70 @@ export class DaytonaSandbox extends MastraSandbox {
         this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
         return { success: false, mountPath, error };
       }
-    } catch (checkErr) {
-      const checkError = `Unable to verify mount target safety for "${mountPath}": ${errorToString(checkErr)}`;
-      this.logger.error(`${LOG_PREFIX} ${checkError}`);
-      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: checkError });
-      return { success: false, mountPath, error: checkError };
+    } catch {
+      // Check failed, proceed anyway
     }
 
-    // Create mount directory with sudo (for paths outside home dir like /data)
-    // Then chown to current user so mount works without issues
-    this.logger.debug(`${LOG_PREFIX} Creating mount directory for ${mountPath}...`);
-    const quotedPath = shellQuote(mountPath);
-    const mkdirCommand = `sudo mkdir -p ${quotedPath} && sudo chown $(id -u):$(id -g) ${quotedPath}`;
-
-    this.logger.debug(`${LOG_PREFIX} Running command: ${mkdirCommand}`);
-    const mkdirResult = await runCommand(this._sandbox, mkdirCommand, { timeout: MOUNT_COMMAND_TIMEOUT_MS });
-
-    if (mkdirResult.exitCode !== 0) {
-      const mkdirError = `Failed to create mount directory "${mountPath}": ${mkdirResult.output}`;
-      this.logger.debug(`${LOG_PREFIX} mkdir error for "${mountPath}":`, mkdirError);
-      this.mounts.set(mountPath, { filesystem, state: 'error', config, error: mkdirError });
-      return { success: false, mountPath, error: mkdirError };
+    // Create/prepare the mount directory.
+    // If the path is already a FUSE mount (stuck from a failed prior unmount), overlay
+    // it with a tmpfs first. New FUSE-on-existing-FUSE fails because the kernel asks the
+    // existing daemon to resolve the mount point path, which returns ENOENT. A tmpfs
+    // overlay is kernel-native and doesn't involve the FUSE driver.
+    this.logger.debug(`${LOG_PREFIX} Creating mount directory for "${mountPath}"...`);
+    try {
+      const quotedPath = shellQuote(mountPath);
+      const mkdirResult = await runCommand(
+        sandbox,
+        `mountpoint -q ${quotedPath} 2>/dev/null && sudo mount -t tmpfs tmpfs ${quotedPath} 2>/dev/null; ` +
+          `sudo mkdir -p ${quotedPath} 2>/dev/null; ` +
+          `sudo chown $(id -u):$(id -g) ${quotedPath}`,
+        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
+      );
+      if (mkdirResult.exitCode !== 0) {
+        const error = mkdirResult.output || 'Failed to create mount directory';
+        this.logger.debug(`${LOG_PREFIX} mkdir error for "${mountPath}":`, error);
+        this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+        return { success: false, mountPath, error };
+      }
+    } catch (err) {
+      const error = `Failed to create mount directory: ${err}`;
+      this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+      return { success: false, mountPath, error };
     }
-    this.logger.debug(`${LOG_PREFIX} Created mount directory for mount path "${mountPath}":`, mkdirResult);
 
-    // Create mount context for mount operations
+    // Build mount context for SDK-agnostic mount helpers
     const mountCtx: MountContext = {
-      sandbox: this._sandbox,
+      run: async (cmd, timeoutMs) => {
+        const result = await runCommand(sandbox, cmd, timeoutMs !== undefined ? { timeout: timeoutMs } : undefined);
+        return {
+          exitCode: result.exitCode,
+          stdout: result.output,
+          stderr: result.exitCode !== 0 ? result.output : '',
+        };
+      },
+      writeFile: async (path, content) => {
+        await sandbox.fs.uploadFile(Buffer.from(content), path);
+      },
       logger: this.logger,
     };
 
     try {
       switch (config.type) {
         case 's3':
-          this.logger.debug(`${LOG_PREFIX} Mounting S3 bucket at ${mountPath}...`);
-          await mountS3(mountPath, config as DaytonaS3MountConfig, mountCtx);
+          this.logger.debug(`${LOG_PREFIX} Mounting S3 at "${mountPath}"...`);
+          await mountS3(mountPath, config, mountCtx);
           this.logger.debug(`${LOG_PREFIX} Mounted S3 bucket at ${mountPath}`);
           break;
         case 'gcs':
-          this.logger.debug(`${LOG_PREFIX} Mounting GCS bucket at ${mountPath}...`);
-          await mountGCS(mountPath, config as DaytonaGCSMountConfig, mountCtx);
+          this.logger.debug(`${LOG_PREFIX} Mounting GCS at "${mountPath}"...`);
+          await mountGCS(mountPath, config, mountCtx);
           this.logger.debug(`${LOG_PREFIX} Mounted GCS bucket at ${mountPath}`);
           break;
-        default:
-          this.mounts.set(mountPath, {
-            filesystem,
-            state: 'unsupported',
-            config,
-            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
-          });
-          return {
-            success: false,
-            mountPath,
-            error: `Unsupported mount type: ${(config as FilesystemMountConfig).type}`,
-          };
+        default: {
+          const error = `Unsupported mount type: ${(config as FilesystemMountConfig).type}`;
+          this.mounts.set(mountPath, { filesystem, state: 'unsupported', config, error });
+          return { success: false, mountPath, error };
+        }
       }
     } catch (error) {
       this.logger.error(
@@ -601,15 +651,10 @@ export class DaytonaSandbox extends MastraSandbox {
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error: errorToString(error) });
 
       // Clean up the directory we created since mount failed
-      try {
-        await runCommand(this._sandbox!, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
-          timeout: MOUNT_COMMAND_TIMEOUT_MS,
-        });
-        this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
-      } catch {
-        // Ignore cleanup errors
-      }
-
+      await runCommand(sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      });
+      this.logger.debug(`${LOG_PREFIX} Cleaned up directory after failed mount: ${mountPath}`);
       return { success: false, mountPath, error: errorToString(error) };
     }
 
@@ -619,7 +664,7 @@ export class DaytonaSandbox extends MastraSandbox {
     // Write marker file so we can detect config changes on reconnect
     await this.writeMarkerFile(mountPath);
 
-    this.logger.debug(`${LOG_PREFIX} Mounted ${mountPath}`);
+    this.logger.debug(`${LOG_PREFIX} Mounted "${mountPath}"`);
     return { success: true, mountPath };
   }
 
@@ -632,41 +677,36 @@ export class DaytonaSandbox extends MastraSandbox {
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
+    const sandbox = this._sandbox;
 
-    this.logger.debug(`${LOG_PREFIX} Unmounting ${mountPath}...`);
+    this.logger.debug(`${LOG_PREFIX} Unmounting "${mountPath}"...`);
 
-    try {
-      // Use fusermount for FUSE mounts, fall back to umount
-      const result = await runCommand(
-        this._sandbox,
-        `sudo fusermount -u ${shellQuote(mountPath)} 2>/dev/null || sudo umount ${shellQuote(mountPath)}`,
-        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
-      );
-      if (result.exitCode !== 0) {
-        this.logger.debug(`${LOG_PREFIX} Unmount warning: ${result.output}`);
-      }
-    } catch (error) {
-      this.logger.debug(`${LOG_PREFIX} Unmount error:`, error);
-      // Try lazy unmount as last resort
-      await runCommand(this._sandbox, `sudo umount -l ${shellQuote(mountPath)} 2>/dev/null || true`, {
-        timeout: MOUNT_COMMAND_TIMEOUT_MS,
-      });
-    }
+    // Try fusermount first (user-space), then lazy umount as fallback.
+    // Do NOT pkill the FUSE daemon — a killed daemon leaves a stale mount
+    // (ENOTCONN) that blocks subsequent mkdir/stat on the path.
+    const quotedPath = shellQuote(mountPath);
+    await runCommand(
+      sandbox,
+      `sudo fusermount -u ${quotedPath} 2>/dev/null; ` +
+        `sudo umount -l ${quotedPath} 2>/dev/null; ` +
+        // Last resort: move a stuck FUSE mount aside so the directory can be cleaned up.
+        `mountpoint -q ${quotedPath} 2>/dev/null && ` +
+        `{ _p="/tmp/.mastra-defunct-$$"; sudo mkdir -p "$_p" && sudo mount --move ${quotedPath} "$_p" 2>/dev/null; sudo umount -l "$_p" 2>/dev/null; sudo rmdir "$_p" 2>/dev/null; }`,
+      { timeout: MOUNT_COMMAND_TIMEOUT_MS },
+    );
 
     this.mounts.delete(mountPath);
 
-    // Clean up marker file
-    const filename = this.mounts.markerFilename(mountPath);
-    const markerPath = `/tmp/.mastra-mounts/${filename}`;
-    await runCommand(this._sandbox, `rm -f ${shellQuote(markerPath)} 2>/dev/null || true`, {
-      timeout: MOUNT_COMMAND_TIMEOUT_MS,
-    });
-
-    // Remove empty mount directory (only if empty, rmdir fails on non-empty)
-    // Use sudo since mount directories outside home (like /data) were created with sudo
-    const rmdirResult = await runCommand(this._sandbox, `sudo rmdir ${shellQuote(mountPath)} 2>&1`, {
-      timeout: MOUNT_COMMAND_TIMEOUT_MS,
-    });
+    // Clean up marker file and mount directory in one round-trip.
+    // rm -f always exits 0, so the combined exit code reflects rmdir.
+    const markerPath = `/tmp/.mastra-mounts/${this.mounts.markerFilename(mountPath)}`;
+    const rmdirResult = await runCommand(
+      sandbox,
+      `rm -f ${shellQuote(markerPath)} 2>/dev/null; sudo rmdir ${quotedPath} 2>&1`,
+      {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      },
+    );
     if (rmdirResult.exitCode === 0) {
       this.logger.debug(`${LOG_PREFIX} Unmounted and removed ${mountPath}`);
     } else {
@@ -682,43 +722,50 @@ export class DaytonaSandbox extends MastraSandbox {
    * Call this after reconnecting to an existing sandbox to clean up old mounts.
    */
   async reconcileMounts(expectedMountPaths: string[]): Promise<void> {
-    if (!this._sandbox) {
-      throw new SandboxNotReadyError(this.id);
-    }
+    if (!this._sandbox) return;
+    const sandbox = this._sandbox;
 
     this.logger.debug(`${LOG_PREFIX} Reconciling mounts. Expected paths:`, expectedMountPaths);
 
-    // Get current FUSE mounts in the sandbox
-    // Use || true to prevent failure when no FUSE mounts exist (grep exits 1 on no match)
-    const mountsResult = await runCommand(
-      this._sandbox,
-      `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}' || true`,
-      { timeout: MOUNT_COMMAND_TIMEOUT_MS },
-    );
-    const currentMounts = mountsResult.output
-      .trim()
-      .split('\n')
-      .filter(p => p.length > 0);
+    // Get current FUSE mounts
+    let currentMounts: string[] = [];
+    try {
+      const mountsResult = await runCommand(
+        sandbox,
+        `grep -E 'fuse\\.(s3fs|gcsfuse)' /proc/mounts | awk '{print $2}'`,
+        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
+      );
+      currentMounts = mountsResult.output
+        .trim()
+        .split('\n')
+        .filter(p => p.length > 0);
+    } catch (err) {
+      this.logger.debug(`${LOG_PREFIX} Could not read /proc/mounts: ${err}`);
+      return;
+    }
 
     this.logger.debug(`${LOG_PREFIX} Current FUSE mounts in sandbox:`, currentMounts);
 
     // Read our marker files to know which mounts WE created
-    const markersResult = await runCommand(this._sandbox, `ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""`, {
-      timeout: MOUNT_COMMAND_TIMEOUT_MS,
-    });
-    const markerFiles = markersResult.output
-      .trim()
-      .split('\n')
-      .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
+    let markerFiles: string[] = [];
+    try {
+      const markersResult = await runCommand(sandbox, 'ls /tmp/.mastra-mounts/ 2>/dev/null || echo ""', {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      });
+      markerFiles = markersResult.output
+        .trim()
+        .split('\n')
+        .filter(f => f.length > 0 && SAFE_MARKER_NAME.test(f));
+    } catch (err) {
+      this.logger.debug(`${LOG_PREFIX} Could not read marker files: ${err}`);
+    }
 
     // Build a map of mount paths -> marker filenames for mounts WE created
     const managedMountPaths = new Map<string, string>();
     for (const markerFile of markerFiles) {
-      const markerResult = await runCommand(
-        this._sandbox,
-        `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`,
-        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
-      );
+      const markerResult = await runCommand(sandbox, `cat "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || echo ""`, {
+        timeout: MOUNT_COMMAND_TIMEOUT_MS,
+      });
       const parsed = this.mounts.parseMarkerContent(markerResult.output.trim());
       if (parsed && SAFE_MOUNT_PATH.test(parsed.path)) {
         managedMountPaths.set(parsed.path, markerFile);
@@ -730,10 +777,14 @@ export class DaytonaSandbox extends MastraSandbox {
 
     for (const stalePath of staleMounts) {
       if (managedMountPaths.has(stalePath)) {
-        this.logger.debug(`${LOG_PREFIX} Found stale managed FUSE mount at ${stalePath}, unmounting...`);
-        await this.unmount(stalePath);
+        this.logger.debug(`${LOG_PREFIX} Found stale managed FUSE mount at "${stalePath}", unmounting...`);
+        try {
+          await this.unmount(stalePath);
+        } catch (err) {
+          this.logger.debug(`${LOG_PREFIX} Failed to unmount stale mount at "${stalePath}": ${err}`);
+        }
       } else {
-        this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at ${stalePath}, leaving untouched`);
+        this.logger.debug(`${LOG_PREFIX} Found external FUSE mount at "${stalePath}", leaving untouched`);
       }
     }
 
@@ -756,21 +807,16 @@ export class DaytonaSandbox extends MastraSandbox {
             // Only clean up directory if not currently FUSE mounted
             if (!currentMounts.includes(mountPath)) {
               this.logger.debug(`${LOG_PREFIX} Cleaning up orphaned marker and directory for ${mountPath}`);
-
-              // Remove marker file
-              await runCommand(this._sandbox!, `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`, {
-                timeout: MOUNT_COMMAND_TIMEOUT_MS,
-              });
-
-              // Try to remove the directory (will fail if not empty or doesn't exist, which is fine)
-              await runCommand(this._sandbox!, `sudo rmdir ${shellQuote(mountPath)} 2>/dev/null || true`, {
-                timeout: MOUNT_COMMAND_TIMEOUT_MS,
-              });
+              await runCommand(
+                sandbox,
+                `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null; sudo rmdir ${shellQuote(mountPath)} 2>/dev/null`,
+                { timeout: MOUNT_COMMAND_TIMEOUT_MS },
+              );
             }
           } else {
             // Malformed marker file - just delete it
             this.logger.debug(`${LOG_PREFIX} Removing malformed marker file: ${markerFile}`);
-            await runCommand(this._sandbox!, `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`, {
+            await runCommand(sandbox, `rm -f "/tmp/.mastra-mounts/${markerFile}" 2>/dev/null || true`, {
               timeout: MOUNT_COMMAND_TIMEOUT_MS,
             });
           }
@@ -804,7 +850,7 @@ export class DaytonaSandbox extends MastraSandbox {
   }
 
   /**
-   * Check if a path is already mounted and if the config matches.
+   * Check if a path is already mounted and whether the config matches.
    *
    * @param mountPath - The mount path to check
    * @param newConfig - The new config to compare against the stored config
@@ -815,46 +861,49 @@ export class DaytonaSandbox extends MastraSandbox {
     newConfig: DaytonaMountConfig,
   ): Promise<'not_mounted' | 'matching' | 'mismatched' | 'unmanaged'> {
     if (!this._sandbox) throw new SandboxNotReadyError(this.id);
+    const sandbox = this._sandbox;
 
     // Check if path is a mount point
-    const mountCheck = await runCommand(
-      this._sandbox,
-      `mountpoint -q ${shellQuote(mountPath)} && echo "mounted" || echo "not mounted"`,
-      { timeout: MOUNT_COMMAND_TIMEOUT_MS },
-    );
-
-    if (mountCheck.output.trim() !== 'mounted') {
+    try {
+      const mountCheck = await runCommand(
+        sandbox,
+        `mountpoint -q ${shellQuote(mountPath)} && echo "mounted" || echo "not mounted"`,
+        { timeout: MOUNT_COMMAND_TIMEOUT_MS },
+      );
+      if (mountCheck.output.trim() !== 'mounted') {
+        return 'not_mounted';
+      }
+    } catch {
       return 'not_mounted';
     }
 
-    // Path is mounted - check if config matches via marker file
+    // Path is mounted — check if config matches via marker file
     const filename = this.mounts.markerFilename(mountPath);
     const markerPath = `/tmp/.mastra-mounts/${filename}`;
-
+    let parsed;
     try {
-      const markerResult = await runCommand(this._sandbox, `cat ${shellQuote(markerPath)} 2>/dev/null || echo ""`, {
+      const markerResult = await runCommand(sandbox, `cat ${shellQuote(markerPath)} 2>/dev/null || echo ""`, {
         timeout: MOUNT_COMMAND_TIMEOUT_MS,
       });
-      const parsed = this.mounts.parseMarkerContent(markerResult.output.trim());
-
-      if (!parsed) {
-        return 'unmanaged';
-      }
-
-      // Compute hash of the NEW config and compare with stored hash
-      const newConfigHash = this.mounts.computeConfigHash(newConfig);
-      this.logger.debug(
-        `${LOG_PREFIX} Marker check - stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
-      );
-
-      if (parsed.path === mountPath && parsed.configHash === newConfigHash) {
-        return 'matching';
-      }
+      parsed = this.mounts.parseMarkerContent(markerResult.output.trim());
     } catch {
       // Marker doesn't exist or can't be read - treat as unmanaged
+      return 'unmanaged';
     }
 
-    return 'unmanaged';
+    if (!parsed) return 'unmanaged';
+
+    // Compute hash of the NEW config and compare with stored hash
+    const newConfigHash = this.mounts.computeConfigHash(newConfig);
+    this.logger.debug(
+      `${LOG_PREFIX} Marker check - stored hash: "${parsed.configHash}", new config hash: "${newConfigHash}"`,
+    );
+
+    if (parsed.path === mountPath && parsed.configHash === newConfigHash) {
+      return 'matching';
+    }
+
+    return 'mismatched';
   }
 
   // ---------------------------------------------------------------------------
@@ -862,10 +911,33 @@ export class DaytonaSandbox extends MastraSandbox {
   // ---------------------------------------------------------------------------
 
   /**
-   * Try to find and reconnect to an existing Daytona sandbox with the same
-   * logical ID (via the mastra-sandbox-id label). Returns the sandbox if
-   * found and usable, or null if a fresh sandbox should be created.
+   * Try to find and reconnect to an existing Daytona sandbox.
+   *
+   * Uses two strategies:
+   * 1. `get()` by sandbox name — calls the getSandbox API directly, which
+   *    returns sandboxes in ANY state (including stopped). This is the
+   *    primary path and fixes reconnection after stop/start cycles.
+   * 2. `findOne()` by label — falls back to label-based search. Note: the
+   *    SDK's list() API only returns started sandboxes by default (no states
+   *    param in v0.143.0), so this only finds running sandboxes.
+   *
+   * Returns the sandbox if found and usable, or null if a fresh one should
+   * be created.
    */
+  private async detectWorkingDir(): Promise<void> {
+    if (!this._sandbox) return;
+    try {
+      const result = await runCommand(this._sandbox, 'pwd', { timeout: MOUNT_COMMAND_TIMEOUT_MS });
+      const dir = result.output?.trim();
+      if (dir) {
+        this._workingDir = dir;
+        this.logger.debug(`${LOG_PREFIX} Detected working directory: ${dir}`);
+      }
+    } catch {
+      this.logger.debug(`${LOG_PREFIX} Could not detect working directory, will omit from instructions`);
+    }
+  }
+
   private async findExistingSandbox(): Promise<Sandbox | null> {
     const DEAD_STATES: SandboxState[] = [
       SandboxState.DESTROYED,
@@ -874,32 +946,130 @@ export class DaytonaSandbox extends MastraSandbox {
       SandboxState.BUILD_FAILED,
     ];
 
-    try {
-      const sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
-      const state = sandbox.state;
+    let sandbox: Sandbox | null = null;
 
-      if (state && DEAD_STATES.includes(state)) {
-        this.logger.debug(
-          `${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`,
-        );
-        try {
-          await this._daytona!.delete(sandbox);
-        } catch {
-          // Best-effort cleanup of dead sandbox
+    // Strategy 1: lookup by name (works for stopped sandboxes)
+    if (this.sandboxName) {
+      try {
+        sandbox = await this._daytona!.get(this.sandboxName);
+      } catch (error) {
+        if (error instanceof DaytonaNotFoundError) {
+          // Not found by name — fall through to label lookup
+        } else if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
+          throw error; // Auth failure — propagate immediately
+        } else {
+          // Transient/network error (ETIMEDOUT, 5xx, etc.) — fall through
+          this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by name: ${error}`);
         }
+      }
+    }
+
+    // Strategy 2: fallback to label-based lookup
+    if (!sandbox) {
+      try {
+        sandbox = await this._daytona!.findOne({ labels: { 'mastra-sandbox-id': this.id } });
+      } catch (error) {
+        if (
+          error instanceof DaytonaNotFoundError ||
+          (error instanceof Error && error.message.includes('No sandbox found'))
+        ) {
+          // Not found by label either — create a fresh sandbox
+          return null;
+        }
+        if (error instanceof DaytonaError && (error.statusCode === 401 || error.statusCode === 403)) {
+          throw error; // Auth failure — propagate immediately
+        }
+        // Transient/network error — fall through to create fresh sandbox
+        this.logger.debug(`${LOG_PREFIX} Transient error looking up sandbox by label: ${error}`);
         return null;
       }
+    }
 
-      if (state !== SandboxState.STARTED) {
-        this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
-        await this._daytona!.start(sandbox);
+    const state = sandbox.state;
+
+    if (state && DEAD_STATES.includes(state)) {
+      this.logger.debug(`${LOG_PREFIX} Existing sandbox ${sandbox.id} is dead (${state}), deleting and creating fresh`);
+      try {
+        await this._daytona!.delete(sandbox);
+      } catch {
+        // Best-effort cleanup of dead sandbox
       }
-
-      return sandbox;
-    } catch {
-      // Not found or any error — create a fresh sandbox
       return null;
     }
+
+    if (state !== SandboxState.STARTED) {
+      this.logger.debug(`${LOG_PREFIX} Restarting sandbox ${sandbox.id} (state: ${state})`);
+      await this.waitForStableStateAndStart(sandbox);
+    }
+
+    return sandbox;
+  }
+
+  /**
+   * Transitional states where the Daytona API will reject start() with
+   * "State change in progress". We poll until the sandbox reaches a stable
+   * state before attempting start().
+   */
+  private static readonly TRANSITIONAL_STATES: SandboxState[] = [
+    SandboxState.STARTING,
+    SandboxState.STOPPING,
+    SandboxState.CREATING,
+    SandboxState.RESTORING,
+    SandboxState.ARCHIVING,
+    SandboxState.RESIZING,
+    SandboxState.PULLING_SNAPSHOT,
+    SandboxState.BUILDING_SNAPSHOT,
+  ];
+
+  /**
+   * Wait for the sandbox to leave a transitional state, then start it if needed.
+   * Polls every 2s for up to 120s. If the sandbox reaches STARTED on its own
+   * (e.g. it was STARTING), we skip the start() call. If start() still fails
+   * with "State change in progress", we retry with backoff.
+   */
+  private async waitForStableStateAndStart(sandbox: Sandbox): Promise<void> {
+    const MAX_WAIT_MS = 120_000;
+    const POLL_INTERVAL_MS = 2_000;
+    const deadline = Date.now() + MAX_WAIT_MS;
+
+    let current = sandbox;
+
+    // Phase 1: Poll until the reported state is no longer transitional
+    while (current.state && DaytonaSandbox.TRANSITIONAL_STATES.includes(current.state) && Date.now() < deadline) {
+      this.logger.debug(`${LOG_PREFIX} Sandbox ${current.id} is in transitional state (${current.state}), waiting...`);
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+      current = await this._daytona!.get(current.id);
+    }
+
+    if (current.state === SandboxState.STARTED) {
+      // Reached STARTED on its own — update the reference and return
+      Object.assign(sandbox, current);
+      return;
+    }
+
+    // Phase 2: Attempt start() with retries for "State change in progress"
+    while (Date.now() < deadline) {
+      try {
+        await this._daytona!.start(current);
+        return;
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('State change in progress') && Date.now() < deadline) {
+          this.logger.debug(`${LOG_PREFIX} start() returned "State change in progress", retrying...`);
+          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+          current = await this._daytona!.get(current.id);
+          if (current.state === SandboxState.STARTED) {
+            Object.assign(sandbox, current);
+            return;
+          }
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    // Last-ditch attempt after deadline
+    await this._daytona!.start(current);
   }
 
   /**

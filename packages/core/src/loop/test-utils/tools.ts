@@ -1,13 +1,8 @@
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { dynamicTool, jsonSchema, stepCountIs } from '@internal/ai-sdk-v5';
-import {
-  convertArrayToReadableStream,
-  convertReadableStreamToArray,
-  mockValues,
-  mockId,
-} from '@internal/ai-sdk-v5/test';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
-import z from 'zod';
+import z from 'zod/v4';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { loop } from '../loop';
 import { createMessageListWithUserMessage, createTestModels, defaultSettings, testUsage } from './utils';
@@ -956,6 +951,80 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       // Verify we also get the text response
       const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
       expect(textChunks.length).toBeGreaterThan(0);
+    });
+
+    it('should complete stream when PTC sends only tool-input streaming (no explicit tool-call chunk)', async () => {
+      // Regression: PTC from code execution sends tool-input-start/delta/end only;
+      // without synthesizing a tool-call the stream would freeze.
+      const result = loopFn({
+        methodType: 'stream',
+        runId,
+        messageList: createMessageListWithUserMessage(),
+        models: createTestModels({
+          stream: convertArrayToReadableStream([
+            {
+              type: 'response-metadata',
+              id: 'id-0',
+              modelId: 'claude-code-model',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'tool-input-start',
+              id: 'call-1',
+              toolName: 'str_replace_editor',
+              providerExecuted: true,
+            },
+            {
+              type: 'tool-input-delta',
+              id: 'call-1',
+              delta: '{"command":"view","path":"/src/app.ts"}',
+            },
+            {
+              type: 'tool-input-end',
+              id: 'call-1',
+            },
+            {
+              type: 'tool-result',
+              toolCallId: 'call-1',
+              toolName: 'str_replace_editor',
+              result: {
+                content: '// app.ts content',
+                line_count: 1,
+              },
+              providerExecuted: true,
+            },
+            {
+              type: 'text-delta',
+              id: 'text-1',
+              delta: 'Done.',
+            },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: testUsage,
+            },
+          ]),
+        }),
+        tools: {},
+        ...defaultSettings(),
+      });
+
+      const stream = result.fullStream;
+      const chunks = await convertAsyncIterableToArray(stream);
+
+      const toolResultChunk = chunks.find((c: any) => c.type === 'tool-result');
+      expect(toolResultChunk).toBeDefined();
+      expect((toolResultChunk as any)?.payload?.result).toEqual({
+        content: '// app.ts content',
+        line_count: 1,
+      });
+      expect((toolResultChunk as any)?.payload?.providerExecuted).toBe(true);
+
+      const textChunks = chunks.filter((c: any) => c.type === 'text-delta');
+      expect(textChunks.length).toBeGreaterThan(0);
+
+      const finishChunk = chunks.find((c: any) => c.type === 'finish');
+      expect(finishChunk).toBeDefined();
     });
   });
 

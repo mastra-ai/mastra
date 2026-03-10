@@ -174,6 +174,8 @@ export interface Config<
 
   /**
    * Custom ID generator function for creating unique identifiers.
+   * Receives optional context about what type of ID is being generated
+   * and where it's being requested from.
    * @default `crypto.randomUUID()`
    */
   idGenerator?: MastraIdGenerator;
@@ -365,10 +367,13 @@ export class Mastra<
    * @example
    * ```typescript
    * const mastra = new Mastra({
-   *   idGenerator: () => `custom-${Date.now()}`
+   *   idGenerator: context =>
+   *     context?.idType === 'message' && context.threadId
+   *       ? `msg-${context.threadId}-${Date.now()}`
+   *       : `custom-${Date.now()}`
    * });
    * const generator = mastra.getIdGenerator();
-   * console.log(generator?.()); // \"custom-1234567890\"
+   * console.log(generator?.({ idType: 'message', threadId: 'thread-123' })); // \"msg-thread-123-1234567890\"
    * ```
    */
   public getIdGenerator() {
@@ -456,18 +461,37 @@ export class Mastra<
    *
    * The ID generator function will be used by `generateId()` instead of the default
    * `crypto.randomUUID()`. This is useful for creating application-specific ID formats
-   * or integrating with existing ID generation systems.
+   * or integrating with existing ID generation systems. The function receives
+   * optional context about what is requesting the ID.
    *
    * @example
    * ```typescript
    * const mastra = new Mastra();
-   * mastra.setIdGenerator(() => `custom-${Date.now()}`);
-   * const id = mastra.generateId();
-   * console.log(id); // "custom-1234567890"
+   * mastra.setIdGenerator(context =>
+   *   context?.idType === 'run' && context.entityId
+   *     ? `run-${context.entityId}-${Date.now()}`
+   *     : `custom-${Date.now()}`
+   * );
+   * const id = mastra.generateId({ idType: 'run', entityId: 'agent-123' });
+   * console.log(id); // "run-agent-123-1234567890"
    * ```
    */
   public setIdGenerator(idGenerator: MastraIdGenerator) {
     this.#idGenerator = idGenerator;
+  }
+
+  /**
+   * Sets the server configuration for this Mastra instance.
+   *
+   * @param server - The server configuration object
+   *
+   * @example
+   * ```typescript
+   * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
+   * ```
+   */
+  public setServer(server: ServerConfig): void {
+    this.#server = server;
   }
 
   /**
@@ -1295,7 +1319,7 @@ export class Mastra<
    * @example Getting and executing a workflow
    * ```typescript
    * import { createWorkflow, createStep } from '@mastra/core/workflows';
-   * import { z } from 'zod';
+   * import { z } from 'zod/v4';
    *
    * const processDataWorkflow = createWorkflow({
    *   name: 'process-data',

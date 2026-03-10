@@ -67,7 +67,7 @@ const history = await dataset.getItemHistory({ itemId: 'item-id' })
 
 ## Access
 
-`Dataset` is not instantiated directly. Obtain one via `DatasetsManager`:
+`Dataset` isn't instantiated directly. Obtain one via `DatasetsManager`:
 
 ```typescript
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
@@ -81,11 +81,11 @@ For the full dataset record (name, description, schemas, version, timestamps), c
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "The unique identifier of the dataset. Read-only.",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'The unique identifier of the dataset. Read-only.',
+  },
 ]}
 />
 

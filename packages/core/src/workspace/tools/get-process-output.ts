@@ -58,6 +58,7 @@ Use this after starting a background command with execute_command (background: t
               await context.writer!.custom({
                 type: 'data-sandbox-stdout',
                 data: { output: data, timestamp: Date.now(), toolCallId },
+                transient: true,
               });
             }
           : undefined,
@@ -66,6 +67,7 @@ Use this after starting a background command with execute_command (background: t
               await context.writer!.custom({
                 type: 'data-sandbox-stderr',
                 data: { output: data, timestamp: Date.now(), toolCallId },
+                transient: true,
               });
             }
           : undefined,

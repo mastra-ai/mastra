@@ -110,18 +110,20 @@ export interface TUIState {
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
+  quietMode: boolean;
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
   pendingNewThread: boolean;
-  pendingLockConflict: { threadTitle: string; ownerPid: number } | null;
 
   // ── Inline interaction ────────────────────────────────────────────────
   /** Track the most recent ask_user tool for inline question placement */
   lastAskUserComponent?: IToolExecutionComponent;
-  /** Saved editor text for Ctrl+Z undo */
+  /** Saved editor text for Alt+Z undo */
   lastClearedText: string;
   activeInlineQuestion?: AskQuestionInlineComponent;
+  /** Queue of pending inline questions waiting to be shown (when one is already active) */
+  pendingInlineQuestions: Array<() => void>;
   activeInlinePlanApproval?: PlanApprovalInlineComponent;
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: IToolExecutionComponent;
@@ -207,13 +209,14 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,
+    quietMode: false,
 
     // Thread / conversation
     pendingNewThread: false,
-    pendingLockConflict: null,
 
     // Inline interaction
     lastClearedText: '',
+    pendingInlineQuestions: [],
     followUpComponents: [],
     pendingSlashCommands: [],
     pendingApprovalDismiss: null,

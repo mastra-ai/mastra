@@ -396,7 +396,6 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
       expect(result.steps.step1).toMatchObject({
         status: 'success',
         output: { result: 'success' },
-        payload: {},
       });
     });
 

@@ -73,6 +73,7 @@ export async function replaceTypes(file, rootDir, bundledPackages) {
 
   const Program = new Project();
   const sourceFile = Program.addSourceFileAtPath(file);
+  // Collect top-level import declarations: import { Foo } from "@internal/ai-sdk-v5"
   sourceFile.getStatements().forEach(statement => {
     if (statement.getKind() === SyntaxKind.ImportDeclaration) {
       const importDeclaration = /** @type {import('ts-morph').ImportDeclaration} */ (statement);
@@ -82,6 +83,19 @@ export async function replaceTypes(file, rootDir, bundledPackages) {
 
       if (hasExternal) {
         importsToReplace.add(moduleSpecifier);
+      }
+    }
+  });
+
+  // Collect inline import type expressions: import("@internal/ai-sdk-v5").UIMessage
+  sourceFile.getDescendantsOfKind(SyntaxKind.ImportType).forEach(importType => {
+    const arg = importType.getArgument();
+    if (arg.getKind() === SyntaxKind.LiteralType) {
+      const literal = /** @type {import('ts-morph').LiteralTypeNode} */ (arg).getLiteral();
+      const value = literal.getLiteralValue();
+      const hasExternal = normalizedBundledPackages.some(pkg => value.includes(pkg));
+      if (hasExternal) {
+        importsToReplace.add(literal);
       }
     }
   });

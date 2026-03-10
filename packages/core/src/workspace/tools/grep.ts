@@ -1,7 +1,8 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { isTextFile } from '../filesystem/fs-utils';
+import { loadGitignore } from '../gitignore';
 import type { GlobMatcher } from '../glob';
 import { createGlobMatcher, extractGlobBase, isGlobPattern } from '../glob';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
@@ -88,6 +89,14 @@ Usage:
       searchPath = inputPath;
     }
 
+    // Load gitignore filter.
+    // If the user explicitly targets a gitignored path (e.g. "./dist"), skip
+    // filtering so they can still search there. Otherwise apply as normal.
+    const rawIgnoreFilter = await loadGitignore(filesystem);
+    const searchPathNormalized = searchPath.replace(/^\.\//, '').replace(/\/$/, '');
+    const targetIsIgnored = rawIgnoreFilter && searchPathNormalized && rawIgnoreFilter(searchPathNormalized + '/');
+    const ignoreFilter = targetIsIgnored ? undefined : rawIgnoreFilter;
+
     // Collect files to search
     let filePaths: string[];
 
@@ -113,6 +122,14 @@ Usage:
             if (!includeHidden && entry.name.startsWith('.')) continue;
 
             const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
+
+            // Skip gitignored paths
+            if (ignoreFilter) {
+              const relativePath = fullPath.replace(/^\.\//, '');
+              const checkPath = entry.type === 'directory' ? `${relativePath}/` : relativePath;
+              if (ignoreFilter(checkPath)) continue;
+            }
+
             if (entry.type === 'file') {
               // Skip non-text files
               if (!isTextFile(entry.name)) continue;

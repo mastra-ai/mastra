@@ -40,69 +40,69 @@ constructor(options: MastraServerOptions<TApp>)
 
 <PropertiesTable
   content={[
-{
-name: "app",
-type: "TApp",
-description: "Framework app instance",
-isOptional: false,
-},
-{
-name: "mastra",
-type: "Mastra",
-description: "Mastra instance",
-isOptional: false,
-},
-{
-name: "prefix",
-type: "string",
-description: "Route path prefix (e.g., `/api/v2`)",
-isOptional: true,
-defaultValue: "''",
-},
-{
-name: "openapiPath",
-type: "string",
-description: "Path to serve OpenAPI spec",
-isOptional: true,
-defaultValue: "''",
-},
-{
-name: "bodyLimitOptions",
-type: "BodyLimitOptions",
-description: "Request body size limits",
-isOptional: true,
-},
-{
-name: "streamOptions",
-type: "StreamOptions",
-description: "Stream redaction config",
-isOptional: true,
-defaultValue: "{ redact: true }",
-},
-{
-name: "customRouteAuthConfig",
-type: "Map<string, boolean>",
-description: "Per-route auth overrides",
-isOptional: true,
-},
-{
-name: "tools",
-type: "Record<string, Tool>",
-description: "Available tools for the server",
-isOptional: true,
-},
-{
-name: "taskStore",
-type: "InMemoryTaskStore",
-description: "Task store for A2A (Agent-to-Agent) operations",
-isOptional: true,
-},
-{
-name: "mcpOptions",
-type: "MCPOptions",
-description: "MCP transport options for serverless environments",
-isOptional: true,
-},
+  {
+    name: 'app',
+    type: 'TApp',
+    description: 'Framework app instance',
+    isOptional: false,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance',
+    isOptional: false,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Route path prefix (e.g., `/api/v2`)',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'openapiPath',
+    type: 'string',
+    description: 'Path to serve OpenAPI spec',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'bodyLimitOptions',
+    type: 'BodyLimitOptions',
+    description: 'Request body size limits',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: 'StreamOptions',
+    description: 'Stream redaction config',
+    isOptional: true,
+    defaultValue: '{ redact: true }',
+  },
+  {
+    name: 'customRouteAuthConfig',
+    type: 'Map<string, boolean>',
+    description: 'Per-route auth overrides',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'Record<string, Tool>',
+    description: 'Available tools for the server',
+    isOptional: true,
+  },
+  {
+    name: 'taskStore',
+    type: 'InMemoryTaskStore',
+    description: 'Task store for A2A (Agent-to-Agent) operations',
+    isOptional: true,
+  },
+  {
+    name: 'mcpOptions',
+    type: 'MCPOptions',
+    description: 'MCP transport options for serverless environments',
+    isOptional: true,
+  },
 ]}
 />
 

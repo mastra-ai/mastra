@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
 import {
   MainContentLayout,
   MainContentContent,
@@ -17,8 +15,9 @@ import {
   DatasetCombobox,
 } from '@mastra/playground-ui';
 import type { DatasetVersion } from '@mastra/playground-ui';
-import { Link } from 'react-router';
 import { Database, Play } from 'lucide-react';
+import { useState } from 'react';
+import { useParams, useNavigate, Link } from 'react-router';
 
 function DatasetPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -47,12 +46,12 @@ function DatasetPage() {
   }
 
   const handleExperimentSuccess = (experimentId: string) => {
-    navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
+    void navigate(`/datasets/${datasetId}/experiments/${experimentId}`);
   };
 
   const handleDeleteSuccess = () => {
     // Navigate back to datasets list
-    navigate('/datasets');
+    void navigate('/datasets');
   };
 
   // Version selection handler for contextual run button

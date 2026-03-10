@@ -38,7 +38,11 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
       ? RecordToTuple<Partial<Values>>
       : Iterable<readonly [string, unknown]>,
   ) {
-    this.registry = new Map(iterable);
+    if (iterable && typeof iterable === 'object' && typeof (iterable as any)[Symbol.iterator] !== 'function') {
+      this.registry = new Map(Object.entries(iterable));
+    } else {
+      this.registry = new Map(iterable);
+    }
   }
 
   /**
