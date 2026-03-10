@@ -4,7 +4,6 @@ description: "Learn how to set up and use the Mastra Client SDK"
 packages:
   - "@mastra/client-js"
   - "@mastra/core"
-  - "@mastra/react"
 ---
 
 # Mastra Client SDK
@@ -22,20 +21,6 @@ To ensure smooth local development, make sure you have:
 ## Usage
 
 The Mastra Client SDK is designed for browser environments and uses the native `fetch` API for making HTTP requests to your Mastra server.
-
-## Use `@mastra/react` in browser apps
-
-If you're building a React UI, install `@mastra/react` and import its hooks from the package root. The root entry is safe to use in browser bundlers such as Vite, so you do not need custom aliases or Node.js polyfills.
-
-```bash npm2yarn
-npm install @mastra/react@latest
-```
-
-The following example demonstrates the supported browser import path:
-
-```tsx title="src/main.tsx"
-import { MastraReactProvider, useChat, useMastraClient } from '@mastra/react'
-```
 
 ## Installation
 
@@ -118,8 +103,6 @@ const testAgent = async () => {
   }
 }
 ```
-
-Mastra's client-side streaming APIs expose standard Web Streams types such as `ReadableStream`, so they work in browser environments without relying on Node.js stream types.
 
 :::info
 
