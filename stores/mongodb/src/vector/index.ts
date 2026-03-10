@@ -331,6 +331,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     includeVector = false,
     documentFilter,
   }: MongoDBQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for MongoDB queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     try {
       const collection = await this.getCollection(indexName, true);
       const indexNameInternal = `${indexName}_vector_index`;

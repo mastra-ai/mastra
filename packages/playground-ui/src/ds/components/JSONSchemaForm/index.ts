@@ -14,9 +14,9 @@ export { useJSONSchemaForm } from './json-schema-form-context';
 export { useJSONSchemaFormField } from './json-schema-form-field-context';
 export { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
 
-export type { SchemaField, FieldType as SchemaFieldType, JSONSchemaOutput } from './types';
+export type { SchemaField, FieldType as SchemaFieldType } from './types';
 export { createField } from './types';
-export { fieldsToJSONSchema } from './utils';
+export { fieldsToJSONSchema, jsonSchemaToFields } from './utils';
 
 import { Root } from './json-schema-form-root';
 import { Field } from './json-schema-form-field';

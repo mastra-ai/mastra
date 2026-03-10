@@ -284,7 +284,7 @@ export class SchemaCompatLayer {
    * @abstract
    */
   processZodType(value: ZodType): ZodType {
-    return this.parent.processZodType(value);
+    return this.parent.processZodType(value) as ZodType;
   }
 
   /**
@@ -304,19 +304,25 @@ export class SchemaCompatLayer {
 
     let result: ZodObject<any, any> = z.object(processedShape);
 
+    // Handle strict objects (catchall is ZodNever) - preserve strict behavior
     if (value._zod.def.catchall instanceof z.ZodNever) {
       result = z.strictObject(processedShape);
     }
-    if (value._zod.def.catchall && !(value._zod.def.catchall instanceof z.ZodNever)) {
+    // Handle passthrough objects (catchall is ZodUnknown)
+    else if (value._zod.def.catchall instanceof z.ZodUnknown) {
+      if (options.passthrough) {
+        // Preserve passthrough behavior
+        result = z.looseObject(processedShape);
+      }
+      // else: use default z.object() which strips unknown keys
+    }
+    // Handle custom catchall (not ZodNever or ZodUnknown)
+    else if (value._zod.def.catchall) {
       result = result.catchall(value._zod.def.catchall);
     }
 
     if (value.description) {
       result = result.describe(value.description);
-    }
-
-    if (options.passthrough && value._zod.def.catchall instanceof z.ZodUnknown) {
-      result = z.looseObject(processedShape);
     }
 
     return result;
@@ -638,6 +644,24 @@ export class SchemaCompatLayer {
   ): ZodType {
     if (handleTypes.includes(value.constructor.name as AllZodType)) {
       return this.processZodType(value._zod.def.innerType).optional();
+    } else {
+      return value;
+    }
+  }
+
+  /**
+   * Default handler for Zod nullable types. Processes the inner type and maintains nullability.
+   *
+   * @param value - The Zod nullable to process
+   * @param handleTypes - Types that should be processed vs passed through
+   * @returns The processed Zod nullable
+   */
+  public defaultZodNullableHandler(
+    value: ZodNullable<any>,
+    handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
+  ): ZodType {
+    if (handleTypes.includes(value.constructor.name as AllZodType)) {
+      return this.processZodType(value._zod.def.innerType).nullable();
     } else {
       return value;
     }

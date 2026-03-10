@@ -15,12 +15,19 @@ import {
   FolderPlus,
   Trash2,
   AlertCircle,
+  Cloud,
+  Database,
+  HardDrive,
 } from 'lucide-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { coldarkDark } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { Button } from '@/ds/components/Button';
 import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/ds/components/Tooltip';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { AmazonIcon } from '@/ds/icons/AmazonIcon';
+import { GoogleIcon } from '@/ds/icons/GoogleIcon';
+import { AzureIcon } from '@/ds/icons/AzureIcon';
 import type { FileEntry } from '../types';
 
 // =============================================================================
@@ -49,8 +56,56 @@ export interface FileBrowserProps {
 // File Icon Helper
 // =============================================================================
 
-function getFileIcon(name: string, type: 'file' | 'directory', isOpen = false) {
+/**
+ * Get icon for a mount point based on provider or icon field.
+ */
+function getMountIcon(mount: FileEntry['mount']) {
+  if (!mount) return null;
+
+  // First check explicit icon field, then fall back to provider
+  const iconKey = mount.icon || mount.provider;
+
+  switch (iconKey) {
+    case 'aws-s3':
+    case 's3':
+      // S3 or S3-compatible storage
+      return <AmazonIcon className="h-4 w-4 text-[#FF9900]" />;
+    case 'google-cloud':
+    case 'google-cloud-storage':
+    case 'gcs':
+      return <GoogleIcon className="h-4 w-4" />;
+    case 'azure-blob':
+    case 'azure':
+      return <AzureIcon className="h-4 w-4 text-[#0078D4]" />;
+    case 'cloudflare':
+    case 'cloudflare-r2':
+    case 'r2':
+      return <Cloud className="h-4 w-4 text-[#F38020]" />;
+    case 'minio':
+      return <HardDrive className="h-4 w-4 text-red-400" />;
+    case 'database':
+      return <Database className="h-4 w-4 text-emerald-400" />;
+    case 'local':
+    case 'folder':
+      return <Folder className="h-4 w-4 text-amber-400" />;
+    case 'hard-drive':
+      return <HardDrive className="h-4 w-4 text-slate-400" />;
+    case 'cloud':
+      return <Cloud className="h-4 w-4 text-sky-400" />;
+    default:
+      // Default to cloud icon for unknown providers
+      return <Cloud className="h-4 w-4 text-neutral4" />;
+  }
+}
+
+function getFileIcon(entry: FileEntry, isOpen = false) {
+  const { name, type, mount } = entry;
+
   if (type === 'directory') {
+    // If it's a mount point, show the provider icon
+    if (mount) {
+      return getMountIcon(mount);
+    }
     return isOpen ? <FolderOpen className="h-4 w-4 text-amber-400" /> : <Folder className="h-4 w-4 text-amber-400" />;
   }
 
@@ -65,7 +120,7 @@ function getFileIcon(name: string, type: 'file' | 'directory', isOpen = false) {
       return <FileJson className="h-4 w-4 text-yellow-400" />;
     case 'md':
     case 'mdx':
-      return <FileText className="h-4 w-4 text-icon4" />;
+      return <FileText className="h-4 w-4 text-neutral4" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
@@ -74,16 +129,17 @@ function getFileIcon(name: string, type: 'file' | 'directory', isOpen = false) {
     case 'webp':
       return <Image className="h-4 w-4 text-purple-400" />;
     default:
-      return <File className="h-4 w-4 text-icon4" />;
+      return <File className="h-4 w-4 text-neutral4" />;
   }
 }
 
 function formatBytes(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '';
+  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return '';
+  if (bytes < 0) return '-' + formatBytes(-bytes);
   if (bytes === 0) return '0 B';
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
@@ -140,7 +196,7 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
     <div className="flex items-center gap-1 text-sm overflow-x-auto">
       <button
         onClick={() => onNavigate('/')}
-        className="px-2 py-1 rounded hover:bg-surface4 text-icon5 hover:text-icon6 transition-colors"
+        className="px-2 py-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors"
       >
         /
       </button>
@@ -148,10 +204,10 @@ function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
         const partPath = '/' + parts.slice(0, index + 1).join('/');
         return (
           <div key={partPath} className="flex items-center">
-            <ChevronRight className="h-4 w-4 text-icon3" />
+            <ChevronRight className="h-4 w-4 text-neutral3" />
             <button
               onClick={() => onNavigate(partPath)}
-              className="px-2 py-1 rounded hover:bg-surface4 text-icon5 hover:text-icon6 transition-colors truncate max-w-[150px]"
+              className="px-2 py-1 rounded hover:bg-surface4 text-neutral5 hover:text-neutral6 transition-colors truncate max-w-[150px]"
               title={part}
             >
               {part}
@@ -244,63 +300,105 @@ export function FileBrowser({
       <div className="max-h-[400px] overflow-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-icon3" />
+            <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
           </div>
         ) : error ? (
           <div className="py-12 px-4 text-center">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-500/10 mb-4">
               <AlertCircle className="h-6 w-6 text-red-400" />
             </div>
-            <p className="text-sm text-icon6 font-medium mb-1">Failed to load directory</p>
-            <p className="text-xs text-icon4 max-w-sm mx-auto">{getErrorMessage(error)}</p>
+            <p className="text-sm text-neutral6 font-medium mb-1">Failed to load directory</p>
+            <p className="text-xs text-neutral4 max-w-sm mx-auto">{getErrorMessage(error)}</p>
           </div>
         ) : sortedEntries.length === 0 ? (
-          <div className="py-12 text-center text-icon4 text-sm">
+          <div className="py-12 text-center text-neutral4 text-sm">
             {currentPath === '/' ? 'Workspace is empty' : 'Directory is empty'}
           </div>
         ) : (
-          <ul>
-            {/* Parent directory link */}
-            {currentPath !== '/' && (
-              <li>
-                <button
-                  onClick={() => {
-                    const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
-                    onNavigate(parentPath);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface4 transition-colors text-left"
-                >
-                  <FolderOpen className="h-4 w-4 text-amber-400" />
-                  <span className="text-sm text-icon5">..</span>
-                </button>
-              </li>
-            )}
-            {sortedEntries.map(entry => (
-              <li key={entry.name} className="group">
-                <div className="flex items-center hover:bg-surface4 transition-colors">
+          <TooltipProvider>
+            <ul>
+              {/* Parent directory link */}
+              {currentPath !== '/' && (
+                <li>
                   <button
-                    onClick={() => handleEntryClick(entry)}
-                    className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
+                    onClick={() => {
+                      const parentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+                      onNavigate(parentPath);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 hover:bg-surface4 transition-colors text-left"
                   >
-                    {getFileIcon(entry.name, entry.type)}
-                    <span className="text-sm text-icon6 flex-1 truncate">{entry.name}</span>
-                    {entry.type === 'file' && entry.size !== undefined && (
-                      <span className="text-xs text-icon3 tabular-nums">{formatBytes(entry.size)}</span>
-                    )}
+                    <FolderOpen className="h-4 w-4 text-amber-400" />
+                    <span className="text-sm text-neutral5">..</span>
                   </button>
-                  {onDelete && (
-                    <button
-                      onClick={() => handleDelete(entry)}
-                      aria-label={`Delete ${entry.name}`}
-                      className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-icon3 transition-all"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+                </li>
+              )}
+              {sortedEntries.map(entry => {
+                const mountLabel = entry.mount?.displayName || entry.mount?.provider;
+                const isError = entry.mount?.status === 'error';
+
+                return (
+                  <li key={entry.name} className="group">
+                    <div className="flex items-center hover:bg-surface4 transition-colors">
+                      <button
+                        onClick={() => handleEntryClick(entry)}
+                        className="flex-1 flex items-center gap-3 px-4 py-2 text-left"
+                      >
+                        {getFileIcon(entry)}
+                        <span className="text-sm text-neutral6 flex-1 truncate">{entry.name}</span>
+                        {/* Mount error indicator */}
+                        {entry.mount && isError && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span tabIndex={0} className="flex items-center">
+                                <AlertCircle className="h-4 w-4 text-red-400" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-xs">
+                              <span className="text-red-400">Error:</span>{' '}
+                              {entry.mount.error || 'Failed to connect to this filesystem'}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                        {entry.mount &&
+                          mountLabel &&
+                          (entry.mount.description ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  tabIndex={0}
+                                  className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-neutral3 bg-surface4'}`}
+                                >
+                                  {mountLabel}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>{entry.mount.description}</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <span
+                              className={`text-xs px-1.5 py-0.5 rounded ${isError ? 'text-red-400 bg-red-400/10' : 'text-neutral3 bg-surface4'}`}
+                            >
+                              {mountLabel}
+                            </span>
+                          ))}
+                        {entry.type === 'file' && entry.size !== undefined && (
+                          <span className="text-xs text-neutral3 tabular-nums">{formatBytes(entry.size)}</span>
+                        )}
+                      </button>
+                      {onDelete && !entry.mount && (
+                        <button
+                          onClick={() => handleDelete(entry)}
+                          aria-label={`Delete ${entry.name}`}
+                          className="p-2 opacity-0 group-hover:opacity-100 hover:text-red-400 text-neutral3 transition-all"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </TooltipProvider>
         )}
       </div>
 
@@ -317,11 +415,14 @@ export function FileBrowser({
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action
               disabled={isDeleting}
-              onClick={() => {
-                if (deleteTarget && onDelete) {
-                  onDelete(deleteTarget);
+              onClick={async () => {
+                try {
+                  if (deleteTarget && onDelete) {
+                    await onDelete(deleteTarget);
+                  }
+                } finally {
+                  setDeleteTarget(null);
                 }
-                setDeleteTarget(null);
               }}
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -426,8 +527,8 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-surface3 border-b border-border1">
         <div className="flex items-center gap-2">
-          {getFileIcon(fileName, 'file')}
-          <span className="text-sm font-medium text-icon6">{fileName}</span>
+          {getFileIcon({ name: fileName, type: 'file' })}
+          <span className="text-sm font-medium text-neutral6">{fileName}</span>
         </div>
         <div className="flex items-center gap-2">
           <CopyButton content={content} copyMessage="Copied file content" />
@@ -443,7 +544,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
       <div className="max-h-[500px] overflow-auto h-full" style={{ backgroundColor: 'black' }}>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-icon3" />
+            <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
           </div>
         ) : isImage ? (
           <div className="p-4 flex items-center justify-center">
@@ -456,7 +557,7 @@ export function FileViewer({ path, content, isLoading, mimeType, onClose }: File
         ) : language ? (
           <HighlightedCode content={content} language={language} />
         ) : (
-          <pre className="p-4 text-sm text-icon5 whitespace-pre-wrap font-mono overflow-x-auto">{content}</pre>
+          <pre className="p-4 text-sm text-neutral5 whitespace-pre-wrap font-mono overflow-x-auto">{content}</pre>
         )}
       </div>
     </div>
@@ -472,10 +573,10 @@ export function WorkspaceNotConfigured() {
     <div className="grid place-items-center py-16">
       <div className="flex flex-col items-center text-center max-w-md">
         <div className="p-4 rounded-full bg-surface4 mb-4">
-          <Folder className="h-8 w-8 text-icon3" />
+          <Folder className="h-8 w-8 text-neutral3" />
         </div>
-        <h2 className="text-lg font-medium text-icon6 mb-2">Workspace Not Configured</h2>
-        <p className="text-sm text-icon4 mb-6">
+        <h2 className="text-lg font-medium text-neutral6 mb-2">Workspace Not Configured</h2>
+        <p className="text-sm text-neutral4 mb-6">
           No workspace is configured. Add a workspace to your Mastra configuration to manage files, skills, and enable
           semantic search.
         </p>

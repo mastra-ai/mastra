@@ -11,20 +11,6 @@ export interface SchemaField {
   items?: SchemaField;
 }
 
-export interface JSONSchemaProperty {
-  type: string | string[];
-  description?: string;
-  properties?: Record<string, JSONSchemaProperty>;
-  items?: JSONSchemaProperty;
-  required?: string[];
-}
-
-export interface JSONSchemaOutput {
-  type: 'object';
-  properties: Record<string, JSONSchemaProperty>;
-  required?: string[];
-}
-
 let idCounter = 0;
 
 export function createField(overrides: Partial<SchemaField> = {}): SchemaField {

@@ -161,9 +161,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * object is finally JSON.stringify'd, our error's toJSON() is called.
    */
   async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
-    return this.inngestStep.run(operationId, async () => {
+    const result = await this.inngestStep.run(operationId, async () => {
       try {
-        return await operationFn();
+        const fnResult = await operationFn();
+        return fnResult;
       } catch (e) {
         const errorInstance = getErrorFromUnknown(e, {
           serializeStack: false,
@@ -177,7 +178,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         });
       }
-    }) as Promise<T>;
+    });
+    return result as T;
   }
 
   /**

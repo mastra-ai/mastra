@@ -1,5 +1,3 @@
-import { Link } from 'react-router';
-
 import {
   Crumb,
   Header,
@@ -15,6 +13,7 @@ import {
   Truncate,
 } from '@mastra/playground-ui';
 import { EyeIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
 export function WorkflowHeader({
   workflowName,
@@ -57,7 +56,7 @@ export function WorkflowHeader({
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as={Link} target="_blank" to="/swagger-ui">
+          <Button as="a" target="_blank" href="/swagger-ui">
             <Icon>
               <ApiIcon />
             </Icon>

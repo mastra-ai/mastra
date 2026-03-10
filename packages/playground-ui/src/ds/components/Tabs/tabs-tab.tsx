@@ -17,11 +17,11 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
     <RadixTabs.Trigger
       value={value}
       className={cn(
-        'text-xs p-3 text-neutral3 whitespace-nowrap flex-shrink-0 flex items-center justify-center gap-1.5',
+        'text-sm p-3 text-neutral3 whitespace-nowrap flex-shrink-0 flex items-center justify-center gap-1.5',
         transitions.all,
         focusRing.visible,
         'hover:text-neutral4',
-        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-accent1',
+        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-white/50',
         className,
       )}
       onClick={onClick}

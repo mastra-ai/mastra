@@ -13,6 +13,7 @@ import { type LlmsTxtPluginOptions, resolveOptions, validateOptions } from './op
 import { CacheManager, computeHash } from './cache-manager'
 import { processHtml } from './html-processor'
 import { generateRootLlmsTxt, writeLlmsTxt, type RouteEntry } from './output-generator'
+import { generateManifest, writeManifest } from './manifest-generator'
 
 const PLUGIN_NAME = 'docusaurus-plugin-llms-txt'
 const CONCURRENCY = 10
@@ -103,6 +104,10 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
 
       // Filter out null results
       const validRoutes = results.filter((r): r is RouteEntry => r !== null)
+
+      // Generate llms-manifest.json mapping packages to their documentation
+      const manifest = await generateManifest(validRoutes, siteDir, outDir)
+      await writeManifest(manifest, outDir)
 
       // Generate root llms.txt
       await generateRootLlmsTxt(outDir, siteDir)

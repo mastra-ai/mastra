@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { PlusIcon } from 'lucide-react';
+import type { JsonSchema } from '@/lib/json-schema';
 import { TooltipProvider } from '../Tooltip';
 import { JSONSchemaForm } from './index';
-import type { JSONSchemaOutput, SchemaField } from './types';
+import type { SchemaField } from './types';
 import { createField } from './types';
 
 const meta: Meta<typeof JSONSchemaForm.Root> = {
@@ -25,7 +26,7 @@ const meta: Meta<typeof JSONSchemaForm.Root> = {
 export default meta;
 type Story = StoryObj<typeof JSONSchemaForm.Root>;
 
-function JSONSchemaPreview({ schema }: { schema: JSONSchemaOutput | null }) {
+function JSONSchemaPreview({ schema }: { schema: JsonSchema | null }) {
   if (!schema) return null;
   return (
     <pre className="mt-4 p-4 bg-surface2 rounded-md text-xs text-neutral4 overflow-auto max-h-64">
@@ -84,7 +85,7 @@ function RecursiveFieldRenderer({
 
 export const Default: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     return (
       <div className="w-[500px]">
@@ -107,7 +108,7 @@ export const Default: Story = {
 
 export const WithDefaultValues: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     const defaultFields: SchemaField[] = [
       createField({ name: 'name', type: 'string', description: 'User name' }),
@@ -159,7 +160,7 @@ export const WithDefaultValues: Story = {
 
 export const CompactLayout: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     return (
       <div className="w-[400px]">
@@ -192,7 +193,7 @@ export const CompactLayout: Story = {
 
 export const NestedObjects: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     const defaultFields: SchemaField[] = [
       createField({
@@ -230,7 +231,7 @@ export const NestedObjects: Story = {
 
 export const CustomStyling: Story = {
   render: () => {
-    const [schema, setSchema] = useState<JSONSchemaOutput | null>(null);
+    const [schema, setSchema] = useState<JsonSchema | null>(null);
 
     return (
       <div className="w-[500px]">

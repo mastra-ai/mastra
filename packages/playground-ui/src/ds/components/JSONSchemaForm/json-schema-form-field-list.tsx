@@ -22,9 +22,5 @@ export function FieldList({ className, children }: JSONSchemaFormFieldListProps)
     return null;
   }
 
-  return (
-    <div className={cn('flex flex-col gap-2', className)}>
-      {fields.map((field, index) => children(field, index, { parentPath, depth }))}
-    </div>
-  );
+  return <div className={className}>{fields.map((field, index) => children(field, index, { parentPath, depth }))}</div>;
 }

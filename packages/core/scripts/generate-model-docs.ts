@@ -115,11 +115,11 @@ const ModelsDevProviderSchema = z
     name: z.string(),
     url: z.string().optional(),
     npm: z.string().optional(),
-    models: z.record(ModelsDevModelSchema),
+    models: z.record(z.string(), ModelsDevModelSchema),
   })
   .passthrough();
 
-const ModelsDevResponseSchema = z.record(ModelsDevProviderSchema);
+const ModelsDevResponseSchema = z.record(z.string(), ModelsDevProviderSchema);
 
 type ModelsDevProvider = z.infer<typeof ModelsDevProviderSchema>;
 
@@ -264,7 +264,7 @@ Learn more in the [${provider.name} documentation](${docUrl}).`
   const modelDataJson = JSON.stringify(modelsWithCapabilities, null, 2);
 
   return `---
-title: "${provider.name} | Models | Mastra"
+title: "${provider.name} | Models"
 description: "Use ${provider.name} models with Mastra. ${modelCount} model${modelCount !== 1 ? 's' : ''} available."
 ---
 
@@ -494,7 +494,7 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
 
   return `---
-title: "${displayName} | Models | Mastra"
+title: "${displayName} | Models"
 description: "Use AI models through ${displayName}."
 ---
 
@@ -529,7 +529,13 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 
 \`\`\`bash
 # Use gateway API key
-${gatewayName.toUpperCase()}_API_KEY=your-gateway-key
+${(() => {
+  const envVar = providers[0]?.apiKeyEnvVar;
+  if (Array.isArray(envVar)) {
+    return envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
+  }
+  return `${envVar || `${gatewayName.toUpperCase()}_API_KEY`}=your-gateway-key`;
+})()}
 
 # Or use provider API keys directly
 OPENAI_API_KEY=sk-...
@@ -1171,7 +1177,7 @@ async function generateDocs() {
   const modelsDevResponse = await fetch('https://models.dev/api.json');
   const modelsDevData = ModelsDevResponseSchema.parse(await modelsDevResponse.json());
   // Convert object to array of providers
-  const allModelsDevProviders: ModelsDevProvider[] = Object.values(modelsDevData);
+  const allModelsDevProviders = Object.values(modelsDevData) as ModelsDevProvider[];
 
   // Generate index page
   const indexContent = generateIndexPage(grouped);
