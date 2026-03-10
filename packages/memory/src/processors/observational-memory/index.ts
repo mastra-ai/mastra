@@ -11,7 +11,7 @@
  * - Reflector: Condenses observations when they exceed threshold
  */
 
-// Main processor
+// Engine
 export {
   ObservationalMemory,
   OBSERVATIONAL_MEMORY_DEFAULTS,
@@ -22,6 +22,9 @@ export {
   type ObservationDebugEvent,
   type ObserveHooks,
 } from './observational-memory';
+
+// Processor adapter
+export { ObservationalMemoryProcessor } from './processor';
 
 // Types
 export type {

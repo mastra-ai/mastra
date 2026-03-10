@@ -18,6 +18,7 @@ import {
   sanitizeObservationLines,
   detectDegenerateRepetition,
 } from '../observer-agent';
+import { ObservationalMemoryProcessor } from '../processor';
 import {
   buildReflectorPrompt,
   parseReflectorOutput,
@@ -1746,7 +1747,8 @@ describe('ObservationalMemory Integration', () => {
       const countImageForModel = async (actorModel: string) => {
         const [provider, modelId] = actorModel.split('/');
 
-        await omWithDynamicObserverModel.processInputStep({
+        const dynamicProcessor = new ObservationalMemoryProcessor(omWithDynamicObserverModel);
+        await dynamicProcessor.processInputStep({
           messageList: new MessageList({ threadId, resourceId }),
           messages: [imageMessage],
           requestContext: makeContext(actorModel),
@@ -1826,7 +1828,8 @@ describe('ObservationalMemory Integration', () => {
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    await multimodalOm.processInputStep({
+    const multimodalProcessor = new ObservationalMemoryProcessor(multimodalOm);
+    await multimodalProcessor.processInputStep({
       messageList,
       messages: [imageMessage as any],
       requestContext,
@@ -1896,7 +1899,8 @@ describe('ObservationalMemory Integration', () => {
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    await multimodalOm.processInputStep({
+    const multimodalProcessor = new ObservationalMemoryProcessor(multimodalOm);
+    await multimodalProcessor.processInputStep({
       messageList,
       messages: [imageLikeFileMessage as any],
       requestContext,
@@ -3914,7 +3918,8 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     requestContext.set('MastraMemory', { thread: { id: threadBId }, resourceId });
     requestContext.set('currentDate', new Date('2025-01-01T10:05:00Z').toISOString());
 
-    await om.processInputStep({
+    const processor = new ObservationalMemoryProcessor(om);
+    await processor.processInputStep({
       messageList,
       messages: [],
       requestContext,
@@ -6302,6 +6307,7 @@ describe('Full Async Buffering Flow', () => {
     let sharedMessageList = new MessageList({ threadId, resourceId });
 
     // Helper to call processInputStep
+    const processor = new ObservationalMemoryProcessor(om);
     async function step(stepNumber: number, opts?: { freshState?: boolean }) {
       if (opts?.freshState) {
         Object.keys(sharedState).forEach(k => delete sharedState[k]);
@@ -6311,7 +6317,7 @@ describe('Full Async Buffering Flow', () => {
       requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
       requestContext.set('currentDate', new Date('2025-01-01T12:00:00Z').toISOString());
 
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList: sharedMessageList,
         messages: [],
         requestContext,
@@ -8610,8 +8616,9 @@ describe('Per-step save deduplication', () => {
       throw new Error('aborted');
     }) as any;
 
+    const processor = new ObservationalMemoryProcessor(om);
     const runStep = async (stepNumber: number) => {
-      await om.processInputStep({
+      await processor.processInputStep({
         messageList,
         messages: [],
         requestContext: makeCtx(),
@@ -8646,7 +8653,7 @@ describe('Per-step save deduplication', () => {
     };
 
     const finalize = async () => {
-      await om.processOutputResult({
+      await processor.processOutputResult({
         messageList,
         messages: messageList.get.response.db(),
         requestContext: makeCtx(),
@@ -8907,9 +8914,11 @@ describe('Single-thread replay red tests', () => {
       reflection: { observationTokens: 200_000 },
     });
 
+    const processor = new ObservationalMemoryProcessor(om);
+
     const messageList = new MessageList({ threadId, resourceId });
 
-    return { om, messageList, threadId, resourceId };
+    return { om, processor, messageList, threadId, resourceId };
   }
 
   function getModelTextParts(message: any): string[] {
@@ -9131,7 +9140,7 @@ describe('Single-thread replay red tests', () => {
 
   it('T4-B: post-activation step>0 should still prune already observed content before model sees it', async () => {
     const { RequestContext } = await import('@mastra/core/di');
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { om, processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
     const t1 = new Date('2025-01-01T10:00:01.000Z');
@@ -9189,7 +9198,7 @@ describe('Single-thread replay red tests', () => {
     const ctx = new RequestContext();
     ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    await om.processInputStep({
+    await processor.processInputStep({
       messageList,
       messages: [],
       requestContext: ctx,
@@ -9212,7 +9221,7 @@ describe('Single-thread replay red tests', () => {
 
   it('T4-C: post-activation step>0 should not replay sealed-split prefix when ID A is reused', async () => {
     const { RequestContext } = await import('@mastra/core/di');
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { om, processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9282,7 +9291,7 @@ describe('Single-thread replay red tests', () => {
     const ctx = new RequestContext();
     ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    await om.processInputStep({
+    await processor.processInputStep({
       messageList,
       messages: [],
       requestContext: ctx,
@@ -9305,7 +9314,7 @@ describe('Single-thread replay red tests', () => {
 
   it('T4-D: repeated loop re-add of id A should not replay observed prefix across reminted tails on step>0', async () => {
     const { RequestContext } = await import('@mastra/core/di');
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { om, processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9377,7 +9386,7 @@ describe('Single-thread replay red tests', () => {
     const ctx = new RequestContext();
     ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    await om.processInputStep({
+    await processor.processInputStep({
       messageList,
       messages: [],
       requestContext: ctx,

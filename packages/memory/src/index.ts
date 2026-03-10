@@ -1997,9 +1997,9 @@ Notes:
 
     // Dynamic import to avoid loading OM code when not needed and to prevent
     // import errors when paired with an older @mastra/core version
-    const { ObservationalMemory } = await import('./processors/observational-memory');
+    const { ObservationalMemory, ObservationalMemoryProcessor } = await import('./processors/observational-memory');
 
-    return new ObservationalMemory({
+    const engine = new ObservationalMemory({
       storage: memoryStore,
       scope: omConfig.scope,
       shareTokenBudget: omConfig.shareTokenBudget,
@@ -2029,6 +2029,8 @@ Notes:
           }
         : undefined,
     });
+
+    return new ObservationalMemoryProcessor(engine);
   }
 }
 
