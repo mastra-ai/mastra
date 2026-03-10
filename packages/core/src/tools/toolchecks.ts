@@ -28,7 +28,14 @@ export function isVercelTool(tool?: ToolToConvert): tool is VercelTool {
   );
 }
 
-type ProviderTool = { type: 'provider-defined' | 'provider'; id: string; args?: Record<string, unknown> };
+type ProviderTool = {
+  type: 'provider-defined' | 'provider';
+  id: string;
+  args?: Record<string, unknown>;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+  requestContextSchema?: unknown;
+};
 
 /**
  * Checks if a tool is a provider-defined tool from the AI SDK.
