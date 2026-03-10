@@ -596,10 +596,9 @@ export class AgentsDSQL extends AgentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
 
-      const countResult = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`,
-        [agentId],
-      );
+      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`, [
+        agentId,
+      ]);
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -681,10 +680,9 @@ export class AgentsDSQL extends AgentsStorage {
   async countVersions(agentId: string): Promise<number> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`,
-        [agentId],
-      );
+      const result = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`, [
+        agentId,
+      ]);
       return parseInt(result.count, 10);
     } catch (error) {
       if (error instanceof MastraError) throw error;
