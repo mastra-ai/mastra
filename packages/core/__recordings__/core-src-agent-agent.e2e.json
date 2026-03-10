@@ -47,32 +47,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               }
@@ -90,9 +74,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -186,32 +168,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false
               },
               "strict": true
@@ -231,9 +197,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false
               },
               "strict": true
@@ -309,32 +273,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               }
@@ -352,9 +300,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -454,32 +400,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false
               },
               "strict": true
@@ -499,9 +429,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false
               },
               "strict": true
@@ -803,9 +731,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "name"
-                  ],
+                  "required": ["name"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -942,9 +868,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "name"
-                  ],
+                  "required": ["name"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -1062,9 +986,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "color"
-                  ],
+                  "required": ["color"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -1182,9 +1104,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "color"
-                  ],
+                  "required": ["color"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -1230,13 +1150,7 @@
           "data: {\"id\":\"chatcmpl-DGQ4qZJS01i9LyRXyRTcAqkO5V1rX\",\"object\":\"chat.completion.chunk\",\"created\":1772805860,\"model\":\"gpt-4o-2024-08-06\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_c7a156cce7\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"obfuscation\":\"\"}\n\ndata: {\"id\":\"chatcmpl-DGQ4qZJS01i9LyRXyRTcAqkO5V1rX\",\"object\":\"chat.completion.chunk\",\"created\":1772805860,\"model\":\"gpt-4o-2024-08-06\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_c7a156cce7\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"obfuscation\":\"A\"}\n\n",
           "data: [DONE]\n\n"
         ],
-        "chunkTimings": [
-          0,
-          55,
-          34,
-          9,
-          12
-        ],
+        "chunkTimings": [0, 55, 34, 9, 12],
         "isStreaming": true
       }
     },
@@ -1271,9 +1185,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "name"
-                  ],
+                  "required": ["name"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -1410,9 +1322,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "name"
-                  ],
+                  "required": ["name"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -3556,45 +3466,8 @@
           "data: [DONE]\n\n"
         ],
         "chunkTimings": [
-          24,
-          1,
-          8,
-          43,
-          75,
-          31,
-          105,
-          0,
-          0,
-          22,
-          27,
-          23,
-          50,
-          49,
-          62,
-          29,
-          28,
-          51,
-          24,
-          52,
-          107,
-          2,
-          0,
-          57,
-          43,
-          84,
-          69,
-          103,
-          38,
-          1,
-          135,
-          0,
-          1,
-          0,
-          0,
-          13,
-          10,
-          9,
-          9
+          24, 1, 8, 43, 75, 31, 105, 0, 0, 22, 27, 23, 50, 49, 62, 29, 28, 51, 24, 52, 107, 2, 0, 57, 43, 84, 69, 103,
+          38, 1, 135, 0, 1, 0, 0, 13, 10, 9, 9
         ],
         "isStreaming": true
       }
@@ -3673,19 +3546,7 @@
           "data: {\"id\":\"chatcmpl-DGQ50zhlanndDTT5EKDMKWnJQ8XKY\",\"object\":\"chat.completion.chunk\",\"created\":1772805870,\"model\":\"gpt-4o-2024-08-06\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_c4e01d72e0\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" you\"},\"logprobs\":null,\"finish_reason\":null}],\"obfuscation\":\"BW8UBgb9f\"}\n\ndata: {\"id\":\"chatcmpl-DGQ50zhlanndDTT5EKDMKWnJQ8XKY\",\"object\":\"chat.completion.chunk\",\"created\":1772805870,\"model\":\"gpt-4o-2024-08-06\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_c4e01d72e0\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\"},\"logprobs\":null,\"finish_reason\":null}],\"obfuscation\":\"O7neWM8elSyB\"}\n\n",
           "data: {\"id\":\"chatcmpl-DGQ50zhlanndDTT5EKDMKWnJQ8XKY\",\"object\":\"chat.completion.chunk\",\"created\":1772805870,\"model\":\"gpt-4o-2024-08-06\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_c4e01d72e0\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"obfuscation\":\"qZBf2jo\"}\n\ndata: [DONE]\n\n"
         ],
-        "chunkTimings": [
-          1,
-          22,
-          62,
-          29,
-          23,
-          4,
-          1,
-          105,
-          1,
-          1,
-          0
-        ],
+        "chunkTimings": [1, 22, 62, 29, 23, 4, 1, 105, 1, 1, 0],
         "isStreaming": true
       }
     },
@@ -3727,9 +3588,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "color"
-                  ],
+                  "required": ["color"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -3775,13 +3634,7 @@
           "data: {\"id\":\"chatcmpl-DGQ51T3pLfKkrvGbElGklAszm2t23\",\"object\":\"chat.completion.chunk\",\"created\":1772805871,\"model\":\"gpt-4o-2024-08-06\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_c19388be09\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}],\"obfuscation\":\"\"}\n\ndata: {\"id\":\"chatcmpl-DGQ51T3pLfKkrvGbElGklAszm2t23\",\"object\":\"chat.completion.chunk\",\"created\":1772805871,\"model\":\"gpt-4o-2024-08-06\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_c19388be09\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"obfuscation\":\"R\"}\n\n",
           "data: [DONE]\n\n"
         ],
-        "chunkTimings": [
-          26,
-          104,
-          11,
-          9,
-          8
-        ],
+        "chunkTimings": [26, 104, 11, 9, 8],
         "isStreaming": true
       }
     },
@@ -3823,9 +3676,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "color"
-                  ],
+                  "required": ["color"],
                   "additionalProperties": false,
                   "$schema": "http://json-schema.org/draft-07/schema#"
                 }
@@ -3953,32 +3804,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               }
@@ -3996,9 +3831,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -4092,32 +3925,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false
               },
               "strict": true
@@ -4137,9 +3954,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false
               },
               "strict": true
@@ -4215,32 +4030,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               }
@@ -4258,9 +4057,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -4360,32 +4157,16 @@
                     "type": "number"
                   },
                   "windSpeed": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "barometricPressure": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   },
                   "precipitation": {
-                    "type": [
-                      "number",
-                      "null"
-                    ]
+                    "type": ["number", "null"]
                   }
                 },
-                "required": [
-                  "weather",
-                  "temperature",
-                  "humidity",
-                  "windSpeed",
-                  "barometricPressure",
-                  "precipitation"
-                ],
+                "required": ["weather", "temperature", "humidity", "windSpeed", "barometricPressure", "precipitation"],
                 "additionalProperties": false
               },
               "strict": true
@@ -4405,9 +4186,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "city"
-                ],
+                "required": ["city"],
                 "additionalProperties": false
               },
               "strict": true
@@ -4775,9 +4554,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -4872,9 +4649,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false
               },
               "strict": false
@@ -4944,9 +4719,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -5047,9 +4820,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false
               },
               "strict": false
@@ -5110,9 +4881,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "color"
-                ],
+                "required": ["color"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -5207,9 +4976,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "color"
-                ],
+                "required": ["color"],
                 "additionalProperties": false
               },
               "strict": false
@@ -5270,9 +5037,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "color"
-                ],
+                "required": ["color"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -5316,19 +5081,7 @@
           "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0ea748d1270334600069aadef99c508194ab9b32f71302106e\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"color\\\":\\\"green\\\"}\",\"call_id\":\"call_IKFMlLnvPlqhoMUD5QWzD60Y\",\"name\":\"changeColor\"},\"output_index\":0,\"sequence_number\":9}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0ea748d1270334600069aadef91124819483aed460af017883\",\"object\":\"response\",\"created_at\":1772805881,\"status\":\"completed\",\"background\":false,\"completed_at\":1772805881,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"fc_0ea748d1270334600069aadef99c508194ab9b32f71302106e\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"color\\\":\\\"green\\\"}\",\"call_id\":\"call_IKFMlLnvPlqhoMUD5QWzD60Y\",\"name\":\"changeColor\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"changeColor\",\"parameters\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":65,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":15,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":80},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
         ],
-        "chunkTimings": [
-          0,
-          0,
-          522,
-          1,
-          0,
-          0,
-          0,
-          8,
-          32,
-          0,
-          99
-        ],
+        "chunkTimings": [0, 0, 522, 1, 0, 0, 0, 8, 32, 0, 99],
         "isStreaming": true
       }
     },
@@ -5367,9 +5120,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -5464,9 +5215,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false
               },
               "strict": false
@@ -5536,9 +5285,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -5639,9 +5386,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "name"
-                ],
+                "required": ["name"],
                 "additionalProperties": false
               },
               "strict": false
@@ -6913,9 +6658,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -7010,9 +6753,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false
               },
               "strict": false
@@ -7082,9 +6823,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -7179,9 +6918,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false
               },
               "strict": false
@@ -7260,9 +6997,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -7357,9 +7092,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false
               },
               "strict": false
@@ -7447,9 +7180,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -7550,9 +7281,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "input"
-                ],
+                "required": ["input"],
                 "additionalProperties": false
               },
               "strict": false
@@ -7690,52 +7419,8 @@
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0a0ad01205857df60069aadf04ed308195be46e8d12b16bd4f\",\"object\":\"response\",\"created_at\":1772805892,\"status\":\"completed\",\"background\":false,\"completed_at\":1772805896,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_0a0ad01205857df60069aadf060ed48195abc03a71f4335a2b\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I'm an AI language model designed to assist with a wide range of questions and tasks, from providing information and explanations to helping with creative writing and problem-solving. How can I assist you today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":48,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":39,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":87},\"user\":null,\"metadata\":{}},\"sequence_number\":45}\n\n"
         ],
         "chunkTimings": [
-          3,
-          20,
-          1009,
-          0,
-          112,
-          0,
-          106,
-          3,
-          106,
-          1,
-          111,
-          2,
-          119,
-          1,
-          168,
-          0,
-          43,
-          0,
-          117,
-          0,
-          101,
-          0,
-          115,
-          2,
-          150,
-          1,
-          317,
-          5,
-          106,
-          3,
-          111,
-          0,
-          106,
-          0,
-          108,
-          2,
-          110,
-          1,
-          177,
-          0,
-          0,
-          2,
-          0,
-          0,
-          0,
-          45
+          3, 20, 1009, 0, 112, 0, 106, 3, 106, 1, 111, 2, 119, 1, 168, 0, 43, 0, 117, 0, 101, 0, 115, 2, 150, 1, 317, 5,
+          106, 3, 111, 0, 106, 0, 108, 2, 110, 1, 177, 0, 0, 2, 0, 0, 0, 45
         ],
         "isStreaming": true
       }
@@ -7830,28 +7515,7 @@
           "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0b2b2057321929de0069aadf08ed1c8190bb67df9887bc8103\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Of course! What would you like to know or discuss?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":18}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0b2b2057321929de0069aadf08a540819096c1d7b4a6577106\",\"object\":\"response\",\"created_at\":1772805896,\"status\":\"completed\",\"background\":false,\"completed_at\":1772805897,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_0b2b2057321929de0069aadf08ed1c8190bb67df9887bc8103\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Of course! What would you like to know or discuss?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":40,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":13,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":53},\"user\":null,\"metadata\":{}},\"sequence_number\":19}\n\n"
         ],
-        "chunkTimings": [
-          2,
-          1,
-          223,
-          0,
-          43,
-          2,
-          23,
-          2,
-          1,
-          1,
-          107,
-          4,
-          0,
-          0,
-          11,
-          4,
-          13,
-          4,
-          2,
-          72
-        ],
+        "chunkTimings": [2, 1, 223, 0, 43, 2, 23, 2, 1, 1, 107, 4, 0, 0, 11, 4, 13, 4, 2, 72],
         "isStreaming": true
       }
     },
@@ -7920,25 +7584,7 @@
           "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_045c8a042a4b44c80069aadf09c2588194938262ff0c26d962\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":15}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_045c8a042a4b44c80069aadf096700819490f38fe87ec436d5\",\"object\":\"response\",\"created_at\":1772805897,\"status\":\"completed\",\"background\":false,\"completed_at\":1772805897,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"msg_045c8a042a4b44c80069aadf09c2588194938262ff0c26d962\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":19,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":10,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":29},\"user\":null,\"metadata\":{}},\"sequence_number\":16}\n\n"
         ],
-        "chunkTimings": [
-          6,
-          1,
-          298,
-          0,
-          20,
-          6,
-          0,
-          7,
-          43,
-          0,
-          1,
-          2,
-          5,
-          91,
-          1,
-          0,
-          61
-        ],
+        "chunkTimings": [6, 1, 298, 0, 20, 6, 0, 7, 43, 0, 1, 2, 5, 91, 1, 0, 61],
         "isStreaming": true
       }
     },
@@ -7977,9 +7623,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "color"
-                ],
+                "required": ["color"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               }
@@ -7997,9 +7641,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "color"
-                ],
+                "required": ["color"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -8044,20 +7686,7 @@
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0a9c0302c10604b40069aadf0a2fd881958e1ca5973bbe64d7\",\"object\":\"response\",\"created_at\":1772805898,\"status\":\"completed\",\"background\":false,\"completed_at\":1772805898,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"output\":[{\"id\":\"fc_0a9c0302c10604b40069aadf0ac9208195b775ab0ea9cb7193\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"color\\\":\\\"green\\\"}\",\"call_id\":\"call_Mg0EoBsia6Yzq5dXafLLZT93\",\"name\":\"changeColor\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"json_schema\",\"description\":null,\"name\":\"response\",\"schema\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":false},\"strict\":true},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"changeColor\",\"parameters\":{\"type\":\"object\",\"properties\":{\"color\":{\"type\":\"string\"}},\"required\":[\"color\"],\"additionalProperties\":fal",
           "se},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":87,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":15,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":102},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
         ],
-        "chunkTimings": [
-          1,
-          2,
-          501,
-          9,
-          44,
-          1,
-          6,
-          0,
-          35,
-          90,
-          26,
-          0
-        ],
+        "chunkTimings": [1, 2, 501, 9, 44, 1, 6, 0, 35, 90, 26, 0],
         "isStreaming": true
       }
     },
@@ -8096,9 +7725,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -8199,9 +7826,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false
               },
               "strict": false
@@ -8262,9 +7887,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -8365,9 +7988,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false
               },
               "strict": false
@@ -8436,9 +8057,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -8539,9 +8158,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false
               },
               "strict": false
@@ -8620,9 +8237,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -8723,9 +8338,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false
               },
               "strict": false
@@ -8813,9 +8426,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -8916,9 +8527,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false
               },
               "strict": false
@@ -8978,9 +8587,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#"
               },
@@ -9081,9 +8688,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "value"
-                ],
+                "required": ["value"],
                 "additionalProperties": false
               },
               "strict": false
@@ -9167,18 +8772,7 @@
           "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0f6532d6b439ed700069aadf11fb608197858ad1e644b2d340\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":13,\"text\":\"Hello! How can I assist you today?\"}\n\nevent: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0f6532d6b439ed700069aadf11fb608197858ad1e644b2d340\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"},\"sequence_number\":14}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0f6532d6b439ed700069aadf11fb608197858ad1e644b2d340\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":15}\n\n",
           "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0f6532d6b439ed700069aadf1196ac8197921d1bac13ac8d8e\",\"object\":\"response\",\"created_at\":1772805905,\"status\":\"completed\",\"background\":false,\"completed_at\":1772805906,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"msg_0f6532d6b439ed700069aadf11fb608197858ad1e644b2d340\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":18,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":10,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":28},\"user\":null,\"metadata\":{}},\"sequence_number\":16}\n\n"
         ],
-        "chunkTimings": [
-          0,
-          0,
-          296,
-          86,
-          98,
-          9,
-          12,
-          5,
-          27,
-          102
-        ],
+        "chunkTimings": [0, 0, 296, 86, 98, 9, 12, 5, 27, 102],
         "isStreaming": true
       }
     }

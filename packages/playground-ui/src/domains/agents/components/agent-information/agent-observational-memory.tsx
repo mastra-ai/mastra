@@ -340,8 +340,8 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   }, [record]);
 
   const hasObservations = Boolean(observations);
-  // Use current observation token count, not cumulative total
-  const tokenCount = statusData?.observationalMemory?.observationTokenCount;
+  // Keep the sidebar label aligned with the same live observation window tokens used by the progress bar.
+  const tokenCount = observationTokenCount;
 
   const { isCopied, handleCopy } = useCopyToClipboard({
     text: observations,

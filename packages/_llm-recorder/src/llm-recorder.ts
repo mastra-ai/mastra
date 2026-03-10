@@ -486,12 +486,20 @@ function findRecording(recordings: LLMRecording[], hash: string, url: string, bo
 
   // 2. Fuzzy match via string similarity on serialized request content
   const incoming = serializeRequestContent(url, body);
-  const candidates = recordings.map(r => serializeRequestContent(r.request.url, r.request.body));
+  let bestRating = -1;
+  let bestIndex = -1;
 
-  const { bestMatch, bestMatchIndex } = stringSimilarity.findBestMatch(incoming, candidates);
+  for (let i = 0; i < recordings.length; i++) {
+    const candidate = serializeRequestContent(recordings[i]!.request.url, recordings[i]!.request.body);
+    const rating = stringSimilarity.compareTwoStrings(incoming, candidate);
+    if (rating > bestRating) {
+      bestRating = rating;
+      bestIndex = i;
+    }
+  }
 
-  if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
-    return recordings[bestMatchIndex]!;
+  if (bestRating >= SIMILARITY_THRESHOLD && bestIndex >= 0) {
+    return recordings[bestIndex]!;
   }
 
   return undefined;
