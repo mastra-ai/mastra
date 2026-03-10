@@ -1,13 +1,13 @@
 ---
-title: "Reference: ElasticSearch Vector Store | Vectors"
-description: Documentation for the ElasticSearchVector class in Mastra, which provides vector search using ElasticSearch.
+title: "Reference: Elasticsearch vector store | Vectors"
+description: Documentation for the ElasticSearchVector class in Mastra, which provides vector search using Elasticsearch.
 packages:
   - "@mastra/elasticsearch"
 ---
 
-# ElasticSearch Vector Store
+# Elasticsearch vector store
 
-The ElasticSearchVector class provides vector search using [ElasticSearch](https://www.elastic.co/elasticsearch/) with its `dense_vector` field type and k-NN search capabilities.
+The `ElasticSearchVector` class provides vector search using [Elasticsearch](https://www.elastic.co/elasticsearch/) with its `dense_vector` field type and k-NN search capabilities.
 It's part of the `@mastra/elasticsearch` package.
 
 ## Installation
@@ -65,7 +65,7 @@ const results = await store.query({
   {
     name: 'url',
     type: 'string',
-    description: "ElasticSearch connection URL (e.g., 'http://localhost:9200')",
+    description: "Elasticsearch connection URL (e.g., 'http://localhost:9200')",
   },
 ]}
 />

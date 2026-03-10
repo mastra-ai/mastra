@@ -1,5 +1,5 @@
 ---
-title: "Storing Embeddings in A Vector Database | RAG"
+title: "Storing embeddings in a vector database | RAG"
 description: Guide on vector storage options in Mastra, including embedded and dedicated vector databases for similarity search.
 packages:
   - "@mastra/astra"
@@ -21,7 +21,7 @@ packages:
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
-# Storing Embeddings in A Vector Database
+# Storing embeddings in a vector database
 
 After generating embeddings, you need to store them in a database that supports vector similarity search. Mastra provides a consistent interface for storing and querying embeddings across various vector databases.
 
@@ -259,7 +259,7 @@ After generating embeddings, you need to store them in a database that supports 
     ```
   </TabItem>
 
-  <TabItem value="elasticsearch" label="ElasticSearch">
+  <TabItem value="elasticsearch" label="Elasticsearch">
     ```ts title="vector-store.ts"
     import { ElasticSearchVector } from '@mastra/elasticsearch'
 
@@ -506,7 +506,7 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Example: `_myindex` is not valid (begins with underscore)
   </TabItem>
 
-  <TabItem value="elasticsearch" label="ElasticSearch">
+  <TabItem value="elasticsearch" label="Elasticsearch">
     Index names must:
 
     - Use only lowercase letters

@@ -1,7 +1,9 @@
 (?i)AI
 (?i)API
 (?i)APIs
+Amazon
 Apache
+Astra
 Astro
 (?i)Auth0
 AWS
@@ -14,16 +16,21 @@ ClickHouse
 Cloudflare
 Convex
 CopilotKit
+Couchbase
 CSP
 D1
 Dash0
 Datadog
+Digital Ocean
+DigitalOcean
 Docker
 Dockerfile
+DuckDB
 DynamoDB
 E2B
 EC2
 (?i)Electron
+Elasticsearch
 ElevenLabs
 (?i)Express
 (?i)Fastify
@@ -50,6 +57,7 @@ JSONB
 JWKS
 (?i)Lambda
 (?i)Laminar
+LanceDB
 (?i)LangSmith
 (?i)LibSQL
 LLM
@@ -68,6 +76,7 @@ Nuxt
 OAuth
 (?i)OpenAI
 (?i)OpenAPI
+OpenSearch
 OpenTelemetry
 OS
 (?i)OTEL
@@ -101,6 +110,7 @@ Swagger
 Traceloop
 (?i)TTS
 TTL
+Turbopuffer
 Turso
 (?i)TypeScript
 (?i)UI

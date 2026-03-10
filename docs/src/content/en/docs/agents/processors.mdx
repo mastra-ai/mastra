@@ -331,7 +331,7 @@ The `processOutputStream` method receives all streaming chunks. To also receive 
 
 #### Accessing generation result data
 
-The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This makes it easy to access token usage, generated text, finish reason, and step details.
+The `processOutputResult` method receives a `result` object containing the resolved generation data — the same information available in the `onFinish` callback. This lets you access token usage, generated text, finish reason, and step details.
 
 ```typescript title="src/mastra/processors/usage-tracker.ts"
 import type { Processor } from '@mastra/core'

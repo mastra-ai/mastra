@@ -1,12 +1,12 @@
 ---
-title: "Supervisor Agents | Agents"
+title: "Supervisor agents | Agents"
 description: Learn how to coordinate multiple agents using the supervisor pattern with delegation hooks, iteration monitoring, message filtering, and task completion scoring.
 packages:
   - "@mastra/core"
   - "@mastra/memory"
 ---
 
-# Supervisor Agents
+# Supervisor agents
 
 A supervisor agent coordinates multiple subagents using `agent.stream()` or `agent.generate()`. You configure subagents on the supervisor's `agents` property, and the supervisor uses its instructions and each subagent's `description` to decide when and how to delegate tasks.
 

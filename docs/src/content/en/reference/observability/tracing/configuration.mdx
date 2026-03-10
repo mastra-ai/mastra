@@ -168,11 +168,11 @@ interface ConfigSelectorOptions {
 }
 ```
 
-# Registry Methods
+## Registry methods
 
 The Observability class provides methods for managing observability instances:
 
-## registerInstance
+### registerInstance
 
 ```typescript prettier:false
 registerInstance(
@@ -184,7 +184,7 @@ registerInstance(
 
 Registers an observability instance in the registry.
 
-## getInstance
+### getInstance
 
 ```typescript prettier:false
 getInstance(name: string): ObservabilityInstance | undefined;
@@ -192,7 +192,7 @@ getInstance(name: string): ObservabilityInstance | undefined;
 
 Retrieves an observability instance by name.
 
-## getDefaultInstance
+### getDefaultInstance
 
 ```typescript prettier:false
 getDefaultInstance(): ObservabilityInstance | undefined;
@@ -200,7 +200,7 @@ getDefaultInstance(): ObservabilityInstance | undefined;
 
 Returns the default observability instance.
 
-## getSelectedInstance
+### getSelectedInstance
 
 ```typescript prettier:false
 getSelectedInstance(
@@ -210,7 +210,7 @@ getSelectedInstance(
 
 Returns the observability instance selected by the config selector or default.
 
-## listInstances
+### listInstances
 
 ```typescript prettier:false
 listInstances(): ReadonlyMap<string, ObservabilityInstance>;
@@ -218,7 +218,7 @@ listInstances(): ReadonlyMap<string, ObservabilityInstance>;
 
 Returns all registered observability instances.
 
-## hasInstance
+### hasInstance
 
 ```typescript prettier:false
 hasInstance(name: string): boolean;
@@ -226,7 +226,7 @@ hasInstance(name: string): boolean;
 
 Checks if an observability instance exists.
 
-## setConfigSelector
+### setConfigSelector
 
 ```typescript prettier:false
 setConfigSelector(selector: ConfigSelector): void;
@@ -234,7 +234,7 @@ setConfigSelector(selector: ConfigSelector): void;
 
 Sets the config selector function.
 
-## unregisterInstance
+### unregisterInstance
 
 ```typescript prettier:false
 unregisterInstance(name: string): boolean;
@@ -242,7 +242,7 @@ unregisterInstance(name: string): boolean;
 
 Removes an observability instance from the registry.
 
-## clear
+### clear
 
 ```typescript prettier:false
 clear(): void;
@@ -250,7 +250,7 @@ clear(): void;
 
 Clears all instances without shutdown.
 
-## shutdown
+### shutdown
 
 ```typescript prettier:false
 async shutdown(): Promise<void>;
