@@ -1,6 +1,6 @@
 # Plaid Finance Tool
 
-This example shows a Mastra agent using Plaid sandbox tools to create a sandbox access token, fetch account balances, and review transaction history.
+This example shows a Mastra agent using Plaid sandbox tools to create a sandbox session handle, fetch account balances, and review transaction history.
 
 ## Prerequisites
 
@@ -52,6 +52,11 @@ pnpm test
 ## What It Does
 
 - Creates a Plaid sandbox public token
-- Exchanges it for a sandbox access token
-- Uses that token to fetch account balances
+- Exchanges it for a sandbox access token stored only on the server side
+- Returns an opaque sandbox session handle to the agent
+- Uses that handle to fetch account balances and transactions
 - Exposes transaction history tooling for finance questions
+
+## Note
+
+This example is intentionally sandbox-only. For real bank account connections, use Plaid Link to create a `link_token`, collect a `public_token` from the client, and exchange that token server-side.

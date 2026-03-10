@@ -8,10 +8,12 @@ import {
 } from 'plaid';
 import { z } from 'zod';
 
-const accessTokenSchema = z
-  .string({ required_error: 'A Plaid access token is required.' })
-  .min(1, 'A Plaid access token is required.')
-  .describe('Plaid access token for the connected account.');
+const sandboxSessionStore = new Map<string, string>();
+
+const sessionHandleSchema = z
+  .string({ required_error: 'A Plaid session handle is required.' })
+  .min(1, 'A Plaid session handle is required.')
+  .describe('Opaque server-side handle for a stored Plaid sandbox access token.');
 
 const dateSchema = z
   .string({ required_error: 'A date in YYYY-MM-DD format is required.' })
@@ -19,18 +21,18 @@ const dateSchema = z
   .describe('Date in YYYY-MM-DD format.');
 
 export const getAccountBalanceInputSchema = z.object({
-  access_token: accessTokenSchema,
+  session_handle: sessionHandleSchema,
 });
 
 export const getTransactionsInputSchema = z.object({
-  access_token: accessTokenSchema,
+  session_handle: sessionHandleSchema,
   start_date: dateSchema.describe('Start date for the transaction query in YYYY-MM-DD format.'),
   end_date: dateSchema.describe('End date for the transaction query in YYYY-MM-DD format.'),
 });
 
 export const createSandboxTokenInputSchema = z
   .object({})
-  .describe('No input is required. Generates a Plaid sandbox access token.');
+  .describe('No input is required. Generates a sandbox-only Plaid session handle.');
 
 const getPlaidCredentials = () => {
   const clientId = process.env.PLAID_CLIENT_ID;
@@ -45,6 +47,7 @@ const getPlaidCredentials = () => {
   return { clientId, secret };
 };
 
+/** Creates a Plaid client configured for the sandbox environment. */
 export const createPlaidClient = () => {
   const { clientId, secret } = getPlaidCredentials();
 
@@ -61,11 +64,31 @@ export const createPlaidClient = () => {
   );
 };
 
+const createSandboxSessionHandle = (accessToken: string) => {
+  const sessionHandle = `plaid-sandbox-${crypto.randomUUID()}`;
+  sandboxSessionStore.set(sessionHandle, accessToken);
+  return sessionHandle;
+};
+
+const resolveAccessToken = (sessionHandle: string) => {
+  const accessToken = sandboxSessionStore.get(sessionHandle);
+
+  if (!accessToken) {
+    throw new Error(
+      `Unknown Plaid session handle "${sessionHandle}". Create a sandbox token first before requesting balances or transactions.`,
+    );
+  }
+
+  return accessToken;
+};
+
+/** Fetches account balances using a stored sandbox session handle. */
 export const fetchAccountBalance = async (input: z.infer<typeof getAccountBalanceInputSchema>) => {
-  const { access_token } = getAccountBalanceInputSchema.parse(input);
+  const { session_handle } = getAccountBalanceInputSchema.parse(input);
 
   try {
     const client = createPlaidClient();
+    const access_token = resolveAccessToken(session_handle);
     const response = await client.accountsBalanceGet({ access_token });
 
     return response.data.accounts.map(account => ({
@@ -82,28 +105,51 @@ export const fetchAccountBalance = async (input: z.infer<typeof getAccountBalanc
   }
 };
 
+/** Fetches all transactions for a date range using Plaid pagination. */
 export const fetchTransactions = async (input: z.infer<typeof getTransactionsInputSchema>) => {
-  const { access_token, start_date, end_date } = getTransactionsInputSchema.parse(input);
+  const { session_handle, start_date, end_date } = getTransactionsInputSchema.parse(input);
 
   try {
     const client = createPlaidClient();
-    const response = await client.transactionsGet({
-      access_token,
-      start_date,
-      end_date,
-    });
+    const access_token = resolveAccessToken(session_handle);
+    const count = 500;
+    let offset = 0;
+    let totalTransactions = 0;
+    const transactions: Array<{
+      name: string;
+      amount: number;
+      date: string;
+      category: string[];
+      currency: string | null;
+    }> = [];
 
-    const transactions = response.data.transactions.map(transaction => ({
-      name: transaction.name,
-      amount: transaction.amount,
-      date: transaction.date,
-      category: transaction.category ?? [],
-      currency: transaction.iso_currency_code ?? transaction.unofficial_currency_code ?? null,
-    }));
+    do {
+      const response = await client.transactionsGet({
+        access_token,
+        start_date,
+        end_date,
+        options: {
+          count,
+          offset,
+        },
+      });
+
+      totalTransactions = response.data.total_transactions;
+      transactions.push(
+        ...response.data.transactions.map(transaction => ({
+          name: transaction.name,
+          amount: transaction.amount,
+          date: transaction.date,
+          category: transaction.category ?? [],
+          currency: transaction.iso_currency_code ?? transaction.unofficial_currency_code ?? null,
+        })),
+      );
+      offset += count;
+    } while (transactions.length < totalTransactions);
 
     return {
       transactions,
-      total: transactions.length,
+      total: totalTransactions,
     };
   } catch (error) {
     throw new Error(
@@ -112,6 +158,7 @@ export const fetchTransactions = async (input: z.infer<typeof getTransactionsInp
   }
 };
 
+/** Creates a sandbox-only session handle and keeps the Plaid access token server-side. */
 export const createSandboxAccessToken = async () => {
   try {
     const client = createPlaidClient();
@@ -126,7 +173,7 @@ export const createSandboxAccessToken = async () => {
     });
 
     return {
-      access_token: exchangeResponse.data.access_token,
+      session_handle: createSandboxSessionHandle(exchangeResponse.data.access_token),
     };
   } catch (error) {
     throw new Error(
@@ -137,7 +184,7 @@ export const createSandboxAccessToken = async () => {
 
 export const getAccountBalance = createTool({
   id: 'getAccountBalance',
-  description: 'Fetch account balances for a Plaid access token.',
+  description: 'Fetch account balances for a stored Plaid sandbox session handle.',
   inputSchema: getAccountBalanceInputSchema,
   execute: async input => {
     return fetchAccountBalance(input);
@@ -146,7 +193,7 @@ export const getAccountBalance = createTool({
 
 export const getTransactions = createTool({
   id: 'getTransactions',
-  description: 'Fetch transaction history for a Plaid access token and date range.',
+  description: 'Fetch transaction history for a stored Plaid sandbox session handle and date range.',
   inputSchema: getTransactionsInputSchema,
   execute: async input => {
     return fetchTransactions(input);
@@ -155,7 +202,7 @@ export const getTransactions = createTool({
 
 export const createSandboxToken = createTool({
   id: 'createSandboxToken',
-  description: 'Create and exchange a Plaid sandbox public token into an access token.',
+  description: 'Create a sandbox-only Plaid session handle backed by a server-side access token.',
   inputSchema: createSandboxTokenInputSchema,
   execute: async () => {
     return createSandboxAccessToken();

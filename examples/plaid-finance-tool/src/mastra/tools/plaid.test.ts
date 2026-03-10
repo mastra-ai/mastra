@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockAccountsBalanceGet = vi.fn();
 const mockTransactionsGet = vi.fn();
@@ -36,8 +36,26 @@ describe('Plaid tools', () => {
     process.env.PLAID_SECRET = 'test-secret';
   });
 
-  it('getAccountBalance returns correctly shaped account data', async () => {
-    const { fetchAccountBalance } = await import('./plaid');
+  afterEach(() => {
+    delete process.env.PLAID_CLIENT_ID;
+    delete process.env.PLAID_SECRET;
+    vi.clearAllMocks();
+  });
+
+  it('fetchAccountBalance returns correctly shaped account data', async () => {
+    const { createSandboxAccessToken, fetchAccountBalance } = await import('./plaid');
+
+    mockSandboxPublicTokenCreate.mockResolvedValue({
+      data: {
+        public_token: 'public-sandbox-token',
+      },
+    });
+    mockItemPublicTokenExchange.mockResolvedValue({
+      data: {
+        access_token: 'access-sandbox-token',
+      },
+    });
+    const { session_handle } = await createSandboxAccessToken();
 
     mockAccountsBalanceGet.mockResolvedValue({
       data: {
@@ -55,7 +73,7 @@ describe('Plaid tools', () => {
       },
     });
 
-    await expect(fetchAccountBalance({ access_token: 'access-sandbox-123' })).resolves.toEqual([
+    await expect(fetchAccountBalance({ session_handle })).resolves.toEqual([
       {
         name: 'Plaid Checking',
         type: 'depository',
@@ -66,8 +84,20 @@ describe('Plaid tools', () => {
     ]);
   });
 
-  it('getTransactions returns correctly shaped transaction data', async () => {
-    const { fetchTransactions } = await import('./plaid');
+  it('fetchTransactions returns correctly shaped transaction data', async () => {
+    const { createSandboxAccessToken, fetchTransactions } = await import('./plaid');
+
+    mockSandboxPublicTokenCreate.mockResolvedValue({
+      data: {
+        public_token: 'public-sandbox-token',
+      },
+    });
+    mockItemPublicTokenExchange.mockResolvedValue({
+      data: {
+        access_token: 'access-sandbox-token',
+      },
+    });
+    const { session_handle } = await createSandboxAccessToken();
 
     mockTransactionsGet.mockResolvedValue({
       data: {
@@ -80,12 +110,13 @@ describe('Plaid tools', () => {
             iso_currency_code: 'USD',
           },
         ],
+        total_transactions: 1,
       },
     });
 
     await expect(
       fetchTransactions({
-        access_token: 'access-sandbox-123',
+        session_handle,
         start_date: '2026-03-01',
         end_date: '2026-03-10',
       }),
@@ -103,29 +134,41 @@ describe('Plaid tools', () => {
     });
   });
 
-  it('getAccountBalance throws descriptive error when API fails', async () => {
-    const { fetchAccountBalance } = await import('./plaid');
+  it('fetchAccountBalance throws descriptive error when API fails', async () => {
+    const { createSandboxAccessToken, fetchAccountBalance } = await import('./plaid');
+
+    mockSandboxPublicTokenCreate.mockResolvedValue({
+      data: {
+        public_token: 'public-sandbox-token',
+      },
+    });
+    mockItemPublicTokenExchange.mockResolvedValue({
+      data: {
+        access_token: 'access-sandbox-token',
+      },
+    });
+    const { session_handle } = await createSandboxAccessToken();
 
     mockAccountsBalanceGet.mockRejectedValue(new Error('plaid upstream unavailable'));
 
-    await expect(fetchAccountBalance({ access_token: 'access-sandbox-123' })).rejects.toThrow(
+    await expect(fetchAccountBalance({ session_handle })).rejects.toThrow(
       'Failed to fetch account balances from Plaid: plaid upstream unavailable',
     );
   });
 
-  it('getTransactions throws for missing required inputs', async () => {
+  it('fetchTransactions throws for missing required inputs', async () => {
     const { fetchTransactions } = await import('./plaid');
 
     await expect(
       fetchTransactions({
-        access_token: '',
+        session_handle: '',
         start_date: '2026-03-01',
         end_date: '2026-03-10',
       }),
-    ).rejects.toThrow('A Plaid access token is required.');
+    ).rejects.toThrow('A Plaid session handle is required.');
   });
 
-  it('createSandboxToken successfully returns access_token', async () => {
+  it('createSandboxAccessToken successfully returns session_handle', async () => {
     const { createSandboxAccessToken } = await import('./plaid');
 
     mockSandboxPublicTokenCreate.mockResolvedValue({
@@ -140,7 +183,7 @@ describe('Plaid tools', () => {
     });
 
     await expect(createSandboxAccessToken()).resolves.toEqual({
-      access_token: 'access-sandbox-token',
+      session_handle: expect.stringMatching(/^plaid-sandbox-/),
     });
   });
 });
