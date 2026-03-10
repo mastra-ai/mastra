@@ -64,7 +64,7 @@
     "posthog-node": "5.17.2",
     "prettier": "^3.8.1",
     "semver": "^7.7.4",
-    "serve": "^14.2.5",
+    "serve": "^14.2.6",
     "serve-handler": "^6.1.6",
     "shell-quote": "^1.8.3",
     "strip-json-comments": "^5.0.3",
