@@ -607,6 +607,7 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'tracing-test-tool',
       entityName: 'tracing-test-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
     });
 
@@ -713,6 +714,7 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'vercel-tool',
       entityName: 'vercel-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
     });
 
@@ -833,6 +835,7 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'toolset-tool',
       entityName: 'toolset-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
     });
   });
