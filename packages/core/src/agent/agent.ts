@@ -2967,10 +2967,8 @@ export class Agent<
                 }
               }
 
-              const messagesForSubAgent: MessageListInput = [
-                ...filteredContextMessages,
-                { role: 'user' as const, content: effectivePrompt },
-              ];
+              // Pass history as context (not messages) so it reaches the LLM but is not persisted to the sub-agent thread.
+              const messagesForSubAgent: MessageListInput = [{ role: 'user' as const, content: effectivePrompt }];
 
               const subAgentPromptCreatedAt = new Date();
 
@@ -2985,6 +2983,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as any,
                       ...(resourceId && threadId
                         ? {
                             memory: {
@@ -3000,6 +2999,7 @@ export class Agent<
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
+                      context: filteredContextMessages as any,
                       ...(resourceId && threadId
                         ? {
                             memory: {
@@ -3072,6 +3072,7 @@ export class Agent<
                 const generateResult = await agent.generateLegacy(messagesForSubAgent, {
                   requestContext,
                   ...resolveObservabilityContext(context ?? {}),
+                  context: filteredContextMessages as any,
                 });
                 result = { text: generateResult.text };
               } else if (
