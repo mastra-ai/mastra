@@ -2866,9 +2866,6 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
-      '@mastra/observability':
-        specifier: workspace:*
-        version: link:../../observability/mastra
       '@openrouter/ai-sdk-provider':
         specifier: ^0.4.6
         version: 0.4.6(zod@4.3.6)

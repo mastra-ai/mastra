@@ -14,7 +14,14 @@ import { z } from 'zod/v4';
 import { Mastra } from '../..';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType, getOrCreateSpan, createObservabilityContext } from '../../observability';
+import {
+  SpanType,
+  wrapMastra,
+  executeWithContext,
+  EntityType,
+  getOrCreateSpan,
+  createObservabilityContext,
+} from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { isVercelTool } from '../../tools/toolchecks';
