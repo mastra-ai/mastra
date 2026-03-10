@@ -9,7 +9,7 @@ packages:
 
 The Google Voice implementation in Mastra provides both text-to-speech (TTS) and speech-to-text (STT) capabilities using Google Cloud services. It supports multiple voices, languages, advanced audio configuration options, and both standard API key authentication and Vertex AI mode for enterprise deployments.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { GoogleVoice } from '@mastra/voice-google'
@@ -37,7 +37,7 @@ const transcript = await voice.listen(audioStream, {
 const voices = await voice.getSpeakers({ languageCode: 'en-US' })
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -369,7 +369,7 @@ For long-audio Text-to-Speech operations:
 - `operations.get` - Get operation status
 - `operations.list` - List operations
 
-## Important Notes
+## Important notes
 
 1. **Authentication**: Either a Google Cloud API key (standard mode) or service account credentials (Vertex AI mode) is required.
 1. **Environment Variables**:

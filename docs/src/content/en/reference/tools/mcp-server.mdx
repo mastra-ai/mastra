@@ -951,7 +951,7 @@ Call this method when the overall list of available prompts has changed (e.g., a
 await serverWithPrompts.prompts.notifyListChanged()
 ```
 
-### Best Practices for Prompt Handling
+### Best practices for Prompt Handling
 
 - Use clear, descriptive prompt names and descriptions.
 - Validate all required arguments in `getPromptMessages`.
@@ -1312,7 +1312,7 @@ const customMiddleware = createOAuthMiddleware({
 
 Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. This allows you to pass authentication info, user context, or any custom data from your HTTP middleware to your MCP tools.
 
-### How It Works
+### How it works
 
 Whatever you set on `req.auth` in your HTTP middleware becomes available as `context.mcp.extra.authInfo` in your tools:
 

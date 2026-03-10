@@ -9,7 +9,7 @@ packages:
 
 The `CompositeAuth` class allows you to combine multiple authentication providers into a single auth handler. It tries each provider in order until one succeeds.
 
-## Use Cases
+## Use cases
 
 - Support both API keys and OAuth tokens
 - Migrate between auth providers without breaking existing clients
@@ -24,7 +24,7 @@ CompositeAuth is included in `@mastra/core`, no additional packages required.
 import { CompositeAuth } from '@mastra/core/server'
 ```
 
-## Usage Example
+## Usage example
 
 Combine SimpleAuth (for API keys) with Clerk (for user sessions):
 
@@ -64,7 +64,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## How It Works
+## How it works
 
 When a request comes in, CompositeAuth:
 
@@ -188,7 +188,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Error Handling
+## Error handling
 
 CompositeAuth silently catches errors from individual providers and moves to the next one. This prevents one failing provider from blocking authentication:
 

@@ -12,7 +12,7 @@ packages:
 
 The UpstashVector class provides vector search using [Upstash Vector](https://upstash.com/vector), a serverless vector database service that provides vector similarity search with metadata filtering capabilities and hybrid search support.
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -322,7 +322,7 @@ await vectorStore.updateVector({
 })
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -335,7 +335,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -353,14 +353,14 @@ try {
 }
 ```
 
-## Environment Variables
+## Environment variables
 
 Required environment variables:
 
 - `UPSTASH_VECTOR_URL`: Your Upstash Vector database URL
 - `UPSTASH_VECTOR_TOKEN`: Your Upstash Vector API token
 
-## Usage Example
+## Usage example
 
 ### Local embeddings with fastembed
 

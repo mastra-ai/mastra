@@ -13,7 +13,7 @@ Tracing provides specialized monitoring and debugging for the AI-related operati
 
 Unlike traditional application tracing, Tracing focuses specifically on understanding your AI pipeline — capturing token usage, model parameters, tool execution details, and conversation flows. This makes it easier to debug issues, optimize performance, and understand how your AI systems behave in production.
 
-## How It Works
+## How it works
 
 Traces are created by:
 
@@ -433,7 +433,7 @@ requestContext.set('session', { data: { experimentId: 'exp-999' } })
 // Metadata will include: { user: { id: 'user-456' }, session: { data: { experimentId: 'exp-999' } } }
 ```
 
-#### How It Works
+#### How it works
 
 1. **TraceState Computation**: At the start of a trace (root span creation), Mastra computes which keys to extract by merging configuration-level and per-request keys
 1. **Automatic Extraction**: Root spans (agent runs, workflow executions) automatically extract metadata from RequestContext
@@ -520,7 +520,7 @@ const result = await agent.generate([{ role: 'user', content: 'Handle confidenti
 })
 ```
 
-#### How It Works
+#### How it works
 
 - **Trace-wide effect**: When set on the root span, these options apply to all child spans in the trace (tool calls, model generations, etc.)
 - **Export-time filtering**: The data is still available internally during execution but is excluded when spans are exported to observability platforms
@@ -678,7 +678,7 @@ Processors are executed in the order they're defined, allowing you to chain mult
 
 Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations. Formatters support both synchronous and asynchronous operations.
 
-#### Use Cases
+#### Use cases
 
 - **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
 - **Transform input/output formats** - Customize how data displays in specific platforms
@@ -846,7 +846,7 @@ export const mastra = new Mastra({
 | `maxArrayLength` | 50 | Maximum number of items in arrays. Additional items are omitted. |
 | `maxObjectKeys` | 50 | Maximum number of keys in objects. Additional keys are omitted. |
 
-### Use Cases
+### Use cases
 
 **Increasing limits for debugging**: If your agents or tools work with large documents, API responses, or data structures, increase these limits to capture more context in your traces:
 
@@ -1101,7 +1101,7 @@ Mastra automatically creates spans for:
 - **Control flow** - Conditionals, loops, parallel execution
 - **Wait operations** - Delays and event waiting
 
-## See Also
+## See also
 
 ### Reference Documentation
 

@@ -54,7 +54,7 @@ Extends `BaseExporterConfig`, which includes:
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
-## Environment Variables
+## Environment variables
 
 The exporter reads these environment variables if not provided in config:
 
@@ -121,7 +121,7 @@ The exporter batches spans for efficient network usage:
 - Flushes when `maxBatchWaitMs` elapsed since first span in batch
 - Flushes on `shutdown()`
 
-### Error Handling
+### Error handling
 
 - Uses exponential backoff retry with `maxRetries` attempts
 - Drops batches after all retries fail
@@ -174,7 +174,7 @@ const customExporter = new CloudExporter({
 })
 ```
 
-## See Also
+## See also
 
 ### Documentation
 

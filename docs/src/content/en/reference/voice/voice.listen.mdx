@@ -32,7 +32,7 @@ The `listen()` method is a core function available in all Mastra voice providers
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns one of the following:
 
@@ -151,7 +151,7 @@ Each voice provider may support additional options specific to their implementat
 ]}
 />
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
@@ -268,7 +268,7 @@ await voice.listen(microphoneStream)
 - Some providers support streaming transcription, where text is returned as it's transcribed
 - For best performance, consider closing or ending the audio stream when you're done with it
 
-## Related Methods
+## Related methods
 
 - [voice.speak()](./voice.speak) - Converts text to speech
 - [voice.send()](./voice.send) - Sends audio data to the voice provider in real-time

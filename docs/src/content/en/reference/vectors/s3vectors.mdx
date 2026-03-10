@@ -21,7 +21,7 @@ Amazon S3 Vectors is a Preview service. Preview features may change or be remove
 npm install @mastra/s3vectors@latest
 ```
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { S3Vectors } from '@mastra/s3vectors'
@@ -73,7 +73,7 @@ const results = await store.query({
 await store.disconnect()
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -307,7 +307,7 @@ Deletes a specific vector by ID.
 
 Closes the underlying AWS SDK HTTP handler to free sockets.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -365,7 +365,7 @@ If you set `nonFilterableMetadataKeys` at index creation, those keys are stored 
 
 :::
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -383,7 +383,7 @@ try {
 }
 ```
 
-## Environment Variables
+## Environment variables
 
 Typical environment variables when wiring your app:
 
@@ -391,7 +391,7 @@ Typical environment variables when wiring your app:
 - `AWS_REGION`: AWS region for the S3 Vectors bucket.
 - **AWS credentials**: via the standard AWS SDK provider chain (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, etc.).
 
-## Best Practices
+## Best practices
 
 - Choose the metric (`cosine` or `euclidean`) to match your embedding model; `dotproduct` isn't supported.
 - Keep **filterable** metadata small and structured (string/number/boolean). Store large text (e.g., `content`) as **non-filterable**.

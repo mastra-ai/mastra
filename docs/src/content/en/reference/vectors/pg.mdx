@@ -13,7 +13,7 @@ packages:
 The PgVector class provides vector search using [PostgreSQL](https://www.postgresql.org/) with [pgvector](https://github.com/pgvector/pgvector) extension.
 It provides robust vector similarity search capabilities within your existing PostgreSQL database.
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -87,7 +87,7 @@ It provides robust vector similarity search capabilities within your existing Po
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 ### Connection String
 
@@ -566,7 +566,7 @@ await pgVector.buildIndex('my_vectors', 'cosine', {
 })
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -579,7 +579,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -626,7 +626,7 @@ The system automatically detects configuration changes and only rebuilds indexes
 - Changed configuration: Index is dropped and rebuilt
 - This prevents the performance issues from unnecessary index recreations
 
-## Best Practices
+## Best practices
 
 - Regularly evaluate your index configuration to ensure optimal performance.
 - Adjust parameters like `lists` and `m` based on dataset size and query requirements.
@@ -649,7 +649,7 @@ This enables advanced usage such as running direct SQL queries, managing transac
 
 This design supports advanced use cases but requires careful resource management by the user.
 
-## Usage Example
+## Usage example
 
 ### Local embeddings with fastembed
 

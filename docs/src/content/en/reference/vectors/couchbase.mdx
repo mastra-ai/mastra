@@ -20,7 +20,7 @@ The `CouchbaseVector` class provides vector search using [Couchbase Vector Searc
 npm install @mastra/couchbase@latest
 ```
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { CouchbaseVector } from '@mastra/couchbase'
@@ -36,7 +36,7 @@ const store = new CouchbaseVector({
 })
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -317,7 +317,7 @@ Deletes multiple vectors by their IDs. **Note:** Filter-based deletion isn't yet
 
 Closes the Couchbase client connection. Should be called when done using the store.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -330,7 +330,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 

@@ -60,7 +60,7 @@ const results = await store.query({
 await store.close();
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -332,7 +332,7 @@ Closes the database connection and releases resources.
 await store.close()
 ```
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -388,7 +388,7 @@ const results = await store.query({
 | `euclidean` | L2 distance | 0-∞ (0 = most similar) | Image embeddings, spatial data |
 | `dotproduct` | Inner product | Higher = more similar | When vector magnitude matters |
 
-## Error Handling
+## Error handling
 
 The store throws specific errors for different failure cases:
 
@@ -417,7 +417,7 @@ Common error cases include:
 - Empty filter or ids array in delete/update operations
 - Mutual exclusivity violations (providing both `id` and `filter`)
 
-## Use Cases
+## Use cases
 
 ### Embedded Semantic Search
 

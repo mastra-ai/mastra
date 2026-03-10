@@ -60,7 +60,7 @@ const results = await store.query({
 });
 ```
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -343,7 +343,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -356,7 +356,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws specific errors for different failure cases:
 
@@ -388,7 +388,7 @@ Common error cases include:
 - Database connection issues
 - Transaction failures during upsert
 
-## Usage Example
+## Usage example
 
 ### Local embeddings with fastembed
 

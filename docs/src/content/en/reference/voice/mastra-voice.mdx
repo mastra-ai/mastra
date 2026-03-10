@@ -9,7 +9,7 @@ packages:
 
 The MastraVoice class is an abstract base class that defines the core interface for voice services in Mastra. All voice provider implementations (like OpenAI, Deepgram, PlayAI, Speechify) extend this class to provide their specific functionality. The class now includes support for real-time speech-to-speech capabilities through WebSocket connections.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { MastraVoice } from '@mastra/core/voice'
@@ -84,7 +84,7 @@ class MyVoiceProvider extends MastraVoice {
 }
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[

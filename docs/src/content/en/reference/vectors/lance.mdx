@@ -29,7 +29,7 @@ The LanceVectorStore uses a factory pattern for creation. You should use the sta
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 You can create a `LanceVectorStore` instance using the static create method:
 
@@ -420,7 +420,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 Closes the database connection.
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -434,7 +434,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -451,7 +451,7 @@ try {
 }
 ```
 
-## Best Practices
+## Best practices
 
 - Use the appropriate index type for your use case:
   - HNSW for better recall and performance when memory isn't constrained

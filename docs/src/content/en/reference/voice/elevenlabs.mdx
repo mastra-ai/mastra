@@ -9,7 +9,7 @@ packages:
 
 The ElevenLabs voice implementation in Mastra provides high-quality text-to-speech (TTS) and speech-to-text (STT) capabilities using the ElevenLabs API.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { ElevenLabsVoice } from '@mastra/voice-elevenlabs'
@@ -33,7 +33,7 @@ const audioStream = await voice.speak('Hello, world!')
 const speakers = await voice.getSpeakers()
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -217,7 +217,7 @@ The options object supports the following properties:
 
 Returns: `Promise<string>` - A Promise that resolves to the transcribed text
 
-## Important Notes
+## Important notes
 
 1. An ElevenLabs API key is required. Set it via the `ELEVENLABS_API_KEY` environment variable or pass it in the constructor.
 1. The default speaker is set to Aria (ID: '9BWtsMINqrJLrRacOk9x').

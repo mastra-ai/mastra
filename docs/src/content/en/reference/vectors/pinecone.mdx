@@ -10,7 +10,7 @@ packages:
 The PineconeVector class provides an interface to [Pinecone](https://www.pinecone.io/)'s vector database.
 It provides real-time vector search, with features like hybrid search, metadata filtering, and namespace management.
 
-## Constructor Options
+## Constructor options
 
 The constructor accepts all [Pinecone configuration options](https://docs.pinecone.io/reference/typescript-sdk) plus Mastra-specific fields.
 
@@ -314,7 +314,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -327,7 +327,7 @@ interface QueryResult {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 
@@ -345,7 +345,7 @@ try {
 }
 ```
 
-### Environment Variables
+### Environment variables
 
 Required environment variables:
 

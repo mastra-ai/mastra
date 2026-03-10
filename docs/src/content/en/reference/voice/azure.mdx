@@ -9,7 +9,7 @@ packages:
 
 The AzureVoice class in Mastra provides text-to-speech and speech-to-text capabilities using Microsoft Azure Cognitive Services.
 
-## Usage Example
+## Usage example
 
 This requires Azure Speech Services credentials that can be provided through environment variables or directly in the configuration:
 
@@ -42,7 +42,7 @@ const text = await voice.listen(audioStream)
 
 ## Configuration
 
-### Constructor Options
+### Constructor options
 
 <PropertiesTable
   content={[
@@ -223,7 +223,7 @@ Returns an array of available voice options (200+ voices), where each node conta
 
 Returns: `Promise<Array<{ voiceId: string; language: string; region: string; }>>`
 
-## Important Notes
+## Important notes
 
 ### Azure Speech Services vs Azure OpenAI
 
@@ -233,7 +233,7 @@ Returns: `Promise<Array<{ voiceId: string; language: string; region: string; }>>
 - **DO** use an Azure Speech Services subscription key (obtain from Azure Portal under "Speech Services")
 - These are separate Azure resources with different API keys and endpoints
 
-### Environment Variables
+### Environment variables
 
 API keys and regions can be provided via constructor options or environment variables:
 
