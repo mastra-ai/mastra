@@ -3,12 +3,18 @@
  * Created once at startup, provides tools from connected MCP servers.
  */
 
-import { MCPClient } from '@mastra/mcp';
+import { exec } from 'node:child_process';
+import http from 'node:http';
+import { join } from 'node:path';
+import { MCPClient, MCPOAuthClientProvider, auth } from '@mastra/mcp';
 import type { MastraMCPServerDefinition } from '@mastra/mcp';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
+import { McpOAuthFileStorage } from './mcp-oauth-storage.js';
 import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
 
 const MASTRACODE_MCP_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const OAUTH_CALLBACK_PATH = '/oauth/callback';
+const OAUTH_CALLBACK_TIMEOUT_MS = 120_000;
 
 /** Summary of MCP initialization result. */
 export interface McpInitResult {
@@ -46,21 +52,166 @@ export interface McpManager {
   getServerLogs(name: string): string[];
 }
 
+interface OAuthCallbackServer {
+  port: number;
+  waitForCode(): Promise<string | null>;
+  close(): void;
+}
+
 function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
   return 'url' in cfg ? 'http' : 'stdio';
+}
+
+function openBrowser(url: string): void {
+  if (process.platform === 'darwin') {
+    exec(`open "${url}"`);
+  } else if (process.platform === 'win32') {
+    exec(`start "${url}"`);
+  } else {
+    exec(`wslview "${url}" 2>/dev/null || xdg-open "${url}" 2>/dev/null || cmd.exe /c start "${url}"`);
+  }
+}
+
+function startOAuthCallbackServer(): Promise<OAuthCallbackServer> {
+  return new Promise((resolve, reject) => {
+    let receivedCode: string | null = null;
+    let cancelled = false;
+
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url || '', `http://localhost`);
+      if (url.pathname !== OAUTH_CALLBACK_PATH) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
+
+      const code = url.searchParams.get('code');
+      if (!code) {
+        res.writeHead(400);
+        res.end('Missing authorization code');
+        return;
+      }
+
+      receivedCode = code;
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<html><body><h2>Authorization successful.</h2><p>You can close this tab.</p></body></html>');
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      if (!port) {
+        server.close();
+        reject(new Error('Failed to bind OAuth callback server'));
+        return;
+      }
+
+      resolve({
+        port,
+        async waitForCode() {
+          const interval = 100;
+          const iterations = OAUTH_CALLBACK_TIMEOUT_MS / interval;
+          for (let i = 0; i < iterations; i++) {
+            if (receivedCode) return receivedCode;
+            if (cancelled) return null;
+            await new Promise(r => setTimeout(r, interval));
+          }
+          return null;
+        },
+        close() {
+          cancelled = true;
+          server.close();
+        },
+      });
+    });
+
+    server.on('error', reject);
+  });
+}
+
+interface OAuthContext {
+  callbackServer: OAuthCallbackServer;
+  redirectTriggered: boolean;
+}
+
+function createOAuthProvider(
+  serverName: string,
+  dataDir: string,
+  oauthCtx: OAuthContext,
+): MCPOAuthClientProvider {
+  const storagePath = join(dataDir, 'mcp-oauth.json');
+  const storage = new McpOAuthFileStorage(serverName, storagePath);
+  const redirectUrl = `http://localhost:${oauthCtx.callbackServer.port}${OAUTH_CALLBACK_PATH}`;
+
+  return new MCPOAuthClientProvider({
+    redirectUrl,
+    clientMetadata: {
+      redirect_uris: [redirectUrl],
+      client_name: `mastracode (${serverName})`,
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+    },
+    storage,
+    onRedirectToAuthorization: (url: URL) => {
+      oauthCtx.redirectTriggered = true;
+      openBrowser(url.toString());
+    },
+  });
+}
+
+function hasOAuthServers(servers: Record<string, McpServerConfig>): boolean {
+  return Object.values(servers).some(cfg => 'url' in cfg && (cfg as McpHttpServerConfig).auth === 'oauth');
+}
+
+async function buildServerDefs(
+  servers: Record<string, McpServerConfig>,
+  dataDir: string,
+): Promise<{ defs: Record<string, MastraMCPServerDefinition>; oauthCtx: OAuthContext | null }> {
+  const defs: Record<string, MastraMCPServerDefinition> = {};
+  let oauthCtx: OAuthContext | null = null;
+
+  if (hasOAuthServers(servers)) {
+    oauthCtx = {
+      callbackServer: await startOAuthCallbackServer(),
+      redirectTriggered: false,
+    };
+  }
+
+  for (const [name, cfg] of Object.entries(servers)) {
+    if ('url' in cfg) {
+      const httpCfg = cfg as McpHttpServerConfig;
+      const def: MastraMCPServerDefinition = {
+        url: new URL(httpCfg.url),
+        requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
+      };
+      if (httpCfg.auth === 'oauth' && oauthCtx) {
+        def.authProvider = createOAuthProvider(name, dataDir, oauthCtx);
+      }
+      defs[name] = def;
+    } else {
+      defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env, stderr: 'pipe' };
+    }
+  }
+
+  return { defs, oauthCtx };
 }
 
 /**
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
  */
-export function createMcpManager(projectDir: string, extraServers?: Record<string, McpServerConfig>): McpManager {
+export function createMcpManager(
+  projectDir: string,
+  extraServers?: Record<string, McpServerConfig>,
+  dataDir?: string,
+): McpManager {
   /** Merge programmatic servers into a base config (highest priority). */
   const applyExtraServers = (base: McpConfig): McpConfig => {
     if (!extraServers || Object.keys(extraServers).length === 0) return base;
     return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
   };
 
+  const resolvedDataDir = dataDir ?? join(projectDir, '.mastracode');
   let config = applyExtraServers(loadMcpConfig(projectDir));
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
@@ -105,28 +256,10 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
     });
   }
 
-  function buildServerDefs(servers: Record<string, McpServerConfig>): Record<string, MastraMCPServerDefinition> {
-    const defs: Record<string, MastraMCPServerDefinition> = {};
-    for (const [name, cfg] of Object.entries(servers)) {
-      if ('url' in cfg) {
-        const httpCfg = cfg as McpHttpServerConfig;
-        defs[name] = {
-          url: new URL(httpCfg.url),
-          requestInit: httpCfg.headers ? { headers: httpCfg.headers } : undefined,
-        };
-      } else {
-        defs[name] = { command: cfg.command, args: cfg.args, env: cfg.env, stderr: 'pipe' };
-      }
-    }
-    return defs;
-  }
-
-  async function connectAndCollectTools(): Promise<void> {
-    const servers = config.mcpServers;
-    if (!servers || Object.keys(servers).length === 0) {
-      return;
-    }
-
+  async function tryConnect(
+    servers: Record<string, McpServerConfig>,
+    defs: Record<string, MastraMCPServerDefinition>,
+  ): Promise<void> {
     // Pre-populate statuses as "connecting" so callers can see in-progress state
     const serverNames = Object.keys(servers);
     for (const name of serverNames) {
@@ -142,12 +275,9 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
     client = new MCPClient({
       id: 'mastra-code-mcp',
-      servers: buildServerDefs(servers),
+      servers: defs,
       timeout: MASTRACODE_MCP_TIMEOUT_MS,
     });
-
-    // Use listToolsetsWithErrors() to get tools grouped by server name,
-    // plus per-server error messages for servers that failed to connect.
 
     try {
       const { toolsets, errors } = await client.listToolsetsWithErrors();
@@ -200,10 +330,59 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
           error: errMsg,
         });
       }
+
+      throw error;
     }
   }
 
-  async function disconnect(): Promise<void> {
+  async function connectAndCollectTools(): Promise<void> {
+    const servers = config.mcpServers;
+    if (!servers || Object.keys(servers).length === 0) {
+      return;
+    }
+
+    const { defs, oauthCtx } = await buildServerDefs(servers, resolvedDataDir);
+
+    try {
+      await tryConnect(servers, defs);
+    } catch {
+      // tryConnect sets statuses on failure — continue to check for auth redirect
+    }
+
+    if (!oauthCtx?.redirectTriggered) {
+      oauthCtx?.callbackServer.close();
+      return;
+    }
+
+    const code = await oauthCtx.callbackServer.waitForCode();
+    oauthCtx.callbackServer.close();
+
+    if (!code) return;
+
+    for (const [, def] of Object.entries(defs)) {
+      if (!def.authProvider) continue;
+      try {
+        await auth(def.authProvider, {
+          serverUrl: def.url as URL,
+          authorizationCode: code,
+        });
+      } catch {
+        // Token exchange failed — continue with others
+      }
+    }
+
+    await safeDisconnect();
+    serverStatuses = new Map();
+    tools = {};
+
+    try {
+      await tryConnect(servers, defs);
+    } catch {
+      // Retry failed — statuses already set by tryConnect
+    }
+  }
+
+  async function safeDisconnect(): Promise<void> {
     if (client) {
       try {
         await client.disconnect();
@@ -235,7 +414,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
     },
 
     async reload() {
-      await disconnect();
+      await safeDisconnect();
       config = applyExtraServers(loadMcpConfig(projectDir));
       tools = {};
       serverStatuses = new Map();
@@ -354,7 +533,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
       }
     },
 
-    disconnect,
+    disconnect: safeDisconnect,
 
     getTools() {
       return { ...tools };

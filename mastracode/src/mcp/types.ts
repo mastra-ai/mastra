@@ -23,8 +23,10 @@ export interface McpStdioServerConfig {
 export interface McpHttpServerConfig {
   /** The URL of the remote MCP server endpoint */
   url: string;
-  /** Optional HTTP headers (e.g. for authentication) */
+  /** Static HTTP headers sent with every request */
   headers?: Record<string, string>;
+  /** Enable OAuth authentication for this server */
+  auth?: 'oauth';
 }
 
 /**

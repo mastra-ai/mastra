@@ -1,19 +1,18 @@
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadMcpConfig } from '../config.js';
 import { createMcpManager } from '../manager.js';
 import type { McpConfig, McpHttpServerConfig, McpStdioServerConfig } from '../types.js';
 
-// Mock @mastra/mcp before importing manager
 vi.mock('@mastra/mcp', () => {
-  const MCPClient = vi.fn(function (this: any) {
-    // individual tests override listToolsets/disconnect via mockImplementation
-  });
-  return { MCPClient };
+  // individual tests override listToolsets/disconnect via mockImplementation
+  const MCPClient = vi.fn(function (this: any) {});
+  const MCPOAuthClientProvider = vi.fn();
+  const auth = vi.fn().mockResolvedValue('AUTHORIZED');
+  return { MCPClient, MCPOAuthClientProvider, auth };
 });
 
-// Mock config module to control what loadMcpConfig returns
 vi.mock('../config.js', async importOriginal => {
   const original = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -22,8 +21,15 @@ vi.mock('../config.js', async importOriginal => {
   };
 });
 
+vi.mock('../mcp-oauth-storage.js', () => {
+  return {
+    McpOAuthFileStorage: vi.fn(),
+  };
+});
+
 const mockedLoadMcpConfig = vi.mocked(loadMcpConfig);
 const MockedMCPClient = vi.mocked(MCPClient);
+const MockedMCPOAuthClientProvider = vi.mocked(MCPOAuthClientProvider);
 
 function setupConfig(config: McpConfig) {
   mockedLoadMcpConfig.mockReturnValue(config);
@@ -331,6 +337,156 @@ describe('createMcpManager', () => {
       expect(result.totalTools).toBe(1);
       // listToolsetsWithErrors should only have been called once (from init, not again from initInBackground)
       expect(mockListToolsetsWithErrors).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('OAuth auth wiring', () => {
+    it('passes authProvider when auth is "oauth"', async () => {
+      setupConfig({
+        mcpServers: {
+          remote: { url: 'https://mcp.example.com/mcp', auth: 'oauth' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const call = MockedMCPClient.mock.calls[0]![0]!;
+      const serverDef = call.servers['remote'] as any;
+      expect(serverDef.url).toBeInstanceOf(URL);
+      expect(serverDef.authProvider).toBeDefined();
+      expect(MockedMCPOAuthClientProvider).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not pass authProvider when auth is absent', async () => {
+      setupConfig({
+        mcpServers: {
+          remote: { url: 'https://mcp.example.com/mcp' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const call = MockedMCPClient.mock.calls[0]![0]!;
+      const serverDef = call.servers['remote'] as any;
+      expect(serverDef.authProvider).toBeUndefined();
+      expect(MockedMCPOAuthClientProvider).not.toHaveBeenCalled();
+    });
+
+    it('preserves static headers alongside authProvider', async () => {
+      setupConfig({
+        mcpServers: {
+          remote: {
+            url: 'https://mcp.example.com/mcp',
+            headers: { 'X-Custom': 'value' },
+            auth: 'oauth',
+          },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const call = MockedMCPClient.mock.calls[0]![0]!;
+      const serverDef = call.servers['remote'] as any;
+      expect(serverDef.authProvider).toBeDefined();
+      expect(serverDef.requestInit).toEqual({ headers: { 'X-Custom': 'value' } });
+    });
+
+    it('creates separate OAuth providers for each server', async () => {
+      setupConfig({
+        mcpServers: {
+          server1: { url: 'https://one.example.com/mcp', auth: 'oauth' },
+          server2: { url: 'https://two.example.com/mcp', auth: 'oauth' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { server1: {}, server2: {} }, errors: {} });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(MockedMCPOAuthClientProvider).toHaveBeenCalledTimes(2);
+    });
+
+    it('configures OAuth provider with correct client metadata', async () => {
+      setupConfig({
+        mcpServers: {
+          myserver: { url: 'https://mcp.example.com/mcp', auth: 'oauth' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { myserver: {} }, errors: {} });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const providerCall = MockedMCPOAuthClientProvider.mock.calls[0]![0]! as any;
+      expect(providerCall.clientMetadata.client_name).toBe('mastracode (myserver)');
+      expect(providerCall.clientMetadata.grant_types).toEqual(['authorization_code', 'refresh_token']);
+      expect(providerCall.clientMetadata.response_types).toEqual(['code']);
+      expect(providerCall.storage).toBeDefined();
+      expect(typeof providerCall.onRedirectToAuthorization).toBe('function');
+    });
+
+    it('uses a real callback port in redirect URL', async () => {
+      setupConfig({
+        mcpServers: {
+          remote: { url: 'https://mcp.example.com/mcp', auth: 'oauth' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const providerCall = MockedMCPOAuthClientProvider.mock.calls[0]![0]! as any;
+      expect(providerCall.redirectUrl).toMatch(/^http:\/\/localhost:\d+\/oauth\/callback$/);
+      expect(providerCall.clientMetadata.redirect_uris[0]).toBe(providerCall.redirectUrl);
+    });
+
+    it('does not start callback server for non-oauth servers', async () => {
+      setupConfig({
+        mcpServers: {
+          remote: { url: 'https://mcp.example.com/mcp' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(MockedMCPOAuthClientProvider).not.toHaveBeenCalled();
     });
   });
 

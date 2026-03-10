@@ -117,6 +117,7 @@ export function validateConfig(raw: unknown): McpConfig {
         url: e.url as string,
         headers:
           typeof e.headers === 'object' && e.headers !== null ? (e.headers as Record<string, string>) : undefined,
+        auth: e.auth === 'oauth' ? 'oauth' : undefined,
       };
     } else {
       skippedServers.push({ name, reason: classification.reason! });

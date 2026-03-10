@@ -86,6 +86,53 @@ describe('validateConfig', () => {
     });
   });
 
+  it('accepts http server entry with auth: "oauth"', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: { url: 'https://mcp.example.com/mcp', auth: 'oauth' },
+      },
+    });
+    const cfg = result.mcpServers!['remote'] as any;
+    expect(cfg.url).toBe('https://mcp.example.com/mcp');
+    expect(cfg.auth).toBe('oauth');
+  });
+
+  it('accepts http server entry with both headers and auth', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          headers: { 'X-Custom': 'static' },
+          auth: 'oauth',
+        },
+      },
+    });
+    const cfg = result.mcpServers!['remote'] as any;
+    expect(cfg.url).toBe('https://mcp.example.com/mcp');
+    expect(cfg.headers).toEqual({ 'X-Custom': 'static' });
+    expect(cfg.auth).toBe('oauth');
+  });
+
+  it('ignores non-oauth auth values', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: { url: 'https://mcp.example.com/mcp', auth: 'basic' },
+      },
+    });
+    const cfg = result.mcpServers!['remote'] as any;
+    expect(cfg.auth).toBeUndefined();
+  });
+
+  it('ignores non-string auth values', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: { url: 'https://mcp.example.com/mcp', auth: 123 },
+      },
+    });
+    const cfg = result.mcpServers!['remote'] as any;
+    expect(cfg.auth).toBeUndefined();
+  });
+
   it('skips invalid entries and collects reasons', () => {
     const result = validateConfig({
       mcpServers: {
