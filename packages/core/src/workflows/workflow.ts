@@ -49,6 +49,7 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
+import { forwardAgentStreamChunk } from './stream-utils';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -503,7 +504,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         });
       } else {
         for await (const chunk of stream) {
-          await writer.write(chunk as any);
+          await forwardAgentStreamChunk({ writer, chunk });
           if (chunk.type === 'tripwire') {
             tripwireChunk = chunk;
             break;
