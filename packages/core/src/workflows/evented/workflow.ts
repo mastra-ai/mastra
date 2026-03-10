@@ -30,7 +30,6 @@ import { Workflow, Run } from '../../workflows';
 import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
-import { forwardAgentStreamChunk, type StreamChunkWriter } from '../stream-utils';
 import type {
   SerializedStepFlowEntry,
   WorkflowConfig,
@@ -45,6 +44,8 @@ import type {
   StepMetadata,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { forwardAgentStreamChunk } from '../stream-utils';
+import type { StreamChunkWriter } from '../stream-utils';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';

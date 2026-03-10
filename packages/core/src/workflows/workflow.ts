@@ -40,7 +40,6 @@ import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
-import { forwardAgentStreamChunk } from './stream-utils';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -49,6 +48,7 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
+import { forwardAgentStreamChunk } from './stream-utils';
 import type {
   DefaultEngineType,
   DynamicMapping,
