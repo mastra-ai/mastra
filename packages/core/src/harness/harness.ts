@@ -1550,6 +1550,12 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
     response: { fullStream: AsyncIterable<any> },
     requestContext: RequestContext,
   ): Promise<{ message: HarnessMessage }> {
+    let deferredToolApproval:
+      | {
+          toolCallId: string;
+          decisionPromise: Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>;
+        }
+      | undefined;
     let currentMessage: HarnessMessage = {
       id: this.generateId(),
       role: 'assistant',
@@ -1692,42 +1698,35 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
           const policy = this.resolveToolApproval(toolName);
 
           if (policy === 'allow') {
-            const result = await this.handleToolApprove({ toolCallId, requestContext });
-            currentMessage = result.message;
-            return { message: currentMessage };
+            // Keep consuming the suspended source stream so workflow snapshot persistence
+            // finishes before we attempt to resume the run.
+            deferredToolApproval = {
+              toolCallId,
+              decisionPromise: Promise.resolve({ decision: 'approve', requestContext }),
+            };
+            break;
           }
 
           if (policy === 'deny') {
-            const result = await this.handleToolDecline({ toolCallId, requestContext });
-            currentMessage = result.message;
-            return { message: currentMessage };
+            deferredToolApproval = {
+              toolCallId,
+              decisionPromise: Promise.resolve({ decision: 'decline', requestContext }),
+            };
+            break;
           }
 
           this.pendingApprovalToolName = toolName;
           this.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
-          const approval = await new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
-            resolve => {
-              this.pendingApprovalResolve = resolve;
-            },
-          );
-          this.pendingApprovalToolName = null;
-
-          if (approval.decision === 'approve') {
-            const result = await this.handleToolApprove({
-              toolCallId,
-              requestContext: approval.requestContext ?? requestContext,
-            });
-            currentMessage = result.message;
-            return { message: currentMessage };
-          } else {
-            const result = await this.handleToolDecline({
-              toolCallId,
-              requestContext: approval.requestContext ?? requestContext,
-            });
-            currentMessage = result.message;
-            return { message: currentMessage };
-          }
+          deferredToolApproval = {
+            toolCallId,
+            decisionPromise: new Promise<{ decision: 'approve' | 'decline'; requestContext?: RequestContext }>(
+              resolve => {
+                this.pendingApprovalResolve = resolve;
+              },
+            ),
+          };
+          break;
         }
 
         case 'error': {
@@ -1962,6 +1961,27 @@ export class Harness<TState extends HarnessStateSchema = HarnessStateSchema> {
         default:
           break;
       }
+    }
+
+    if (deferredToolApproval) {
+      const approval = await deferredToolApproval.decisionPromise;
+      this.pendingApprovalToolName = null;
+
+      if (approval.decision === 'approve') {
+        const result = await this.handleToolApprove({
+          toolCallId: deferredToolApproval.toolCallId,
+          requestContext: approval.requestContext ?? requestContext,
+        });
+        currentMessage = result.message;
+        return { message: currentMessage };
+      }
+
+      const result = await this.handleToolDecline({
+        toolCallId: deferredToolApproval.toolCallId,
+        requestContext: approval.requestContext ?? requestContext,
+      });
+      currentMessage = result.message;
+      return { message: currentMessage };
     }
 
     this.emit({ type: 'message_end', message: currentMessage });
