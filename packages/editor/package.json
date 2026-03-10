@@ -71,7 +71,7 @@
   },
   "dependencies": {
     "@arcadeai/arcadejs": "^2.2.0",
-    "@composio/core": "^0.6.3",
+    "@composio/core": "^0.6.4",
     "@composio/mastra": "^0.6.3",
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*"

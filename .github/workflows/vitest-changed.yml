@@ -129,8 +129,7 @@ jobs:
       matrix:
         project:
           # Core packages
-          - packages/core
-          # - packages/*
+          - packages/*
           # # Stores (external API required)
           # - stores/*
           # # Voice packages
