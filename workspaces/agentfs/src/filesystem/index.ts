@@ -330,10 +330,10 @@ export class AgentFSFilesystem extends MastraFilesystem {
   async appendFile(path: string, content: FileContent): Promise<void> {
     this.assertWritable('appendFile');
     // AgentFS doesn't have native append — read + write (same pattern as S3Filesystem)
-    let existing = Buffer.alloc(0);
+    let existing: Buffer = Buffer.alloc(0);
     try {
       const current = await this.readFile(path);
-      existing = Buffer.isBuffer(current) ? current : Buffer.from(current);
+      existing = Buffer.isBuffer(current) ? Buffer.from(current) : Buffer.from(current);
     } catch (error) {
       if (error instanceof FileNotFoundError) {
         // File doesn't exist — start fresh
@@ -605,12 +605,7 @@ export class AgentFSFilesystem extends MastraFilesystem {
   /**
    * Recursively copy a directory tree.
    */
-  private async copyDirRecursive(
-    agent: AgentFS,
-    src: string,
-    dest: string,
-    options?: CopyOptions,
-  ): Promise<void> {
+  private async copyDirRecursive(agent: AgentFS, src: string, dest: string, options?: CopyOptions): Promise<void> {
     await this.mkdirRecursive(agent, dest);
 
     const entries = await agent.fs.readdirPlus(src);

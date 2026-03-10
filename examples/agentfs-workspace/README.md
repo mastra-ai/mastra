@@ -50,7 +50,7 @@ import { Agent } from '@mastra/core/agent';
 // Create a workspace backed by AgentFS
 const workspace = new Workspace({
   filesystem: new AgentFSFilesystem({
-    agentId: 'my-agent',  // stores at .agentfs/my-agent.db
+    agentId: 'my-agent', // stores at .agentfs/my-agent.db
   }),
 });
 
@@ -69,14 +69,14 @@ const agent = new Agent({
 
 ### AgentFSFilesystem options
 
-| Option | Description |
-|--------|-------------|
-| `agentId` | Agent ID — creates database at `.agentfs/<agentId>.db` |
-| `path` | Explicit database file path (alternative to `agentId`) |
-| `agent` | Pre-opened `AgentFS` instance (caller manages lifecycle) |
-| `readOnly` | Block write operations (default: `false`) |
-| `displayName` | Human-friendly name for the UI |
-| `icon` | Icon identifier (default: `'database'`) |
+| Option        | Description                                              |
+| ------------- | -------------------------------------------------------- |
+| `agentId`     | Agent ID — creates database at `.agentfs/<agentId>.db`   |
+| `path`        | Explicit database file path (alternative to `agentId`)   |
+| `agent`       | Pre-opened `AgentFS` instance (caller manages lifecycle) |
+| `readOnly`    | Block write operations (default: `false`)                |
+| `displayName` | Human-friendly name for the UI                           |
+| `icon`        | Icon identifier (default: `'database'`)                  |
 
 You must provide at least one of `agentId`, `path`, or `agent`.
 
