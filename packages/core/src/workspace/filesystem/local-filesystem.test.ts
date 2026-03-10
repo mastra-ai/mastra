@@ -585,6 +585,30 @@ describe('LocalFilesystem', () => {
         });
         expect(path.isAbsolute(fsWithAllowed.allowedPaths[0])).toBe(true);
       });
+
+      it('should resolve relative allowedPaths against basePath, not cwd', () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: ['./sibling'],
+        });
+        expect(fsWithAllowed.allowedPaths[0]).toBe(path.resolve(tempDir, 'sibling'));
+      });
+
+      it('should resolve ../ allowedPaths against basePath', () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: ['../outside'],
+        });
+        expect(fsWithAllowed.allowedPaths[0]).toBe(path.resolve(tempDir, '..', 'outside'));
+      });
+
+      it('should preserve absolute allowedPaths as-is', () => {
+        const fsWithAllowed = new LocalFilesystem({
+          basePath: tempDir,
+          allowedPaths: [outsideDir],
+        });
+        expect(fsWithAllowed.allowedPaths[0]).toBe(outsideDir);
+      });
     });
 
     describe('setAllowedPaths', () => {
@@ -611,6 +635,11 @@ describe('LocalFilesystem', () => {
       it('should resolve paths to absolute', () => {
         localFs.setAllowedPaths(['./foo']);
         expect(path.isAbsolute(localFs.allowedPaths[0])).toBe(true);
+      });
+
+      it('should resolve relative paths against basePath, not cwd', () => {
+        localFs.setAllowedPaths(['../sibling']);
+        expect(localFs.allowedPaths[0]).toBe(path.resolve(tempDir, '..', 'sibling'));
       });
     });
 
@@ -783,6 +812,98 @@ describe('LocalFilesystem', () => {
 
         const entries = await fsWithAllowed.readdir(outsideDir);
         expect(entries.some(e => e.name === 'external.txt')).toBe(true);
+      });
+    });
+
+    describe('relative allowedPaths with ../', () => {
+      let parentDir: string;
+      let childBase: string;
+      let siblingDir: string;
+
+      beforeEach(async () => {
+        // Create: parentDir/child (basePath) and parentDir/sibling (allowed via ../)
+        parentDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-fs-relative-'));
+        childBase = path.join(parentDir, 'child');
+        siblingDir = path.join(parentDir, 'sibling');
+        await fs.mkdir(childBase, { recursive: true });
+        await fs.mkdir(siblingDir, { recursive: true });
+        await fs.writeFile(path.join(siblingDir, 'sibling.txt'), 'sibling content');
+      });
+
+      afterEach(async () => {
+        try {
+          await fs.rm(parentDir, { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
+
+      it('should allow reading files from a ../ relative allowedPath', async () => {
+        const fsWithRelativeAllowed = new LocalFilesystem({
+          basePath: childBase,
+          contained: true,
+          allowedPaths: ['../sibling'],
+        });
+
+        const content = await fsWithRelativeAllowed.readFile(path.join(siblingDir, 'sibling.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('sibling content');
+      });
+
+      it('should allow exists() on a ../ relative allowedPath', async () => {
+        const fsWithRelativeAllowed = new LocalFilesystem({
+          basePath: childBase,
+          contained: true,
+          allowedPaths: ['../sibling'],
+        });
+
+        expect(await fsWithRelativeAllowed.exists(path.join(siblingDir, 'sibling.txt'))).toBe(true);
+      });
+
+      it('should block access to paths outside both basePath and relative allowedPaths', async () => {
+        const fsWithRelativeAllowed = new LocalFilesystem({
+          basePath: childBase,
+          contained: true,
+          allowedPaths: ['../sibling'],
+        });
+
+        await expect(fsWithRelativeAllowed.readFile('/etc/passwd')).rejects.toThrow(PermissionError);
+      });
+
+      it('should allow exists() on a non-existent path under a non-existent allowedPath', async () => {
+        // This reproduces the bug where assertPathContained skipped non-existent
+        // allowedPaths from rootReals, causing PermissionError even though
+        // _isWithinAnyRoot passed.
+        const nonExistentAllowed = path.join(parentDir, 'not-yet-created');
+        const fsWithNonExistent = new LocalFilesystem({
+          basePath: childBase,
+          contained: true,
+          allowedPaths: [nonExistentAllowed],
+        });
+
+        // Should not throw PermissionError — the path doesn't exist but containment is valid
+        const result = await fsWithNonExistent.exists(path.join(nonExistentAllowed, 'some-file.txt'));
+        expect(result).toBe(false);
+      });
+
+      it('should allow setAllowedPaths with ../ to grant access', async () => {
+        const dynamicFs = new LocalFilesystem({
+          basePath: childBase,
+          contained: true,
+        });
+
+        // Initially blocked
+        await expect(dynamicFs.readFile(path.join(siblingDir, 'sibling.txt'))).rejects.toThrow(PermissionError);
+
+        // Add via relative ../
+        dynamicFs.setAllowedPaths(['../sibling']);
+
+        // Now accessible
+        const content = await dynamicFs.readFile(path.join(siblingDir, 'sibling.txt'), {
+          encoding: 'utf-8',
+        });
+        expect(content).toBe('sibling content');
       });
     });
 

@@ -33,7 +33,7 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveWorkspacePath } from './fs-utils';
+import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveToBasePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 import type { FilesystemMountConfig } from './mount';
@@ -195,7 +195,7 @@ export class LocalFilesystem extends MastraFilesystem {
    */
   setAllowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
     const newPaths = typeof pathsOrUpdater === 'function' ? pathsOrUpdater(this._allowedPaths) : pathsOrUpdater;
-    this._allowedPaths = newPaths.map(p => nodePath.resolve(expandTilde(p)));
+    this._allowedPaths = newPaths.map(p => resolveToBasePath(this._basePath, p));
   }
 
   constructor(options: LocalFilesystemOptions) {
@@ -204,7 +204,7 @@ export class LocalFilesystem extends MastraFilesystem {
     this._basePath = nodePath.resolve(expandTilde(options.basePath));
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
-    this._allowedPaths = (options.allowedPaths ?? []).map(p => nodePath.resolve(expandTilde(p)));
+    this._allowedPaths = (options.allowedPaths ?? []).map(p => resolveToBasePath(this._basePath, p));
     this._instructionsOverride = options.instructions;
   }
 
@@ -238,18 +238,7 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private resolvePath(inputPath: string): string {
-    let absolutePath: string;
-    inputPath = expandTilde(inputPath);
-
-    if (nodePath.isAbsolute(inputPath)) {
-      // Absolute paths are always treated as real filesystem paths.
-      // The containment check below will throw PermissionError if
-      // the path is outside basePath and allowedPaths.
-      absolutePath = nodePath.normalize(inputPath);
-    } else {
-      // Relative paths are resolved against basePath
-      absolutePath = resolveWorkspacePath(this._basePath, inputPath);
-    }
+    const absolutePath = resolveToBasePath(this._basePath, inputPath);
 
     if (this._contained) {
       if (!this._isWithinAnyRoot(absolutePath)) {
@@ -291,49 +280,24 @@ export class LocalFilesystem extends MastraFilesystem {
   private async assertPathContained(absolutePath: string): Promise<void> {
     if (!this._contained) return;
 
-    // Resolve real paths for all roots (basePath + allowedPaths)
-    const rootReals: string[] = [];
-    for (const root of [this._basePath, ...this._allowedPaths]) {
-      try {
-        rootReals.push(await fs.realpath(root));
-      } catch (error: unknown) {
-        if (isEnoentError(error)) {
-          // Root doesn't exist yet — skip (operations will fail naturally)
-          continue;
-        }
-        throw error;
-      }
-    }
-
-    if (rootReals.length === 0) {
-      throw new DirectoryNotFoundError(this._basePath);
-    }
-
+    // Resolve symlinks for the target path. If it doesn't exist,
+    // there are no symlinks to escape through — nothing to check.
     let targetReal: string;
     try {
       targetReal = await fs.realpath(absolutePath);
     } catch (error: unknown) {
-      // If path doesn't exist, walk up to find an existing parent
-      if (isEnoentError(error)) {
-        let parentPath = absolutePath;
-        while (true) {
-          const nextParent = nodePath.dirname(parentPath);
-          if (nextParent === parentPath) {
-            // Reached filesystem root without finding existing directory
-            throw new DirectoryNotFoundError(absolutePath);
-          }
-          parentPath = nextParent;
-          try {
-            targetReal = await fs.realpath(parentPath);
-            break;
-          } catch (parentError: unknown) {
-            if (!isEnoentError(parentError)) {
-              throw parentError;
-            }
-            // Continue walking up
-          }
-        }
-      } else {
+      if (isEnoentError(error)) return; // path doesn't exist yet — safe
+      throw error;
+    }
+
+    // Resolve real paths for roots, skipping any that don't exist
+    const roots = [this._basePath, ...this._allowedPaths];
+    const rootReals: string[] = [];
+    for (const root of roots) {
+      try {
+        rootReals.push(await fs.realpath(root));
+      } catch (error: unknown) {
+        if (isEnoentError(error)) continue;
         throw error;
       }
     }
