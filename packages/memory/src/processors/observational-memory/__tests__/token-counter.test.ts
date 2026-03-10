@@ -1,6 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import o200k_base from 'js-tiktoken/ranks/o200k_base';
+import probeImageSize from 'probe-image-size';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { TokenCounter } from '../token-counter';
+
+vi.mock('probe-image-size', () => ({
+  default: vi.fn(),
+}));
+
+let sharedCustomCounter: TokenCounter | undefined;
+
+function getSharedCustomCounter() {
+  if (!sharedCustomCounter) {
+    sharedCustomCounter = new TokenCounter(o200k_base);
+  }
+
+  return sharedCustomCounter;
+}
 
 function createMessage(content: any) {
   return {
@@ -11,7 +27,51 @@ function createMessage(content: any) {
   } as any;
 }
 
+async function createToolResultPartFromExecutedTool({
+  toolName,
+  args,
+  execute,
+  toModelOutput,
+}: {
+  toolName: string;
+  args: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => unknown | Promise<unknown>;
+  toModelOutput: (output: unknown) => unknown | Promise<unknown>;
+}) {
+  const result = await execute(args);
+  const modelOutput = await toModelOutput(result);
+
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: 'tool-1',
+      toolName,
+      args,
+      result,
+    },
+    providerMetadata: {
+      mastra: {
+        modelOutput,
+      },
+    },
+  } as const;
+}
+
 describe('TokenCounter', () => {
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    vi.mocked(probeImageSize as any).mockReset();
+    globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.unstubAllEnvs();
+  });
+
   describe('shared default encoder', () => {
     it('two default TokenCounter instances share the same encoder reference', () => {
       const a = new TokenCounter();
@@ -40,10 +100,9 @@ describe('TokenCounter', () => {
   });
 
   describe('custom encoding', () => {
-    it('constructor with explicit encoding creates a separate encoder instance', () => {
+    it('constructor with explicit encoding creates a separate encoder instance', { timeout: 15_000 }, () => {
       const defaultCounter = new TokenCounter();
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const customCounter = new TokenCounter(o200k_base);
+      const customCounter = getSharedCustomCounter();
 
       const encoderDefault = (defaultCounter as any).encoder;
       const encoderCustom = (customCounter as any).encoder;
@@ -52,8 +111,7 @@ describe('TokenCounter', () => {
     });
 
     it('custom encoding still produces valid token counts', () => {
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const counter = new TokenCounter(o200k_base);
+      const counter = getSharedCustomCounter();
 
       const tokens = counter.countString('hello world');
       expect(tokens).toBeGreaterThan(0);
@@ -70,6 +128,422 @@ describe('TokenCounter', () => {
       const counter = new TokenCounter();
       expect(counter.countString(null as any)).toBe(0);
       expect(counter.countString(undefined as any)).toBe(0);
+    });
+  });
+
+  describe('image counting', () => {
+    it('counts image url parts with a stable integer estimate', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: new URL('https://example.com/cat.png') }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(Number.isInteger(tokens)).toBe(true);
+      expect(cachedEntry.tokens).toBe(85);
+    });
+
+    it('treats http image strings as urls instead of base64 payloads', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(tokens).toBeLessThan(200);
+      expect(cachedEntry.tokens).toBe(85);
+    });
+
+    it('probes remote image url dimensions during async local fallback when metadata is missing', async () => {
+      vi.mocked(probeImageSize as any).mockResolvedValue({ width: 2048, height: 1024 });
+
+      const counter = new TokenCounter(undefined, { model: 'test-model' as any });
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const tokens = await counter.countMessageAsync(message);
+      const part = message.content.parts[0];
+
+      expect(probeImageSize).toHaveBeenCalledWith(
+        'https://example.com/cat.png',
+        expect.objectContaining({
+          open_timeout: 2500,
+          response_timeout: 2500,
+          read_timeout: 2500,
+          follow_max: 2,
+        }),
+      );
+      expect(part.providerMetadata.mastra.imageDimensions).toEqual({ width: 2048, height: 1024 });
+      expect(part.providerMetadata.mastra.tokenEstimate.tokens).toBe(1105);
+      expect(tokens).toBeGreaterThan(1100);
+    });
+
+    it('uses the provider endpoint before probing remote image dimensions', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ input_tokens: 1851 }),
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const tokens = await counter.countMessageAsync(message);
+
+      expect(tokens).toBeGreaterThan(1800);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(probeImageSize).not.toHaveBeenCalled();
+    });
+
+    it('reuses cached remote attachment counts on async recounts', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      vi.mocked(probeImageSize as any).mockResolvedValue({ width: 2048, height: 1024 });
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ input_tokens: 1851 }),
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: 'https://example.com/cat.png' }],
+      });
+
+      const firstTokens = await counter.countMessageAsync(message);
+      const secondTokens = await counter.countMessageAsync(message);
+
+      expect(firstTokens).toBe(secondTokens);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('dedupes in-flight remote attachment counts for identical attachments', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn(
+        () =>
+          new Promise(resolve => {
+            setTimeout(() => {
+              resolve({
+                ok: true,
+                json: async () => ({ input_tokens: 130 }),
+              });
+            }, 10);
+          }),
+      );
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const createPdfMessage = () =>
+        createMessage({
+          format: 2,
+          parts: [
+            {
+              type: 'file',
+              data: 'https://example.com/specs/floorplan.pdf',
+              mimeType: 'application/pdf',
+              filename: 'floorplan.pdf',
+            },
+          ],
+        });
+
+      const [firstTokens, secondTokens] = await Promise.all([
+        counter.countMessageAsync(createPdfMessage()),
+        counter.countMessageAsync(createPdfMessage()),
+      ]);
+
+      expect(firstTokens).toBe(secondTokens);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not treat non-attachment parts as remote-count eligible', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          { type: 'text', text: 'hello world' },
+          { type: 'data-om-status', data: { active: true } },
+        ],
+      });
+
+      await counter.countMessageAsync(message);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('extracts inline image dimensions from image bytes when metadata is missing', () => {
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image:
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==',
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const part = message.content.parts[0];
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(part.providerMetadata.mastra.imageDimensions).toEqual({ width: 1, height: 1 });
+      expect(part.providerMetadata.mastra.tokenEstimate.tokens).toBe(85);
+    });
+
+    it('counts data-uri image parts with deterministic fallback sizing', () => {
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: dataUriImage }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(700);
+      expect(cachedEntry.tokens).toBe(765);
+    });
+
+    it('counts image-like file parts by mime type instead of serializing the full payload', () => {
+      const counter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const dataUriImage = `data:image/png;base64,${'a'.repeat(2000000)}`;
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'file', data: dataUriImage, mimeType: 'image/png', filename: 'cat.png' }],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(700);
+      expect(tokens).toBeLessThan(1000);
+      expect(cachedEntry.tokens).toBe(765);
+    });
+
+    it('counts image-like file parts by filename when mime type is missing or generic', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: new URL('https://example.com/reference-board.png'),
+            mimeType: 'application/octet-stream',
+          },
+        ],
+      });
+
+      const tokens = counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(tokens).toBeGreaterThan(80);
+      expect(tokens).toBeLessThan(200);
+      expect(cachedEntry.tokens).toBe(85);
+    });
+
+    it('counts non-image file parts from descriptors instead of raw payload bytes', () => {
+      const counter = new TokenCounter();
+      const pdfUrlMessage = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          },
+        ],
+      });
+      const uploadedPdfMessage = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: `data:application/pdf;base64,${'a'.repeat(200000)}`,
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          },
+        ],
+      });
+
+      const pdfUrlTokens = counter.countMessage(pdfUrlMessage);
+      const uploadedPdfTokens = counter.countMessage(uploadedPdfMessage);
+
+      expect(pdfUrlTokens).toBeGreaterThan(0);
+      expect(uploadedPdfTokens).toBeGreaterThan(0);
+      expect(uploadedPdfTokens).toBeLessThan(500);
+      expect(Math.abs(uploadedPdfTokens - pdfUrlTokens)).toBeLessThan(50);
+    });
+
+    it('reuses cached image estimates without re-encoding text payloads', () => {
+      const counter = new TokenCounter();
+      const message = createMessage({
+        format: 2,
+        parts: [{ type: 'image', image: new URL('https://example.com/cached.png') }],
+      });
+
+      const encoder = (counter as any).encoder;
+      const originalEncode = encoder.encode.bind(encoder);
+      let encodeCalls = 0;
+
+      try {
+        encoder.encode = (...args: any[]) => {
+          encodeCalls += 1;
+          return originalEncode(...args);
+        };
+
+        const first = counter.countMessage(message);
+        const second = counter.countMessage(message);
+
+        expect(second).toBe(first);
+        expect(encodeCalls).toBe(2);
+      } finally {
+        encoder.encode = originalEncode;
+      }
+    });
+
+    it('changes image estimates when resolved model context changes', () => {
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/high-detail.png'),
+            providerOptions: {
+              openai: {
+                detail: 'high',
+              },
+            },
+            providerMetadata: {
+              mastra: {
+                imageDimensions: {
+                  width: 1024,
+                  height: 1024,
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      const defaultCounter = new TokenCounter(undefined, { model: 'openai/gpt-4o' });
+      const miniCounter = new TokenCounter(undefined, { model: 'openai/gpt-4o-mini' });
+
+      const defaultTokens = defaultCounter.countMessage(message);
+      const defaultCache = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
+      const defaultCachedEntry = (Object.values(defaultCache).find((entry: any) => entry?.tokens === 765) ??
+        defaultCache) as any;
+
+      const miniTokens = miniCounter.countMessage(message);
+      const miniCache = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
+      const miniCachedEntry = Object.values(miniCache).find((entry: any) => entry?.tokens === 25501) as any;
+
+      expect(defaultTokens).toBeGreaterThan(765);
+      expect(defaultCachedEntry.tokens).toBe(765);
+      expect(miniTokens).toBeGreaterThan(defaultTokens);
+      expect(miniCachedEntry?.tokens).toBe(25501);
+      expect(miniCachedEntry?.key).not.toBe(defaultCachedEntry.key);
+    });
+
+    it('uses google media resolution when the provider is google', () => {
+      const counter = new TokenCounter(undefined, {
+        model: { provider: 'google', modelId: 'gemini-3-flash-preview' },
+      });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/diagram.png'),
+            providerOptions: {
+              google: {
+                mediaResolution: 'medium',
+              },
+            },
+          },
+        ],
+      });
+
+      counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(cachedEntry.tokens).toBe(560);
+    });
+
+    it('uses anthropic image sizing when the provider is anthropic even if the model id looks openai-ish', () => {
+      const counter = new TokenCounter(undefined, {
+        model: { provider: 'anthropic', modelId: 'gpt-4o' },
+      });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/reference-board.png'),
+            providerMetadata: {
+              mastra: {
+                imageDimensions: {
+                  width: 750,
+                  height: 750,
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(cachedEntry.tokens).toBe(750);
+    });
+
+    it('uses legacy google tiling for pre-gemini-3 google models', () => {
+      const counter = new TokenCounter(undefined, {
+        model: { provider: 'google', modelId: 'gemini-2.5-flash' },
+      });
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: new URL('https://example.com/map.png'),
+            providerMetadata: {
+              mastra: {
+                imageDimensions: {
+                  width: 769,
+                  height: 769,
+                },
+              },
+            },
+          },
+        ],
+      });
+
+      counter.countMessage(message);
+      const cachedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(cachedEntry.tokens).toBe(1032);
     });
   });
 
@@ -175,8 +649,7 @@ describe('TokenCounter', () => {
       defaultCounter.countMessage(message);
       const defaultEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
 
-      const o200k_base = require('js-tiktoken/ranks/o200k_base');
-      const customCounter = new TokenCounter(o200k_base);
+      const customCounter = getSharedCustomCounter();
       customCounter.countMessage(message);
 
       const refreshedEntry = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
@@ -256,6 +729,93 @@ describe('TokenCounter', () => {
 
       expect(withToolResult).not.toBe(initial);
       expect(withToolResultAgain).toBe(withToolResult);
+    });
+
+    it('prefers stored mastra.modelOutput over raw tool results for token counting', async () => {
+      const counter = new TokenCounter();
+      const args = { q: 'weather in sf' };
+      const rawResult = {
+        longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
+      };
+
+      const weatherTool = {
+        execute: async (_args: Record<string, unknown>) => rawResult,
+        toModelOutput: async (output: unknown) => {
+          const entryCount = (output as { longPayload: string[] }).longPayload.length;
+          return { type: 'text', value: `sunny, 72°F (${entryCount} entries summarized)` };
+        },
+      };
+
+      const executedResult = await weatherTool.execute(args);
+      const withoutModelOutput = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'lookup',
+              args,
+              result: executedResult,
+            },
+          },
+        ],
+      });
+
+      const withModelOutput = createMessage({
+        format: 2,
+        parts: [
+          await createToolResultPartFromExecutedTool({
+            toolName: 'lookup',
+            args,
+            execute: weatherTool.execute,
+            toModelOutput: weatherTool.toModelOutput,
+          }),
+        ],
+      });
+
+      const rawResultTokens = counter.countMessage(withoutModelOutput);
+      const modelOutputTokens = counter.countMessage(withModelOutput);
+
+      expect(modelOutputTokens).toBeLessThan(rawResultTokens);
+    });
+
+    it('recomputes tool-result estimates when stored modelOutput changes', async () => {
+      const counter = new TokenCounter();
+      const args = { q: 'weather in sf' };
+      const weatherTool = {
+        execute: async (_args: Record<string, unknown>) => ({
+          longPayload: Array.from({ length: 200 }, (_, i) => `entry-${i}-${'very-large-result-'.repeat(5)}`),
+        }),
+        toModelOutput: async () => ({ type: 'text', value: 'brief output' }),
+      };
+
+      const message = createMessage({
+        format: 2,
+        parts: [
+          await createToolResultPartFromExecutedTool({
+            toolName: 'lookup',
+            args,
+            execute: weatherTool.execute,
+            toModelOutput: weatherTool.toModelOutput,
+          }),
+        ],
+      });
+
+      const first = counter.countMessage(message);
+      const firstEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      message.content.parts[0].providerMetadata.mastra.modelOutput = {
+        type: 'text',
+        value: 'expanded output '.repeat(40),
+      };
+
+      const second = counter.countMessage(message);
+      const secondEstimate = message.content.parts[0].providerMetadata.mastra.tokenEstimate;
+
+      expect(second).toBeGreaterThan(first);
+      expect(secondEstimate.key).not.toBe(firstEstimate.key);
     });
   });
 

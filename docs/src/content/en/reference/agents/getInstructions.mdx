@@ -19,28 +19,27 @@ await agent.getInstructions()
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "{ requestContext?: RequestContext }",
-isOptional: true,
-defaultValue: "{}",
-description: "Optional configuration object containing request context.",
-properties: [
-{
-type: "{ requestContext?: RequestContext }",
-parameters: [
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "undefined",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-],
-},
-],
-},
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'undefined',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -48,12 +47,12 @@ description:
 
 <PropertiesTable
   content={[
-{
-name: "instructions",
-type: "SystemMessage | Promise<SystemMessage>",
-description:
-"The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.",
-},
+  {
+    name: 'instructions',
+    type: 'SystemMessage | Promise<SystemMessage>',
+    description:
+      'The instructions configured for the agent. SystemMessage can be: string | string[] | CoreSystemMessage | CoreSystemMessage[] | SystemModelMessage | SystemModelMessage[]. Returns either directly or as a promise that resolves to the instructions.',
+  },
 ]}
 />
 

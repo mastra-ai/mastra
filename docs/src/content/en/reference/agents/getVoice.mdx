@@ -19,28 +19,27 @@ await agent.getVoice()
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "{ requestContext?: RequestContext }",
-isOptional: true,
-defaultValue: "{}",
-description: "Optional configuration object containing request context.",
-properties: [
-{
-type: "{ requestContext?: RequestContext }",
-parameters: [
-{
-name: "requestContext",
-type: "RequestContext",
-isOptional: true,
-defaultValue: "new RequestContext()",
-description:
-"Request Context for dependency injection and contextual information.",
-},
-],
-},
-],
-},
+  {
+    name: 'options',
+    type: '{ requestContext?: RequestContext }',
+    isOptional: true,
+    defaultValue: '{}',
+    description: 'Optional configuration object containing request context.',
+    properties: [
+      {
+        type: '{ requestContext?: RequestContext }',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            defaultValue: 'new RequestContext()',
+            description: 'Request Context for dependency injection and contextual information.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -48,12 +47,12 @@ description:
 
 <PropertiesTable
   content={[
-{
-name: "voice",
-type: "Promise<MastraVoice>",
-description:
-"A promise that resolves to the voice provider configured for the agent, or a default voice provider if none was configured.",
-},
+  {
+    name: 'voice',
+    type: 'Promise<MastraVoice>',
+    description:
+      'A promise that resolves to the voice provider configured for the agent, or a default voice provider if none was configured.',
+  },
 ]}
 />
 

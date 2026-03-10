@@ -35,39 +35,36 @@ const storage = new MongoDBStore({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this storage instance.",
-isOptional: false,
-},
-{
-name: "uri",
-type: "string",
-description:
-"MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)",
-isOptional: false,
-},
-{
-name: "url",
-type: "string",
-description:
-"Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).",
-isOptional: true,
-},
-{
-name: "dbName",
-type: "string",
-description: "The name of the database you want the storage to use.",
-isOptional: false,
-},
-{
-name: "options",
-type: "MongoClientOptions",
-description:
-"MongoDB client options for advanced configuration (SSL, connection pooling, etc.).",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'uri',
+    type: 'string',
+    description: 'MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)',
+    isOptional: false,
+  },
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).',
+    isOptional: true,
+  },
+  {
+    name: 'dbName',
+    type: 'string',
+    description: 'The name of the database you want the storage to use.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'MongoClientOptions',
+    description: 'MongoDB client options for advanced configuration (SSL, connection pooling, etc.).',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -156,7 +153,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called, collections won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
 :::
 
 ## Vector Search Capabilities

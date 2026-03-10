@@ -166,7 +166,7 @@ export const testWorkflow = createWorkflow({
 
 ### Cloning a workflow
 
-Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and appears as a distinct workflow in logs and observability tools.
+Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and shows up as a distinct workflow in logs and observability tools.
 
 ```typescript prettier:false {6} title="src/mastra/workflows/test-workflow.ts"
 import { cloneWorkflow } from "@mastra/core/workflows";
@@ -209,7 +209,7 @@ const testWorkflow = mastra.getWorkflow('testWorkflow')
 1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
 1. It provides full TypeScript type inference for workflow input and output schemas
 
-**Note:** Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it does not provide the same level of type inference.
+**Note:** Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it doesn't provide the same level of type inference.
 :::
 
 ## Running workflows
@@ -400,7 +400,7 @@ For type-safe request context schema validation, see [Schema Validation](/docs/s
 
 ## Testing with Studio
 
-Use [Studio](/docs/getting-started/studio) to easily run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
+Use [Studio](/docs/getting-started/studio) to run workflows with different inputs, visualize the execution lifecycle, see the inputs and outputs for each step, and inspect each part of the workflow in more detail.
 
 ## Related
 

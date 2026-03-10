@@ -15,7 +15,7 @@ The setup consists of three parts:
 - A GitHub Actions workflow that triggers on pull requests
 - A Node.js script that connects the workflow to the agent
 
-The finished action writes a description with summaries in English, Spanish, and Japanese, each marked with a flag emoji for easy scanning. For example:
+The finished action writes a description with summaries in English, Spanish, and Japanese, each marked with a flag emoji for quick scanning. For example:
 
 ```text
 🇬🇧 English
@@ -51,7 +51,7 @@ The workflow references this secret as `${{ secrets.OPENAI_API_KEY }}` and makes
 
 The PR description agent is responsible for turning a git diff into a clear, reviewer-friendly pull request description.
 
-This agent receives the raw diff from a pull request. It generates descriptions in the configured languages and formats the output using emoji flags so each language section is easy to scan in the PR.
+This agent receives the raw diff from a pull request. It generates descriptions in the configured languages and formats the output using emoji flags so each language section is quick to scan in the PR.
 
 ```ts title="src/mastra/agents/description-agent.ts"
 import { Agent } from '@mastra/core/agent'

@@ -24,6 +24,7 @@ export function ActivatedSkillsProvider({ children }: ActivatedSkillsProviderPro
 
   const activateSkill = useCallback((skillName: string) => {
     setActivatedSkills(prev => {
+      if (prev.has(skillName)) return prev;
       const next = new Set(prev);
       next.add(skillName);
       return next;
@@ -59,18 +60,14 @@ export function ActivatedSkillsProvider({ children }: ActivatedSkillsProviderPro
   );
 }
 
+const FALLBACK_CONTEXT: ActivatedSkillsContextValue = {
+  activatedSkills: new Set<string>(),
+  activateSkill: () => {},
+  deactivateSkill: () => {},
+  isSkillActivated: () => false,
+  clearActivatedSkills: () => {},
+};
+
 export function useActivatedSkills(): ActivatedSkillsContextValue {
-  const context = useContext(ActivatedSkillsContext);
-  if (!context) {
-    // Return a no-op implementation if context is not available
-    // This allows components to work without the provider
-    return {
-      activatedSkills: new Set(),
-      activateSkill: () => {},
-      deactivateSkill: () => {},
-      isSkillActivated: () => false,
-      clearActivatedSkills: () => {},
-    };
-  }
-  return context;
+  return useContext(ActivatedSkillsContext) ?? FALLBACK_CONTEXT;
 }

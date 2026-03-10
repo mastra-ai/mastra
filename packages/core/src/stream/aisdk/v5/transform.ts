@@ -11,6 +11,84 @@ import type { ChunkType, LanguageModelUsage } from '../../types';
 import { ChunkFrom } from '../../types';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from './file';
 
+/**
+ * Sanitizes tool-call input strings for safe JSON parsing.
+ *
+ * LLMs sometimes append internal tokens like `<|call|>`, `<|endoftext|>`, or `<|end|>`
+ * to otherwise valid JSON in streamed tool-call arguments, causing JSON.parse to fail.
+ *
+ * This function first attempts JSON.parse on the original input. If parsing succeeds,
+ * the original string is returned unchanged — this avoids corrupting valid JSON payloads
+ * that legitimately contain `<|...|>` patterns inside string values.
+ *
+ * Only when the original input is not valid JSON does the function fall back to stripping
+ * `<|...|>` token patterns and surrounding whitespace via regex.
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/13261
+ * @see https://github.com/mastra-ai/mastra/issues/13185
+ */
+export function sanitizeToolCallInput(input: string): string {
+  // Fast path: if input is already valid JSON, return unchanged to avoid
+  // corrupting <|...|> patterns that appear inside JSON string values.
+  try {
+    JSON.parse(input);
+    return input;
+  } catch {
+    // Input is not valid JSON — strip LLM-specific tokens and retry
+    return input.replace(/[\s]*<\|[^|]*\|>[\s]*/g, '').trim();
+  }
+}
+
+/**
+ * Attempts to repair common JSON malformations produced by LLM providers.
+ *
+ * Some LLM providers (e.g., Kimi/K2) occasionally generate malformed JSON for
+ * tool call arguments. This function applies a sequence of targeted fixes for
+ * the most common errors before giving up.
+ *
+ * Repairs applied (in order):
+ * 1. Missing quote before property name: `{"a":"b",c":"d"}` → `{"a":"b","c":"d"}`
+ * 2. Unquoted property names: `{command:"value"}` → `{"command":"value"}`
+ * 3. Single quotes → double quotes (only outside already-double-quoted strings)
+ * 4. Trailing commas: `{"a":1,}` → `{"a":1}`
+ *
+ * @returns The parsed object if repair succeeds, or null if the JSON is unrecoverable.
+ * @see https://github.com/mastra-ai/mastra/issues/11078
+ */
+export function tryRepairJson(input: string): Record<string, any> | null {
+  let repaired = input.trim();
+
+  // Fix 1: Missing quote before property name after comma or opening brace
+  // e.g. {"a":"b",c":"d"} → {"a":"b","c":"d"}
+  // Matches: ,c" or {c" where c is a word character sequence followed by "
+  // but NOT already preceded by a quote
+  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)"/g, (match, prefix, name) => {
+    // Check if the name is already quoted — if so, leave it alone
+    if (prefix.trimEnd().endsWith('"')) {
+      return match;
+    }
+    return `${prefix}"${name}"`;
+  });
+
+  // Fix 2: Unquoted property names (must come after Fix 1 since Fix 1 handles the partial-quote case)
+  // e.g. {command:"value"} → {"command":"value"}
+  repaired = repaired.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":');
+
+  // Fix 3: Single quotes → double quotes
+  // Simple approach: replace single quotes that act as JSON delimiters
+  repaired = repaired.replace(/'/g, '"');
+
+  // Fix 4: Trailing commas before closing braces/brackets
+  // e.g. {"a":1,} → {"a":1}
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+  try {
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
+}
+
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
@@ -134,14 +212,22 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       let toolCallInput: Record<string, any> | undefined = undefined;
 
       if (value.input) {
-        try {
-          toolCallInput = JSON.parse(value.input);
-        } catch (error) {
-          console.error('Error converting tool call input to JSON', {
-            error,
-            input: value.input,
-          });
-          toolCallInput = undefined;
+        const sanitized = sanitizeToolCallInput(value.input);
+        if (sanitized) {
+          try {
+            toolCallInput = JSON.parse(sanitized);
+          } catch {
+            // JSON.parse failed — attempt to repair common LLM JSON errors
+            const repaired = tryRepairJson(sanitized);
+            if (repaired) {
+              toolCallInput = repaired;
+            } else {
+              console.error('Error converting tool call input to JSON', {
+                input: value.input,
+              });
+              toolCallInput = undefined;
+            }
+          }
         }
       }
 

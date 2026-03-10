@@ -186,8 +186,7 @@
                     "input": {
                       "inputData": {
                         "input": "test input"
-                      },
-                      "suspendedToolRunId": ""
+                      }
                     },
                     "output": {
                       "result": {

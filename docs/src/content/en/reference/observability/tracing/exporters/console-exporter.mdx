@@ -20,31 +20,31 @@ new ConsoleExporter(config?: BaseExporterConfig)
 
 <PropertiesTable
   content={[
-{
-name: "config",
-type: "BaseExporterConfig",
-description: "Configuration options",
-isOptional: true,
-properties: [
-{
-type: "BaseExporterConfig",
-parameters: [
-{
-name: "logger",
-type: "IMastraLogger",
-description: "Logger instance (falls back to ConsoleLogger with INFO level)",
-isOptional: true,
-},
-{
-name: "logLevel",
-type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
-description: "Log level for the exporter (default: INFO)",
-isOptional: true,
-},
-],
-},
-],
-},
+  {
+    name: 'config',
+    type: 'BaseExporterConfig',
+    description: 'Configuration options',
+    isOptional: true,
+    properties: [
+      {
+        type: 'BaseExporterConfig',
+        parameters: [
+          {
+            name: 'logger',
+            type: 'IMastraLogger',
+            description: 'Logger instance (falls back to ConsoleLogger with INFO level)',
+            isOptional: true,
+          },
+          {
+            name: 'logLevel',
+            type: "LogLevel | 'debug' | 'info' | 'warn' | 'error'",
+            description: 'Log level for the exporter (default: INFO)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -66,12 +66,12 @@ Exports a tracing event to the console.
 
 <PropertiesTable
   props={[
-{
-name: "event",
-type: "TracingEvent",
-description: "The tracing event to export",
-required: true,
-},
+  {
+    name: 'event',
+    type: 'TracingEvent',
+    description: 'The tracing event to export',
+    required: true,
+  },
 ]}
 />
 

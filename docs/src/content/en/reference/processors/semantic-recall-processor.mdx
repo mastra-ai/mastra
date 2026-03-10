@@ -30,76 +30,78 @@ const processor = new SemanticRecall({
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "SemanticRecallOptions",
-description: "Configuration options for the semantic recall processor",
-isOptional: false,
-properties: [
-{
-type: "SemanticRecallOptions",
-parameters: [
-{
-name: "storage",
-type: "MemoryStorage",
-description: "Storage instance for retrieving messages",
-isOptional: false,
-},
-{
-name: "vector",
-type: "MastraVector",
-description: "Vector store for semantic search",
-isOptional: false,
-},
-{
-name: "embedder",
-type: "MastraEmbeddingModel<string>",
-description: "Embedder for generating query embeddings",
-isOptional: false,
-},
-{
-name: "topK",
-type: "number",
-description: "Number of most similar messages to retrieve",
-isOptional: true,
-default: "4",
-},
-{
-name: "messageRange",
-type: "number | { before: number; after: number }",
-description: "Number of context messages to include before/after each match. Can be a single number (same for both) or an object with separate values",
-isOptional: true,
-default: "1",
-},
-{
-name: "scope",
-type: "'thread' | 'resource'",
-description: "Scope of semantic search. 'thread' searches within the current thread only. 'resource' searches across all threads for the resource",
-isOptional: true,
-default: "'resource'",
-},
-{
-name: "threshold",
-type: "number",
-description: "Minimum similarity score threshold (0-1). Messages below this threshold are filtered out",
-isOptional: true,
-},
-{
-name: "indexName",
-type: "string",
-description: "Index name for the vector store. If not provided, auto-generated based on embedder model",
-isOptional: true,
-},
-{
-name: "logger",
-type: "IMastraLogger",
-description: "Optional logger instance for structured logging",
-isOptional: true,
-},
-],
-},
-],
-},
+  {
+    name: 'options',
+    type: 'SemanticRecallOptions',
+    description: 'Configuration options for the semantic recall processor',
+    isOptional: false,
+    properties: [
+      {
+        type: 'SemanticRecallOptions',
+        parameters: [
+          {
+            name: 'storage',
+            type: 'MemoryStorage',
+            description: 'Storage instance for retrieving messages',
+            isOptional: false,
+          },
+          {
+            name: 'vector',
+            type: 'MastraVector',
+            description: 'Vector store for semantic search',
+            isOptional: false,
+          },
+          {
+            name: 'embedder',
+            type: 'MastraEmbeddingModel<string>',
+            description: 'Embedder for generating query embeddings',
+            isOptional: false,
+          },
+          {
+            name: 'topK',
+            type: 'number',
+            description: 'Number of most similar messages to retrieve',
+            isOptional: true,
+            default: '4',
+          },
+          {
+            name: 'messageRange',
+            type: 'number | { before: number; after: number }',
+            description:
+              'Number of context messages to include before/after each match. Can be a single number (same for both) or an object with separate values',
+            isOptional: true,
+            default: '1',
+          },
+          {
+            name: 'scope',
+            type: "'thread' | 'resource'",
+            description:
+              "Scope of semantic search. 'thread' searches within the current thread only. 'resource' searches across all threads for the resource",
+            isOptional: true,
+            default: "'resource'",
+          },
+          {
+            name: 'threshold',
+            type: 'number',
+            description: 'Minimum similarity score threshold (0-1). Messages below this threshold are filtered out',
+            isOptional: true,
+          },
+          {
+            name: 'indexName',
+            type: 'string',
+            description: 'Index name for the vector store. If not provided, auto-generated based on embedder model',
+            isOptional: true,
+          },
+          {
+            name: 'logger',
+            type: 'IMastraLogger',
+            description: 'Optional logger instance for structured logging',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -107,30 +109,30 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Processor identifier set to 'semantic-recall'",
-isOptional: false,
-},
-{
-name: "name",
-type: "string",
-description: "Processor display name set to 'SemanticRecall'",
-isOptional: false,
-},
-{
-name: "processInput",
-type: "(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-description: "Performs semantic search on historical messages and adds relevant context to the message list",
-isOptional: false,
-},
-{
-name: "processOutputResult",
-type: "(args: { messages: MastraDBMessage[]; messageList?: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>",
-description: "Creates embeddings for new messages to enable future semantic search",
-isOptional: false,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'semantic-recall'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Processor display name set to 'SemanticRecall'",
+    isOptional: false,
+  },
+  {
+    name: 'processInput',
+    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>',
+    description: 'Performs semantic search on historical messages and adds relevant context to the message list',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputResult',
+    type: '(args: { messages: MastraDBMessage[]; messageList?: MessageList; abort: (reason?: string) => never; tracingContext?: TracingContext; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>',
+    description: 'Creates embeddings for new messages to enable future semantic search',
+    isOptional: false,
+  },
 ]}
 />
 

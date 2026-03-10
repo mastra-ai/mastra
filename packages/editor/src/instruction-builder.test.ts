@@ -258,4 +258,89 @@ describe('resolveInstructionBlocks', () => {
     const result = await resolveInstructionBlocks([], {}, { promptBlocksStorage: storage });
     expect(result).toBe('');
   });
+
+  // --- Preview mode tests (includeDrafts) ---
+
+  it('should include draft prompt_block_ref when includeDrafts is true', async () => {
+    await storage.create({
+      promptBlock: {
+        id: 'draft-block-preview',
+        name: 'Draft Preview',
+        content: 'Draft content for preview.',
+      },
+    });
+    // Note: block is NOT published — status is 'draft'
+
+    const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'draft-block-preview' }];
+    const result = await resolveInstructionBlocks(blocks, {}, { promptBlocksStorage: storage, includeDrafts: true });
+    expect(result).toBe('Draft content for preview.');
+  });
+
+  it('should still skip draft prompt_block_ref when includeDrafts is false', async () => {
+    await storage.create({
+      promptBlock: {
+        id: 'draft-block-no-preview',
+        name: 'Draft No Preview',
+        content: 'Draft content should not appear.',
+      },
+    });
+
+    const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'draft-block-no-preview' }];
+    const result = await resolveInstructionBlocks(blocks, {}, { promptBlocksStorage: storage, includeDrafts: false });
+    expect(result).toBe('');
+  });
+
+  it('should resolve draft prompt_block_ref with template variables in preview mode', async () => {
+    await storage.create({
+      promptBlock: {
+        id: 'draft-tmpl',
+        name: 'Draft template',
+        content: 'Hello {{name}}, this is a draft preview.',
+      },
+    });
+
+    const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'draft-tmpl' }];
+    const result = await resolveInstructionBlocks(
+      blocks,
+      { name: 'Alice' },
+      { promptBlocksStorage: storage, includeDrafts: true },
+    );
+    expect(result).toBe('Hello Alice, this is a draft preview.');
+  });
+
+  it('should mix published and draft refs in preview mode', async () => {
+    await storage.create({
+      promptBlock: {
+        id: 'published-block',
+        name: 'Published',
+        content: 'Published content.',
+      },
+    });
+    await storage.update({ id: 'published-block', status: 'published' });
+
+    await storage.create({
+      promptBlock: {
+        id: 'draft-block-mix',
+        name: 'Draft',
+        content: 'Draft content.',
+      },
+    });
+
+    const blocks: AgentInstructionBlock[] = [
+      { type: 'prompt_block_ref', id: 'published-block' },
+      { type: 'prompt_block_ref', id: 'draft-block-mix' },
+    ];
+
+    // Without preview: only published
+    const resultNormal = await resolveInstructionBlocks(blocks, {}, { promptBlocksStorage: storage });
+    expect(resultNormal).toBe('Published content.');
+
+    // With preview: both
+    const resultPreview = await resolveInstructionBlocks(
+      blocks,
+      {},
+      { promptBlocksStorage: storage, includeDrafts: true },
+    );
+    expect(resultPreview).toBe('Published content.\n\nDraft content.');
+  });
 });

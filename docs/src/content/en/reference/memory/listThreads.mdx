@@ -74,32 +74,31 @@ const result = await memory.listThreads({
 
 <PropertiesTable
   content={[
-{
-name: "filter",
-type: "{ resourceId?: string; metadata?: Record<string, unknown> }",
-description:
-"Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match)",
-isOptional: true,
-},
-{
-name: "page",
-type: "number",
-description: "Page number (0-indexed) to retrieve",
-isOptional: true,
-},
-{
-name: "perPage",
-type: "number | false",
-description: "Maximum number of threads to return per page, or false to fetch all",
-isOptional: true,
-},
-{
-name: "orderBy",
-type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
-description:
-"Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
-isOptional: true,
-},
+  {
+    name: 'filter',
+    type: '{ resourceId?: string; metadata?: Record<string, unknown> }',
+    description:
+      'Optional filter object. resourceId filters threads by resource ID. metadata filters threads by metadata key-value pairs (AND logic - all must match)',
+    isOptional: true,
+  },
+  {
+    name: 'page',
+    type: 'number',
+    description: 'Page number (0-indexed) to retrieve',
+    isOptional: true,
+  },
+  {
+    name: 'perPage',
+    type: 'number | false',
+    description: 'Maximum number of threads to return per page, or false to fetch all',
+    isOptional: true,
+  },
+  {
+    name: 'orderBy',
+    type: "{ field: 'createdAt' | 'updatedAt', direction: 'ASC' | 'DESC' }",
+    description: "Sort configuration with field and direction (defaults to { field: 'createdAt', direction: 'DESC' })",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -107,11 +106,11 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "result",
-type: "Promise<StorageListThreadsOutput>",
-description: "A promise that resolves to paginated thread results with metadata",
-},
+  {
+    name: 'result',
+    type: 'Promise<StorageListThreadsOutput>',
+    description: 'A promise that resolves to paginated thread results with metadata',
+  },
 ]}
 />
 
