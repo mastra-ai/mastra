@@ -115,11 +115,11 @@ const ModelsDevProviderSchema = z
     name: z.string(),
     url: z.string().optional(),
     npm: z.string().optional(),
-    models: z.record(ModelsDevModelSchema),
+    models: z.record(z.string(), ModelsDevModelSchema),
   })
   .passthrough();
 
-const ModelsDevResponseSchema = z.record(ModelsDevProviderSchema);
+const ModelsDevResponseSchema = z.record(z.string(), ModelsDevProviderSchema);
 
 type ModelsDevProvider = z.infer<typeof ModelsDevProviderSchema>;
 
@@ -1177,7 +1177,7 @@ async function generateDocs() {
   const modelsDevResponse = await fetch('https://models.dev/api.json');
   const modelsDevData = ModelsDevResponseSchema.parse(await modelsDevResponse.json());
   // Convert object to array of providers
-  const allModelsDevProviders: ModelsDevProvider[] = Object.values(modelsDevData);
+  const allModelsDevProviders = Object.values(modelsDevData) as ModelsDevProvider[];
 
   // Generate index page
   const indexContent = generateIndexPage(grouped);

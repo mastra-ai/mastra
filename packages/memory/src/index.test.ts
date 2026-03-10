@@ -128,6 +128,49 @@ describe('Memory', () => {
       expect(result).not.toBeNull();
     });
 
+    it('should not drop messages with empty parts array but valid content.content (issue #13824)', () => {
+      const message: MastraDBMessage = {
+        id: 'test-empty-parts',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'Hello from a real message',
+          experimental_attachments: [],
+          parts: [],
+        },
+      };
+
+      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
+
+      // The message has legitimate text in content.content — it must NOT be dropped
+      expect(result).not.toBeNull();
+      expect(result?.content.content).toBe('Hello from a real message');
+    });
+
+    it('should not drop assistant messages with empty parts array but valid content.content (issue #13824)', () => {
+      const message: MastraDBMessage = {
+        id: 'test-empty-parts-assistant',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          content: 'I am the assistant reply',
+          experimental_attachments: [],
+          parts: [],
+        },
+      };
+
+      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
+
+      expect(result).not.toBeNull();
+      expect(result?.content.content).toBe('I am the assistant reply');
+    });
+
     it('should filter out updateWorkingMemory tool invocations', () => {
       const message: MastraDBMessage = {
         id: 'test-7',
@@ -156,6 +199,71 @@ describe('Memory', () => {
       expect(result).not.toBeNull();
       expect(result?.content.parts).toHaveLength(1);
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Let me update memory' });
+    });
+  });
+
+  describe('saveMessages with empty parts array (issue #13824)', () => {
+    let memory: Memory;
+
+    beforeEach(() => {
+      memory = new Memory({
+        storage: new InMemoryStore(),
+      });
+    });
+
+    it('should save messages that have content.content but empty parts array', async () => {
+      const threadId = 'thread-save-test';
+      const resourceId = 'resource-save-test';
+
+      await memory.createThread({
+        threadId,
+        resourceId,
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'save-msg-1',
+          threadId,
+          resourceId,
+          role: 'user',
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          content: {
+            format: 2,
+            content: 'Hello from user',
+            experimental_attachments: [],
+            parts: [],
+          },
+        },
+        {
+          id: 'save-msg-2',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T10:01:00Z'),
+          content: {
+            format: 2,
+            content: 'Hello from assistant',
+            experimental_attachments: [],
+            parts: [],
+          },
+        },
+      ];
+
+      const result = await memory.saveMessages({ messages });
+
+      // Messages must not be silently dropped
+      expect(result.messages.length).toBeGreaterThan(0);
+      expect(result.messages).toHaveLength(2);
+
+      const recalled = await memory.recall({
+        threadId,
+        resourceId,
+        perPage: false,
+      });
+
+      expect(recalled.messages).toHaveLength(2);
+      expect(recalled.messages.map(message => message.id)).toEqual(['save-msg-1', 'save-msg-2']);
+      expect(recalled.messages.map(message => message.content)).toEqual([messages[0].content, messages[1].content]);
     });
   });
 
