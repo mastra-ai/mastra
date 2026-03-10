@@ -681,6 +681,45 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.hasMore).toBe(false);
       });
 
+      it('should return empty results when perPage is 0 with empty include array', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [],
+        });
+
+        expect(result.messages).toHaveLength(0);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+
+      it('should deduplicate overlapping context windows on the include-only fast path (perPage=0)', async () => {
+        // Message 2 with +1 next → Messages 2, 3
+        // Message 3 with +1 prev → Messages 2, 3
+        // Without dedup this would return 4 messages; with dedup it should return 2
+        const result = await memoryStorage.listMessages({
+          threadId: thread.id,
+          perPage: 0,
+          include: [
+            {
+              id: messages[1]!.id, // Message 2
+              withPreviousMessages: 0,
+              withNextMessages: 1,
+            },
+            {
+              id: messages[2]!.id, // Message 3
+              withPreviousMessages: 1,
+              withNextMessages: 0,
+            },
+          ],
+        });
+
+        expect(result.messages).toHaveLength(2);
+        expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 2', 'Message 3']);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+
       it('should respect DESC orderBy on the include-only fast path (perPage=0)', async () => {
         const result = await memoryStorage.listMessages({
           threadId: thread.id,
@@ -698,6 +737,58 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages).toHaveLength(3);
         // DESC order: Message 4, Message 3, Message 2
         expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 4', 'Message 3', 'Message 2']);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+      });
+    });
+
+    describe('high-volume include correctness', () => {
+      it('should return correct messages from a large thread with scattered includes (perPage=0)', async () => {
+        const largeThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: largeThread });
+
+        const baseTime = Date.now() + 100000; // offset to avoid collisions with beforeEach data
+        const count = 200;
+        const largeMessages = Array.from({ length: count }, (_, i) =>
+          createSampleMessageV2({
+            threadId: largeThread.id,
+            resourceId: largeThread.resourceId,
+            content: { content: `Msg ${i}` },
+            createdAt: new Date(baseTime + i * 1000),
+          }),
+        );
+        await memoryStorage.saveMessages({ messages: largeMessages });
+
+        // Pick targets scattered across the thread: indices 10, 50, 100, 150, 190
+        const targets = [10, 50, 100, 150, 190];
+        const contextBefore = 2;
+        const contextAfter = 2;
+
+        const result = await memoryStorage.listMessages({
+          threadId: largeThread.id,
+          perPage: 0,
+          include: targets.map(idx => ({
+            id: largeMessages[idx]!.id,
+            withPreviousMessages: contextBefore,
+            withNextMessages: contextAfter,
+          })),
+        });
+
+        // Build expected set: each target ± 2, clamped to [0, count-1]
+        const expectedIndices = new Set<number>();
+        for (const idx of targets) {
+          for (let i = Math.max(0, idx - contextBefore); i <= Math.min(count - 1, idx + contextAfter); i++) {
+            expectedIndices.add(i);
+          }
+        }
+
+        expect(result.messages).toHaveLength(expectedIndices.size);
+
+        // Verify ASC order
+        const contents = result.messages.map((m: any) => m.content.content);
+        const expectedContents = [...expectedIndices].sort((a, b) => a - b).map(i => `Msg ${i}`);
+        expect(contents).toEqual(expectedContents);
+
         expect(result.total).toBe(0);
         expect(result.hasMore).toBe(false);
       });
