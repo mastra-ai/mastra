@@ -154,9 +154,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.attributes = deepClean(options.attributes, this.deepCleanOptions) || ({} as SpanTypeMap[TType]);
     // Metadata - inherit from parent if not explicitly provided, merge if both exist
     this.metadata = deepClean(
-      options.parent?.metadata || options.metadata
-        ? { ...options.parent?.metadata, ...options.metadata }
-        : undefined,
+      options.parent?.metadata || options.metadata ? { ...options.parent?.metadata, ...options.metadata } : undefined,
       this.deepCleanOptions,
     );
     if (options.requestContext && options.requestContext.size() > 0) {
