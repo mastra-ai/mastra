@@ -186,7 +186,13 @@ export async function createHonoServer(
       credentials: hasAuth ? true : false,
       maxAge: 3600,
       ...server?.cors,
-      allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', ...(server?.cors?.allowHeaders ?? [])],
+      allowHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-mastra-client-type',
+        'x-mastra-dev-playground',
+        ...(server?.cors?.allowHeaders ?? []),
+      ],
       exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
     };
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
