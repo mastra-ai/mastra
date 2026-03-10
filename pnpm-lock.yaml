@@ -3139,11 +3139,11 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0
       '@composio/core':
-        specifier: ^0.6.3
-        version: 0.6.3(ws@8.19.0)(zod@3.25.76)
+        specifier: ^0.6.4
+        version: 0.6.4(ws@8.19.0)(zod@3.25.76)
       '@composio/mastra':
         specifier: ^0.6.3
-        version: 0.6.3(@composio/core@0.6.3(ws@8.19.0)(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)
+        version: 0.6.3(@composio/core@0.6.4(ws@8.19.0)(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
@@ -8439,11 +8439,11 @@ packages:
     peerDependencies:
       commander: ~14.0.0
 
-  '@composio/client@0.1.0-alpha.56':
-    resolution: {integrity: sha512-hNgChB5uhdvT4QXNzzfUuvtG6vrfanQQFY2hPyKwbeR4x6mEmIGFiZ4y2qynErdUWldAZiB/7pY/MBMg6Q9E0g==}
+  '@composio/client@0.1.0-alpha.60':
+    resolution: {integrity: sha512-i1/S+GX7ATzdQK0UzoaPdWqP4lmn/sCWF4ojGdq26k+cyEiq3aWN4HZFKYBp1jmwD1Sxn02RX9iTL09YAPn3Rg==}
 
-  '@composio/core@0.6.3':
-    resolution: {integrity: sha512-PZm4LQGMaaDFHWUouMHqKPg5fNfgjM2l0zF0Vw/vfWJ34KYyo1ne6YjhGvBDmOIKPByT6Dal4/ff7AHpjedL/w==}
+  '@composio/core@0.6.4':
+    resolution: {integrity: sha512-WwC2fegW7T76IoJze5hNCXO0IwU4L8jruLmLfULaexwnUxK2M52whM69wVps1MWOuHUaE3D4YxrycyPzIbzVoQ==}
     peerDependencies:
       zod: ^3.25 || ^4
 
@@ -27454,11 +27454,11 @@ snapshots:
     dependencies:
       commander: 14.0.3
 
-  '@composio/client@0.1.0-alpha.56': {}
+  '@composio/client@0.1.0-alpha.60': {}
 
-  '@composio/core@0.6.3(ws@8.19.0)(zod@3.25.76)':
+  '@composio/core@0.6.4(ws@8.19.0)(zod@3.25.76)':
     dependencies:
-      '@composio/client': 0.1.0-alpha.56
+      '@composio/client': 0.1.0-alpha.60
       '@composio/json-schema-to-zod': 0.1.20(zod@3.25.76)
       '@types/json-schema': 7.0.15
       chalk: 4.1.2
@@ -27474,9 +27474,9 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  '@composio/mastra@0.6.3(@composio/core@0.6.3(ws@8.19.0)(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)':
+  '@composio/mastra@0.6.3(@composio/core@0.6.4(ws@8.19.0)(zod@3.25.76))(@mastra/core@packages+core)(zod@3.25.76)':
     dependencies:
-      '@composio/core': 0.6.3(ws@8.19.0)(zod@3.25.76)
+      '@composio/core': 0.6.4(ws@8.19.0)(zod@3.25.76)
       '@mastra/core': link:packages/core
       '@mastra/schema-compat': 1.1.0(zod@3.25.76)
       zod: 3.25.76
