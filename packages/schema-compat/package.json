@@ -117,7 +117,7 @@
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ajv": "^8.17.1",
+    "ajv": "^8.18.0",
     "arktype": "^2.1.29",
     "eslint": "^9.39.4",
     "json-schema-traverse": "^1.0.0",
