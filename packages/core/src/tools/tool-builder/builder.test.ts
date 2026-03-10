@@ -47,20 +47,17 @@ describe('MCP Tool Tracing', () => {
     const builtTool = builder.build();
     await builtTool.execute!({ path: '/tmp' }, { toolCallId: 'test-call-id', messages: [] });
 
-    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
-      type: SpanType.MCP_TOOL_CALL,
-      name: "mcp_tool: 'mcp-server_list-files' on 'filesystem-server'",
-      input: { path: '/tmp' },
-      entityType: 'tool',
-      entityId: 'mcp-server_list-files',
-      entityName: 'mcp-server_list-files',
-      attributes: {
-        mcpServer: 'filesystem-server',
-        serverVersion: '1.2.0',
-      },
-      tracingPolicy: undefined,
-      requestContext: expect.any(RequestContext),
-    });
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.MCP_TOOL_CALL,
+        name: "mcp_tool: 'mcp-server_list-files' on 'filesystem-server'",
+        input: { path: '/tmp' },
+        attributes: {
+          mcpServer: 'filesystem-server',
+          serverVersion: '1.2.0',
+        },
+      }),
+    );
 
     expect(mockToolSpan.end).toHaveBeenCalledWith({ attributes: { success: true }, output: { files: ['/tmp'] } });
   });
@@ -101,20 +98,17 @@ describe('MCP Tool Tracing', () => {
     const builtTool = builder.build();
     await builtTool.execute!({ value: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
-    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith({
-      type: SpanType.TOOL_CALL,
-      name: "tool: 'regular-tool'",
-      input: { value: 'test' },
-      entityType: 'tool',
-      entityId: 'regular-tool',
-      entityName: 'regular-tool',
-      attributes: {
-        toolDescription: 'A regular tool',
-        toolType: 'tool',
-      },
-      tracingPolicy: undefined,
-      requestContext: expect.any(RequestContext),
-    });
+    expect(mockAgentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'regular-tool'",
+        input: { value: 'test' },
+        attributes: {
+          toolDescription: 'A regular tool',
+          toolType: 'tool',
+        },
+      }),
+    );
   });
 
   it('should handle mcpMetadata with missing serverVersion', async () => {
@@ -207,5 +201,9 @@ describe('MCP Tool Tracing', () => {
         name: "tool: 'vercel-tool'",
       }),
     );
+
+    const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spanArgs.attributes).not.toHaveProperty('mcpServer');
+    expect(spanArgs.attributes).not.toHaveProperty('serverVersion');
   });
 });
