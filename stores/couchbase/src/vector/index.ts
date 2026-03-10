@@ -555,24 +555,23 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
   private scope: Scope;
   private vector_dimension: number;
 
-  constructor({ connectionString, username, password, bucketName, scopeName, collectionName }: CouchbaseVectorParams) {
-    super();
+  constructor({
+    id = 'couchbase-search',
+    connectionString,
+    username,
+    password,
+    bucketName,
+    scopeName,
+    collectionName,
+  }: CouchbaseVectorParams & { id?: string }) {
+    super({ id });
 
     try {
-      const baseClusterPromise = connect(connectionString, {
+      this.clusterPromise = connect(connectionString, {
         username,
         password,
         configProfile: 'wanDevelopment',
       });
-
-      const telemetry = this.__getTelemetry();
-      this.clusterPromise =
-        telemetry?.traceClass(baseClusterPromise, {
-          spanNamePrefix: 'couchbase-vector',
-          attributes: {
-            'vector.type': 'couchbase',
-          },
-        }) ?? baseClusterPromise;
       this.cluster = null as unknown as Cluster;
       this.bucketName = bucketName;
       this.collectionName = collectionName;
@@ -811,6 +810,10 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
     filter = {} as CouchbaseVectorFilter,
   }: QueryVectorParams<CouchbaseVectorFilter>): Promise<QueryResult[]> {
     try {
+      if (!queryVector) {
+        throw new Error('queryVector is required for Couchbase vector search');
+      }
+
       await this.getCollection();
 
       // Checking if the query vector is the same dimension as the index
@@ -981,8 +984,14 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
    * @returns A promise that resolves when the update is complete.
    * @throws Will throw an error if no updates are provided or if the update operation fails.
    */
-  async updateVector({ id, update }: UpdateVectorParams): Promise<void> {
+  async updateVector(params: UpdateVectorParams): Promise<void> {
+    const { update } = params;
     try {
+      if (!('id' in params) || !params.id) {
+        throw new Error('Couchbase vector store only supports updating by id');
+      }
+      const vectorId = params.id;
+
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
       }
@@ -993,10 +1002,10 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
 
       // Check if document exists
       try {
-        await collection.get(id);
+        await collection.get(vectorId);
       } catch (err: any) {
         if (err.code === 13 || err.message?.includes('document not found')) {
-          throw new Error(`Vector with id ${id} does not exist`);
+          throw new Error(`Vector with id ${vectorId} does not exist`);
         }
         throw err;
       }
@@ -1005,7 +1014,7 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
       if (update.vector) specs.push(MutateInSpec.replace('embedding', update.vector));
       if (update.metadata) specs.push(MutateInSpec.replace('metadata', update.metadata));
 
-      await collection.mutateIn(id, specs);
+      await collection.mutateIn(vectorId, specs);
     } catch (error) {
       throw new MastraError(
         {
@@ -1013,7 +1022,7 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            id,
+            ...('id' in params && params.id ? { id: params.id } : {}),
             hasVectorUpdate: !!update.vector,
             hasMetadataUpdate: !!update.metadata,
           },
@@ -1058,6 +1067,20 @@ export class CouchbaseSearchStore extends MastraVector<CouchbaseVectorFilter> {
         error,
       );
     }
+  }
+
+  async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams<CouchbaseVectorFilter>): Promise<void> {
+    throw new MastraError({
+      id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
+      text: 'deleteVectors is not yet implemented for Couchbase vector store',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.SYSTEM,
+      details: {
+        indexName,
+        ...(filter && { filter: JSON.stringify(filter) }),
+        ...(ids && { idsCount: ids.length }),
+      },
+    });
   }
 
   async disconnect() {
