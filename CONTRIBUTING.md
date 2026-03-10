@@ -151,11 +151,11 @@ Mastra maintainers (organization members) can trigger automated CI commands by c
 
 ### Available commands
 
-| Command | Description |
-| --- | --- |
-| `@dane-ai-mastra fix-ci` | Diagnoses and fixes GitHub Actions CI failures on the PR branch |
-| `@dane-ai-mastra fix-lint` | Runs formatting/linting fixes and pushes a commit |
-| `@dane-ai-mastra pr-comments` | Addresses PR review comments and CodeRabbit suggestions |
+| Command                       | Description                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| `@dane-ai-mastra fix-ci`      | Diagnoses and fixes GitHub Actions CI failures on the PR branch |
+| `@dane-ai-mastra fix-lint`    | Runs formatting/linting fixes and pushes a commit               |
+| `@dane-ai-mastra pr-comments` | Addresses PR review comments and CodeRabbit suggestions         |
 
 ### How it works
 
