@@ -170,6 +170,54 @@ const agent = new Agent({
 })
 ```
 
+### MemoryTokenLimiter
+
+Limits memory history messages by token count to prevent context window overflow.
+
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  options: {
+    maxTokens: 800_000,
+  },
+})
+```
+
+**Mastra internally:**
+
+1. Creates a `MemoryTokenLimiter` processor with the configured token limit
+1. Adds it to the agent's input processors (runs after `MessageHistory`)
+
+**What it does:**
+
+- **Input**: Estimates the total token count of all messages (memory history + new input). If the total exceeds `maxTokens`, removes the oldest memory history messages until the total is within budget. Input messages are never removed.
+
+**Example:**
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const agent = new Agent({
+  id: 'long-context-agent',
+  name: 'Long Context Agent',
+  instructions: 'You are a helpful assistant',
+  model: 'google/gemini-2.5-pro',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'memory-store',
+      url: 'file:memory.db',
+    }),
+    options: {
+      lastMessages: Number.MAX_SAFE_INTEGER, // Load all messages
+      maxTokens: 800_000, // But trim to fit 800K tokens
+    },
+  }),
+})
+```
+
 ## Manual Control and Deduplication
 
 If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra **won't** automatically add it. This gives you full control over processor ordering:
@@ -213,7 +261,7 @@ Understanding the execution order is important when combining guardrails with me
 [Memory Processors] → [Your inputProcessors]
 ```
 
-1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
+1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `MemoryTokenLimiter` (if configured), `SemanticRecall`
 1. **Your input processors run AFTER**: guardrails, filters, validators
 
 This means memory loads message history before your processors can validate or filter the input.

@@ -78,6 +78,13 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             defaultValue: '10',
           },
           {
+            name: 'maxTokens',
+            type: 'number',
+            description:
+              'Maximum token count for memory history messages. When the total token count of all messages (memory history + new input) exceeds this limit, the oldest memory history messages are automatically removed. Token count is estimated using character count / 4 approximation. Can be used alongside `lastMessages` for both count-based and token-based limits.',
+            isOptional: true,
+          },
+          {
             name: 'readOnly',
             type: 'boolean',
             description:

@@ -777,6 +777,22 @@ type BaseMemoryConfig = {
   lastMessages?: number | false;
 
   /**
+   * Maximum token count for memory history messages.
+   * When the total token count of all messages (memory history + new input) exceeds this limit,
+   * the oldest memory history messages are automatically removed to stay within the budget.
+   *
+   * Token count is estimated using character count / 4 approximation.
+   * Can be used alongside `lastMessages` for both count-based and token-based limits.
+   *
+   * @example
+   * ```typescript
+   * maxTokens: 800_000 // Trim memory history when total exceeds 800K tokens
+   * maxTokens: 128_000 // For models with 128K context window
+   * ```
+   */
+  maxTokens?: number;
+
+  /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
    * Uses vector embeddings for similarity search across conversation history.
    * Can be a boolean to enable/disable with defaults, or an object for detailed configuration.
@@ -1079,6 +1095,9 @@ export type SerializedMemoryConfig = {
 
     /** Number of recent messages to include, or false to disable */
     lastMessages?: number | false;
+
+    /** Maximum token count for memory history messages */
+    maxTokens?: number;
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;
