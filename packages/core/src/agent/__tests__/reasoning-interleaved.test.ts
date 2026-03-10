@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { simulateReadableStream } from '../../test-utils/llm-mock';
 import { Agent } from '../agent';
 import { MockLanguageModelV2, convertArrayToReadableStream } from './mock-model';
 
@@ -302,52 +303,39 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
     const toolName = 'get_weather';
 
     const model = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: 'stop',
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        content: [
-          { type: 'reasoning', text: reasoningText },
-          { type: 'tool-call', toolCallId, toolName, input: '{}' },
-        ],
-        warnings: [],
-      }),
       doStream: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          {
-            type: 'response-metadata',
-            id: 'response-1',
-            modelId: 'mock-reasoning-tool-model',
-            timestamp: new Date(0),
-          },
-          // Reasoning starts
-          { type: 'reasoning-start', id: 'reasoning-1' },
-          { type: 'reasoning-delta', id: 'reasoning-1', delta: reasoningText },
-          // TOOL-INPUT-START ARRIVES BEFORE REASONING-END
-          // This is the exact sequence from issue #13635
-          {
-            type: 'tool-input-start',
-            id: toolCallId,
-            toolName,
-          },
-          { type: 'tool-input-delta', id: toolCallId, delta: '{}' },
-          {
-            type: 'tool-call',
-            toolCallId,
-            toolName,
-            input: '{}',
-          },
-          // reasoning-end arrives AFTER tool chunks (from provider flush())
-          { type: 'reasoning-end', id: 'reasoning-1' },
-          {
-            type: 'finish',
-            finishReason: 'tool-calls',
-            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          },
-        ]),
+        stream: simulateReadableStream({
+          chunks: [
+            {
+              type: 'response-metadata',
+              id: 'response-1',
+              modelId: 'mock-reasoning-tool-model',
+              timestamp: new Date(0),
+            },
+            { type: 'reasoning-start', id: 'reasoning-1' },
+            { type: 'reasoning-delta', id: 'reasoning-1', delta: reasoningText },
+            // tool-input-start arrives BEFORE reasoning-end (from provider flush())
+            {
+              type: 'tool-input-start',
+              id: toolCallId,
+              toolName,
+            },
+            { type: 'tool-input-delta', id: toolCallId, delta: '{}' },
+            {
+              type: 'tool-call',
+              toolCallId,
+              toolName,
+              input: '{}',
+            },
+            // reasoning-end arrives late from provider flush()
+            { type: 'reasoning-end', id: 'reasoning-1' },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            },
+          ],
+        }),
       }),
     });
 
@@ -365,25 +353,18 @@ describe('Reasoning with Interleaved Chunks (Issue #11480)', () => {
     const assistantMessages = dbMessages.filter(m => m.role === 'assistant');
     const allParts = assistantMessages.flatMap(m => m.content.parts);
 
-    // Find reasoning parts with non-empty text
-    const reasoningParts = allParts.filter(
-      p => p.type === 'reasoning' && p.details?.some((d: any) => d.type === 'text' && d.text.length > 0),
-    );
+    // Find all reasoning parts
+    const allReasoningParts = allParts.filter((p: any) => p.type === 'reasoning');
 
-    // At least one reasoning part should have the actual reasoning text
-    expect(reasoningParts.length).toBeGreaterThan(0);
+    // Should have exactly one reasoning part (no duplicate empty message from late reasoning-end)
+    expect(allReasoningParts.length).toBe(1);
 
-    const reasoningPart = reasoningParts[0];
+    const reasoningPart = allReasoningParts[0] as any;
     expect(reasoningPart.details).toBeDefined();
     expect(reasoningPart.details.length).toBeGreaterThan(0);
 
     const detail = reasoningPart.details[0];
     expect(detail.type).toBe('text');
-    if (detail.type === 'text') {
-      // THIS IS THE KEY ASSERTION for issue #13635
-      // Before the fix, this would be empty because reasoningDeltas were cleared
-      // when tool-input-start arrived, before reasoning-end could save them
-      expect(detail.text).toBe(reasoningText);
-    }
+    expect(detail.text).toBe(reasoningText);
   });
 });

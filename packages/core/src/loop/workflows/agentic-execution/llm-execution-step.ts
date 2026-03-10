@@ -182,6 +182,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 providerMetadata: runState.state.providerOptions,
               },
             ],
+            ...buildResponseModelMetadata(runState),
           },
           createdAt: new Date(),
         };
@@ -336,6 +337,15 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'reasoning-end': {
+        // If reasoning was already flushed by the guard (e.g. tool-input-start arrived
+        // before reasoning-end from provider flush), skip the duplicate empty message.
+        // This only affects OpenAI-compatible providers; the native OpenAI Responses API
+        // sends reasoning-end in order, so the item_reference fix (#9005) is unaffected.
+        if (!runState.state.isReasoning) {
+          safeEnqueue(controller, chunk);
+          break;
+        }
+
         // Always store reasoning, even if empty - OpenAI requires item_reference for tool calls
         // See: https://github.com/mastra-ai/mastra/issues/9005
         const message: MastraDBMessage = {
