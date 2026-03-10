@@ -67,9 +67,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className={cn(
-              'flex justify-center items-center gap-2 border border-dashed border-border1 text-ui-sm py-2 rounded-md bg-surface1 hover:bg-surface2 active:bg-surface3 text-neutral3 hover:text-neutral6',
-            )}
+            className="flex items-center gap-2 text-ui-sm py-1.5 px-2 rounded-md bg-transparent border-transparent hover:bg-surface2 text-neutral3 hover:text-neutral6 w-fit focus-visible:outline-none focus-visible:ring-0"
           >
             <Icon>
               <PlusIcon />
@@ -77,7 +75,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
             Add Instruction block
           </button>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="center" className="w-[240px]">
+        <DropdownMenu.Content align="start" className="w-[240px]">
           <DropdownMenu.Item onSelect={handleAddInline}>
             <Icon>
               <PenLine />

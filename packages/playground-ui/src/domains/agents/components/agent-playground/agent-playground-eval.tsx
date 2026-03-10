@@ -18,6 +18,7 @@ import { ScorerSelector } from '@/domains/datasets/components/experiment-trigger
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useDatasetExperimentResults, useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
+import { LLMProviders, LLMModels } from '@/domains/llm';
 import { useAgentExperiments } from '../../hooks/use-agent-experiments';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import type { AgentExperiment } from '../../hooks/use-agent-experiments';
@@ -452,6 +453,12 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
   return (
     <div className="flex flex-col h-full">
       <div className="p-4 space-y-4 border-b border-border1">
+        <Txt variant="ui-sm" className="text-neutral3">
+          Run your agent against a dataset to evaluate its performance. Select a dataset, choose scorers to grade the
+          results, and optionally override the model. Any request context values you've set will be included
+          automatically.
+        </Txt>
+
         {/* Dataset selector */}
         <div className="grid gap-2">
           <Label>Dataset</Label>
@@ -471,27 +478,55 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
           disabled={isRunning}
         />
 
+        {/* Provider + Model selector */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-1">
+            <Label>Provider</Label>
+            <LLMProviders
+              value={form.watch('model.provider') || ''}
+              onValueChange={value => {
+                form.setValue('model.provider', value, { shouldDirty: true });
+                form.setValue('model.name', '', { shouldDirty: true });
+              }}
+            />
+          </div>
+          <div className="grid gap-1">
+            <Label>Model</Label>
+            <LLMModels
+              llmId={form.watch('model.provider') || ''}
+              value={form.watch('model.name') || ''}
+              onValueChange={value => form.setValue('model.name', value, { shouldDirty: true })}
+            />
+          </div>
+        </div>
+
         {/* Run button */}
-        <Button
-          variant="primary"
-          className="w-full"
-          onClick={handleRunExperiment}
-          disabled={!selectedDatasetId || isRunning}
-        >
-          {isRunning ? (
-            <>
-              <Spinner className="h-4 w-4" />
-              Running...
-            </>
-          ) : (
-            <>
-              <Icon>
-                <Play />
-              </Icon>
-              {isDirty ? 'Save Version and Run Experiment' : 'Run Experiment'}
-            </>
+        <div className="flex items-center justify-end gap-3">
+          {isDirty && !isRunning && (
+            <Txt variant="ui-xs" className="text-neutral3">
+              Current changes will be saved before running
+            </Txt>
           )}
-        </Button>
+          <Button
+            variant="cta"
+            onClick={handleRunExperiment}
+            disabled={!selectedDatasetId || isRunning}
+          >
+            {isRunning ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Running...
+              </>
+            ) : (
+              <>
+                <Icon>
+                  <Play />
+                </Icon>
+                Run Experiment
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Past runs */}

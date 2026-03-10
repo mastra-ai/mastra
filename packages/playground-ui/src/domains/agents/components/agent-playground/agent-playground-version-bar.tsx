@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Clock, MessageSquare, Save } from 'lucide-react';
+import { Check, ChevronDown, Clock, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { Button } from '@/ds/components/Button';
@@ -19,6 +19,7 @@ import {
 } from '@/ds/components/Dialog';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Label } from '@/ds/components/Label';
+import { HoverPopover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
 import { useAgentVersions } from '../../hooks/use-agent-versions';
 
 interface AgentPlaygroundVersionBarProps {
@@ -73,8 +74,6 @@ export function AgentPlaygroundVersionBar({
   const activeVersion = activeVersionId ? versions.find(v => v.id === activeVersionId) : undefined;
   const activeVersionNumber = activeVersion?.versionNumber;
 
-  const displayedVersion = selectedVersionId ? versions.find(v => v.id === selectedVersionId) : latestVersion;
-
   const versionOptions = useMemo(
     () =>
       versions.map(v => {
@@ -106,10 +105,10 @@ export function AgentPlaygroundVersionBar({
     setChangeMessage('');
   }, [changeMessage, onSaveDraft]);
 
-  return (
-    <div className="flex items-center justify-between px-4 py-2 border-b border-border1 bg-surface1">
-      <div className="flex items-center gap-3">
-        <Icon size="sm" className="text-neutral3">
+  return {
+    versionSelector: (
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface2">
+        <Icon size="sm" className="text-neutral3 shrink-0">
           <Clock />
         </Icon>
 
@@ -119,8 +118,8 @@ export function AgentPlaygroundVersionBar({
             value={currentValue}
             onValueChange={onVersionSelect}
             placeholder="Select version..."
-            variant="ghost"
-            className="w-[260px]"
+            variant="outline"
+            className="min-w-0 flex-1"
           />
         ) : (
           <Txt variant="ui-xs" className="text-neutral3">
@@ -128,22 +127,35 @@ export function AgentPlaygroundVersionBar({
           </Txt>
         )}
 
-        {displayedVersion && (
-          <Txt variant="ui-xs" className="text-neutral2">
-            {formatTimestamp(displayedVersion.createdAt)}
-          </Txt>
-        )}
+        <HoverPopover>
+          <PopoverTrigger asChild>
+            <button type="button" className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-0">
+              <Icon size="sm">
+                <Info />
+              </Icon>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-48">
+            <Txt variant="ui-sm" className="text-neutral3">
+              Changes are saved as draft versions. When you're ready, publish a version to make it the active
+              configuration used in production.
+            </Txt>
+          </PopoverContent>
+        </HoverPopover>
 
-        {readOnly && <Badge variant="warning">Read-only (previous version)</Badge>}
-        {!readOnly && hasDraft && <Badge variant="info">Unpublished changes</Badge>}
+        <div className="flex items-center gap-2 ml-auto shrink-0">
+          {readOnly && <Badge variant="warning">Read-only</Badge>}
+          {!readOnly && hasDraft && <Badge variant="info">Unpublished</Badge>}
+        </div>
       </div>
-
-      <div className="flex items-center gap-2">
+    ),
+    actionBar: (
+      <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-border1 bg-surface2">
         {/* Split button: Save + dropdown caret */}
         <div className="flex items-center">
           <Button
             variant="default"
-            size="sm"
+            size="md"
             onClick={() => onSaveDraft()}
             disabled={saveDisabled}
             className="rounded-r-none border-r-0"
@@ -166,7 +178,7 @@ export function AgentPlaygroundVersionBar({
             <DropdownMenu.Trigger asChild>
               <Button
                 variant="default"
-                size="sm"
+                size="md"
                 disabled={saveDisabled}
                 aria-label="More save options"
                 className="rounded-l-none px-1.5"
@@ -179,15 +191,15 @@ export function AgentPlaygroundVersionBar({
                 <Icon size="sm">
                   <MessageSquare />
                 </Icon>
-                Save new version with message
+                Save with message
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
         </div>
 
         <Button
-          variant="primary"
-          size="sm"
+          variant="cta"
+          size="md"
           onClick={onPublish}
           disabled={readOnly || (!hasDraft && !isDirty) || isPublishing || isSavingDraft}
         >
@@ -205,46 +217,46 @@ export function AgentPlaygroundVersionBar({
             </>
           )}
         </Button>
-      </div>
 
-      {/* Change message dialog */}
-      <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Save New Version</DialogTitle>
-            <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
-          </DialogHeader>
-          <DialogBody className="py-1">
-            <div className="grid gap-2">
-              <Label htmlFor="change-message">Change message</Label>
-              <Input
-                id="change-message"
-                placeholder="Describe what changed..."
-                value={changeMessage}
-                className="focus:ring-white/50"
-                onChange={e => setChangeMessage(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    handleSaveWithMessage();
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-          </DialogBody>
-          <DialogFooter className="px-6">
-            <Button variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleSaveWithMessage}>
-              <Icon size="sm">
-                <Save />
-              </Icon>
-              Save Version
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+        {/* Change message dialog */}
+        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save New Version</DialogTitle>
+              <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="py-1">
+              <div className="grid gap-2">
+                <Label htmlFor="change-message">Change message</Label>
+                <Input
+                  id="change-message"
+                  placeholder="Describe what changed..."
+                  value={changeMessage}
+                  className="focus:ring-white/50"
+                  onChange={e => setChangeMessage(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      handleSaveWithMessage();
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+            </DialogBody>
+            <DialogFooter className="px-6">
+              <Button variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" size="sm" onClick={handleSaveWithMessage}>
+                <Icon size="sm">
+                  <Save />
+                </Icon>
+                Save Version
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    ),
+  };
 }

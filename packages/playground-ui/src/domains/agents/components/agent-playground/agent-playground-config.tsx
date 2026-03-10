@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
+import { ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil, PlusIcon, XIcon } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
@@ -6,14 +6,15 @@ import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { Badge } from '@/ds/components/Badge';
 import { Spinner } from '@/ds/components/Spinner';
+import { HoverPopover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover';
 import { cn } from '@/lib/utils';
 
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
 import { ToolsPage } from '../agent-cms-pages/tools-page';
-import { VariablesPage } from '../agent-cms-pages/variables-page';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
 import { usePreviewInstructions } from '../../hooks/use-preview-instructions';
+import type { JsonSchema } from '@/lib/json-schema';
 
 // ---------------------------------------------------------------------------
 // Collapsible section
@@ -40,7 +41,7 @@ function CollapsibleSection({
 
   return (
     <div className="border-b border-border1">
-      <div className="flex items-center gap-2 px-4 py-3 hover:bg-surface3 transition-colors">
+      <div className={cn('group flex items-center gap-2 px-4 py-3 hover:bg-surface3 transition-colors', isOpen && 'bg-surface3')}>
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -53,7 +54,7 @@ function CollapsibleSection({
           <Icon size="sm" className="text-neutral3">
             {icon}
           </Icon>
-          <Txt as="span" variant="ui-sm" className="font-medium text-neutral5">
+          <Txt as="span" variant="ui-sm" className={cn('font-normal text-neutral3 transition-colors group-hover:text-neutral5', isOpen && 'text-neutral5')}>
             {title}
           </Txt>
         </button>
@@ -506,17 +507,56 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const { form, readOnly } = useAgentEditFormContext();
   const tools = form.watch('tools');
   const instructionBlocks = form.watch('instructionBlocks');
+  const variables = form.watch('variables') as JsonSchema | undefined;
   const toolCount = tools ? Object.keys(tools).length : 0;
   const [showPreview, setShowPreview] = useState(false);
+
+  const variableEntries = useMemo(() => {
+    const props = variables?.properties ?? {};
+    return Object.entries(props);
+  }, [variables]);
+
+  const handleAddVariable = () => {
+    const props = { ...(variables?.properties ?? {}) };
+    let name = 'newVariable';
+    let i = 1;
+    while (props[name]) {
+      name = `newVariable${i++}`;
+    }
+    props[name] = { type: 'string' };
+    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
+  };
+
+  const handleRemoveVariable = (name: string) => {
+    const props = { ...(variables?.properties ?? {}) };
+    delete props[name];
+    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
+  };
+
+  const handleRenameVariable = (oldName: string, newName: string) => {
+    if (!newName || newName === oldName) return;
+    const props = { ...(variables?.properties ?? {}) };
+    if (props[newName]) return; // don't overwrite existing
+    const value = props[oldName];
+    delete props[oldName];
+    props[newName] = value;
+    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
+  };
+
+  const handleVariableValueChange = (name: string, value: string) => {
+    const props = { ...(variables?.properties ?? {}) };
+    props[name] = { ...props[name], default: value };
+    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
+  };
 
   const showDiff = readOnly && !!selectedVersionId && !!latestVersionId && selectedVersionId !== latestVersionId;
 
   return (
     <div className={cn('flex flex-col h-full')}>
       <div className="px-4 py-3 border-b border-border1">
-        <Txt variant="ui-xs" className="font-medium text-neutral3 uppercase tracking-wider">
+        {/* <Txt variant="ui-xs" className="font-medium text-red uppercase tracking-wider">
           Configuration
-        </Txt>
+        </Txt> */}
       </div>
 
       <ScrollArea className="flex-1 min-h-0">
@@ -532,27 +572,105 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
               title="System Prompt"
               icon={<Cpu />}
               defaultOpen
-              headerAction={
-                readOnly ? undefined : (
-                  <button
-                    type="button"
-                    onClick={e => {
-                      e.stopPropagation();
-                      setShowPreview(prev => !prev);
-                    }}
-                    className={cn(
-                      'flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors',
-                      showPreview
-                        ? 'bg-accent1/10 text-accent1'
-                        : 'text-neutral3 hover:text-neutral5 hover:bg-surface3',
-                    )}
-                  >
-                    <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
-                    {showPreview ? 'Edit' : 'Preview'}
-                  </button>
-                )
-              }
             >
+              <div className="flex flex-col gap-3 pt-4 px-4 pb-2">
+                <Txt variant="ui-sm" className="font-normal text-neutral3">
+                  Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
+                  <HoverPopover>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline">
+                        use variables
+                      </button>
+                    </PopoverTrigger> as part of your instruction blocks.
+                    <PopoverContent side="bottom" align="start">
+                      <p className="text-ui-sm text-neutral5">
+                        Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert dynamic
+                        values into your instruction blocks.
+                      </p>
+                    </PopoverContent>
+                  </HoverPopover>
+                </Txt>
+
+                <div className="flex items-center justify-between">
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPreview(prev => !prev)}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-neutral3 hover:text-neutral5 hover:bg-surface3"
+                    >
+                      <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
+                      {showPreview ? 'Edit' : 'Preview'}
+                    </button>
+                  )}
+
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={handleAddVariable}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-neutral3 hover:text-neutral5 hover:bg-surface3"
+                    >
+                      <Icon size="sm">
+                        <PlusIcon />
+                      </Icon>
+                      Add Variable
+                    </button>
+                  )}
+                </div>
+
+                {variableEntries.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {variableEntries.map(([name, schema]) => (
+                      <div
+                        key={name}
+                        className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-1.5"
+                      >
+                        {readOnly ? (
+                          <Txt variant="ui-sm" className="text-neutral5 font-mono shrink-0">
+                            {`{{${name}}}`}
+                          </Txt>
+                        ) : (
+                          <input
+                            type="text"
+                            defaultValue={name}
+                            onBlur={e => handleRenameVariable(name, e.target.value.trim())}
+                            placeholder="key"
+                            className="w-24 shrink-0 text-ui-sm font-mono text-neutral5 bg-transparent border-none outline-none focus-visible:outline-none focus-visible:ring-0"
+                            aria-label={`Variable name: ${name}`}
+                          />
+                        )}
+                        <span className="text-neutral3 text-ui-sm shrink-0">=</span>
+                        {readOnly ? (
+                          <Txt variant="ui-sm" className="text-neutral3 flex-1 truncate">
+                            {schema.default != null ? String(schema.default) : ''}
+                          </Txt>
+                        ) : (
+                          <input
+                            type="text"
+                            defaultValue={schema.default != null ? String(schema.default) : ''}
+                            onBlur={e => handleVariableValueChange(name, e.target.value)}
+                            placeholder="value"
+                            className="flex-1 min-w-0 text-ui-sm text-neutral3 bg-transparent border-none outline-none focus-visible:outline-none focus-visible:ring-0"
+                            aria-label={`Variable value: ${name}`}
+                          />
+                        )}
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariable(name)}
+                            className="text-neutral3 hover:text-neutral5 transition-colors focus-visible:outline-none focus-visible:ring-0 shrink-0"
+                            aria-label={`Remove variable ${name}`}
+                          >
+                            <Icon size="sm">
+                              <XIcon />
+                            </Icon>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {readOnly || showPreview ? (
                 <ReadOnlyInstructions blocks={instructionBlocks} />
               ) : (
@@ -566,10 +684,6 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
               badge={toolCount > 0 ? <Badge variant="default">{`${toolCount}`}</Badge> : undefined}
             >
               <ToolsPage />
-            </CollapsibleSection>
-
-            <CollapsibleSection title="Variables" icon={<Wrench />}>
-              <VariablesPage />
             </CollapsibleSection>
           </>
         )}
