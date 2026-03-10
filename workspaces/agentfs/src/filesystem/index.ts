@@ -622,7 +622,7 @@ export class AgentFSFilesystem extends MastraFilesystem {
             throw new FileExistsError(destChild);
           } catch (error: unknown) {
             if (error instanceof FileExistsError) throw error;
-            // ENOENT is expected — dest doesn't exist yet
+            if (!hasCode(error, 'ENOENT')) throw mapError(error, destChild, 'file');
           }
         }
         await agent.fs.copyFile(srcChild, destChild);
