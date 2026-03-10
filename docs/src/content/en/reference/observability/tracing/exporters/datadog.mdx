@@ -18,7 +18,7 @@ Sends Tracing data to Datadog's LLM Observability product for monitoring and ana
 new DatadogExporter(config: DatadogExporterConfig)
 ```
 
-## DatadogExporterConfig
+## `DatadogExporterConfig`
 
 ```typescript
 interface DatadogExporterConfig extends BaseExporterConfig {
@@ -87,7 +87,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>

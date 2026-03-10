@@ -131,7 +131,7 @@ const vectorStore = new PgVector({
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -176,7 +176,7 @@ const vectorStore = new PgVector({
 ]}
 />
 
-#### IndexConfig
+#### `IndexConfig`
 
 <PropertiesTable
   content={[
@@ -266,7 +266,7 @@ HNSW indexes require significant shared memory during construction. For 100K vec
 
 Higher M values or efConstruction values will increase memory requirements significantly. Adjust your system's shared memory limits if needed.
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -295,7 +295,7 @@ Higher M values or efConstruction values will increase memory requirements signi
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -364,11 +364,11 @@ Higher M values or efConstruction values will increase memory requirements signi
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -397,7 +397,7 @@ interface PGIndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -409,7 +409,7 @@ interface PGIndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -463,7 +463,7 @@ await pgVector.updateVector({
 })
 ```
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -486,7 +486,7 @@ Deletes a single vector by ID from the specified index.
 await pgVector.deleteVector({ indexName: 'my_vectors', id: 'vector123' })
 ```
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
@@ -512,11 +512,11 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-### disconnect()
+### `disconnect()`
 
 Closes the database connection pool. Should be called when done using the store.
 
-### buildIndex()
+### `buildIndex()`
 
 <PropertiesTable
   content={[

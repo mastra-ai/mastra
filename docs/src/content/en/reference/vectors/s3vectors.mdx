@@ -100,7 +100,7 @@ await store.disconnect()
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new vector index in the configured vector bucket. If the index already exists, the call validates the schema and becomes a no-op (existing metric and dimension are preserved).
 
@@ -127,7 +127,7 @@ Creates a new vector index in the configured vector bucket. If the index already
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 Adds or replaces vectors (full-record put). If `ids` aren't provided, UUIDs are generated.
 
@@ -158,7 +158,7 @@ Adds or replaces vectors (full-record put). If `ids` aren't provided, UUIDs are 
 ]}
 />
 
-### query()
+### `query()`
 
 Searches for nearest neighbors with optional metadata filtering.
 
@@ -204,7 +204,7 @@ Results include `score = 1/(1 + distance)` so that higher is better while preser
 
 :::
 
-### describeIndex()
+### `describeIndex()`
 
 Returns information about the index.
 
@@ -228,7 +228,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 Deletes an index and its data.
 
@@ -242,13 +242,13 @@ Deletes an index and its data.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all indexes in the configured vector bucket.
 
 Returns: `Promise<string[]>`
 
-### updateVector()
+### `updateVector()`
 
 Updates a vector or metadata for a specific ID within an index.
 
@@ -284,7 +284,7 @@ Updates a vector or metadata for a specific ID within an index.
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a specific vector by ID.
 
@@ -303,7 +303,7 @@ Deletes a specific vector by ID.
 ]}
 />
 
-### disconnect()
+### `disconnect()`
 
 Closes the underlying AWS SDK HTTP handler to free sockets.
 

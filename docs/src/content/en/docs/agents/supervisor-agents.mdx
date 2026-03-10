@@ -69,7 +69,7 @@ for await (const chunk of stream.textStream) {
 
 Delegation hooks let you intercept, modify, or reject delegations as they happen. Configure them under the `delegation` option, either in the agent's `defaultOptions` or per-call.
 
-### onDelegationStart
+### `onDelegationStart`
 
 Called before the supervisor delegates to a subagent. Return an object to control the delegation:
 
@@ -116,7 +116,7 @@ The `context` object includes:
 | `prompt` | The prompt the supervisor is sending |
 | `iteration` | Current iteration number |
 
-### onDelegationComplete
+### `onDelegationComplete`
 
 Called after a delegation finishes. Use it to inspect results, provide feedback, or stop execution:
 

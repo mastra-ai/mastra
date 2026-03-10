@@ -137,7 +137,7 @@ const text = await voice.listen(audioStream)
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using Azure's neural text-to-speech service.
 
@@ -175,7 +175,7 @@ Converts text to speech using Azure's neural text-to-speech service.
 
 Returns: `Promise<NodeJS.ReadableStream>` - Audio stream in WAV format
 
-### listen()
+### `listen()`
 
 Transcribes audio using Azure's speech-to-text service.
 
@@ -194,7 +194,7 @@ Returns: `Promise<string>` - The recognized text from the audio
 
 **Note:** Language and recognition settings are configured in the `listeningModel` configuration during initialization, not passed as options to this method.
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options (200+ voices), where each node contains:
 

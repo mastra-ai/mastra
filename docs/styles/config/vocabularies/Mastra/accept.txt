@@ -3,6 +3,7 @@
 (?i)APIs
 Amazon
 Apache
+Apache License
 App Services
 Assistant UI
 Astra
@@ -16,6 +17,7 @@ CI
 CLI
 ClickHouse
 Cloudflare
+Cloudflare Workers
 Convex
 CopilotKit
 Couchbase
@@ -74,6 +76,7 @@ MLflow
 MongoDB
 (?i)MSSQL
 Netlify
+New Relic
 Next\.js
 Node\.js
 (?i)NPM
@@ -125,6 +128,8 @@ Upstash
 VAD
 Vercel
 (?i)Vite
+Visual Studio Code
+Vectorize
 (?i)Vitest
 VNext
 WebSocket

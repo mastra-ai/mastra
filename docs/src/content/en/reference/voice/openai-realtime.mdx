@@ -127,7 +127,7 @@ voice.connect()
 
 ## Methods
 
-### connect()
+### `connect()`
 
 Establishes a connection to the OpenAI Realtime service. Must be called before using speak, listen, or send functions.
 
@@ -141,7 +141,7 @@ Establishes a connection to the OpenAI Realtime service. Must be called before u
 ]}
 />
 
-### speak()
+### `speak()`
 
 Emits a speaking event using the configured voice model. Can accept either a string or a readable stream as input.
 
@@ -178,7 +178,7 @@ Emits a speaking event using the configured voice model. Can accept either a str
 
 Returns: `Promise<void>`
 
-### listen()
+### `listen()`
 
 Processes audio input for speech recognition. Takes a readable stream of audio data and emits a 'listening' event with the transcribed text.
 
@@ -195,7 +195,7 @@ Processes audio input for speech recognition. Takes a readable stream of audio d
 
 Returns: `Promise<void>`
 
-### send()
+### `send()`
 
 Streams audio data in real-time to the OpenAI service for continuous audio streaming scenarios like live microphone input.
 
@@ -212,7 +212,7 @@ Streams audio data in real-time to the OpenAI service for continuous audio strea
 
 Returns: `Promise<void>`
 
-### updateConfig()
+### `updateConfig()`
 
 Updates the session configuration for the voice instance. This can be used to modify voice settings, turn detection, and other parameters.
 
@@ -229,7 +229,7 @@ Updates the session configuration for the voice instance. This can be used to mo
 
 Returns: `void`
 
-### addTools()
+### `addTools()`
 
 Adds a set of tools to the voice instance. Tools allow the model to perform additional actions during conversations. When OpenAIRealtimeVoice is added to an Agent, any tools configured for the Agent will automatically be available to the voice interface.
 
@@ -246,19 +246,19 @@ Adds a set of tools to the voice instance. Tools allow the model to perform addi
 
 Returns: `void`
 
-### close()
+### `close()`
 
 Disconnects from the OpenAI Realtime session and cleans up resources. Should be called when you're done with the voice instance.
 
 Returns: `void`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns a list of available voice speakers.
 
 Returns: `Promise<Array<{ voiceId: string; [key: string]: any }>>`
 
-### on()
+### `on()`
 
 Registers an event listener for voice events.
 
@@ -281,7 +281,7 @@ Registers an event listener for voice events.
 
 Returns: `void`
 
-### off()
+### `off()`
 
 Removes a previously registered event listener.
 

@@ -93,7 +93,7 @@ const results = await store.query({
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Creates a new vector collection. The index name must start with a letter or underscore and can only contain letters, numbers, and underscores. The dimension must be a positive integer.
 
@@ -120,7 +120,7 @@ Creates a new vector collection. The index name must start with a letter or unde
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 Adds or updates vectors and their metadata in the index. Uses a transaction to ensure all vectors are inserted atomically - if any insert fails, the entire operation is rolled back.
 
@@ -151,7 +151,7 @@ Adds or updates vectors and their metadata in the index. Uses a transaction to e
 ]}
 />
 
-### query()
+### `query()`
 
 Searches for similar vectors with optional metadata filtering.
 
@@ -197,7 +197,7 @@ Searches for similar vectors with optional metadata filtering.
 ]}
 />
 
-### describeIndex()
+### `describeIndex()`
 
 Gets information about an index.
 
@@ -221,7 +221,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 Deletes an index and all its data.
 
@@ -235,13 +235,13 @@ Deletes an index and all its data.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Lists all vector indexes in the database.
 
 Returns: `Promise<string[]>`
 
-### truncateIndex()
+### `truncateIndex()`
 
 Removes all vectors from an index while keeping the index structure.
 
@@ -255,7 +255,7 @@ Removes all vectors from an index while keeping the index structure.
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -298,7 +298,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 Deletes a specific vector entry from an index by its ID.
 
@@ -317,7 +317,7 @@ Deletes a specific vector entry from an index by its ID.
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 

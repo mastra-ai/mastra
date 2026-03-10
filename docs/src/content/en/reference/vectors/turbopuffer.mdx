@@ -65,7 +65,7 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -89,7 +89,7 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -113,7 +113,7 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -150,11 +150,11 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -176,7 +176,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -188,7 +188,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -219,7 +219,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -236,7 +236,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 

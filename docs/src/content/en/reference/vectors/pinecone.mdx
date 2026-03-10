@@ -63,7 +63,7 @@ The constructor accepts all [Pinecone configuration options](https://docs.pineco
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -87,7 +87,7 @@ The constructor accepts all [Pinecone configuration options](https://docs.pineco
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -129,7 +129,7 @@ The constructor accepts all [Pinecone configuration options](https://docs.pineco
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -178,11 +178,11 @@ The constructor accepts all [Pinecone configuration options](https://docs.pineco
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -204,7 +204,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -216,7 +216,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -265,7 +265,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -282,7 +282,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 

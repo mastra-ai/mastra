@@ -11,7 +11,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 ## Core interfaces
 
-### ObservabilityInstance
+### `ObservabilityInstance`
 
 Primary interface for observability.
 
@@ -40,7 +40,7 @@ interface ObservabilityInstance {
 }
 ```
 
-### SpanTypeMap
+### `SpanTypeMap`
 
 Mapping of span types to their corresponding attribute interfaces.
 
@@ -123,7 +123,7 @@ interface Span<TType extends SpanType> {
 }
 ```
 
-### ObservabilityExporter
+### `ObservabilityExporter`
 
 Interface for observability exporters.
 
@@ -163,7 +163,7 @@ interface ObservabilityExporter {
 }
 ```
 
-### SpanOutputProcessor
+### `SpanOutputProcessor`
 
 Interface for span output processors.
 
@@ -182,7 +182,7 @@ interface SpanOutputProcessor {
 
 ## Span types
 
-### SpanType
+### `SpanType`
 
 AI-specific span types with their associated metadata.
 
@@ -238,7 +238,7 @@ enum SpanType {
 }
 ```
 
-### AnySpan
+### `AnySpan`
 
 Union type for cases that need to handle any span.
 
@@ -248,7 +248,7 @@ type AnySpan = Span<keyof SpanTypeMap>
 
 ## Span attributes
 
-### AgentRunAttributes
+### `AgentRunAttributes`
 
 Agent Run attributes.
 
@@ -271,7 +271,7 @@ interface AgentRunAttributes {
 }
 ```
 
-### ModelGenerationAttributes
+### `ModelGenerationAttributes`
 
 Model Generation attributes.
 
@@ -316,7 +316,7 @@ interface ModelGenerationAttributes {
 }
 ```
 
-### ModelStepAttributes
+### `ModelStepAttributes`
 
 Model Step attributes - for a single model execution within a generation.
 
@@ -339,7 +339,7 @@ interface ModelStepAttributes {
 }
 ```
 
-### ModelChunkAttributes
+### `ModelChunkAttributes`
 
 Model Chunk attributes - for individual streaming chunks/events.
 
@@ -353,7 +353,7 @@ interface ModelChunkAttributes {
 }
 ```
 
-### ToolCallAttributes
+### `ToolCallAttributes`
 
 Tool Call attributes.
 
@@ -386,7 +386,7 @@ interface MCPToolCallAttributes {
 }
 ```
 
-### ProcessorRunAttributes
+### `ProcessorRunAttributes`
 
 Processor attributes.
 
@@ -403,7 +403,7 @@ interface ProcessorRunAttributes {
 }
 ```
 
-### WorkflowRunAttributes
+### `WorkflowRunAttributes`
 
 Workflow Run attributes.
 
@@ -417,7 +417,7 @@ interface WorkflowRunAttributes {
 }
 ```
 
-### WorkflowStepAttributes
+### `WorkflowStepAttributes`
 
 Workflow Step attributes.
 
@@ -433,7 +433,7 @@ interface WorkflowStepAttributes {
 
 ## Options types
 
-### StartSpanOptions
+### `StartSpanOptions`
 
 Options for starting new spans.
 
@@ -465,7 +465,7 @@ interface StartSpanOptions<TType extends SpanType> {
 }
 ```
 
-### UpdateSpanOptions
+### `UpdateSpanOptions`
 
 Options for updating spans.
 
@@ -485,7 +485,7 @@ interface UpdateSpanOptions<TType extends SpanType> {
 }
 ```
 
-### EndSpanOptions
+### `EndSpanOptions`
 
 Options for ending spans.
 
@@ -502,7 +502,7 @@ interface EndSpanOptions<TType extends SpanType> {
 }
 ```
 
-### ErrorSpanOptions
+### `ErrorSpanOptions`
 
 Options for recording span errors.
 
@@ -524,7 +524,7 @@ interface ErrorSpanOptions<TType extends SpanType> {
 
 ## Context types
 
-### TracingContext
+### `TracingContext`
 
 Context for Tracing that flows through workflow and agent execution.
 
@@ -535,7 +535,7 @@ interface TracingContext {
 }
 ```
 
-### TracingProperties
+### `TracingProperties`
 
 Properties returned to the user for working with traces externally.
 
@@ -546,7 +546,7 @@ type TracingProperties = {
 }
 ```
 
-### TracingOptions
+### `TracingOptions`
 
 Options passed when starting a new agent or workflow execution.
 
@@ -595,7 +595,7 @@ interface TracingOptions {
 }
 ```
 
-### TracingPolicy
+### `TracingPolicy`
 
 Policy-level tracing configuration applied when creating a workflow or agent.
 
@@ -612,7 +612,7 @@ interface TracingPolicy {
 
 ## Configuration types
 
-### ObservabilityInstanceConfig
+### `ObservabilityInstanceConfig`
 
 Configuration for a single observability instance.
 
@@ -641,7 +641,7 @@ interface ObservabilityInstanceConfig {
 }
 ```
 
-### ObservabilityRegistryConfig
+### `ObservabilityRegistryConfig`
 
 Complete observability registry configuration.
 
@@ -662,7 +662,7 @@ interface ObservabilityRegistryConfig {
 
 ## Sampling types
 
-### SamplingStrategy
+### `SamplingStrategy`
 
 Sampling strategy configuration.
 
@@ -674,7 +674,7 @@ type SamplingStrategy =
   | { type: 'custom'; sampler: (options?: CustomSamplerOptions) => boolean }
 ```
 
-### CustomSamplerOptions
+### `CustomSamplerOptions`
 
 Options passed when using a custom sampler strategy.
 
@@ -687,7 +687,7 @@ interface CustomSamplerOptions {
 
 ## Config selector types
 
-### ConfigSelector
+### `ConfigSelector`
 
 Function to select which observability instance to use for a given span.
 
@@ -698,7 +698,7 @@ type ConfigSelector = (
 ) => string | undefined
 ```
 
-### ConfigSelectorOptions
+### `ConfigSelectorOptions`
 
 Options passed when using a custom tracing config selector.
 
@@ -711,7 +711,7 @@ interface ConfigSelectorOptions {
 
 ## Internal spans
 
-### InternalSpans
+### `InternalSpans`
 
 Bitwise options to set different types of spans as internal in a workflow or agent execution.
 

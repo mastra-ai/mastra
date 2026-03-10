@@ -18,7 +18,7 @@ Sends Tracing data to Langfuse for observability.
 new LangfuseExporter(config: LangfuseExporterConfig)
 ```
 
-## LangfuseExporterConfig
+## `LangfuseExporterConfig`
 
 ```typescript
 interface LangfuseExporterConfig extends BaseExporterConfig {
@@ -78,7 +78,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>

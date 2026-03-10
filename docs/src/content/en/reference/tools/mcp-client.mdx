@@ -51,7 +51,7 @@ constructor({
 ]}
 />
 
-### MastraMCPServerDefinition
+### `MastraMCPServerDefinition`
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
@@ -143,7 +143,7 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 
 ## Methods
 
-### listTools()
+### `listTools()`
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
@@ -152,7 +152,7 @@ Intended to be passed onto an Agent definition.
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
 
-### listToolsets()
+### `listToolsets()`
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
 Intended to be passed dynamically into the generate or stream method.
@@ -163,7 +163,7 @@ const res = await agent.stream(prompt, {
 })
 ```
 
-### disconnect()
+### `disconnect()`
 
 Disconnects from all MCP servers and cleans up resources.
 
@@ -329,7 +329,7 @@ mcpClient.elicitation.onRequest('serverName', async request => {
 
 Sets up a handler function that will be called when any connected MCP server sends an elicitation request. The handler receives the request and must return a response.
 
-##### ElicitationHandler Function
+##### `ElicitationHandler` Function
 
 The handler function receives a request object with:
 

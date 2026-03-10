@@ -227,7 +227,7 @@ const textStream = Readable.from(['Hello', ' from', ' a', ' stream!'])
 const audioStreamFromTextStream = await voice.speak(textStream)
 ```
 
-## Using with CompositeVoice
+## Using with `CompositeVoice`
 
 When using `CompositeVoice`, the `speak()` method delegates to the configured speaking provider:
 

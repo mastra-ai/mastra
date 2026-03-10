@@ -18,7 +18,7 @@ Sends Tracing data to Sentry for AI tracing and monitoring using OpenTelemetry s
 new SentryExporter(config: SentryExporterConfig)
 ```
 
-## SentryExporterConfig
+## `SentryExporterConfig`
 
 ```typescript
 interface SentryExporterConfig extends BaseExporterConfig {
@@ -76,7 +76,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -187,7 +187,7 @@ The exporter reads configuration from these environment variables:
 | `SENTRY_ENVIRONMENT` | Deployment environment name |
 | `SENTRY_RELEASE` | Version of your code deployed |
 
-## OpenTelemetry attributes
+## `OpenTelemetry` attributes
 
 The exporter sets these standard OpenTelemetry attributes:
 

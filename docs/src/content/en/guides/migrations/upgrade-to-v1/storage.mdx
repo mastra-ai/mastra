@@ -104,7 +104,7 @@ USING snapshot::jsonb;
 
 ## Added
 
-### Storage composition in MastraCompositeStore
+### Storage composition in `MastraCompositeStore`
 
 `MastraCompositeStore` can now compose storage domains from different adapters. Use it when you need different databases for different purposes - for example, PostgreSQL for memory and workflows, but a specialized database for observability.
 
@@ -501,7 +501,7 @@ To migrate, rename the method and use named arguments.
 + });
 ```
 
-### PostgresStore `schema` to `schemaName`
+### `PostgresStore`: `schema` to `schemaName`
 
 The `schema` parameter has been renamed to `schemaName` in the PostgresStore constructor. This change provides clearer naming to avoid confusion with database schema concepts.
 

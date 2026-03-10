@@ -50,7 +50,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -86,7 +86,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-#### LanceIndexConfig
+#### `LanceIndexConfig`
 
 <PropertiesTable
   content={[
@@ -155,7 +155,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### createTable()
+### `createTable()`
 
 <PropertiesTable
   content={[
@@ -178,7 +178,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -207,7 +207,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -258,7 +258,7 @@ const s3Store = await LanceVectorStore.create('s3://bucket/db', {
 ]}
 />
 
-### listTables()
+### `listTables()`
 
 Returns an array of table names as strings.
 
@@ -267,7 +267,7 @@ const tables = await vectorStore.listTables()
 // ['my_vectors', 'embeddings', 'documents']
 ```
 
-### getTableSchema()
+### `getTableSchema()`
 
 <PropertiesTable
   content={[
@@ -281,7 +281,7 @@ const tables = await vectorStore.listTables()
 
 Returns the schema of the specified table.
 
-### deleteTable()
+### `deleteTable()`
 
 <PropertiesTable
   content={[
@@ -293,15 +293,15 @@ Returns the schema of the specified table.
 ]}
 />
 
-### deleteAllTables()
+### `deleteAllTables()`
 
 Deletes all tables in the database.
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -330,7 +330,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -342,7 +342,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -373,7 +373,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -390,7 +390,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
@@ -416,7 +416,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-### close()
+### `close()`
 
 Closes the database connection.
 

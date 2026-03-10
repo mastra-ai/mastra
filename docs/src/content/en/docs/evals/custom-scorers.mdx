@@ -213,7 +213,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** Results are available to subsequent steps as `results.analyzeStepResult`
 
-### generateScore Step (Required)
+### `generateScore` step (required)
 
 Converts analysis results into a numerical score. This is the only required step in the pipeline.
 
@@ -236,7 +236,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 
-### generateReason Step (Optional)
+### `generateReason` step (optional)
 
 Generates human-readable explanations for the score, useful for debugging, transparency, or user feedback.
 

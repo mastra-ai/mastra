@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Spans
 
-## BaseSpan
+## `BaseSpan`
 
 Base interface for all span types.
 
@@ -201,7 +201,7 @@ Updates span data while it's still active. Can modify `input`, `output`, `metada
 ]}
 />
 
-#### createChildSpan
+#### `createChildSpan`
 
 ```typescript prettier:false
 createChildSpan<TChildType extends SpanType>(
@@ -246,7 +246,7 @@ Creates a child span under this span. Child spans track sub-operations and inher
 ]}
 />
 
-#### createEventSpan
+#### `createEventSpan`
 
 ```typescript prettier:false
 createEventSpan<TChildType extends SpanType>(
@@ -297,7 +297,7 @@ Creates an event span under this span. Event spans represent point-in-time occur
 ]}
 />
 
-## ExportedSpan
+## `ExportedSpan`
 
 Exported Span interface, used for tracing exporters. A lightweight version of Span without methods or circular references.
 
@@ -315,7 +315,7 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
 
 Events emitted during the span lifecycle.
 
-### TracingEventType
+### `TracingEventType`
 
 ```typescript
 enum TracingEventType {
@@ -330,7 +330,7 @@ enum TracingEventType {
 }
 ```
 
-### TracingEvent
+### `TracingEvent`
 
 ```typescript
 type TracingEvent =
@@ -343,7 +343,7 @@ Exporters receive these events to process and send trace data to observability p
 
 ## Union types
 
-### AnySpan
+### `AnySpan`
 
 ```typescript
 type AnySpan = Span<keyof SpanTypeMap>
@@ -351,7 +351,7 @@ type AnySpan = Span<keyof SpanTypeMap>
 
 Union type for cases that need to handle any span type.
 
-### AnyExportedSpan
+### `AnyExportedSpan`
 
 ```typescript
 type AnyExportedSpan = ExportedSpan<keyof SpanTypeMap>
@@ -363,7 +363,7 @@ Union type for cases that need to handle any exported span type.
 
 When tracing is disabled (sampling returns false), NO-OP spans are returned:
 
-### NoOpSpan
+### `NoOpSpan`
 
 ```typescript prettier:false
 class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>

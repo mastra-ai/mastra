@@ -28,7 +28,7 @@ new DefaultExporter(config?: DefaultExporterConfig)
 ]}
 />
 
-## DefaultExporterConfig
+## `DefaultExporterConfig`
 
 ```typescript
 interface DefaultExporterConfig extends BaseExporterConfig {
@@ -57,7 +57,7 @@ Extends `BaseExporterConfig`, which includes:
 - `logger?: IMastraLogger` - Logger instance
 - `logLevel?: LogLevel | 'debug' | 'info' | 'warn' | 'error'` - Log level (default: INFO)
 
-## TracingStorageStrategy
+## `TracingStorageStrategy`
 
 ```typescript
 type TracingStorageStrategy = 'realtime' | 'batch-with-updates' | 'insert-only'
@@ -96,7 +96,7 @@ Initializes the exporter after dependencies are ready. Resolves tracing strategy
 ]}
 />
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>

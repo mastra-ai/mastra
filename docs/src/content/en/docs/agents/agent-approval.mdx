@@ -101,7 +101,7 @@ const handleDecline = async () => {
 }
 ```
 
-## Tool approval with generate()
+## Tool approval with `generate()`
 
 Tool approval also works with the `generate()` method for non-streaming use cases. When a tool requires approval during a `generate()` call, the method returns immediately instead of executing the tool.
 
@@ -514,7 +514,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-### Using suspend() in supervisor pattern
+### Using `suspend()` in supervisor pattern
 
 Tools can also use [`suspend()`](#approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does — the suspension surfaces at the supervisor level:
 
@@ -563,7 +563,7 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
-### Tool approval with generate()
+### Tool approval with `generate()`
 
 Tool approval propagation also works with `generate()` in supervisor pattern:
 

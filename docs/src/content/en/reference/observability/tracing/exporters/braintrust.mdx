@@ -17,7 +17,7 @@ Sends Tracing data to Braintrust for eval and observability.
 new BraintrustExporter(config: BraintrustExporterConfig)
 ```
 
-## BraintrustExporterConfig
+## `BraintrustExporterConfig`
 
 ```typescript
 interface BraintrustExporterConfig extends BaseExporterConfig {
@@ -70,7 +70,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>

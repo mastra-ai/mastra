@@ -28,7 +28,7 @@ new CloudExporter(config?: CloudExporterConfig)
 ]}
 />
 
-## CloudExporterConfig
+## `CloudExporterConfig`
 
 ```typescript
 interface CloudExporterConfig extends BaseExporterConfig {
@@ -69,7 +69,7 @@ readonly name = 'mastra-cloud-observability-exporter';
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -133,7 +133,7 @@ The exporter batches spans for efficient network usage:
 - Ignores `SPAN_STARTED` and `SPAN_UPDATED` events
 - Formats spans to MastraCloudSpanRecord format
 
-## MastraCloudSpanRecord
+## `MastraCloudSpanRecord`
 
 Internal format for cloud spans:
 

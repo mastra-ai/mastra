@@ -37,7 +37,7 @@ const agent = mastraClient.getAgent('my-agent')
 
 ## Agent methods
 
-### details()
+### `details()`
 
 Retrieve detailed information about an agent:
 
@@ -45,7 +45,7 @@ Retrieve detailed information about an agent:
 const details = await agent.details()
 ```
 
-### generate()
+### `generate()`
 
 Generate a response from the agent:
 
@@ -78,7 +78,7 @@ const response = await agent.generate('Hello, how are you?', {
 })
 ```
 
-### stream()
+### `stream()`
 
 Stream responses from the agent for real-time interactions:
 
@@ -160,7 +160,7 @@ for await (const part of uiMessageStream) {
 }
 ```
 
-### getTool()
+### `getTool()`
 
 Retrieve information about a specific tool available to the agent:
 
@@ -168,7 +168,7 @@ Retrieve information about a specific tool available to the agent:
 const tool = await agent.getTool('tool-id')
 ```
 
-### executeTool()
+### `executeTool()`
 
 Execute a specific tool for the agent:
 
@@ -178,7 +178,7 @@ const result = await agent.executeTool('tool-id', {
 })
 ```
 
-### network()
+### `network()`
 
 Stream responses from an agent network for multi-agent interactions:
 
@@ -192,7 +192,7 @@ response.processDataStream({
 })
 ```
 
-### approveToolCall()
+### `approveToolCall()`
 
 Approve a pending tool call that requires human confirmation:
 
@@ -209,7 +209,7 @@ response.processDataStream({
 })
 ```
 
-### declineToolCall()
+### `declineToolCall()`
 
 Decline a pending tool call that requires human confirmation:
 
@@ -226,7 +226,7 @@ response.processDataStream({
 })
 ```
 
-### approveToolCallGenerate()
+### `approveToolCallGenerate()`
 
 Approve a pending tool call when using `generate()` (non-streaming). Returns the complete response:
 
@@ -245,7 +245,7 @@ if (output.finishReason === 'suspended') {
 }
 ```
 
-### declineToolCallGenerate()
+### `declineToolCallGenerate()`
 
 Decline a pending tool call when using `generate()` (non-streaming). Returns the complete response:
 
@@ -319,7 +319,7 @@ response.processDataStream({
 
 Stored agents are agent configurations stored in a database that can be created, updated, and deleted at runtime. They reference primitives (tools, workflows, other agents, memory, scorers) by key, which are resolved from the Mastra registry when the agent is instantiated.
 
-### listStoredAgents()
+### `listStoredAgents()`
 
 Retrieve a paginated list of all stored agents:
 
@@ -342,7 +342,7 @@ const result = await mastraClient.listStoredAgents({
 })
 ```
 
-### createStoredAgent()
+### `createStoredAgent()`
 
 Create a new stored agent:
 
@@ -389,7 +389,7 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
-### getStoredAgent()
+### `getStoredAgent()`
 
 Get an instance of a specific stored agent:
 
@@ -399,7 +399,7 @@ const storedAgent = mastraClient.getStoredAgent('my-agent')
 
 ## Stored agent methods
 
-### details()
+### `details()`
 
 Retrieve the stored agent configuration:
 
@@ -410,7 +410,7 @@ console.log(details.instructions)
 console.log(details.model)
 ```
 
-### update()
+### `update()`
 
 Update specific fields of a stored agent. All fields are optional:
 
@@ -436,7 +436,7 @@ await storedAgent.update({
 })
 ```
 
-### delete()
+### `delete()`
 
 Delete a stored agent:
 

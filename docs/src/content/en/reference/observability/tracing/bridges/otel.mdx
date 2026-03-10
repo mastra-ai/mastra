@@ -28,7 +28,7 @@ new OtelBridge()
 
 ## Methods
 
-### executeInContext
+### `executeInContext`
 
 ```typescript prettier:false
 executeInContext<T>(spanId: string, fn: () => Promise<T>): Promise<T>
@@ -55,7 +55,7 @@ Executes an async function within the OTEL context of a Mastra span. OTEL-instru
 
 **Returns:** `Promise<T>` - The result of the function execution.
 
-### executeInContextSync
+### `executeInContextSync`
 
 ```typescript prettier:false
 executeInContextSync<T>(spanId: string, fn: () => T): T
@@ -142,7 +142,7 @@ const mastra = new Mastra({
 })
 ```
 
-## OpenTelemetry setup requirements
+## `OpenTelemetry` setup requirements
 
 The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
 

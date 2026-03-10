@@ -304,7 +304,7 @@ Tools support lifecycle hooks that allow you to monitor and react to different s
 
 ### Available Hooks
 
-#### onInputStart
+#### `onInputStart`
 
 Called when tool call input streaming begins, before any input data is received.
 
@@ -318,7 +318,7 @@ export const tool = createTool({
 })
 ```
 
-#### onInputDelta
+#### `onInputDelta`
 
 Called for each incremental chunk of input text as it streams in. Useful for showing real-time progress or parsing partial JSON.
 
@@ -332,7 +332,7 @@ export const tool = createTool({
 })
 ```
 
-#### onInputAvailable
+#### `onInputAvailable`
 
 Called when the complete tool input is available and has been parsed and validated against the `inputSchema`.
 
@@ -350,7 +350,7 @@ export const tool = createTool({
 })
 ```
 
-#### onOutput
+#### `onOutput`
 
 Called after the tool has successfully executed and returned output. Useful for logging results, triggering follow-up actions, or analytics.
 
@@ -412,7 +412,7 @@ mcp: {
 }
 ```
 
-### ToolAnnotations Properties
+### `ToolAnnotations` Properties
 
 <PropertiesTable
   content={[

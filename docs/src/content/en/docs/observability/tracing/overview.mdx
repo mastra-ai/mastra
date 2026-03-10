@@ -354,7 +354,7 @@ execute: async (inputData, context) => {
 
 Metadata set here will be shown in all configured exporters.
 
-### Automatic Metadata from RequestContext
+### Automatic Metadata from `RequestContext`
 
 Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
 
@@ -1041,7 +1041,7 @@ In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflar
 Serverless environments have ephemeral filesystems. Use external storage instead of local file storage (`file:./mastra.db`). See the [Vercel deployment guide](/guides/deployment/vercel#observability) for a complete setup example.
 :::
 
-### Using flush()
+### Using `flush()`
 
 Call `flush()` on the observability instance to flush all exporters:
 
@@ -1053,7 +1053,7 @@ const observability = mastra.getObservability()
 await observability.flush()
 ```
 
-### When to Use flush()
+### When to Use `flush()`
 
 Use `flush()` in these scenarios:
 
@@ -1074,7 +1074,7 @@ export async function POST(req: Request) {
 }
 ```
 
-### flush() vs shutdown()
+### `flush()` vs `shutdown()`
 
 | Method | Behavior | Use Case |
 | - | - | - |

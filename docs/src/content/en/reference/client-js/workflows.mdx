@@ -33,7 +33,7 @@ const workflow = mastraClient.getWorkflow('city-workflow')
 
 ## Workflow methods
 
-### details()
+### `details()`
 
 Retrieve detailed information about a workflow:
 
@@ -41,7 +41,7 @@ Retrieve detailed information about a workflow:
 const details = await workflow.details()
 ```
 
-### createRun()
+### `createRun()`
 
 Create a new workflow run instance:
 
@@ -60,7 +60,7 @@ const run = await workflow.createRun({
 
 The `resourceId` parameter associates the workflow run with a specific resource (e.g., user ID, tenant ID). This value is persisted with the run and can be used for filtering and querying runs later.
 
-### startAsync()
+### `startAsync()`
 
 Start a workflow run and await the full result:
 
@@ -102,7 +102,7 @@ const result = await run.startAsync({
 })
 ```
 
-### start()
+### `start()`
 
 Start a workflow run without waiting for completion:
 
@@ -121,7 +121,7 @@ const result = await workflow.runById(run.runId)
 
 This is useful for long-running workflows where you want to start execution and check results later.
 
-### resumeAsync()
+### `resumeAsync()`
 
 Resume a suspended workflow step and await the full result:
 
@@ -134,7 +134,7 @@ const result = await run.resumeAsync({
 })
 ```
 
-### resume()
+### `resume()`
 
 Resume a suspended workflow step without waiting for completion:
 
@@ -147,7 +147,7 @@ await run.resume({
 })
 ```
 
-### cancel()
+### `cancel()`
 
 Cancel a running workflow:
 
@@ -162,7 +162,7 @@ This method stops any running steps and prevents subsequent steps from executing
 
 See the [Run.cancel()](/reference/workflows/run-methods/cancel) reference for detailed information about how cancellation works and how to write steps that respond to cancellation.
 
-### stream()
+### `stream()`
 
 Stream workflow execution for real-time updates:
 
@@ -180,7 +180,7 @@ for await (const chunk of stream) {
 }
 ```
 
-### runById()
+### `runById()`
 
 Get the execution result for a workflow run:
 

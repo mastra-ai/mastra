@@ -143,7 +143,7 @@ const voices = await voice.getSpeakers({ languageCode: 'en-US' })
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using Google Cloud Text-to-Speech service.
 
@@ -193,7 +193,7 @@ Converts text to speech using Google Cloud Text-to-Speech service.
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+### `listen()`
 
 Converts speech to text using Google Cloud Speech-to-Text service.
 
@@ -236,7 +236,7 @@ Converts speech to text using Google Cloud Speech-to-Text service.
 
 Returns: `Promise<string>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 
@@ -257,19 +257,19 @@ Returns an array of available voice options, where each node contains:
 ]}
 />
 
-### isUsingVertexAI()
+### `isUsingVertexAI()`
 
 Checks if Vertex AI mode is enabled.
 
 Returns: `boolean` - `true` if using Vertex AI, `false` otherwise
 
-### getProject()
+### `getProject()`
 
 Gets the configured Google Cloud project ID.
 
 Returns: `string | undefined` - The project ID or `undefined` if not set
 
-### getLocation()
+### `getLocation()`
 
 Gets the configured Google Cloud location/region.
 

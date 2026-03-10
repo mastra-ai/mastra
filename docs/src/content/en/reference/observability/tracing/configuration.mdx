@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Configuration
 
-## ObservabilityRegistryConfig
+## `ObservabilityRegistryConfig`
 
 ```typescript
 interface ObservabilityRegistryConfig {
@@ -42,7 +42,7 @@ interface ObservabilityRegistryConfig {
 ]}
 />
 
-## ObservabilityInstanceConfig
+## `ObservabilityInstanceConfig`
 
 ```typescript
 interface ObservabilityInstanceConfig {
@@ -141,7 +141,7 @@ interface ObservabilityInstanceConfig {
 ]}
 />
 
-## SamplingStrategy
+## `SamplingStrategy`
 
 ```typescript
 type SamplingStrategy =
@@ -151,7 +151,7 @@ type SamplingStrategy =
   | { type: 'custom'; sampler: (options?: TracingOptions) => boolean }
 ```
 
-## ConfigSelector
+## `ConfigSelector`
 
 ```typescript
 type ConfigSelector = (
@@ -160,7 +160,7 @@ type ConfigSelector = (
 ) => string | undefined
 ```
 
-## ConfigSelectorOptions
+## `ConfigSelectorOptions`
 
 ```typescript
 interface ConfigSelectorOptions {
@@ -172,7 +172,7 @@ interface ConfigSelectorOptions {
 
 The Observability class provides methods for managing observability instances:
 
-### registerInstance
+### `registerInstance`
 
 ```typescript prettier:false
 registerInstance(
@@ -184,7 +184,7 @@ registerInstance(
 
 Registers an observability instance in the registry.
 
-### getInstance
+### `getInstance`
 
 ```typescript prettier:false
 getInstance(name: string): ObservabilityInstance | undefined;
@@ -192,7 +192,7 @@ getInstance(name: string): ObservabilityInstance | undefined;
 
 Retrieves an observability instance by name.
 
-### getDefaultInstance
+### `getDefaultInstance`
 
 ```typescript prettier:false
 getDefaultInstance(): ObservabilityInstance | undefined;
@@ -200,7 +200,7 @@ getDefaultInstance(): ObservabilityInstance | undefined;
 
 Returns the default observability instance.
 
-### getSelectedInstance
+### `getSelectedInstance`
 
 ```typescript prettier:false
 getSelectedInstance(
@@ -210,7 +210,7 @@ getSelectedInstance(
 
 Returns the observability instance selected by the config selector or default.
 
-### listInstances
+### `listInstances`
 
 ```typescript prettier:false
 listInstances(): ReadonlyMap<string, ObservabilityInstance>;
@@ -218,7 +218,7 @@ listInstances(): ReadonlyMap<string, ObservabilityInstance>;
 
 Returns all registered observability instances.
 
-### hasInstance
+### `hasInstance`
 
 ```typescript prettier:false
 hasInstance(name: string): boolean;
@@ -226,7 +226,7 @@ hasInstance(name: string): boolean;
 
 Checks if an observability instance exists.
 
-### setConfigSelector
+### `setConfigSelector`
 
 ```typescript prettier:false
 setConfigSelector(selector: ConfigSelector): void;
@@ -234,7 +234,7 @@ setConfigSelector(selector: ConfigSelector): void;
 
 Sets the config selector function.
 
-### unregisterInstance
+### `unregisterInstance`
 
 ```typescript prettier:false
 unregisterInstance(name: string): boolean;

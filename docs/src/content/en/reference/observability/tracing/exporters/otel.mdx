@@ -17,7 +17,7 @@ Sends Tracing data to any OpenTelemetry-compatible observability platform using 
 new OtelExporter(config: OtelExporterConfig)
 ```
 
-## OtelExporterConfig
+## `OtelExporterConfig`
 
 ```typescript
 interface OtelExporterConfig {
@@ -65,7 +65,7 @@ interface OtelExporterConfig {
 
 ## Provider configurations
 
-### Dash0Config
+### `Dash0Config`
 
 ```typescript
 interface Dash0Config {
@@ -98,7 +98,7 @@ interface Dash0Config {
 ]}
 />
 
-### SignozConfig
+### `SignozConfig`
 
 ```typescript
 interface SignozConfig {
@@ -131,7 +131,7 @@ interface SignozConfig {
 ]}
 />
 
-### NewRelicConfig
+### `NewRelicConfig`
 
 ```typescript
 interface NewRelicConfig {
@@ -158,7 +158,7 @@ interface NewRelicConfig {
 ]}
 />
 
-### TraceloopConfig
+### `TraceloopConfig`
 
 ```typescript
 interface TraceloopConfig {
@@ -192,7 +192,7 @@ interface TraceloopConfig {
 ]}
 />
 
-### LaminarConfig
+### `LaminarConfig`
 
 ```typescript
 interface LaminarConfig {
@@ -218,7 +218,7 @@ interface LaminarConfig {
 ]}
 />
 
-### CustomConfig
+### `CustomConfig`
 
 ```typescript
 interface CustomConfig {
@@ -253,7 +253,7 @@ interface CustomConfig {
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>

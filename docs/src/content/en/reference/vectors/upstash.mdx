@@ -31,7 +31,7 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 Note: This method is a no-op for Upstash as indexes are created automatically.
 
@@ -57,7 +57,7 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -93,7 +93,7 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -149,11 +149,11 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names (namespaces) as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -175,7 +175,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -187,7 +187,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 <PropertiesTable
   content={[
@@ -215,7 +215,7 @@ The `update` object can have the following properties:
 - `sparseVector` (optional): A sparse vector object with `indices` and `values` arrays for hybrid indexes.
 - `metadata` (optional): A record of key-value pairs for metadata.
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[

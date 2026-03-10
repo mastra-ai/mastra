@@ -248,7 +248,7 @@ const fetchUserData = createTool({
 
 These are the functions you can call on an `MCPServer` instance to control its behavior and get information.
 
-### startStdio()
+### `startStdio()`
 
 Use this method to start the server so it communicates using standard input and output (stdio). This is typical when running the server as a command-line program.
 
@@ -270,7 +270,7 @@ const server = new MCPServer({
 await server.startStdio()
 ```
 
-### startSSE()
+### `startSSE()`
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
@@ -342,7 +342,7 @@ Here are the details for the values needed by the `startSSE` method:
 ]}
 />
 
-### startHonoSSE()
+### `startHonoSSE()`
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
@@ -414,7 +414,7 @@ Here are the details for the values needed by the `startHonoSSE` method:
 ]}
 />
 
-### startHTTP()
+### `startHTTP()`
 
 This method helps you integrate the MCP server with an existing web server to use streamable HTTP for communication. You'll call this from your web server's code when it receives HTTP requests.
 
@@ -602,7 +602,7 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 ]}
 />
 
-### close()
+### `close()`
 
 This method closes the server and releases all resources.
 
@@ -610,7 +610,7 @@ This method closes the server and releases all resources.
 async close(): Promise<void>
 ```
 
-### getServerInfo()
+### `getServerInfo()`
 
 This method gives you a look at the server's basic information.
 
@@ -618,7 +618,7 @@ This method gives you a look at the server's basic information.
 getServerInfo(): ServerInfo
 ```
 
-### getServerDetail()
+### `getServerDetail()`
 
 This method gives you a detailed look at the server's information.
 
@@ -626,7 +626,7 @@ This method gives you a detailed look at the server's information.
 getServerDetail(): ServerDetail
 ```
 
-### getToolListInfo()
+### `getToolListInfo()`
 
 This method gives you a look at the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
 
@@ -634,7 +634,7 @@ This method gives you a look at the tools that were set up when you created the 
 getToolListInfo(): ToolListInfo
 ```
 
-### getToolInfo()
+### `getToolInfo()`
 
 This method gives you detailed information about a specific tool.
 
@@ -642,7 +642,7 @@ This method gives you detailed information about a specific tool.
 getToolInfo(toolName: string): ToolInfo
 ```
 
-### executeTool()
+### `executeTool()`
 
 This method executes a specific tool and returns the result.
 
@@ -650,7 +650,7 @@ This method executes a specific tool and returns the result.
 executeTool(toolName: string, input: any): Promise<any>
 ```
 
-### getStdioTransport()
+### `getStdioTransport()`
 
 If you started the server with `startStdio()`, you can use this to get the object that manages the stdio communication. This is mostly for checking things internally or for testing.
 
@@ -658,7 +658,7 @@ If you started the server with `startStdio()`, you can use this to get the objec
 getStdioTransport(): StdioServerTransport | undefined
 ```
 
-### getSseTransport()
+### `getSseTransport()`
 
 If you started the server with `startSSE()`, you can use this to get the object that manages the SSE communication. Like `getStdioTransport`, this is mainly for internal checks or testing.
 
@@ -666,7 +666,7 @@ If you started the server with `startSSE()`, you can use this to get the object 
 getSseTransport(): SSEServerTransport | undefined
 ```
 
-### getSseHonoTransport()
+### `getSseHonoTransport()`
 
 If you started the server with `startHonoSSE()`, you can use this to get the object that manages the SSE communication. Like `getSseTransport`, this is mainly for internal checks or testing.
 
@@ -674,7 +674,7 @@ If you started the server with `startHonoSSE()`, you can use this to get the obj
 getSseHonoTransport(): SSETransport | undefined
 ```
 
-### getStreamableHTTPTransport()
+### `getStreamableHTTPTransport()`
 
 If you started the server with `startHTTP()`, you can use this to get the object that manages the HTTP communication. Like `getSseTransport`, this is mainly for internal checks or testing.
 
@@ -682,7 +682,7 @@ If you started the server with `startHTTP()`, you can use this to get the object
 getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 ```
 
-### tools()
+### `tools()`
 
 Executes a specific tool provided by this MCP server.
 
