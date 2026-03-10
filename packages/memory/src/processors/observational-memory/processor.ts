@@ -3,8 +3,8 @@ import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { omDebug } from './debug';
 import type { ObservationalMemory } from './observational-memory';
-import { omDebug } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { resolveRetentionFloor } from './thresholds';
 import type { TokenCounterModelContext } from './token-counter';

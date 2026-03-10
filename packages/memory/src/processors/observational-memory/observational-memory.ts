@@ -1,5 +1,3 @@
-import { appendFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import type { AgentConfig, MastraDBMessage, MessageList } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
@@ -12,36 +10,15 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
-const OM_DEBUG_LOG = process.env.OM_DEBUG ? join(process.cwd(), 'om-debug.log') : null;
-
-export function omDebug(msg: string) {
-  if (!OM_DEBUG_LOG) return;
-  try {
-    appendFileSync(OM_DEBUG_LOG, `[${new Date().toLocaleString()}] ${msg}\n`);
-  } catch {
-    // ignore write errors
-  }
-}
-function omError(msg: string, err?: unknown) {
-  const errStr = err instanceof Error ? (err.stack ?? err.message) : err !== undefined ? String(err) : '';
-  const full = errStr ? `${msg}: ${errStr}` : msg;
-  omDebug(`[OM:ERROR] ${full}`);
-}
-
-omDebug(`[OM:process-start] OM module loaded, pid=${process.pid}`);
-
-// Wrap console.error so any unexpected errors also land in the debug log
-if (OM_DEBUG_LOG) {
-  const _origConsoleError = console.error;
-  console.error = (...args: unknown[]) => {
-    omDebug(
-      `[console.error] ${args.map(a => (a instanceof Error ? (a.stack ?? a.message) : typeof a === 'object' && a !== null ? JSON.stringify(a) : String(a))).join(' ')}`,
-    );
-    _origConsoleError.apply(console, args);
-  };
-}
-
+import {
+  OBSERVATIONAL_MEMORY_DEFAULTS,
+  OBSERVATION_CONTINUATION_HINT,
+  OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_INSTRUCTIONS,
+} from './constants';
 import { addRelativeTimeToObservations } from './date-utils';
+import { omDebug, omError } from './debug';
+
 import {
   createActivationMarker,
   createBufferingEndMarker,
@@ -82,233 +59,14 @@ import { TokenCounter } from './token-counter';
 import type { TokenCounterModelContext } from './token-counter';
 import type {
   DataOmStatusPart,
-  ObservationConfig,
-  ReflectionConfig,
+  ObservationDebugEvent,
+  ObservationalMemoryConfig,
+  ObserveHooks,
+  ResolvedObservationConfig,
+  ResolvedReflectionConfig,
   ThresholdRange,
-  ModelSettings,
-  ProviderOptions,
   ObservationMarkerConfig,
 } from './types';
-
-/**
- * Debug event emitted when observation-related events occur.
- * Useful for understanding what the Observer is doing.
- */
-export interface ObservationDebugEvent {
-  type:
-    | 'observation_triggered'
-    | 'observation_complete'
-    | 'reflection_triggered'
-    | 'reflection_complete'
-    | 'tokens_accumulated'
-    | 'step_progress';
-  timestamp: Date;
-  threadId: string;
-  resourceId: string;
-  /** Messages that were sent to the Observer */
-  messages?: Array<{ role: string; content: string }>;
-  /** Token counts */
-  pendingTokens?: number;
-  sessionTokens?: number;
-  totalPendingTokens?: number;
-  threshold?: number;
-  /** Input token count (for reflection events) */
-  inputTokens?: number;
-  /** Number of active observations (for reflection events) */
-  activeObservationsLength?: number;
-  /** Output token count after reflection */
-  outputTokens?: number;
-  /** The observations that were generated */
-  observations?: string;
-  /** Previous observations (before this event) */
-  previousObservations?: string;
-  /** Observer's raw output */
-  rawObserverOutput?: string;
-  /** LLM usage from Observer/Reflector calls */
-  usage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  };
-  /** Step progress fields (for step_progress events) */
-  stepNumber?: number;
-  finishReason?: string;
-  thresholdPercent?: number;
-  willSave?: boolean;
-  willObserve?: boolean;
-}
-
-/**
- * Configuration for ObservationalMemory
- */
-export interface ObservationalMemoryConfig {
-  /**
-   * Storage adapter for persisting observations.
-   * Must be a MemoryStorage instance (from MastraStorage.stores.memory).
-   */
-  storage: MemoryStorage;
-
-  /**
-   * Model for both Observer and Reflector agents.
-   * Sets the model for both agents at once. Cannot be used together with
-   * `observation.model` or `reflection.model` — an error will be thrown.
-   *
-   * @default 'google/gemini-2.5-flash'
-   */
-  model?: AgentConfig['model'];
-
-  /**
-   * Observation step configuration.
-   */
-  observation?: ObservationConfig;
-
-  /**
-   * Reflection step configuration.
-   */
-  reflection?: ReflectionConfig;
-
-  /**
-   * Memory scope for observations.
-   * - 'resource': Observations span all threads for a resource (cross-thread memory)
-   * - 'thread': Observations are per-thread (default)
-   */
-  scope?: 'resource' | 'thread';
-
-  /**
-   * Debug callback for observation events.
-   * Called whenever observation-related events occur.
-   * Useful for debugging and understanding the observation flow.
-   */
-  onDebugEvent?: (event: ObservationDebugEvent) => void;
-
-  obscureThreadIds?: boolean;
-
-  /**
-   * Share the token budget between messages and observations.
-   * When true, the total budget = observation.messageTokens + reflection.observationTokens.
-   * - Messages can use more space when observations are small
-   * - Observations can use more space when messages are small
-   *
-   * This helps maximize context usage by allowing flexible allocation.
-   *
-   * @default false
-   */
-  shareTokenBudget?: boolean;
-}
-
-/**
- * Internal resolved config with all defaults applied.
- * Thresholds are stored as ThresholdRange internally for dynamic calculation,
- * even when user provides a simple number (converted based on shareTokenBudget).
- */
-interface ResolvedObservationConfig {
-  model: AgentConfig['model'];
-  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
-  messageTokens: number | ThresholdRange;
-  /** Whether shared token budget is enabled */
-  shareTokenBudget: boolean;
-  /** Model settings - merged with user config and defaults */
-  modelSettings: ModelSettings;
-  providerOptions: ProviderOptions;
-  maxTokensPerBatch: number;
-  /** Token interval for async background observation buffering (resolved from config) */
-  bufferTokens?: number;
-  /** Ratio of buffered observations to activate (0-1 float) */
-  bufferActivation?: number;
-  /** Token threshold above which synchronous observation is forced */
-  blockAfter?: number;
-  /** Custom instructions to append to the Observer's system prompt */
-  instruction?: string;
-}
-
-interface ResolvedReflectionConfig {
-  model: AgentConfig['model'];
-  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
-  observationTokens: number | ThresholdRange;
-  /** Whether shared token budget is enabled */
-  shareTokenBudget: boolean;
-  /** Model settings - merged with user config and defaults */
-  modelSettings: ModelSettings;
-  providerOptions: ProviderOptions;
-  /** Ratio (0-1) controlling when async reflection buffering starts */
-  bufferActivation?: number;
-  /** Token threshold above which synchronous reflection is forced */
-  blockAfter?: number;
-  /** Custom instructions to append to the Reflector's system prompt */
-  instruction?: string;
-}
-
-/**
- * Default configuration values matching the spec
- */
-export const OBSERVATIONAL_MEMORY_DEFAULTS = {
-  observation: {
-    model: 'google/gemini-2.5-flash',
-    messageTokens: 30_000,
-    modelSettings: {
-      temperature: 0.3,
-      maxOutputTokens: 100_000,
-    },
-    providerOptions: {
-      google: {
-        thinkingConfig: {
-          thinkingBudget: 215,
-        },
-      },
-    },
-    maxTokensPerBatch: 10_000,
-    // Async buffering defaults (enabled by default)
-    bufferTokens: 0.2 as number | undefined, // Buffer every 20% of messageTokens
-    bufferActivation: 0.8 as number | undefined, // Activate to retain 20% of threshold
-  },
-  reflection: {
-    model: 'google/gemini-2.5-flash',
-    observationTokens: 40_000,
-    modelSettings: {
-      temperature: 0, // Use 0 for maximum consistency in reflections
-      maxOutputTokens: 100_000,
-    },
-    providerOptions: {
-      google: {
-        thinkingConfig: {
-          thinkingBudget: 1024,
-        },
-      },
-    },
-    // Async reflection buffering (enabled by default)
-    bufferActivation: 0.5 as number | undefined, // Start buffering at 50% of observationTokens
-  },
-} as const;
-
-/**
- * Continuation hint injected after observations to guide the model's behavior.
- * Prevents the model from awkwardly acknowledging the memory system or treating
- * the conversation as new after observed messages are removed.
- */
-export const OBSERVATION_CONTINUATION_HINT = `This message is not from the user, the conversation history grew too long and wouldn't fit in context! Thankfully the entire conversation is stored in your memory observations. Please continue from where the observations left off. Do not refer to your "memory observations" directly, the user doesn't know about them, they are your memories! Just respond naturally as if you're remembering the conversation (you are!). Do not say "Hi there!" or "based on our previous conversation" as if the conversation is just starting, this is not a new conversation. This is an ongoing conversation, keep continuity by responding based on your memory. For example do not say "I understand. I've reviewed my memory observations", or "I remember [...]". Answer naturally following the suggestion from your memory. Note that your memory may contain a suggested first response, which you should follow.
-
-IMPORTANT: this system reminder is NOT from the user. The system placed it here as part of your memory system. This message is part of you remembering your conversation with the user.
-
-NOTE: Any messages following this system reminder are newer than your memories.`;
-
-/**
- * Preamble that introduces the observations block.
- * Use before `<observations>`, with instructions after.
- * Full pattern: `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${obs}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`
- */
-export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
-
-/**
- * Instructions that tell the model how to interpret and use observations.
- * Place AFTER the `<observations>` block so the model sees the data before the rules.
- */
-export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
-
-KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently...", "what is my current..."), always prefer the MOST RECENT information. Observations include dates - if you see conflicting information, the newer observation supersedes the older one. Look for phrases like "will start", "is switching", "changed to", "moved to" as indicators that previous information has been updated.
-
-PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.
-
-MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.`;
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
@@ -349,13 +107,6 @@ MOST RECENT USER INPUT: Treat the most recent user message as the highest-priori
  * });
  * ```
  */
-export interface ObserveHooks {
-  onObservationStart?: () => void;
-  onObservationEnd?: () => void;
-  onReflectionStart?: () => void;
-  onReflectionEnd?: () => void;
-}
-
 export class ObservationalMemory {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;

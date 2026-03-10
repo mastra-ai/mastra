@@ -1,5 +1,6 @@
 import type { AgentConfig } from '@mastra/core/agent';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
+import type { MemoryStorage } from '@mastra/core/storage';
 
 /**
  * Threshold can be a simple number or a dynamic range.
@@ -643,4 +644,161 @@ export interface DataOmObservedPart {
     /** Snapshot of config at observation time (for debugging) */
     config?: ObservationMarkerConfig;
   };
+}
+
+// ─── Types moved from observational-memory.ts ──────────────────────────────
+
+/**
+ * Debug event emitted when observation-related events occur.
+ * Useful for understanding what the Observer is doing.
+ */
+export interface ObservationDebugEvent {
+  type:
+    | 'observation_triggered'
+    | 'observation_complete'
+    | 'reflection_triggered'
+    | 'reflection_complete'
+    | 'tokens_accumulated'
+    | 'step_progress';
+  timestamp: Date;
+  threadId: string;
+  resourceId: string;
+  /** Messages that were sent to the Observer */
+  messages?: Array<{ role: string; content: string }>;
+  /** Token counts */
+  pendingTokens?: number;
+  sessionTokens?: number;
+  totalPendingTokens?: number;
+  threshold?: number;
+  /** Input token count (for reflection events) */
+  inputTokens?: number;
+  /** Number of active observations (for reflection events) */
+  activeObservationsLength?: number;
+  /** Output token count after reflection */
+  outputTokens?: number;
+  /** The observations that were generated */
+  observations?: string;
+  /** Previous observations (before this event) */
+  previousObservations?: string;
+  /** Observer's raw output */
+  rawObserverOutput?: string;
+  /** LLM usage from Observer/Reflector calls */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  /** Step progress fields (for step_progress events) */
+  stepNumber?: number;
+  finishReason?: string;
+  thresholdPercent?: number;
+  willSave?: boolean;
+  willObserve?: boolean;
+}
+
+/**
+ * Configuration for ObservationalMemory
+ */
+export interface ObservationalMemoryConfig {
+  /**
+   * Storage adapter for persisting observations.
+   * Must be a MemoryStorage instance (from MastraStorage.stores.memory).
+   */
+  storage: MemoryStorage;
+
+  /**
+   * Model for both Observer and Reflector agents.
+   * Sets the model for both agents at once. Cannot be used together with
+   * `observation.model` or `reflection.model` — an error will be thrown.
+   *
+   * @default 'google/gemini-2.5-flash'
+   */
+  model?: AgentConfig['model'];
+
+  /**
+   * Observation step configuration.
+   */
+  observation?: ObservationConfig;
+
+  /**
+   * Reflection step configuration.
+   */
+  reflection?: ReflectionConfig;
+
+  /**
+   * Memory scope for observations.
+   * - 'resource': Observations span all threads for a resource (cross-thread memory)
+   * - 'thread': Observations are per-thread (default)
+   */
+  scope?: 'resource' | 'thread';
+
+  /**
+   * Debug callback for observation events.
+   * Called whenever observation-related events occur.
+   * Useful for debugging and understanding the observation flow.
+   */
+  onDebugEvent?: (event: ObservationDebugEvent) => void;
+
+  obscureThreadIds?: boolean;
+
+  /**
+   * Share the token budget between messages and observations.
+   * When true, the total budget = observation.messageTokens + reflection.observationTokens.
+   * - Messages can use more space when observations are small
+   * - Observations can use more space when messages are small
+   *
+   * This helps maximize context usage by allowing flexible allocation.
+   *
+   * @default false
+   */
+  shareTokenBudget?: boolean;
+}
+
+/**
+ * Internal resolved config with all defaults applied.
+ * Thresholds are stored as ThresholdRange internally for dynamic calculation,
+ * even when user provides a simple number (converted based on shareTokenBudget).
+ */
+export interface ResolvedObservationConfig {
+  model: AgentConfig['model'];
+  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
+  messageTokens: number | ThresholdRange;
+  /** Whether shared token budget is enabled */
+  shareTokenBudget: boolean;
+  /** Model settings - merged with user config and defaults */
+  modelSettings: ModelSettings;
+  providerOptions: ProviderOptions;
+  maxTokensPerBatch: number;
+  /** Token interval for async background observation buffering (resolved from config) */
+  bufferTokens?: number;
+  /** Ratio of buffered observations to activate (0-1 float) */
+  bufferActivation?: number;
+  /** Token threshold above which synchronous observation is forced */
+  blockAfter?: number;
+  /** Custom instructions to append to the Observer's system prompt */
+  instruction?: string;
+}
+
+export interface ResolvedReflectionConfig {
+  model: AgentConfig['model'];
+  /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
+  observationTokens: number | ThresholdRange;
+  /** Whether shared token budget is enabled */
+  shareTokenBudget: boolean;
+  /** Model settings - merged with user config and defaults */
+  modelSettings: ModelSettings;
+  providerOptions: ProviderOptions;
+  /** Ratio (0-1) controlling when async reflection buffering starts */
+  bufferActivation?: number;
+  /** Token threshold above which synchronous reflection is forced */
+  blockAfter?: number;
+  /** Custom instructions to append to the Reflector's system prompt */
+  instruction?: string;
+}
+
+export interface ObserveHooks {
+  onObservationStart?: () => void;
+  onObservationEnd?: () => void;
+  onReflectionStart?: () => void;
+  onReflectionEnd?: () => void;
 }
