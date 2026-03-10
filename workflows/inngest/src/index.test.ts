@@ -15461,7 +15461,6 @@ createWorkflowTestSuite({
   // Provide access to storage for tests that need to spy on storage operations
   getStorage: () => sharedStorage,
 
-  // beforeAll is called AFTER registerWorkflows in the factory, so nothing to do here
   beforeAll: async () => {
     console.log('[beforeAll] Ready');
     vi.unmock('crypto');
