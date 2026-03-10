@@ -260,6 +260,11 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
+      case 'tool-call-input-streaming-end': {
+        safeEnqueue(controller, chunk);
+        break;
+      }
+
       case 'reasoning-start': {
         runState.setState({
           isReasoning: true,
@@ -443,6 +448,7 @@ async function processOutputStream<OUTPUT = undefined>({
         'tool-call',
         'tool-call-input-streaming-start',
         'tool-call-delta',
+        'tool-call-input-streaming-end',
         'raw',
       ].includes(chunk.type)
     ) {
@@ -1046,11 +1052,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       }
 
       /**
-       * Add tool calls to the message list
+       * Add tool calls to the message list.
+       * For PTC (programmatic tool calling from code execution), merge matching tool-result
+       * so providerExecuted tool calls include output for the tool-call-step.
        */
-
-      const toolCalls = outputStream._getImmediateToolCalls()?.map(chunk => {
-        return chunk.payload;
+      const toolResultChunks = outputStream._getImmediateToolResults() ?? [];
+      const toolCalls = (outputStream._getImmediateToolCalls() ?? []).map(chunk => {
+        const payload = { ...chunk.payload };
+        if (payload.providerExecuted) {
+          const match = toolResultChunks.find(t => t.payload.toolCallId === payload.toolCallId);
+          if (match) payload.output = match.payload.result;
+        }
+        return payload;
       });
 
       /**

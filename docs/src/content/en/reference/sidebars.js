@@ -535,6 +535,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
         { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
