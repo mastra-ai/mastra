@@ -22,6 +22,7 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:watch": "vitest watch",
     "test": "vitest run",
     "lint": "eslint ."

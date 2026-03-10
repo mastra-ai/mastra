@@ -579,6 +579,38 @@ export class AgentFSFilesystem extends MastraFilesystem {
   }
 
   // ---------------------------------------------------------------------------
+  // Type checks
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Check if the path points to a file.
+   * Returns `false` if the path doesn't exist.
+   */
+  async isFile(path: string): Promise<boolean> {
+    try {
+      const st = await this.stat(path);
+      return st.type === 'file';
+    } catch (error) {
+      if (error instanceof FileNotFoundError) return false;
+      throw error;
+    }
+  }
+
+  /**
+   * Check if the path points to a directory.
+   * Returns `false` if the path doesn't exist.
+   */
+  async isDirectory(path: string): Promise<boolean> {
+    try {
+      const st = await this.stat(path);
+      return st.type === 'directory';
+    } catch (error) {
+      if (error instanceof FileNotFoundError) return false;
+      throw error;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
