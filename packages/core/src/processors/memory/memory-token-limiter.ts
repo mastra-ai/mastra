@@ -40,7 +40,8 @@ export class MemoryTokenLimiter implements Processor {
     const { messageList } = args;
 
     const allMessages = messageList.get.all.db();
-    if (estimateTokenCount(allMessages) <= this.maxTokens) {
+    let totalTokens = estimateTokenCount(allMessages);
+    if (totalTokens <= this.maxTokens) {
       return messageList;
     }
 
@@ -49,9 +50,10 @@ export class MemoryTokenLimiter implements Processor {
 
     // Remove oldest memory messages first until we're within the token budget
     for (const message of memoryMessages) {
+      const messageTokens = estimateTokenCount([message]);
       idsToRemove.push(message.id);
-      const remaining = allMessages.filter(m => !idsToRemove.includes(m.id));
-      if (estimateTokenCount(remaining) <= this.maxTokens) {
+      totalTokens -= messageTokens;
+      if (totalTokens <= this.maxTokens) {
         break;
       }
     }
