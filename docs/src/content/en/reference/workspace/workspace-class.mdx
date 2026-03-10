@@ -382,7 +382,7 @@ const config = workspace.getToolsConfig()
 
 #### `setToolsConfig(config?)`
 
-Replace the per-tool configuration at runtime. This performs a full replacement — it does not merge with the previous config. Pass `undefined` to reset to defaults. Changes take effect on the next agent interaction (the next `createWorkspaceTools()` call).
+Replace the per-tool configuration at runtime. This performs a full replacement — it doesn't merge with the previous config. Pass `undefined` to reset to defaults. Changes take effect on the next agent interaction (the next `createWorkspaceTools()` call).
 
 ```typescript
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
@@ -412,7 +412,7 @@ workspace.setToolsConfig(undefined)
 
 ## Agent tools
 
-A workspace provides tools to agents based on what is configured.
+A workspace provides tools to agents based on what's configured.
 
 ### Filesystem tools
 

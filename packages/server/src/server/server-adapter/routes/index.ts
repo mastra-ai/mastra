@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type z from 'zod';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import { A2A_ROUTES } from './a2a';
@@ -107,6 +107,7 @@ export type ServerRoute<
    * requiresPermission: 'workflows:execute'
    */
   requiresPermission?: string;
+  onValidationError?: ValidationErrorHook;
 };
 
 export const SERVER_ROUTES: ServerRoute<any, any, any>[] = [

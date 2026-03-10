@@ -112,7 +112,11 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
     return generateValidDataFromSchema(def.innerType, fieldName);
   }
   if (typeName === 'ZodDefault') {
-    return def.defaultValue();
+    if ('_zod' in schema) {
+      return def.defaultValue;
+    } else {
+      return def.defaultValue();
+    }
   }
 
   if (typeName === 'ZodString') return generateContextualValue(fieldName);
@@ -123,16 +127,32 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodDate') return new Date();
   if (typeName === 'ZodBigInt') return BigInt(0);
 
-  if (typeName === 'ZodLiteral') return def.value;
+  if (typeName === 'ZodLiteral') {
+    if ('_zod' in schema) {
+      return def.values?.[0];
+    } else {
+      return def.value;
+    }
+  }
 
-  if (typeName === 'ZodEnum') return def.values[0];
+  if (typeName === 'ZodEnum') {
+    if ('_zod' in schema) {
+      return Object.values(def.entries)[0];
+    } else {
+      return def.values[0];
+    }
+  }
   if (typeName === 'ZodNativeEnum') {
     const values = Object.values(def.values);
     return values[0];
   }
 
   if (typeName === 'ZodArray') {
-    return [generateValidDataFromSchema(def.type, fieldName)];
+    if ('_zod' in schema) {
+      return [generateValidDataFromSchema(def.element, fieldName)];
+    } else {
+      return [generateValidDataFromSchema(def.type, fieldName)];
+    }
   }
 
   if (typeName === 'ZodObject') {

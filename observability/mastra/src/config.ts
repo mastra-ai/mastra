@@ -14,7 +14,7 @@ import type {
   ConfigSelector,
   SerializationOptions,
 } from '@mastra/core/observability';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 // ============================================================================
 // Sampling Strategy Types
@@ -120,7 +120,7 @@ export const samplingStrategySchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(SamplingStrategyType.CUSTOM),
-    sampler: z.function().args(z.any().optional()).returns(z.boolean()),
+    sampler: z.function({ input: z.tuple([z.any().optional()]), output: z.boolean() }),
   }),
 ]);
 

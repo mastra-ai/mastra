@@ -21,7 +21,6 @@
  * });
  * ```
  */
-
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import type { ProcessInputStepArgs, Processor } from '../index';
