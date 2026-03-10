@@ -22,7 +22,7 @@ export const ruleSchema = z.object({
     'exists',
     'not_exists',
   ]),
-  value: z.unknown(),
+  value: z.unknown().optional(),
 });
 
 const ruleGroupDepth2 = z.object({

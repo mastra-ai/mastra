@@ -498,6 +498,20 @@ processOutputResult?(args: ProcessOutputResultArgs): ProcessorMessageResult;
     isOptional: false,
   },
   {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description:
+      'Per-processor state that persists across all method calls within this request. Shared with processOutputStream and other methods.',
+    isOptional: false,
+  },
+  {
+    name: 'result',
+    type: 'OutputResult',
+    description:
+      'Resolved generation result containing `text` (accumulated text), `usage` (token usage with inputTokens, outputTokens, totalTokens), `finishReason` (why generation ended), and `steps` (all LLM step results, each with toolCalls, toolResults, reasoning, sources, files, etc.).',
+    isOptional: false,
+  },
+  {
     name: 'abort',
     type: '(reason?: string) => never',
     description: 'Function to abort processing.',

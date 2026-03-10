@@ -6,8 +6,9 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
+import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { noopLogger } from '../../logger';
 import type { StorageThreadType } from '../../memory';
@@ -20,6 +21,10 @@ import { MessageList } from '../message-list/index';
 import { assertNoDuplicateParts } from '../test-utils';
 
 config();
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
   let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3;

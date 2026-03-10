@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai';
-import { describe, expect, it, vi } from 'vitest';
+import { createLLMMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { TestCaseWithContext } from '../../utils';
 
@@ -196,7 +197,10 @@ const testCases: TestCaseWithContext[] = [
 ];
 
 const model = openai('gpt-4o');
+const mock = createLLMMock(model);
 describe('HallucinationMetric', () => {
+  beforeAll(() => mock.start());
+  afterAll(() => mock.saveAndStop());
   it('should handle perfect alignment', async () => {
     const testCase = testCases[0]!;
     const scorer = createHallucinationScorer({ model, options: { context: testCase.context } });

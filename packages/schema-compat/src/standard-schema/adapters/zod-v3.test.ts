@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 // With vitest workspace alias, 'zod' resolves to 'zod-v3' for this test file
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { toStandardSchema } from './zod-v3';
 
 describe('zod-v3 standard-schema adapter', () => {
