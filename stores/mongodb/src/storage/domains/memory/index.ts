@@ -176,35 +176,66 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     return result;
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
     const collection = await this.getCollection(TABLE_MESSAGES);
+
+    // Phase 1: Batch-fetch metadata for all target messages in a single query.
+    // This replaces per-include findOne + full thread load with one batched lookup.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const targetDocs = await collection
+      .find({ id: { $in: targetIds } }, { projection: { id: 1, thread_id: 1, createdAt: 1 } })
+      .toArray();
+
+    if (targetDocs.length === 0) return null;
+
+    const targetMap = new Map(
+      targetDocs.map((doc: any) => [doc.id, { threadId: doc.thread_id, createdAt: doc.createdAt }]),
+    );
+
+    // Phase 2: Use cursor-based range queries with limits instead of loading entire threads.
+    // For each include, fetch only the needed context window using createdAt range + limit.
     const includedMessages: any[] = [];
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
+      const target = targetMap.get(id);
+      if (!target) continue;
 
-      // Step 1: Get the target message by ID (globally unique)
-      const targetMessage = await collection.findOne({ id });
-      if (!targetMessage) continue;
+      // Fetch the target message + previous messages (createdAt <= target, ordered DESC, limited)
+      const prevMessages = await collection
+        .find({ thread_id: target.threadId, createdAt: { $lte: target.createdAt } })
+        .sort({ createdAt: -1, id: -1 })
+        .limit(withPreviousMessages + 1)
+        .toArray();
+      includedMessages.push(...prevMessages);
 
-      // Step 2: Get the threadId from the message itself
-      const messageThreadId = targetMessage.thread_id;
-
-      // Step 3: Get all messages for that thread ordered by creation date
-      const allMessages = await collection.find({ thread_id: messageThreadId }).sort({ createdAt: 1 }).toArray();
-
-      // Step 4: Find the target message index
-      const targetIndex = allMessages.findIndex((msg: any) => msg.id === id);
-      if (targetIndex === -1) continue;
-
-      // Step 5: Get surrounding context
-      const startIndex = Math.max(0, targetIndex - withPreviousMessages);
-      const endIndex = Math.min(allMessages.length - 1, targetIndex + withNextMessages);
-
-      for (let i = startIndex; i <= endIndex; i++) {
-        includedMessages.push(allMessages[i]);
+      // Fetch messages after the target (only if requested)
+      if (withNextMessages > 0) {
+        const nextMessages = await collection
+          .find({ thread_id: target.threadId, createdAt: { $gt: target.createdAt } })
+          .sort({ createdAt: 1, id: 1 })
+          .limit(withNextMessages)
+          .toArray();
+        includedMessages.push(...nextMessages);
       }
     }
 
@@ -303,6 +334,24 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0, we only need included messages — skip COUNT and data queries
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        const list = new MessageList().add(includeMessages ?? [], 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const total = await collection.countDocuments(query);
 
@@ -351,22 +400,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -465,6 +499,27 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
       }
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const list = new MessageList().add(includeMessages, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const total = await collection.countDocuments(query);
 
@@ -513,22 +568,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        // Fallback to string comparison for non-numeric fields
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       const hasMore = perPageInput !== false && offset + perPage < total;

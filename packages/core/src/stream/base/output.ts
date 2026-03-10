@@ -20,8 +20,10 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  ProviderMetadata,
   StreamTransport,
   StepTripwireData,
+  ToolCallChunk,
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
@@ -180,6 +182,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
+  #toolCallStreamingMeta: Record<
+    string,
+    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata }
+  > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
   #warnings: LLMStepResult<OUTPUT>['warnings'] = [];
@@ -436,7 +442,52 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             case 'tool-call-input-streaming-start':
               self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId] = chunk.payload.toolName;
+              self.#toolCallStreamingMeta[chunk.payload.toolCallId] = {
+                toolName: chunk.payload.toolName,
+                providerExecuted: chunk.payload.providerExecuted,
+                providerMetadata: chunk.payload.providerMetadata,
+              };
               break;
+            case 'tool-call-input-streaming-end': {
+              const toolCallId = chunk.payload.toolCallId;
+              const meta = self.#toolCallStreamingMeta[toolCallId];
+              const deltaParts = self.#toolCallArgsDeltas[toolCallId];
+              let args: Record<string, unknown> = {};
+              if (deltaParts?.length) {
+                try {
+                  const merged = deltaParts.join('');
+                  args = typeof merged === 'string' && merged.length > 0 ? JSON.parse(merged) : {};
+                } catch {
+                  args = {};
+                }
+              }
+              delete self.#toolCallStreamingMeta[toolCallId];
+              delete self.#toolCallArgsDeltas[toolCallId];
+              delete self.#toolCallDeltaIdNameMap[toolCallId];
+              if (meta) {
+                const synthetic: ToolCallChunk = {
+                  type: 'tool-call',
+                  runId: chunk.runId,
+                  from: chunk.from,
+                  payload: {
+                    toolCallId,
+                    toolName: meta.toolName,
+                    args,
+                    providerExecuted: meta.providerExecuted,
+                    providerMetadata: meta.providerMetadata,
+                  },
+                };
+                self.#toolCalls.push(synthetic);
+                self.#bufferedByStep.toolCalls.push(synthetic);
+                // Emit streaming-end then synthetic so studio receives tool-input-end then tool-input-available before tool-output-available
+                self.#emitChunk(chunk);
+                controller.enqueue(chunk);
+                self.#emitChunk(synthetic);
+                controller.enqueue(synthetic);
+                return;
+              }
+              break;
+            }
             case 'tool-call-delta':
               if (!self.#toolCallArgsDeltas[chunk.payload.toolCallId]) {
                 self.#toolCallArgsDeltas[chunk.payload.toolCallId] = [];
@@ -493,6 +544,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             }
             case 'tool-call':
+              // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
+              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+                return;
+              }
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
               const toolCallPayload = chunk.payload;
@@ -1519,6 +1574,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedFiles: this.#bufferedFiles,
       toolCallArgsDeltas: this.#toolCallArgsDeltas,
       toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
+      toolCallStreamingMeta: this.#toolCallStreamingMeta,
       toolCalls: this.#toolCalls,
       toolResults: this.#toolResults,
       warnings: this.#warnings,
@@ -1542,6 +1598,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedFiles = state.bufferedFiles;
     this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
     this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
+    this.#toolCallStreamingMeta = state.toolCallStreamingMeta ?? {};
     this.#toolCalls = state.toolCalls;
     this.#toolResults = state.toolResults;
     this.#warnings = state.warnings;

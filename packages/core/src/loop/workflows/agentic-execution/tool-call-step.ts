@@ -560,7 +560,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       };
 
       //if resuming a subAgent or workflow tool, we want to find the runId from when it got suspended.
-      if (resumeDataToPassToToolOptions && (isAgentTool || isWorkflowTool) && !isResumeToolCall) {
+      // Also look up the runId when the LLM provided resumeData in args (isResumeToolCall)
+      // but omitted suspendedToolRunId — without it, workflow tools start a fresh run and re-suspend.
+      const needsRunIdLookup =
+        resumeDataToPassToToolOptions &&
+        (isAgentTool || isWorkflowTool) &&
+        (!isResumeToolCall || !args.suspendedToolRunId);
+      if (needsRunIdLookup) {
         let suspendedToolRunId = '';
         const messages = messageList.get.all.db();
         const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
