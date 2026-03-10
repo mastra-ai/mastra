@@ -54,6 +54,8 @@ createWorkflowTestSuite({
 
   beforeAll: async () => {
     // Nothing special needed for default engine
+    vi.unmock('crypto');
+    vi.unmock('node:crypto');
   },
 
   afterAll: async () => {

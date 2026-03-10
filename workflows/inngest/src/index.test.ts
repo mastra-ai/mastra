@@ -15464,6 +15464,8 @@ createWorkflowTestSuite({
   // beforeAll is called AFTER registerWorkflows in the factory, so nothing to do here
   beforeAll: async () => {
     console.log('[beforeAll] Ready');
+    vi.unmock('crypto');
+    vi.unmock('node:crypto');
   },
 
   afterAll: async () => {
