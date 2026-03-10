@@ -2921,7 +2921,7 @@ importers:
         specifier: ^8.2.1
         version: 8.2.1
       vscode-languageserver-protocol:
-        specifier: ^3.17.0
+        specifier: ^3.17.5
         version: 3.17.5
       zod:
         specifier: 'catalog:'
