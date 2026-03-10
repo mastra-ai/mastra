@@ -7,7 +7,7 @@ import type { VercelTool } from './types';
  * The marker fallback handles environments like Vite SSR where the same
  * module may be loaded multiple times, causing instanceof to fail.
  */
-function isMastraTool(tool: unknown): boolean {
+export function isMastraTool(tool: unknown): boolean {
   return tool instanceof Tool || (typeof tool === 'object' && tool !== null && MASTRA_TOOL_MARKER in tool);
 }
 

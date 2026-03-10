@@ -160,26 +160,33 @@ Converts text to speech using Google Cloud Text-to-Speech service.
     type: 'object',
     description: 'Speech synthesis options',
     isOptional: true,
-  },
-  {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Voice ID to use for this request',
-    isOptional: true,
-  },
-  {
-    name: 'options.languageCode',
-    type: 'string',
-    description:
-      "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
-    isOptional: true,
-  },
-  {
-    name: 'options.audioConfig',
-    type: "ISynthesizeSpeechRequest['audioConfig']",
-    description: 'Audio configuration options from Google Cloud Text-to-Speech API',
-    isOptional: true,
-    defaultValue: "{ audioEncoding: 'LINEAR16' }",
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Voice ID to use for this request',
+            isOptional: true,
+          },
+          {
+            name: 'languageCode',
+            type: 'string',
+            description:
+              "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+            isOptional: true,
+          },
+          {
+            name: 'audioConfig',
+            type: "ISynthesizeSpeechRequest['audioConfig']",
+            description: 'Audio configuration options from Google Cloud Text-to-Speech API',
+            isOptional: true,
+            defaultValue: "{ audioEncoding: 'LINEAR16' }",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -203,19 +210,26 @@ Converts speech to text using Google Cloud Speech-to-Text service.
     type: 'object',
     description: 'Recognition options',
     isOptional: true,
-  },
-  {
-    name: 'options.stream',
-    type: 'boolean',
-    description: 'Whether to use streaming recognition',
-    isOptional: true,
-  },
-  {
-    name: 'options.config',
-    type: 'IRecognitionConfig',
-    description: 'Recognition configuration from Google Cloud Speech-to-Text API',
-    isOptional: true,
-    defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'stream',
+            type: 'boolean',
+            description: 'Whether to use streaming recognition',
+            isOptional: true,
+          },
+          {
+            name: 'config',
+            type: 'IRecognitionConfig',
+            description: 'Recognition configuration from Google Cloud Speech-to-Text API',
+            isOptional: true,
+            defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -267,7 +281,7 @@ The Google Voice provider supports two authentication methods:
 
 ### Standard Mode (API Key)
 
-Uses a Google Cloud API key for authentication. Suitable for development and simple use cases.
+Uses a Google Cloud API key for authentication. Suitable for development and basic use cases.
 
 ```typescript
 // Using environment variable (GOOGLE_API_KEY)

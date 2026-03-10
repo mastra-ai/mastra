@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer } from 'node:http';
 import { createTool } from '@mastra/core/tools';
 import type { Prompt, PromptMessage, Resource, ResourceTemplate } from '@modelcontextprotocol/sdk/types.js';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 import { MCPServer } from '../server/server';
 import type { MCPServerResources, MCPServerResourceContent, MCPServerPrompts } from '../server/types';
 
