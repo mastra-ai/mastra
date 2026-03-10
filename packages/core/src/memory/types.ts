@@ -781,7 +781,7 @@ type BaseMemoryConfig = {
    * When the total token count of all messages (memory history + new input) exceeds this limit,
    * the oldest memory history messages are automatically removed to stay within the budget.
    *
-   * Token count is estimated using character count / 4 approximation.
+   * Token counting uses tiktoken (o200k_base encoding) for accurate results.
    * Can be used alongside `lastMessages` for both count-based and token-based limits.
    *
    * @example

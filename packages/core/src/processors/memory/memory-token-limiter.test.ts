@@ -11,12 +11,10 @@ function createMessage(id: string, role: 'user' | 'assistant', text: string, thr
     threadId,
     role,
     content: {
-      format: 'v2' as const,
-      content: text,
+      format: 2 as const,
       parts: [{ type: 'text' as const, text }],
     },
     createdAt: new Date(),
-    type: 'text',
   };
 }
 
@@ -54,11 +52,13 @@ describe('MemoryTokenLimiter', () => {
   });
 
   it('should remove oldest memory messages when over token limit', async () => {
-    // Set a very small token limit to trigger trimming
-    const limiter = new MemoryTokenLimiter({ maxTokens: 10 });
+    // Set a token limit smaller than the total of all messages
+    // 'x'.repeat(2000) ≈ 667 tiktoken tokens, so two such messages ≈ 1334 tokens
+    // plus input ≈ 2 tokens. Limit of 5 forces all memory messages to be removed.
+    const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
     const messageList = new MessageList();
 
-    // Add memory messages with substantial content to exceed 10 tokens
+    // Add memory messages with substantial content
     const longText = 'x'.repeat(2000);
     const memoryMsg1 = createMessage('mem-1', 'user', longText);
     const memoryMsg2 = createMessage('mem-2', 'assistant', longText);
@@ -90,7 +90,8 @@ describe('MemoryTokenLimiter', () => {
   });
 
   it('should never remove input messages', async () => {
-    const limiter = new MemoryTokenLimiter({ maxTokens: 50 });
+    // 'x'.repeat(1000) ≈ 334 tiktoken tokens. Set limit below that so memory gets trimmed.
+    const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
     const messageList = new MessageList();
 
     // Add a large input message
@@ -200,7 +201,8 @@ describe('MemoryTokenLimiter', () => {
   });
 
   it('should preserve input messages even when they alone exceed maxTokens', async () => {
-    const limiter = new MemoryTokenLimiter({ maxTokens: 10 });
+    // 'x'.repeat(5000) ≈ 1667 tiktoken tokens, well above maxTokens: 5
+    const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
     const messageList = new MessageList();
 
     // Large input that exceeds maxTokens by itself
