@@ -145,7 +145,7 @@ export const useWriteWorkspaceFile = () => {
       });
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '/';
+      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
@@ -172,7 +172,7 @@ export const useWriteWorkspaceFileFromFile = () => {
       });
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '/';
+      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
@@ -195,7 +195,7 @@ export const useDeleteWorkspaceFile = () => {
       });
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '/';
+      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
@@ -215,7 +215,7 @@ export const useCreateWorkspaceDirectory = () => {
       return workspace.mkdir(params.path, params.recursive);
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '/';
+      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
     },
   });
