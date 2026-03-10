@@ -2,7 +2,7 @@
 title: "Reference: BlaxelSandbox | Workspace"
 description: "Documentation for the BlaxelSandbox provider for isolated cloud code execution."
 packages:
-  - "@mastra/daytona"
+  - "@mastra/blaxel"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -48,27 +48,142 @@ const agent = new Agent({
 
 ### Custom image with resources
 
-Use a custom Docker image:
+Use a custom Docker image with additional memory:
 
 ```typescript
 const workspace = new Workspace({
   sandbox: new BlaxelSandbox({
     image: 'node:20-slim',
+    memory: 8192,
+    timeout: '10m',
   }),
 })
 ```
 
 ## Constructor parameters
 
-TODO
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this sandbox instance.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'image',
+    type: 'string',
+    description:
+      'Docker image to use for the sandbox. Debian-based images support both S3 and GCS mounts. Alpine-based images support S3 mounts only.',
+    isOptional: true,
+    defaultValue: "'blaxel/ts-app:latest'",
+  },
+  {
+    name: 'memory',
+    type: 'number',
+    description: 'Memory allocation in MB.',
+    isOptional: true,
+    defaultValue: '4096',
+  },
+  {
+    name: 'timeout',
+    type: 'string',
+    description: "Execution timeout as a duration string (e.g. '5m', '1h'). Maps to the Blaxel sandbox TTL.",
+    isOptional: true,
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    description: 'Environment variables to set in the sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'labels',
+    type: 'Record<string, string>',
+    description: 'Custom labels for the sandbox.',
+    isOptional: true,
+  },
+  {
+    name: 'runtimes',
+    type: 'SandboxRuntime[]',
+    description:
+      "Supported runtimes. Valid values: 'node', 'python', 'bash', 'ruby', 'go', 'rust', 'java', 'cpp', 'r'.",
+    isOptional: true,
+    defaultValue: "['node', 'python', 'bash']",
+  },
+  {
+    name: 'ports',
+    type: "Array<{ name?: string; target: number; protocol?: 'HTTP' | 'TCP' | 'UDP' }>",
+    description: 'Ports to expose from the sandbox.',
+    isOptional: true,
+  },
+]}
+/>
 
 ## Properties
 
-TODO
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Sandbox instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "'BlaxelSandbox'",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "'blaxel'",
+  },
+  {
+    name: 'status',
+    type: 'ProviderStatus',
+    description: "'pending' | 'initializing' | 'running' | 'stopped' | 'error'",
+  },
+  {
+    name: 'instance',
+    type: 'SandboxInstance',
+    description:
+      'The underlying Blaxel SandboxInstance for direct access to Blaxel APIs. Throws SandboxNotReadyError if the sandbox has not been started.',
+  },
+  {
+    name: 'processes',
+    type: 'BlaxelProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
+]}
+/>
 
-## Methods
+## Background processes
 
-TODO
+`BlaxelSandbox` includes a built-in process manager for spawning and managing background processes.
+
+```typescript
+const sandbox = new BlaxelSandbox({ id: 'dev-sandbox' })
+await sandbox.start()
+
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
+})
+
+// Interact with the process
+console.log(handle.stdout)
+await handle.kill()
+```
+
+:::note
+Blaxel sandboxes don't support stdin. Calling `handle.sendStdin()` throws an error.
+:::
+
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
 ## Mounting cloud storage
 
