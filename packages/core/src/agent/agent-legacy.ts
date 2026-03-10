@@ -963,10 +963,12 @@ export class AgentLegacyHandler {
       beforeResult.agentSpan?.end({
         output: { tripwire: beforeResult.tripwire },
         attributes: {
-          tripwireReason: beforeResult.tripwire.reason,
-          tripwireProcessorId: beforeResult.tripwire.processorId,
-          tripwireRetry: beforeResult.tripwire.retry,
-          tripwireMetadata: beforeResult.tripwire.metadata,
+          tripwireAbort: {
+            reason: beforeResult.tripwire.reason,
+            processorId: beforeResult.tripwire.processorId,
+            retry: beforeResult.tripwire.retry,
+            metadata: beforeResult.tripwire.metadata,
+          },
         },
       });
 
@@ -1035,10 +1037,12 @@ export class AgentLegacyHandler {
         agentSpan?.end({
           output: { tripwire: outputProcessorResult.tripwire },
           attributes: {
-            tripwireReason: outputProcessorResult.tripwire.reason,
-            tripwireProcessorId: outputProcessorResult.tripwire.processorId,
-            tripwireRetry: outputProcessorResult.tripwire.retry,
-            tripwireMetadata: outputProcessorResult.tripwire.metadata,
+            tripwireAbort: {
+              reason: outputProcessorResult.tripwire.reason,
+              processorId: outputProcessorResult.tripwire.processorId,
+              retry: outputProcessorResult.tripwire.retry,
+              metadata: outputProcessorResult.tripwire.metadata,
+            },
           },
         });
 
@@ -1161,10 +1165,12 @@ export class AgentLegacyHandler {
       agentSpan?.end({
         output: { tripwire: outputProcessorResult.tripwire },
         attributes: {
-          tripwireReason: outputProcessorResult.tripwire.reason,
-          tripwireProcessorId: outputProcessorResult.tripwire.processorId,
-          tripwireRetry: outputProcessorResult.tripwire.retry,
-          tripwireMetadata: outputProcessorResult.tripwire.metadata,
+          tripwireAbort: {
+            reason: outputProcessorResult.tripwire.reason,
+            processorId: outputProcessorResult.tripwire.processorId,
+            retry: outputProcessorResult.tripwire.retry,
+            metadata: outputProcessorResult.tripwire.metadata,
+          },
         },
       });
 
@@ -1290,10 +1296,12 @@ export class AgentLegacyHandler {
       beforeResult.agentSpan?.end({
         output: { tripwire: beforeResult.tripwire },
         attributes: {
-          tripwireReason: beforeResult.tripwire.reason,
-          tripwireProcessorId: beforeResult.tripwire.processorId,
-          tripwireRetry: beforeResult.tripwire.retry,
-          tripwireMetadata: beforeResult.tripwire.metadata,
+          tripwireAbort: {
+            reason: beforeResult.tripwire.reason,
+            processorId: beforeResult.tripwire.processorId,
+            retry: beforeResult.tripwire.retry,
+            metadata: beforeResult.tripwire.metadata,
+          },
         },
       });
 
@@ -1387,10 +1395,12 @@ export class AgentLegacyHandler {
               agentSpan?.end({
                 output: { tripwire: outputProcessorResult.tripwire },
                 attributes: {
-                  tripwireReason: outputProcessorResult.tripwire.reason,
-                  tripwireProcessorId: outputProcessorResult.tripwire.processorId,
-                  tripwireRetry: outputProcessorResult.tripwire.retry,
-                  tripwireMetadata: outputProcessorResult.tripwire.metadata,
+                  tripwireAbort: {
+                    reason: outputProcessorResult.tripwire.reason,
+                    processorId: outputProcessorResult.tripwire.processorId,
+                    retry: outputProcessorResult.tripwire.retry,
+                    metadata: outputProcessorResult.tripwire.metadata,
+                  },
                 },
               });
               await onFinish?.({ ...result, runId } as any);
@@ -1461,10 +1471,12 @@ export class AgentLegacyHandler {
             agentSpan?.end({
               output: { tripwire: outputProcessorResult.tripwire },
               attributes: {
-                tripwireReason: outputProcessorResult.tripwire.reason,
-                tripwireProcessorId: outputProcessorResult.tripwire.processorId,
-                tripwireRetry: outputProcessorResult.tripwire.retry,
-                tripwireMetadata: outputProcessorResult.tripwire.metadata,
+                tripwireAbort: {
+                  reason: outputProcessorResult.tripwire.reason,
+                  processorId: outputProcessorResult.tripwire.processorId,
+                  retry: outputProcessorResult.tripwire.retry,
+                  metadata: outputProcessorResult.tripwire.metadata,
+                },
               },
             });
             await onFinish?.({ ...result, runId } as any);

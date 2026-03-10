@@ -4425,10 +4425,12 @@ export class Agent<
       ...(result.tripwire
         ? {
             attributes: {
-              tripwireReason: result.tripwire.reason,
-              tripwireProcessorId: result.tripwire.processorId,
-              tripwireRetry: result.tripwire.retry,
-              tripwireMetadata: result.tripwire.metadata,
+              tripwireAbort: {
+                reason: result.tripwire.reason,
+                processorId: result.tripwire.processorId,
+                retry: result.tripwire.retry,
+                metadata: result.tripwire.metadata,
+              },
             },
           }
         : {}),

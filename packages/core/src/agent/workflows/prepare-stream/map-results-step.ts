@@ -132,23 +132,28 @@ export function createMapResultsStep<OUTPUT = undefined>({
         agentSpan?.end({
           output: { tripwire: memoryData.tripwire },
           attributes: {
-            tripwireReason: memoryData.tripwire?.reason,
-            tripwireProcessorId: memoryData.tripwire?.processorId,
-            tripwireRetry: memoryData.tripwire?.retry,
-            tripwireMetadata: memoryData.tripwire?.metadata,
+            tripwireAbort: {
+              reason: memoryData.tripwire?.reason,
+              processorId: memoryData.tripwire?.processorId,
+              retry: memoryData.tripwire?.retry,
+              metadata: memoryData.tripwire?.metadata,
+            },
           },
         });
 
         return bail(modelOutput);
       } catch (error) {
-        // End agent span with error so failures aren't masked
-        agentSpan?.end({
-          output: { tripwire: memoryData.tripwire },
+        // End agent span with error and tripwire context so failures aren't masked
+        agentSpan?.error({
+          error: error as Error,
+          endSpan: true,
           attributes: {
-            tripwireReason: memoryData.tripwire?.reason,
-            tripwireProcessorId: memoryData.tripwire?.processorId,
-            tripwireRetry: memoryData.tripwire?.retry,
-            tripwireMetadata: memoryData.tripwire?.metadata,
+            tripwireAbort: {
+              reason: memoryData.tripwire?.reason,
+              processorId: memoryData.tripwire?.processorId,
+              retry: memoryData.tripwire?.retry,
+              metadata: memoryData.tripwire?.metadata,
+            },
           },
         });
         throw error;

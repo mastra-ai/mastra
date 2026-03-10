@@ -379,9 +379,11 @@ export class ProcessorRunner {
             error,
             endSpan: true,
             attributes: {
-              tripwireReason: error.message,
-              tripwireRetry: error.options?.retry,
-              tripwireMetadata: error.options?.metadata,
+              tripwireAbort: {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+              },
             },
           });
           throw error;
@@ -517,9 +519,11 @@ export class ProcessorRunner {
               error,
               endSpan: true,
               attributes: {
-                tripwireReason: error.message,
-                tripwireRetry: error.options?.retry,
-                tripwireMetadata: error.options?.metadata,
+                tripwireAbort: {
+                  reason: error.message,
+                  retry: error.options?.retry,
+                  metadata: error.options?.metadata,
+                },
               },
             });
             return {
@@ -826,9 +830,11 @@ export class ProcessorRunner {
             error,
             endSpan: true,
             attributes: {
-              tripwireReason: error.message,
-              tripwireRetry: error.options?.retry,
-              tripwireMetadata: error.options?.metadata,
+              tripwireAbort: {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+              },
             },
           });
           throw error;
@@ -1042,9 +1048,11 @@ export class ProcessorRunner {
             error,
             endSpan: true,
             attributes: {
-              tripwireReason: error.message,
-              tripwireRetry: error.options?.retry,
-              tripwireMetadata: error.options?.metadata,
+              tripwireAbort: {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+              },
             },
           });
           throw error;
@@ -1256,9 +1264,11 @@ export class ProcessorRunner {
             error,
             endSpan: true,
             attributes: {
-              tripwireReason: error.message,
-              tripwireRetry: error.options?.retry,
-              tripwireMetadata: error.options?.metadata,
+              tripwireAbort: {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+              },
             },
           });
           throw error;
