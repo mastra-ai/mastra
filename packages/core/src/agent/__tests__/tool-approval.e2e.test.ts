@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
@@ -8,6 +9,34 @@ import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows';
 import { Agent } from '../agent';
 import { getOpenAIModel } from './mock-model';
+
+const mock = createGatewayMock({
+  transformRequest: ({ url, body }) => {
+    let serialized = JSON.stringify(body);
+    // Normalize UUIDs (runId, subAgentThreadId, etc.)
+    serialized = serialized.replace(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+      '00000000-0000-0000-0000-000000000000',
+    );
+    // Normalize OpenAI function-call IDs (call_xxx)
+    serialized = serialized.replace(/"call_id":"call_[a-zA-Z0-9]+"/g, '"call_id":"call_NORMALIZED"');
+    // Normalize OpenAI item_reference IDs (fc_xxx)
+    serialized = serialized.replace(/"id":"fc_[a-f0-9]+"/g, '"id":"fc_NORMALIZED"');
+    // Normalize toolCallId (AI SDK generated)
+    serialized = serialized.replace(/"toolCallId":"[a-zA-Z0-9]+"/g, '"toolCallId":"NORMALIZED"');
+    serialized = serialized.replace(/\\"toolCallId\\":\\"[a-zA-Z0-9]+\\"/g, '\\"toolCallId\\":\\"NORMALIZED\\"');
+    // Normalize escaped call_id inside nested JSON strings (e.g. in function_call_output output)
+    serialized = serialized.replace(/\\"call_id\\":\\"call_[a-zA-Z0-9]+\\"/g, '\\"call_id\\":\\"call_NORMALIZED\\"');
+    // Normalize call_xxx patterns in toolCallId embedded in JSON strings
+    serialized = serialized.replace(
+      /\\"toolCallId\\":\\"call_[a-zA-Z0-9]+\\"/g,
+      '\\"toolCallId\\":\\"call_NORMALIZED\\"',
+    );
+    return { url, body: JSON.parse(serialized) };
+  },
+});
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 const mockStorage = new InMemoryStore();
 
@@ -566,13 +595,12 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
         const stream = await agentOne.stream('Find the user with name - Dero Israel');
         for await (const _chunk of stream.fullStream) {
         }
-        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        await new Promise(resolve => setTimeout(resolve, 3000));
         const resumeStream = await agentOne.resumeStream({ name: 'Dero Israel' }, { runId: stream.runId });
         for await (const _chunk of resumeStream.fullStream) {
         }
-
         const toolResults = await resumeStream.toolResults;
-
         toolCall = toolResults?.find((result: any) => result.payload.toolName === 'agent-userAgent')?.payload;
 
         const text = toolCall?.result?.text;

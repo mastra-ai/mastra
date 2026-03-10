@@ -49,7 +49,7 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
       const randomWalkSteps: number | undefined =
         requestContext?.get('randomWalkSteps') ?? graphOptions.randomWalkSteps;
       const restartProb: number | undefined = requestContext?.get('restartProb') ?? graphOptions.restartProb;
-      const topK: number = requestContext?.get('topK') ?? inputData.topK ?? 10;
+      const topK: number = requestContext?.get('topK') ?? (inputData.topK as number) ?? 10;
       const filter: unknown = requestContext?.get('filter') ?? inputData.filter;
       const queryText = inputData.queryText;
       const providerOptions: ProviderOptions['providerOptions'] =

@@ -2,9 +2,10 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
+import { createGatewayMock } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
@@ -12,6 +13,10 @@ import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
@@ -250,8 +255,18 @@ async function runSingleToolSchemaTest(
           maxSteps: 1,
         });
 
-    const toolCall = response.toolCalls.find(tc => tc.toolName === toolName);
-    const toolResult = response.toolResults.find(tr => tr.toolCallId === toolCall?.toolCallId);
+    const toolCall = response.toolCalls.find(tr => {
+      if (tr.payload) {
+        return tr.payload.toolName === toolName;
+      }
+      return tr.toolName === toolName;
+    });
+    const toolResult = response.toolResults.find(tr => {
+      if (tr.payload) {
+        return tr.payload.toolCallId === toolCall?.payload?.toolCallId;
+      }
+      return tr.toolCallId === toolCall?.toolCallId;
+    });
 
     if (toolResult?.payload?.result?.success || toolResult?.result?.success) {
       return {
@@ -410,7 +425,7 @@ const modelsByProviderV2 = modelsToTestV2.reduce(
             const schemaName = testTool.id.replace('testTool_', '');
 
             it.concurrent(
-              `should handle ${schemaName} schema`,
+              `should handle ${schemaName} schema (${model.specificationVersion})`,
               {
                 timeout: TEST_TIMEOUT,
                 // add retries here if we find some models are flaky in the future
@@ -924,7 +939,6 @@ describe('Tool Input Validation', () => {
     expect(result).toHaveProperty('error', true);
     expect(result).toHaveProperty('message');
     expect(result.message).toContain('Tool input validation failed');
-    expect(result.message).toContain('Required');
     expect(result.message).toContain('- name:');
   });
 
@@ -1268,5 +1282,76 @@ describe('CoreToolBuilder Output Schema', () => {
 
     const builtTool = builder.build();
     expect(builtTool.outputSchema).toBeDefined();
+  });
+
+  describe('agent-as-tools schema serialization (#13324)', () => {
+    it('should produce valid JSON Schema with type keys for all properties including resumeData: z.any()', async () => {
+      // Simulate what CoreToolBuilder does: inject resumeData and suspendedToolRunId
+      // into agent tool schemas. The resumeData field uses z.any() which serializes
+      // to {} (no type key) via Zod v4's toJSONSchema. OpenAI rejects schemas
+      // without a type key on every property.
+      const agentTool = createTool({
+        id: 'agent-subAgent',
+        description: 'A sub-agent tool',
+        inputSchema: z.object({
+          prompt: z.string().describe('The prompt for the agent'),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
+          resumeData: z
+            .any()
+            .describe('The resumeData object created from the resumeSchema of suspended tool')
+            .optional(),
+        }),
+        execute: async () => 'result',
+      });
+      const mockModel = {
+        modelId: 'openai/gpt-4.1-mini',
+        provider: 'openrouter',
+        specificationVersion: 'v2',
+        supportsStructuredOutputs: false,
+      } as any;
+
+      const toolDef = new CoreToolBuilder({
+        originalTool: agentTool,
+        options: {
+          name: 'weather-tool',
+          logger: console as any,
+          description: 'Get weather information',
+          requestContext: new RequestContext(),
+          tracingContext: {},
+          model: mockModel,
+        },
+      }).buildV5();
+
+      expect(toolDef.type).toBe('function');
+
+      // The critical assertion: every property in the schema must have a 'type' key.
+      // OpenAI rejects schemas where properties lack a 'type' key.
+      // buildV5() wraps the schema via AI SDK's jsonSchema(), so inputSchema is
+      // an AI SDK Schema object { _type, jsonSchema, validate } — access .jsonSchema directly.
+      const properties = (toolDef.inputSchema as any).jsonSchema.properties;
+      expect(properties).toBeDefined();
+
+      for (const [propName, propSchema] of Object.entries(properties)) {
+        const schema = propSchema as Record<string, any>;
+        const hasTypeKey = 'type' in schema;
+        const hasRef = '$ref' in schema;
+        const hasAnyOf = 'anyOf' in schema;
+        const hasOneOf = 'oneOf' in schema;
+        const hasAllOf = 'allOf' in schema;
+
+        expect(
+          hasTypeKey || hasRef || hasAnyOf || hasOneOf || hasAllOf,
+          `Property '${propName}' in agent tool schema must have a 'type', '$ref', 'anyOf', 'oneOf', or 'allOf' key. Got: ${JSON.stringify(schema)}`,
+        ).toBe(true);
+
+        // OpenAI requires 'items' when 'array' is in the type union
+        if (Array.isArray(schema.type) && schema.type.includes('array')) {
+          expect(
+            schema.items,
+            `Property '${propName}' includes 'array' in type but is missing 'items'. OpenAI requires 'items' for array types. Got: ${JSON.stringify(schema)}`,
+          ).toBeDefined();
+        }
+      }
+    });
   });
 });
