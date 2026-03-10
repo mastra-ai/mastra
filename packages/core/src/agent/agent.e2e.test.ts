@@ -117,8 +117,10 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         weather: expect.any(String),
         temperature: expect.any(Number),
         humidity: expect.any(Number),
-        windSpeed: null,
-        barometricPressure: null,
+        // .optional() fields: compat layer transforms null → undefined
+        windSpeed: undefined,
+        barometricPressure: undefined,
+        // .nullable() (without .optional()) stays null
         precipitation: null,
       };
 

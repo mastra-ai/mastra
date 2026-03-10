@@ -133,7 +133,7 @@
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "fetch-to-node": "^2.1.0",
     "hono-openapi": "^1.1.1",
     "stacktrace-parser": "^0.1.11",
