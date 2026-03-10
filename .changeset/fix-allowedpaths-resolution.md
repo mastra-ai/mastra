@@ -2,11 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fix `allowedPaths` resolving against `process.cwd()` instead of `basePath`, and fix `assertPathContained` rejecting access to non-existent `allowedPaths` directories.
+Fixed `allowedPaths` resolving against `process.cwd()` instead of `basePath`, causing permission errors when the workspace root differed from the working directory. Also fixed access to non-existent `allowedPaths` directories (e.g., during skills discovery) being incorrectly rejected.
 
-Previously, relative `allowedPaths` like `../../skills` were resolved against `process.cwd()`, which produced incorrect absolute paths when `basePath` was different from `cwd`. Additionally, `assertPathContained` would skip non-existent `allowedPaths` from its containment check, causing `PermissionError` when accessing paths under directories that hadn't been created yet (e.g., skills discovery).
-
-Now:
-- Relative `allowedPaths` resolve against `basePath` (absolute paths are used as-is)
-- `assertPathContained` correctly handles non-existent roots by skipping symlink resolution instead of skipping the root entirely
-- New `resolveToBasePath` utility unifies path resolution for both `resolvePath` and `allowedPaths`
+- Relative `allowedPaths` now resolve from `basePath`
+- Non-existent `allowedPaths` roots no longer cause permission errors

@@ -990,7 +990,7 @@ Instructions for the new skill.`;
       }
     });
 
-    it('should detect new skills when using /skills/**/SKILL.md glob', async () => {
+    it('should detect new skills when using skills/**/SKILL.md glob', async () => {
       vi.useFakeTimers();
       try {
         let modifiedAt = new Date(Date.now() - 10000);
@@ -1343,7 +1343,7 @@ Instructions for the new skill.`;
       expect(result[0]?.name).toBe('test-skill');
     });
 
-    it('should discover skills with /skills/** glob', async () => {
+    it('should discover skills with skills/** glob', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
@@ -1391,7 +1391,7 @@ Instructions for the new skill.`;
       expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
-    it('should discover skills with /skills/**/SKILL.md glob', async () => {
+    it('should discover skills with skills/**/SKILL.md glob', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/nested/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
@@ -1423,7 +1423,7 @@ Instructions for the new skill.`;
       expect(result[0]?.name).toBe('test-skill');
     });
 
-    it('should discover skills with trailing slash /skills/', async () => {
+    it('should discover skills with trailing slash skills/', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,

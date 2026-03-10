@@ -184,13 +184,17 @@ function getErrorMessage(error: Error): string {
 // Breadcrumb Navigation
 // =============================================================================
 
+function isRootPath(p: string) {
+  return p === '.' || p === '';
+}
+
 interface BreadcrumbProps {
   path: string;
   onNavigate: (path: string) => void;
 }
 
 function Breadcrumb({ path, onNavigate }: BreadcrumbProps) {
-  const isRoot = path === '.' || path === '';
+  const isRoot = isRootPath(path);
   const parts = isRoot ? [] : path.split('/').filter(Boolean);
 
   return (
@@ -248,7 +252,7 @@ export function FileBrowser({
     return a.name.localeCompare(b.name);
   });
 
-  const isRoot = currentPath === '.' || currentPath === '';
+  const isRoot = isRootPath(currentPath);
 
   const handleEntryClick = (entry: FileEntry) => {
     const fullPath = isRoot ? entry.name : `${currentPath}/${entry.name}`;

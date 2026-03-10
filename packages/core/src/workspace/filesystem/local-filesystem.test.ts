@@ -101,15 +101,13 @@ describe('LocalFilesystem', () => {
       await expect(localFs.readFile('testdir')).rejects.toThrow(IsDirectoryError);
     });
 
-    it('should normalize paths with leading slashes', async () => {
+    it('should read files using relative paths', async () => {
       const filePath = path.join(tempDir, 'test.txt');
       await fs.writeFile(filePath, 'content');
 
-      const content1 = await localFs.readFile('test.txt', { encoding: 'utf-8' });
-      const content2 = await localFs.readFile('test.txt', { encoding: 'utf-8' });
+      const content = await localFs.readFile('test.txt', { encoding: 'utf-8' });
 
-      expect(content1).toBe('content');
-      expect(content2).toBe('content');
+      expect(content).toBe('content');
     });
   });
 
