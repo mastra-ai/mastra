@@ -27,9 +27,7 @@ export function getDefaultUpdatedPeerDependencies(): UpdatedPeerDependencies {
 }
 
 function getNextMajorVersion(version: string): string | null {
-  const isZeroVersion = version.startsWith('0.');
-  const bumpType = isZeroVersion ? 'minor' : 'major';
-  return semver.inc(version, bumpType);
+  return semver.inc(version, 'major');
 }
 
 async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: any): Promise<UpdateContext | null> {
@@ -80,20 +78,11 @@ async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: an
 
   const coreBump = bumpsFromRelease[corePackage];
 
-  // if core got bumped because of a linked package we don't have to update peer dependencies.
-  if (coreBump === 'patch' && !versionBumps[corePackage]) {
-    spinner.stop(color.dim('Core package not bumped, skipping peer dependency updates.'));
+  // Only update peer dependencies when core gets a major bump.
+  // In 1.x, minor and patch bumps are non-breaking and don't require peer dep range changes.
+  if (coreBump !== 'major') {
+    spinner.stop(color.dim('Core package not bumped to major, skipping peer dependency updates.'));
     return null;
-  }
-
-  if (coreBump === 'patch' && Object.keys(versionBumps).length === 1) {
-    spinner.stop(color.dim('Only core package bumped, skipping peer dependency updates.'));
-    return null;
-  }
-
-  // When core is not bumped, we don't have to update peer dependencies to minor.
-  if (!versionBumps[corePackage]) {
-    versionBumps = {} as VersionBumps;
   }
 
   const packages = await getPublicPackages();
@@ -135,10 +124,6 @@ function collectIndirectUpdates(
   directUpdatedPackages: Map<string, PackageJson>,
 ): Map<string, PackageJson> {
   const indirectUpdatedPackages = new Map<string, PackageJson>();
-
-  if (context.coreBump === 'patch') {
-    return indirectUpdatedPackages;
-  }
 
   for (const pkg of context.packages) {
     if (pkg.packageJson.name === corePackage) continue;
@@ -202,7 +187,7 @@ export async function updatePeerDependencies(versionBumps: VersionBumps): Promis
   applyUpdatesToFiles(directUpdatedPackages, context.packagesByName);
 
   // Create changeset for direct updates
-  await createChangesetForUpdates(directUpdatedPackages, 'minor', context.nextCoreVersion);
+  await createChangesetForUpdates(directUpdatedPackages, 'major', context.nextCoreVersion);
 
   // Collect indirect updates
   (s as any).message = 'Updating indirect peer dependencies';
