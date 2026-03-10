@@ -144,3 +144,26 @@ For complex reproductions, you may also need to:
 - **Network traces**: For integration issues, include relevant network request/response data
 
 A well-crafted minimal reproduction is the best way to get your issue resolved quickly.
+
+## Automated PR commands
+
+Mastra maintainers (organization members) can trigger automated CI commands by commenting on a pull request with `@dane-ai-mastra` followed by a command name.
+
+### Available commands
+
+| Command | Description |
+| --- | --- |
+| `@dane-ai-mastra fix-ci` | Diagnoses and fixes GitHub Actions CI failures on the PR branch |
+| `@dane-ai-mastra fix-lint` | Runs formatting/linting fixes and pushes a commit |
+| `@dane-ai-mastra pr-comments` | Addresses PR review comments and CodeRabbit suggestions |
+
+### How it works
+
+1. Comment on a PR with one of the commands above
+2. The bot reacts with 👀 to acknowledge the request
+3. The command runs in a GitHub Actions workflow with full repo access
+4. On success, the bot reacts with 🚀. On failure, it reacts with 😕 and posts an error comment.
+
+### Who can use it
+
+Only members of the Mastra GitHub organization can trigger these commands. Comments from non-members are ignored.
