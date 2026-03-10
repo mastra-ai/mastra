@@ -11,7 +11,7 @@ import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
 import { config } from 'dotenv';
 import { describe, expect, it } from 'vitest';
-import z from 'zod';
+import { z } from 'zod';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 
@@ -132,7 +132,7 @@ describe('Tool calls with various LLM providers', { timeout: 120_000 }, () => {
       model: anthropic('claude-haiku-4-5-20251001'),
       envKey: 'ANTHROPIC_API_KEY',
     },
-    { name: 'google/gemini-2.0-flash', model: google('gemini-2.0-flash'), envKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
+    { name: 'google/gemini-2.5-flash', model: google('gemini-2.5-flash'), envKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
   ];
 
   for (const { name, model, envKey } of models) {
