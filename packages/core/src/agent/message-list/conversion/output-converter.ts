@@ -55,6 +55,22 @@ export function sanitizeV5UIMessages(
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
+
+      // When building a prompt TO the LLM (filterIncompleteToolCalls=true),
+      // check if this message contains OpenAI reasoning parts (rs_* itemIds).
+      // If so, we need to strip them AND clear providerMetadata.openai from remaining
+      // parts to prevent item_reference linking to the stripped reasoning items.
+      const hasOpenAIReasoning =
+        filterIncompleteToolCalls &&
+        m.parts.some(
+          p =>
+            p.type === 'reasoning' &&
+            'providerMetadata' in p &&
+            p.providerMetadata &&
+            typeof p.providerMetadata === 'object' &&
+            'openai' in (p.providerMetadata as Record<string, unknown>),
+        );
+
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
         // Filter out data-* parts (custom streaming data from writer.custom())
@@ -62,6 +78,18 @@ export function sanitizeV5UIMessages(
         // If not filtered, convertToModelMessages produces empty content arrays
         // which causes some models to fail with "must include at least one parts field"
         if (typeof p.type === 'string' && p.type.startsWith('data-')) {
+          return false;
+        }
+
+        // Strip OpenAI reasoning parts when building a prompt TO the LLM.
+        // OpenAI's Responses API uses item_reference linking (rs_*/msg_* itemIds) that
+        // creates mandatory pairing between reasoning and message items. Replaying
+        // reasoning from history causes:
+        //   "Item 'rs_*' of type 'reasoning' was provided without its required following item"
+        //   "Item 'msg_*' of type 'message' was provided without its required 'reasoning' item"
+        // Reasoning data is preserved in the database — only stripped from LLM input.
+        // See: https://github.com/mastra-ai/mastra/issues/12980
+        if (p.type === 'reasoning' && hasOpenAIReasoning) {
           return false;
         }
 
@@ -102,6 +130,22 @@ export function sanitizeV5UIMessages(
       const sanitized = {
         ...m,
         parts: safeParts.map(part => {
+          // When OpenAI reasoning was stripped, also clear providerMetadata.openai from
+          // remaining parts. Text parts carry msg_* itemIds that reference the stripped
+          // rs_* reasoning items — if retained, the SDK sends item_reference instead of
+          // inline content, and the API rejects the orphaned reference.
+          if (hasOpenAIReasoning && 'providerMetadata' in part && part.providerMetadata) {
+            const meta = part.providerMetadata as Record<string, unknown>;
+            if ('openai' in meta) {
+              const { openai: _, ...restMeta } = meta;
+              part = {
+                ...part,
+                providerMetadata:
+                  Object.keys(restMeta).length > 0 ? (restMeta as typeof part.providerMetadata) : undefined,
+              };
+            }
+          }
+
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
