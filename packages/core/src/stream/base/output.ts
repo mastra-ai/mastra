@@ -8,6 +8,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
 import { resolveObservabilityContext } from '../../observability';
+import type { OutputResult } from '../../processors';
 import { STRUCTURED_OUTPUT_PROCESSOR_NAME } from '../../processors/processors/structured-output';
 import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
@@ -19,7 +20,10 @@ import type {
   LLMStepResult,
   MastraModelOutputOptions,
   MastraOnFinishCallbackArgs,
+  ProviderMetadata,
+  StreamTransport,
   StepTripwireData,
+  ToolCallChunk,
 } from '../types';
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
@@ -178,6 +182,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
+  #toolCallStreamingMeta: Record<
+    string,
+    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata }
+  > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
   #warnings: LLMStepResult<OUTPUT>['warnings'] = [];
@@ -189,6 +197,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #tripwire: StepTripwireData | undefined = undefined;
+  #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
+  #transportClosed = false;
 
   #delayedPromises: DelayedPromises<OUTPUT> = {
     suspendPayload: new DelayedPromise<PromiseResults<OUTPUT>['suspendPayload']>(),
@@ -262,6 +272,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     this.#options = options;
+    this.#transportRef = options.transportRef;
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
@@ -431,7 +442,52 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             case 'tool-call-input-streaming-start':
               self.#toolCallDeltaIdNameMap[chunk.payload.toolCallId] = chunk.payload.toolName;
+              self.#toolCallStreamingMeta[chunk.payload.toolCallId] = {
+                toolName: chunk.payload.toolName,
+                providerExecuted: chunk.payload.providerExecuted,
+                providerMetadata: chunk.payload.providerMetadata,
+              };
               break;
+            case 'tool-call-input-streaming-end': {
+              const toolCallId = chunk.payload.toolCallId;
+              const meta = self.#toolCallStreamingMeta[toolCallId];
+              const deltaParts = self.#toolCallArgsDeltas[toolCallId];
+              let args: Record<string, unknown> = {};
+              if (deltaParts?.length) {
+                try {
+                  const merged = deltaParts.join('');
+                  args = typeof merged === 'string' && merged.length > 0 ? JSON.parse(merged) : {};
+                } catch {
+                  args = {};
+                }
+              }
+              delete self.#toolCallStreamingMeta[toolCallId];
+              delete self.#toolCallArgsDeltas[toolCallId];
+              delete self.#toolCallDeltaIdNameMap[toolCallId];
+              if (meta) {
+                const synthetic: ToolCallChunk = {
+                  type: 'tool-call',
+                  runId: chunk.runId,
+                  from: chunk.from,
+                  payload: {
+                    toolCallId,
+                    toolName: meta.toolName,
+                    args,
+                    providerExecuted: meta.providerExecuted,
+                    providerMetadata: meta.providerMetadata,
+                  },
+                };
+                self.#toolCalls.push(synthetic);
+                self.#bufferedByStep.toolCalls.push(synthetic);
+                // Emit streaming-end then synthetic so studio receives tool-input-end then tool-input-available before tool-output-available
+                self.#emitChunk(chunk);
+                controller.enqueue(chunk);
+                self.#emitChunk(synthetic);
+                controller.enqueue(synthetic);
+                return;
+              }
+              break;
+            }
             case 'tool-call-delta':
               if (!self.#toolCallArgsDeltas[chunk.payload.toolCallId]) {
                 self.#toolCallArgsDeltas[chunk.payload.toolCallId] = [];
@@ -488,6 +544,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               break;
             }
             case 'tool-call':
+              // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
+              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+                return;
+              }
               self.#toolCalls.push(chunk);
               self.#bufferedByStep.toolCalls.push(chunk);
               const toolCallPayload = chunk.payload;
@@ -568,6 +628,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     (chunk.payload.metadata?.modelId as string) || (chunk.payload.metadata?.model as string) || '',
                   ...otherMetadata,
                   messages: chunk.payload.messages?.nonUser || [],
+                  dbMessages: self.messageList.get.response.db(),
                   // We have to cast this until messageList can take generics also and type metadata, it was too
                   // complicated to do this in this PR, it will require a much bigger change.
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
@@ -647,6 +708,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 suspendPayload: undefined, // Tripwire doesn't suspend, so resolve to undefined
                 resumeSchema: undefined,
               });
+
+              self.#closeTransportIfNeeded();
 
               // Emit the tripwire chunk for listeners
               self.#emitChunk(chunk);
@@ -734,12 +797,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     },
                   };
 
+                  const outputResult: OutputResult = {
+                    text: self.#bufferedText.join(''),
+                    usage: chunk.payload.output.usage as LanguageModelUsage,
+                    finishReason: self.#finishReason || 'unknown',
+                    steps: [...self.#bufferedSteps] as LLMStepResult[],
+                  };
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     resolveObservabilityContext(options),
                     self.#options.requestContext,
                     0,
                     outputResultWriter,
+                    outputResult,
                   );
 
                   // Get text from the latest response message (the last assistant message)
@@ -884,6 +955,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                 await options?.onFinish?.(onFinishPayload);
               }
+
+              self.#closeTransportIfNeeded();
               break;
 
             case 'error':
@@ -900,6 +973,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               });
 
+              self.#closeTransportIfNeeded();
               break;
           }
           self.#emitChunk(chunk);
@@ -952,6 +1026,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             }
           });
 
+          self.#closeTransportIfNeeded();
+
           // Emit finish event for EventEmitter streams
           self.#streamFinished = true;
           self.#emitter.emit('finish');
@@ -980,6 +1056,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     for (const keyString in data) {
       const key = keyString as keyof PromiseResults<OUTPUT>;
       this.resolvePromise(key, data[key]);
+    }
+  }
+
+  #closeTransportIfNeeded() {
+    const transport = this.#transportRef?.current as StreamTransport | undefined;
+    if (!transport || !transport.closeOnFinish || this.#transportClosed) {
+      return;
+    }
+
+    this.#transportClosed = true;
+    try {
+      transport.close();
+    } catch {
+      // best-effort close
     }
   }
 
@@ -1092,6 +1182,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   get request() {
     return this.#getDelayedPromise(this.#delayedPromises.request);
+  }
+
+  /**
+   * Transport handle for the current stream (when available).
+   */
+  get transport(): StreamTransport | undefined {
+    return this.#transportRef?.current as StreamTransport | undefined;
   }
 
   /**
@@ -1477,6 +1574,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedFiles: this.#bufferedFiles,
       toolCallArgsDeltas: this.#toolCallArgsDeltas,
       toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
+      toolCallStreamingMeta: this.#toolCallStreamingMeta,
       toolCalls: this.#toolCalls,
       toolResults: this.#toolResults,
       warnings: this.#warnings,
@@ -1500,6 +1598,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedFiles = state.bufferedFiles;
     this.#toolCallArgsDeltas = state.toolCallArgsDeltas;
     this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
+    this.#toolCallStreamingMeta = state.toolCallStreamingMeta ?? {};
     this.#toolCalls = state.toolCalls;
     this.#toolResults = state.toolResults;
     this.#warnings = state.warnings;

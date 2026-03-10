@@ -39,6 +39,48 @@ function replaceAdmonitionMarkers(text) {
   return text.replaceAll('\\_\\_ADMONITION\\_MARKER\\_\\_', '[')
 }
 
+function remarkFormatJsxExpressions(prettierOptions) {
+  return async function traverse(tree) {
+    let promises = []
+
+    visit(tree, ['mdxJsxFlowElement', 'mdxJsxTextElement'], node => {
+      if (!node.attributes) return
+
+      for (let attr of node.attributes) {
+        if (attr.type !== 'mdxJsxAttribute' || !attr.value || typeof attr.value !== 'object') continue
+        if (attr.value.type !== 'mdxJsxAttributeValueExpression') continue
+
+        let expr = attr.value.value
+        if (!expr || !expr.trim()) continue
+
+        promises.push(
+          prettier
+            .format('const __x = ' + expr, {
+              ...prettierOptions,
+              parser: 'babel',
+              printWidth: 120,
+            })
+            .then(formatted => {
+              let result = formatted.replace(/^const __x = /, '').trimEnd()
+
+              // Remove trailing semicolons that babel adds
+              if (result.endsWith(';')) {
+                result = result.slice(0, -1)
+              }
+
+              attr.value.value = result
+            })
+            .catch(() => {
+              // If the expression can't be parsed as JS, leave it as-is
+            }),
+        )
+      }
+    })
+
+    await Promise.all(promises)
+  }
+}
+
 function remarkFormatCodeBlocks(prettierOptions) {
   return async function traverse(tree) {
     let promises = []
@@ -124,7 +166,11 @@ export const printers = {
       let text = ast.stack[0].text
 
       text = String(
-        await processor().use(remarkFormatCodeBlocks, prettierOptions).use(remarkAddAdmonitionMarkers).process(text),
+        await processor()
+          .use(remarkFormatJsxExpressions, prettierOptions)
+          .use(remarkFormatCodeBlocks, prettierOptions)
+          .use(remarkAddAdmonitionMarkers)
+          .process(text),
       )
       text = replaceAdmonitionMarkers(text)
 

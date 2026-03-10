@@ -1,7 +1,9 @@
 import { GetScorerResponse } from '@mastra/client-js';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
 import { Cell, Row, Table, Tbody, Th, Thead, useTableKeyboardNavigation } from '@/ds/components/Table';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { AgentCoinIcon } from '@/ds/icons/AgentCoinIcon';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { Icon } from '@/ds/icons/Icon';
@@ -18,9 +20,10 @@ import { Searchbar, SearchbarWrapper } from '@/ds/components/Searchbar';
 export interface ScorersTableProps {
   scorers: Record<string, GetScorerResponse>;
   isLoading: boolean;
+  error?: Error | null;
 }
 
-export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
+export function ScorersTable({ scorers, isLoading, error }: ScorersTableProps) {
   const { navigate, paths } = useLinkComponent();
   const [search, setSearch] = useState('');
   const scorersData: ScorerTableData[] = useMemo(
@@ -64,6 +67,15 @@ export function ScorersTable({ scorers, isLoading }: ScorersTableProps) {
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows;
+
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="scorers" />
+      </div>
+    );
+  }
 
   if (scorersData.length === 0 && !isLoading) {
     return <EmptyScorersTable />;

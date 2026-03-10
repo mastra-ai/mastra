@@ -32,39 +32,39 @@ Configuration options specific to Pinecone vector store.
 
 <PropertiesTable
   content={[
-{
-name: "namespace",
-type: "string",
-description:
-"Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.",
-isOptional: true,
-},
-{
-name: "sparseVector",
-type: "{ indices: number[]; values: number[]; }",
-description:
-"Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.",
-isOptional: true,
-properties: [
-{
-type: "object",
-parameters: [
-{
-name: "indices",
-description: "Array of indices for sparse vector components",
-isOptional: false,
-type: "number[]",
-},
-{
-name: "values",
-description: "Array of values corresponding to the indices",
-isOptional: false,
-type: "number[]",
-},
-],
-},
-],
-},
+  {
+    name: 'namespace',
+    type: 'string',
+    description:
+      'Pinecone namespace for organizing and isolating vectors within the same index. Useful for multi-tenancy or environment separation.',
+    isOptional: true,
+  },
+  {
+    name: 'sparseVector',
+    type: '{ indices: number[]; values: number[]; }',
+    description:
+      'Sparse vector for hybrid search combining dense and sparse embeddings. Enables better search quality for keyword-based queries.  The indices and values arrays must be the same length.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'indices',
+            description: 'Array of indices for sparse vector components',
+            isOptional: false,
+            type: 'number[]',
+          },
+          {
+            name: 'values',
+            description: 'Array of values corresponding to the indices',
+            isOptional: false,
+            type: 'number[]',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -80,27 +80,27 @@ Configuration options specific to PostgreSQL with pgvector extension.
 
 <PropertiesTable
   content={[
-{
-name: "minScore",
-type: "number",
-description:
-"Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.",
-isOptional: true,
-},
-{
-name: "ef",
-type: "number",
-description:
-"HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.",
-isOptional: true,
-},
-{
-name: "probes",
-type: "number",
-description:
-"IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.",
-isOptional: true,
-},
+  {
+    name: 'minScore',
+    type: 'number',
+    description:
+      'Minimum similarity score threshold for results. Only vectors with similarity scores above this value will be returned.',
+    isOptional: true,
+  },
+  {
+    name: 'ef',
+    type: 'number',
+    description:
+      'HNSW search parameter that controls the size of the dynamic candidate list during search. Higher values improve accuracy at the cost of speed. Typically set between topK and 200.',
+    isOptional: true,
+  },
+  {
+    name: 'probes',
+    type: 'number',
+    description:
+      'IVFFlat probe parameter that specifies the number of index cells to visit during search. Higher values improve recall at the cost of speed.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -122,20 +122,19 @@ Configuration options specific to Chroma vector store.
 
 <PropertiesTable
   content={[
-{
-name: "where",
-type: "Record<string, any>",
-description:
-"Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.",
-isOptional: true,
-},
-{
-name: "whereDocument",
-type: "Record<string, any>",
-description:
-"Document content filtering conditions. Allows filtering based on the actual document text content.",
-isOptional: true,
-},
+  {
+    name: 'where',
+    type: 'Record<string, any>',
+    description:
+      'Metadata filtering conditions using MongoDB-style query syntax. Filters results based on metadata fields.',
+    isOptional: true,
+  },
+  {
+    name: 'whereDocument',
+    type: 'Record<string, any>',
+    description: 'Document content filtering conditions. Allows filtering based on the actual document text content.',
+    isOptional: true,
+  },
 ]}
 />
 

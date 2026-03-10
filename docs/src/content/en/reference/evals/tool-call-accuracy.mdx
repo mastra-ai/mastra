@@ -38,28 +38,28 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
 
 <PropertiesTable
   content={[
-{
-name: "expectedTool",
-type: "string",
-description:
-"The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.",
-required: false,
-},
-{
-name: "strictMode",
-type: "boolean",
-description:
-"Controls evaluation strictness. For single tool mode: only exact single tool calls accepted. For order checking mode: tools must match exactly with no extra tools allowed.",
-required: false,
-default: "false",
-},
-{
-name: "expectedToolOrder",
-type: "string[]",
-description:
-"Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.",
-required: false,
-},
+  {
+    name: 'expectedTool',
+    type: 'string',
+    description:
+      'The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.',
+    required: false,
+  },
+  {
+    name: 'strictMode',
+    type: 'boolean',
+    description:
+      'Controls evaluation strictness. For single tool mode: only exact single tool calls accepted. For order checking mode: tools must match exactly with no extra tools allowed.',
+    required: false,
+    default: 'false',
+  },
+  {
+    name: 'expectedToolOrder',
+    type: 'string[]',
+    description:
+      'Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.',
+    required: false,
+  },
 ]}
 />
 
@@ -71,7 +71,7 @@ The code-based scorer operates in two distinct modes:
 
 #### Single Tool Mode
 
-When `expectedToolOrder` is not provided, the scorer evaluates single tool selection:
+When `expectedToolOrder` isn't provided, the scorer evaluates single tool selection:
 
 - **Standard Mode (strictMode: false)**: Returns `1` if the expected tool is called, regardless of other tools
 - **Strict Mode (strictMode: true)**: Returns `1` only if exactly one tool is called and it matches the expected tool
@@ -307,19 +307,18 @@ The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/pre
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraModelConfig",
-description: "The LLM model to use for evaluating tool appropriateness",
-required: true,
-},
-{
-name: "availableTools",
-type: "Array<{name: string, description: string}>",
-description:
-"List of available tools with their descriptions for context",
-required: true,
-},
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The LLM model to use for evaluating tool appropriateness',
+    required: true,
+  },
+  {
+    name: 'availableTools',
+    type: 'Array<{name: string, description: string}>',
+    description: 'List of available tools with their descriptions for context',
+    required: true,
+  },
 ]}
 />
 

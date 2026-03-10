@@ -43,18 +43,18 @@ await elevenLabsVoice.speak(text, { speaker: elevenLabsSpeakers[0].voiceId })
 
 ## Parameters
 
-This method does not accept any parameters.
+This method doesn't accept any parameters.
 
 ## Return Value
 
 <PropertiesTable
   content={[
-{
-name: "Promise<Array<{ voiceId: string } & TSpeakerMetadata>>",
-type: "Promise",
-description:
-"A promise that resolves to an array of voice options, where each option contains at least a voiceId property and may include additional provider-specific metadata.",
-},
+  {
+    name: 'Promise<Array<{ voiceId: string } & TSpeakerMetadata>>',
+    type: 'Promise',
+    description:
+      'A promise that resolves to an array of voice options, where each option contains at least a voiceId property and may include additional provider-specific metadata.',
+  },
 ]}
 />
 
@@ -66,11 +66,11 @@ Different voice providers return different metadata for their voices:
   <TabItem value="OpenAI">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice (e.g., 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer')",
-}
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: "Unique identifier for the voice (e.g., 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer')",
+  },
 ]}
     />
   </TabItem>
@@ -78,12 +78,11 @@ description: "Unique identifier for the voice (e.g., 'alloy', 'echo', 'fable', '
   <TabItem value="OpenAI Realtime">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description:
-"Unique identifier for the voice (e.g., 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer')",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: "Unique identifier for the voice (e.g., 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer')",
+  },
 ]}
     />
   </TabItem>
@@ -91,16 +90,16 @@ description:
   <TabItem value="Deepgram">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-},
-{
-name: "language",
-type: "string",
-description: "Language code embedded in the voice ID (e.g., 'en')",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: "Language code embedded in the voice ID (e.g., 'en')",
+  },
 ]}
     />
   </TabItem>
@@ -108,21 +107,21 @@ description: "Language code embedded in the voice ID (e.g., 'en')",
   <TabItem value="ElevenLabs">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-},
-{
-name: "name",
-type: "string",
-description: "Human-readable name of the voice",
-},
-{
-name: "category",
-type: "string",
-description: "Category of the voice (e.g., 'premade', 'cloned')",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable name of the voice',
+  },
+  {
+    name: 'category',
+    type: 'string',
+    description: "Category of the voice (e.g., 'premade', 'cloned')",
+  },
 ]}
     />
   </TabItem>
@@ -130,17 +129,16 @@ description: "Category of the voice (e.g., 'premade', 'cloned')",
   <TabItem value="Google">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-},
-{
-name: "languageCodes",
-type: "string[]",
-description:
-"Array of language codes supported by the voice (e.g., ['en-US'])",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+  },
+  {
+    name: 'languageCodes',
+    type: 'string[]',
+    description: "Array of language codes supported by the voice (e.g., ['en-US'])",
+  },
 ]}
     />
   </TabItem>
@@ -148,21 +146,21 @@ description:
   <TabItem value="Azure">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-},
-{
-name: "language",
-type: "string",
-description: "Language code extracted from the voice ID (e.g., 'en')",
-},
-{
-name: "region",
-type: "string",
-description: "Region code extracted from the voice ID (e.g., 'US')",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: "Language code extracted from the voice ID (e.g., 'en')",
+  },
+  {
+    name: 'region',
+    type: 'string',
+    description: "Region code extracted from the voice ID (e.g., 'US')",
+  },
 ]}
     />
   </TabItem>
@@ -170,27 +168,26 @@ description: "Region code extracted from the voice ID (e.g., 'US')",
   <TabItem value="Murf">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-},
-{
-name: "name",
-type: "string",
-description: "Name of the voice (same as voiceId)",
-},
-{
-name: "language",
-type: "string",
-description: "Language code extracted from the voice ID (e.g., 'en')",
-},
-{
-name: "gender",
-type: "string",
-description:
-"Gender of the voice (always 'neutral' in current implementation)",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name of the voice (same as voiceId)',
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: "Language code extracted from the voice ID (e.g., 'en')",
+  },
+  {
+    name: 'gender',
+    type: 'string',
+    description: "Gender of the voice (always 'neutral' in current implementation)",
+  },
 ]}
     />
   </TabItem>
@@ -198,39 +195,36 @@ description:
   <TabItem value="PlayAI">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description:
-"Unique identifier for the voice (S3 URL to manifest.json)",
-},
-{
-name: "name",
-type: "string",
-description:
-"Human-readable name of the voice (e.g., 'Angelo', 'Arsenio')",
-},
-{
-name: "accent",
-type: "string",
-description:
-"Accent of the voice (e.g., 'US', 'Irish', 'US African American')",
-},
-{
-name: "gender",
-type: "string",
-description: "Gender of the voice ('M' or 'F')",
-},
-{
-name: "age",
-type: "string",
-description: "Age category of the voice (e.g., 'Young', 'Middle')",
-},
-{
-name: "style",
-type: "string",
-description: "Speaking style of the voice (e.g., 'Conversational')",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice (S3 URL to manifest.json)',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Human-readable name of the voice (e.g., 'Angelo', 'Arsenio')",
+  },
+  {
+    name: 'accent',
+    type: 'string',
+    description: "Accent of the voice (e.g., 'US', 'Irish', 'US African American')",
+  },
+  {
+    name: 'gender',
+    type: 'string',
+    description: "Gender of the voice ('M' or 'F')",
+  },
+  {
+    name: 'age',
+    type: 'string',
+    description: "Age category of the voice (e.g., 'Young', 'Middle')",
+  },
+  {
+    name: 'style',
+    type: 'string',
+    description: "Speaking style of the voice (e.g., 'Conversational')",
+  },
 ]}
     />
   </TabItem>
@@ -238,21 +232,21 @@ description: "Speaking style of the voice (e.g., 'Conversational')",
   <TabItem value="Speechify">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-},
-{
-name: "name",
-type: "string",
-description: "Human-readable name of the voice",
-},
-{
-name: "language",
-type: "string",
-description: "Language code of the voice (e.g., 'en-US')",
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable name of the voice',
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: "Language code of the voice (e.g., 'en-US')",
+  },
 ]}
     />
   </TabItem>
@@ -260,26 +254,26 @@ description: "Language code of the voice (e.g., 'en-US')",
   <TabItem value="Sarvam">
     <PropertiesTable
       content={[
-{
-name: "voiceId",
-type: "string",
-description: "Unique identifier for the voice",
-},
-{
-name: "name",
-type: "string",
-description: "Human-readable name of the voice",
-},
-{
-name: "language",
-type: "string",
-description: "Language of the voice (e.g., 'english', 'hindi')",
-},
-{
-name: "gender",
-type: "string",
-description: "Gender of the voice ('male' or 'female')",
-}
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable name of the voice',
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: "Language of the voice (e.g., 'english', 'hindi')",
+  },
+  {
+    name: 'gender',
+    type: 'string',
+    description: "Gender of the voice ('male' or 'female')",
+  },
 ]}
     />
   </TabItem>

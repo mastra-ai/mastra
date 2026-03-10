@@ -370,6 +370,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   isBufferingReflection: { type: 'boolean', nullable: false },
   lastBufferedAtTokens: { type: 'integer', nullable: false },
   lastBufferedAtTime: { type: 'timestamp', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -382,6 +383,7 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   inputSchema: { type: 'jsonb', nullable: true },
   groundTruthSchema: { type: 'jsonb', nullable: true },
+  requestContextSchema: { type: 'jsonb', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -395,6 +397,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
   groundTruth: { type: 'jsonb', nullable: true },
+  requestContext: { type: 'jsonb', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },

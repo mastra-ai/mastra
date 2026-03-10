@@ -1,9 +1,23 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import type { ResolveHookContext } from 'node:module';
+import type { LoadHookContext, ResolveHookContext } from 'node:module';
 import { builtinModules } from 'node:module';
 import { join } from 'node:path';
 import { isDependencyPartOfPackage } from '../build/utils';
+
+const STUB_PREFIX = 'mastra-stub:';
+
+let _stubbedExternals: string[] | null = null;
+function getStubbedExternals(): string[] {
+  if (_stubbedExternals === null) {
+    try {
+      _stubbedExternals = JSON.parse(process.env.STUBBED_EXTERNALS || '[]') as string[];
+    } catch {
+      _stubbedExternals = [];
+    }
+  }
+  return _stubbedExternals;
+}
 
 const cache = new Map<string, Record<string, string>>();
 
@@ -87,6 +101,15 @@ export async function resolve(
     return nextResolve(specifier, context);
   }
 
+  // Stub GLOBAL_EXTERNALS packages during validation
+  const stubbedExternals = getStubbedExternals();
+  if (stubbedExternals.length > 0) {
+    const isStubbed = stubbedExternals.some(ext => isDependencyPartOfPackage(specifier, ext));
+    if (isStubbed) {
+      return { url: `${STUB_PREFIX}${specifier}`, shortCircuit: true };
+    }
+  }
+
   if (context.parentURL) {
     const parentPath = await getParentPath(specifier, context.parentURL);
 
@@ -100,4 +123,15 @@ export async function resolve(
 
   // Continue resolution with the modified path
   return nextResolve(specifier, context);
+}
+
+export async function load(
+  url: string,
+  context: LoadHookContext,
+  nextLoad: (url: string, context: LoadHookContext) => Promise<{ format: string; source: string }>,
+) {
+  if (url.startsWith(STUB_PREFIX)) {
+    return { format: 'module', source: 'export default {}', shortCircuit: true };
+  }
+  return nextLoad(url, context);
 }

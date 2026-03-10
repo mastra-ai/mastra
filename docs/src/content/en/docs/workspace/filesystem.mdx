@@ -116,7 +116,7 @@ const workspace = new Workspace({
 })
 ```
 
-When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are not added to the agent's toolset. The agent can still read and list files.
+When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) aren't added to the agent's toolset. The agent can still read and list files.
 
 ## Mounts and CompositeFilesystem
 
@@ -155,7 +155,7 @@ With this configuration:
 
 All file paths must start with a mount prefix. Operations on paths that don't match any mount will fail. Listing the root directory (`/`) returns virtual directory entries for each mount point.
 
-Mount paths cannot be nested — for example, you cannot mount at both `/data` and `/data/sub`.
+Mount paths can't be nested — for example, you can't mount at both `/data` and `/data/sub`.
 
 ### `filesystem` vs `mounts`
 

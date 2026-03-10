@@ -21,7 +21,7 @@ export function ItemListRow({ isSelected, children, columns }: ItemListRowProps)
         transitions.colors,
         {
           'selected-row': isSelected,
-          grid: columns,
+          'grid px-4 gap-4 ': columns,
         },
       )}
       style={{ gridTemplateColumns: getItemListColumnTemplate(columns) }}

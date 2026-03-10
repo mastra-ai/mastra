@@ -15,6 +15,7 @@ import type {
   ToolsetsInput,
   ToolsInput,
   StructuredOutputOptions,
+  PublicStructuredOutputOptions,
   AgentMethodType,
   MastraDBMessage,
 } from './types';
@@ -405,7 +406,13 @@ export type NetworkOptions<OUTPUT = undefined> = {
    * const result = await stream.object;
    * ```
    */
-  structuredOutput?: StructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
+  structuredOutput?: PublicStructuredOutputOptions<OUTPUT extends {} ? OUTPUT : never>;
+
+  /** Callback fired after each LLM step within a sub-agent execution */
+  onStepFinish?: LoopConfig<OUTPUT>['onStepFinish'];
+
+  /** Callback fired when an error occurs during sub-agent execution */
+  onError?: LoopConfig<OUTPUT>['onError'];
 
   /** Callback fired when streaming is aborted */
   onAbort?: LoopConfig<OUTPUT>['onAbort'];
@@ -420,6 +427,11 @@ export type NetworkOptions<OUTPUT = undefined> = {
  * @deprecated Use NetworkOptions instead
  */
 export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
+
+/**
+ * Public-facing network options that accept PublicSchema types.
+ */
+export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
 export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Custom instructions that override the agent's default instructions for this execution */
@@ -591,6 +603,17 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   delegation?: DelegationConfig;
 } & Partial<ObservabilityContext>;
 
+/**
+ * Public-facing agent execution options that accept PublicSchema types (Zod, AI SDK Schema, JSON Schema, StandardSchemaWithJSON).
+ * Use this type for public method signatures.
+ */
+export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
+  (OUTPUT extends {} ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+
+/**
+ * Internal agent execution options that require StandardSchemaWithJSON.
+ * Use this type internally after converting from PublicSchema.
+ */
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
   (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
 

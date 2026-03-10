@@ -3,13 +3,18 @@ import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { assertNoDuplicateParts } from '../test-utils';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });

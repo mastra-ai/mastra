@@ -1,6 +1,6 @@
 {
   "name": "@mastra/s3",
-  "version": "0.2.0",
+  "version": "0.2.2-alpha.0",
   "description": "S3-compatible filesystem provider for Mastra workspaces (AWS S3, Cloudflare R2, MinIO)",
   "type": "module",
   "main": "dist/index.js",
@@ -32,18 +32,18 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.985.0"
+    "@aws-sdk/client-s3": "^3.1004.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.7",
-    "dotenv": "^17.2.3",
+    "@types/node": "22.19.13",
+    "dotenv": "^17.3.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -78,7 +78,7 @@ When a sensitive field is detected, its value is replaced with `[REDACTED]` by d
 
 ## Custom Configuration
 
-You can customize which fields are redacted and how redaction appears:
+You can customize which fields are redacted and how redaction displays:
 
 ```ts title="src/mastra/index.ts"
 import { SensitiveDataFilter, DefaultExporter, Observability } from '@mastra/observability'
@@ -175,7 +175,7 @@ The filter uses intelligent field matching:
 1. **Separator-Agnostic**: `api-key`, `api_key`, and `apiKey` are treated identically
 1. **Exact Matching**: After normalization, fields must match exactly
    - `token` matches `token`, `Token`, `TOKEN`
-   - `token` does NOT match `promptTokens` or `tokenCount`
+   - `token` doesn't match `promptTokens` or `tokenCount`
 
 ## Nested Object Handling
 

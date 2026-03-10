@@ -5,11 +5,15 @@
  * implementation plan. It can read the codebase to understand existing
  * patterns and architecture, but cannot modify anything.
  */
-import type { SubagentDefinition } from './types.js';
+import type { HarnessSubagent } from '@mastra/core/harness';
 
-export const planSubagent: SubagentDefinition = {
+import { MC_TOOLS } from '../../tool-names.js';
+
+export const planSubagent: HarnessSubagent = {
   id: 'plan',
   name: 'Plan',
+  description:
+    "Read-only analysis and planning. Use for 'create an implementation plan for X', 'analyze the architecture of Y'.",
   instructions: `You are an expert software architect and planner. Your job is to analyze a codebase and produce a detailed implementation plan for a given task.
 
 ## Rules
@@ -38,5 +42,5 @@ Structure your plan as:
 . **Risks**: Potential issues or edge cases (if any)
 
 Be specific about code locations (file paths, function names, line numbers). Keep the plan actionable and under 500 words.`,
-  allowedTools: ['view', 'search_content', 'find_files'],
+  allowedWorkspaceTools: [MC_TOOLS.VIEW, MC_TOOLS.SEARCH_CONTENT, MC_TOOLS.FIND_FILES],
 };

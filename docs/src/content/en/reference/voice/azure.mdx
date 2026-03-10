@@ -46,61 +46,92 @@ const text = await voice.listen(audioStream)
 
 <PropertiesTable
   content={[
-{
-name: "speechModel",
-type: "AzureSpeechConfig",
-description: "Configuration for text-to-speech synthesis.",
-isOptional: true,
-},
-{
-name: "listeningModel",
-type: "AzureSpeechConfig",
-description: "Configuration for speech-to-text recognition.",
-isOptional: true,
-},
-{
-name: "speaker",
-type: "string",
-description: "Default voice ID for speech synthesis.",
-isOptional: true,
-},
-]}
-/>
-
-### AzureSpeechConfig
-
-Configuration object for speech synthesis (`speechModel`) and recognition (`listeningModel`).
-
-<PropertiesTable
-  content={[
-{
-name: "apiKey",
-type: "string",
-description:
-"Azure Speech Services API key (NOT Azure OpenAI key). Falls back to AZURE_API_KEY environment variable.",
-isOptional: true,
-},
-{
-name: "region",
-type: "string",
-description:
-"Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_REGION environment variable.",
-isOptional: true,
-},
-{
-name: "voiceName",
-type: "string",
-description:
-"Voice ID for speech synthesis (e.g., 'en-US-AriaNeural', 'en-US-JennyNeural'). Only used in speechModel. See voice list below.",
-isOptional: true,
-},
-{
-name: "language",
-type: "string",
-description:
-"Recognition language code (e.g., 'en-US', 'fr-FR'). Only used in listeningModel.",
-isOptional: true,
-},
+  {
+    name: 'speechModel',
+    type: 'AzureSpeechConfig',
+    description: 'Configuration for text-to-speech synthesis.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'AzureSpeechConfig',
+        parameters: [
+          {
+            name: 'apiKey',
+            type: 'string',
+            description:
+              'Azure Speech Services API key (NOT Azure OpenAI key). Falls back to AZURE_API_KEY environment variable.',
+            isOptional: true,
+          },
+          {
+            name: 'region',
+            type: 'string',
+            description:
+              "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_REGION environment variable.",
+            isOptional: true,
+          },
+          {
+            name: 'voiceName',
+            type: 'string',
+            description:
+              "Voice ID for speech synthesis (e.g., 'en-US-AriaNeural', 'en-US-JennyNeural'). Only used in speechModel. See voice list below.",
+            isOptional: true,
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: "Recognition language code (e.g., 'en-US', 'fr-FR'). Only used in listeningModel.",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'listeningModel',
+    type: 'AzureSpeechConfig',
+    description: 'Configuration for speech-to-text recognition.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'AzureSpeechConfig',
+        parameters: [
+          {
+            name: 'apiKey',
+            type: 'string',
+            description:
+              'Azure Speech Services API key (NOT Azure OpenAI key). Falls back to AZURE_API_KEY environment variable.',
+            isOptional: true,
+          },
+          {
+            name: 'region',
+            type: 'string',
+            description:
+              "Azure region (e.g., 'eastus', 'westeurope'). Falls back to AZURE_REGION environment variable.",
+            isOptional: true,
+          },
+          {
+            name: 'voiceName',
+            type: 'string',
+            description:
+              "Voice ID for speech synthesis (e.g., 'en-US-AriaNeural', 'en-US-JennyNeural'). Only used in speechModel. See voice list below.",
+            isOptional: true,
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: "Recognition language code (e.g., 'en-US', 'fr-FR'). Only used in listeningModel.",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'speaker',
+    type: 'string',
+    description: 'Default voice ID for speech synthesis.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -112,19 +143,33 @@ Converts text to speech using Azure's neural text-to-speech service.
 
 <PropertiesTable
   content={[
-{
-name: "input",
-type: "string | NodeJS.ReadableStream",
-description: "Text or text stream to convert to speech.",
-isOptional: false,
-},
-{
-name: "options.speaker",
-type: "string",
-description: "Voice ID to use for speech synthesis (e.g., 'en-US-JennyNeural'). Overrides the default voice.",
-isOptional: true,
-defaultValue: "Constructor's speaker value",
-},
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description: 'Text or text stream to convert to speech.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description:
+              "Voice ID to use for speech synthesis (e.g., 'en-US-JennyNeural'). Overrides the default voice.",
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -136,12 +181,12 @@ Transcribes audio using Azure's speech-to-text service.
 
 <PropertiesTable
   content={[
-{
-name: "audioStream",
-type: "NodeJS.ReadableStream",
-description: "Audio stream to transcribe. Must be in WAV format.",
-isOptional: false,
-},
+  {
+    name: 'audioStream',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe. Must be in WAV format.',
+    isOptional: false,
+  },
 ]}
 />
 
@@ -155,25 +200,24 @@ Returns an array of available voice options (200+ voices), where each node conta
 
 <PropertiesTable
   content={[
-{
-name: "voiceId",
-type: "string",
-description:
-"Unique identifier for the voice (e.g., 'en-US-JennyNeural', 'fr-FR-DeniseNeural')",
-isOptional: false,
-},
-{
-name: "language",
-type: "string",
-description: "Language code extracted from voice ID (e.g., 'en', 'fr')",
-isOptional: false,
-},
-{
-name: "region",
-type: "string",
-description: "Region code extracted from voice ID (e.g., 'US', 'GB', 'FR')",
-isOptional: false,
-},
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: "Unique identifier for the voice (e.g., 'en-US-JennyNeural', 'fr-FR-DeniseNeural')",
+    isOptional: false,
+  },
+  {
+    name: 'language',
+    type: 'string',
+    description: "Language code extracted from voice ID (e.g., 'en', 'fr')",
+    isOptional: false,
+  },
+  {
+    name: 'region',
+    type: 'string',
+    description: "Region code extracted from voice ID (e.g., 'US', 'GB', 'FR')",
+    isOptional: false,
+  },
 ]}
 />
 
@@ -185,7 +229,7 @@ Returns: `Promise<Array<{ voiceId: string; language: string; region: string; }>>
 
 **⚠️ Critical:** This package uses **Azure Speech Services**, which is different from **Azure OpenAI Services**.
 
-- **DO NOT** use your `AZURE_OPENAI_API_KEY` for this package
+- **DON'T** use your `AZURE_OPENAI_API_KEY` for this package
 - **DO** use an Azure Speech Services subscription key (obtain from Azure Portal under "Speech Services")
 - These are separate Azure resources with different API keys and endpoints
 

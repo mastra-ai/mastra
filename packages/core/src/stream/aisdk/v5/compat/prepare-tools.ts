@@ -10,6 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 
 /** Model specification version for tool type conversion */
 export type ModelSpecVersion = 'v2' | 'v3';
@@ -47,11 +48,6 @@ function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');
 }
 
-/**
- * Recursively fixes JSON Schema properties that lack a 'type' key.
- * Zod v4's toJSONSchema serializes z.any() to just { description: "..." } with no 'type',
- * which providers like OpenAI reject. This converts such schemas to a permissive type union.
- */
 function fixTypelessProperties(schema: Record<string, unknown>): Record<string, unknown> {
   if (typeof schema !== 'object' || schema === null) return schema;
 
@@ -63,6 +59,7 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         if (typeof value !== 'object' || value === null || Array.isArray(value)) {
           return [key, value];
         }
+
         const propSchema = value as Record<string, unknown>;
         const hasType = 'type' in propSchema;
         const hasRef = '$ref' in propSchema;
@@ -71,12 +68,10 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
         const hasAllOf = 'allOf' in propSchema;
 
         if (!hasType && !hasRef && !hasAnyOf && !hasOneOf && !hasAllOf) {
-          return [
-            key,
-            { ...propSchema, type: ['string', 'number', 'integer', 'boolean', 'object', 'array', 'null'], items: {} },
-          ];
+          const { items: _items, ...rest } = propSchema;
+          return [key, { ...rest, type: ['string', 'number', 'integer', 'boolean', 'object', 'null'] }];
         }
-        // Recurse into nested object schemas
+
         return [key, fixTypelessProperties(propSchema)];
       }),
     );
@@ -163,11 +158,50 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
             case undefined:
             case 'dynamic':
             case 'function':
+              // Convert tool input schema to JSON Schema
+              let parameters;
+              if (sdkTool.inputSchema) {
+                if (
+                  '$schema' in sdkTool.inputSchema &&
+                  typeof sdkTool.inputSchema.$schema === 'string' &&
+                  sdkTool.inputSchema.$schema.startsWith('http://json-schema.org/')
+                ) {
+                  parameters = sdkTool.inputSchema;
+                } else if (isStandardSchemaWithJSON(sdkTool.inputSchema)) {
+                  parameters = standardSchemaToJSONSchema(sdkTool.inputSchema, {
+                    io: 'input',
+                    target: 'draft-07',
+                  });
+                } else {
+                  // Fallback to AI SDK's asSchema for non-standard schemas
+                  parameters = asSchema(sdkTool.inputSchema).jsonSchema;
+                }
+
+                // Normalize $schema field to draft-07 for consistency
+                // Some tools (created with tool() helper) use Zod v4's native generation
+                // which defaults to draft 2020-12, but we want draft-07 for LLM compatibility
+                if (
+                  parameters &&
+                  typeof parameters === 'object' &&
+                  '$schema' in parameters &&
+                  parameters.$schema !== 'http://json-schema.org/draft-07/schema#'
+                ) {
+                  parameters.$schema = 'http://json-schema.org/draft-07/schema#';
+                }
+              } else {
+                // No schema provided - use empty object
+                parameters = {
+                  type: 'object',
+                  properties: {},
+                  additionalProperties: false,
+                };
+              }
+
               return {
                 type: 'function' as const,
                 name,
                 description: sdkTool.description,
-                inputSchema: fixTypelessProperties(asSchema(sdkTool.inputSchema).jsonSchema as Record<string, unknown>),
+                inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {

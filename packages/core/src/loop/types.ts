@@ -7,7 +7,7 @@ import type {
   ToolSet,
 } from '@internal/ai-sdk-v5';
 import type { StopCondition as StopConditionV6 } from '@internal/ai-v6';
-import z from 'zod';
+import z from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
@@ -17,7 +17,7 @@ import type { ModelMethodType } from '../llm/model/model.loop.types';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { MastraMemory, MemoryConfig } from '../memory';
+import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
   InputProcessorOrWorkflow,
@@ -32,6 +32,7 @@ import type {
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   ModelManagerModelConfig,
+  StreamTransportRef,
 } from '../stream/types';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
@@ -44,17 +45,21 @@ export type StreamInternal = {
   generateId?: IdGenerator;
   currentDate?: () => Date;
   saveQueueManager?: SaveQueueManager; // SaveQueueManager from agent/save-queue
-  memoryConfig?: MemoryConfig; // MemoryConfig from memory/types
+  memoryConfig?: MemoryConfigInternal; // MemoryConfig from memory/types
   threadId?: string;
   resourceId?: string;
   memory?: MastraMemory; // MastraMemory from memory/memory
   threadExists?: boolean;
   // Tools modified by prepareStep/processInputStep - stored here to avoid workflow serialization
   stepTools?: ToolSet;
+  // Active tools from prepareStep - used by toolCallStep to reject calls to hidden tools
+  stepActiveTools?: string[];
   // Workspace from prepareStep/processInputStep - stored here to avoid workflow serialization
   stepWorkspace?: Workspace;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop
   _delegationBailed?: boolean;
+  // Stream transport reference (e.g., WebSocket) for stream lifecycle management
+  transportRef?: StreamTransportRef;
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {

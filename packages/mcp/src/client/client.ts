@@ -1,10 +1,12 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { Tool } from '@mastra/core/tools';
-import { isZodType } from '@mastra/core/utils';
+
+import type { JSONSchema7 } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -25,18 +27,17 @@ import {
   ElicitRequestSchema,
   ProgressNotificationSchema,
   ListRootsRequestSchema,
+  LoggingMessageNotificationSchema,
+  EmptyResultSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
-import { z } from 'zod';
-import { convertJsonSchemaToZod } from 'zod-from-json-schema';
-import { convertJsonSchemaToZod as convertJsonSchemaToZodV3 } from 'zod-from-json-schema-v3';
-import type { JSONSchema } from 'zod-from-json-schema-v3';
 import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
 import type {
+  FetchLike,
   LogHandler,
   ElicitationHandler,
   ProgressHandler,
@@ -52,6 +53,7 @@ export type {
   LogHandler,
   ElicitationHandler,
   ProgressHandler,
+  MastraFetchLike,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   Root,
@@ -102,7 +104,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableProgressTracking?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
-  private currentOperationContext: RequestContext | null = null;
+  private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private _roots: Root[];
@@ -193,27 +195,17 @@ export class InternalMastraMCPClient extends MastraBase {
         timestamp: new Date(),
         serverName: this.name,
         details,
-        requestContext: this.currentOperationContext,
+        requestContext: this.operationContextStore.getStore() ?? null,
       });
     }
   }
 
   private setupLogging(): void {
     if (this.enableServerLogs) {
-      this.client.setNotificationHandler(
-        z.object({
-          method: z.literal('notifications/message'),
-          params: z
-            .object({
-              level: z.string(),
-            })
-            .passthrough(),
-        }),
-        notification => {
-          const { level, ...params } = notification.params;
-          this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
-        },
-      );
+      this.client.setNotificationHandler(LoggingMessageNotificationSchema, (notification: any) => {
+        const { level, ...params } = notification.params;
+        this.log(level as LoggingLevel, '[MCP SERVER LOG]', params);
+      });
     }
   }
 
@@ -295,7 +287,14 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async connectHttp(url: URL) {
-    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch } = this.serverConfig;
+    const { requestInit, eventSourceInit, authProvider, connectTimeout, fetch: userFetch } = this.serverConfig;
+
+    // Wrap the user's fetch function to inject requestContext as the third argument.
+    // The transport calls fetch with standard (url, init) signature, but we forward
+    // the current operation context so users can access request-scoped data (e.g., auth cookies).
+    const fetch: FetchLike | undefined = userFetch
+      ? (url: string | URL, init?: RequestInit) => userFetch(url, init, this.operationContextStore.getStore() ?? null)
+      : undefined;
 
     this.log('debug', `Attempting to connect to URL: ${url}`);
 
@@ -502,7 +501,9 @@ export class InternalMastraMCPClient extends MastraBase {
       errorMessage.includes('http 403') ||
       errorMessage.includes('econnrefused') ||
       errorMessage.includes('fetch failed') ||
-      errorMessage.includes('connection refused')
+      errorMessage.includes('connection refused') ||
+      errorMessage.includes('sse stream disconnected') ||
+      errorMessage.includes('typeerror: terminated')
     );
   }
 
@@ -556,14 +557,14 @@ export class InternalMastraMCPClient extends MastraBase {
 
   async subscribeResource(uri: string) {
     this.log('debug', `Subscribing to resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, z.object({}), {
+    return await this.client.request({ method: 'resources/subscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
 
   async unsubscribeResource(uri: string) {
     this.log('debug', `Unsubscribing from resource on MCP server: ${uri}`);
-    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, z.object({}), {
+    return await this.client.request({ method: 'resources/unsubscribe', params: { uri } }, EmptyResultSchema, {
       timeout: this.timeout,
     });
   }
@@ -619,11 +620,9 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
-  setResourceUpdatedNotificationHandler(
-    handler: (params: z.infer<typeof ResourceUpdatedNotificationSchema>['params']) => void,
-  ): void {
+  setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
     this.log('debug', 'Setting resource updated notification handler');
-    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, notification => {
+    this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification: any) => {
       handler(notification.params);
     });
   }
@@ -651,34 +650,23 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async convertInputSchema(
-    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'] | JSONSchema,
-  ): Promise<z.ZodType> {
-    if (isZodType(inputSchema)) {
-      return inputSchema;
-    }
-
+    inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
+  ): Promise<JSONSchema7> {
     try {
       await $RefParser.dereference(inputSchema);
-      const jsonSchemaToConvert = ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema;
-      if ('toJSONSchema' in z) {
-        //@ts-expect-error - zod type issue
-        return convertJsonSchemaToZod(jsonSchemaToConvert);
-      } else {
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
-      }
+      return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
         errorDetails = error.stack;
       } else {
-        // Attempt to stringify, fallback to String()
         try {
           errorDetails = JSON.stringify(error);
         } catch {
           errorDetails = String(error);
         }
       }
-      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+      this.log('error', 'Failed to dereference JSON schema', {
         error: errorDetails,
         originalJsonSchema: inputSchema,
       });
@@ -693,35 +681,25 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   private async convertOutputSchema(
-    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'] | JSONSchema,
-  ): Promise<z.ZodType | undefined> {
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
+  ): Promise<JSONSchema7 | undefined> {
     if (!outputSchema) return;
-    if (isZodType(outputSchema)) {
-      return outputSchema;
-    }
 
     try {
       await $RefParser.dereference(outputSchema);
-      const jsonSchemaToConvert = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema;
-      if ('toJSONSchema' in z) {
-        //@ts-expect-error - zod type issue
-        return convertJsonSchemaToZod(jsonSchemaToConvert);
-      } else {
-        return convertJsonSchemaToZodV3(jsonSchemaToConvert);
-      }
+      return ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
     } catch (error: unknown) {
       let errorDetails: string | undefined;
       if (error instanceof Error) {
         errorDetails = error.stack;
       } else {
-        // Attempt to stringify, fallback to String()
         try {
           errorDetails = JSON.stringify(error);
         } catch {
           errorDetails = String(error);
         }
       }
-      this.log('error', 'Failed to convert JSON schema to Zod schema using zodFromJsonSchema', {
+      this.log('error', 'Failed to dereference JSON schema', {
         error: errorDetails,
         originalJsonSchema: outputSchema,
       });
@@ -747,91 +725,99 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
-          execute: async (input: any, context?: { requestContext?: RequestContext | null; runId?: string }) => {
-            const previousContext = this.currentOperationContext;
-            this.currentOperationContext = context?.requestContext || null; // Set current context
+          execute: async (
+            input: any,
+            context?: { requestContext?: RequestContext | null; runId?: string; abortSignal?: AbortSignal },
+          ) => {
+            const operationContext = context?.requestContext ?? null;
 
-            const executeToolCall = async () => {
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
-              const res = await this.client.callTool(
-                {
-                  name: tool.name,
-                  arguments: input,
-                  // Use runId as progress token if available, otherwise generate a random UUID
-                  ...(this.enableProgressTracking
-                    ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
-                    : {}),
-                },
-                CallToolResultSchema,
-                {
-                  timeout: this.timeout,
-                },
-              );
+            return this.operationContextStore.run(operationContext, async () => {
+              const executeToolCall = async () => {
+                this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+                const res = await this.client.callTool(
+                  {
+                    name: tool.name,
+                    arguments: input,
+                    // Use runId as progress token if available, otherwise generate a random UUID
+                    ...(this.enableProgressTracking
+                      ? { _meta: { progressToken: context?.runId || crypto.randomUUID() } }
+                      : {}),
+                  },
+                  CallToolResultSchema,
+                  {
+                    timeout: this.timeout,
+                    signal: context?.abortSignal,
+                  },
+                );
 
-              this.log('debug', `Tool executed successfully: ${tool.name}`);
+                this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-              // When a tool has an outputSchema, return the structuredContent directly
-              // so that output validation works correctly
-              if (res.structuredContent !== undefined) {
-                return res.structuredContent;
-              }
+                // When a tool has an outputSchema, return the structuredContent directly
+                // so that output validation works correctly
+                if (res.structuredContent !== undefined) {
+                  return res.structuredContent;
+                }
 
-              // When the tool has an outputSchema but the server didn't return
-              // structuredContent (e.g. older MCP protocol versions that predate the
-              // structuredContent spec), extract the result from the content array.
-              // Without this, the raw CallToolResult envelope ({ content, isError,
-              // _meta }) gets validated against the outputSchema and Zod strips all
-              // unrecognised keys, producing {}.
-              if (tool.outputSchema && !res.isError) {
-                const content = res.content as Array<{ type: string; text?: string }> | undefined;
-                if (content && content.length === 1 && content[0]!.type === 'text' && content[0]!.text !== undefined) {
-                  try {
-                    return JSON.parse(content[0]!.text);
-                  } catch {
-                    return content[0]!.text;
+                // When the tool has an outputSchema but the server didn't return
+                // structuredContent (e.g. older MCP protocol versions that predate the
+                // structuredContent spec), extract the result from the content array.
+                // Without this, the raw CallToolResult envelope ({ content, isError,
+                // _meta }) gets validated against the outputSchema and Zod strips all
+                // unrecognised keys, producing {}.
+                if (tool.outputSchema && !res.isError) {
+                  const content = res.content as Array<{ type: string; text?: string }> | undefined;
+                  if (
+                    content &&
+                    content.length === 1 &&
+                    content[0]!.type === 'text' &&
+                    content[0]!.text !== undefined
+                  ) {
+                    try {
+                      return JSON.parse(content[0]!.text);
+                    } catch {
+                      return content[0]!.text;
+                    }
                   }
                 }
-              }
 
-              return res;
-            };
+                return res;
+              };
 
-            try {
-              return await executeToolCall();
-            } catch (e) {
-              // Check if this is a session-related error that requires reconnection
-              if (this.isSessionError(e)) {
-                this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
-                  error: e instanceof Error ? e.message : String(e),
-                });
-
-                try {
-                  // Force reconnection
-                  await this.forceReconnect();
-
-                  // Retry the tool call with fresh connection
-                  this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
-                  return await executeToolCall();
-                } catch (reconnectError) {
-                  this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
-                    originalError: e instanceof Error ? e.message : String(e),
-                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
-                    toolArgs: input,
+              try {
+                return await executeToolCall();
+              } catch (e) {
+                // Check if this is a session-related error that requires reconnection
+                if (this.isSessionError(e)) {
+                  this.log('debug', `Session error detected for tool ${tool.name}, attempting reconnection...`, {
+                    error: e instanceof Error ? e.message : String(e),
                   });
-                  // Throw the original error if reconnection/retry fails
-                  throw e;
-                }
-              }
 
-              // For non-session errors, log and rethrow
-              this.log('error', `Error calling tool: ${tool.name}`, {
-                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                toolArgs: input,
-              });
-              throw e;
-            } finally {
-              this.currentOperationContext = previousContext; // Restore previous context
-            }
+                  try {
+                    // Force reconnection
+                    await this.forceReconnect();
+
+                    // Retry the tool call with fresh connection
+                    this.log('debug', `Retrying tool ${tool.name} after reconnection...`);
+                    return await executeToolCall();
+                  } catch (reconnectError) {
+                    this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
+                      originalError: e instanceof Error ? e.message : String(e),
+                      reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
+                      toolArgs: input,
+                    });
+                    // Throw the original error if reconnection/retry fails
+                    throw e;
+                  }
+                }
+
+                // For non-session errors, log and rethrow
+                this.log('error', `Error calling tool: ${tool.name}`, {
+                  error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
+                  toolArgs: input,
+                });
+                throw e;
+              }
+            });
           },
         });
 
