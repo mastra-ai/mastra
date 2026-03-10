@@ -97,6 +97,7 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
 
     const messages = messageList.get.all.db();
 
+    // If no messages or empty array, throw TripWire - can't send LLM a request with no messages
     if (!messages || messages.length === 0) {
       throw new TripWire('TokenLimiterProcessor: No messages to process. Cannot send LLM a request with no messages.', {
         retry: false,
@@ -113,6 +114,8 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
 
     const limit = this.maxTokens;
 
+    // If system messages alone exceed the token limit (accounting for conversation overhead),
+    // throw TripWire - can't send LLM a request with only system messages
     if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
       throw new TripWire(
         'TokenLimiterProcessor: System messages alone exceed token limit. Requests cannot be completed by removing system messages.',
@@ -120,13 +123,14 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       );
     }
 
-    // Calculate remaining budget for non-system messages
+    // Calculate remaining budget for non-system messages (accounting for conversation overhead)
     const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
 
-    // Process non-system messages in reverse order (newest first) to prioritize recent messages
+    // Process non-system messages in reverse order (newest first)
     const messagesToKeep: MastraDBMessage[] = [];
     let currentTokens = 0;
 
+    // Iterate through messages in reverse to prioritize recent messages
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (!message) continue;
@@ -134,9 +138,10 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
       const messageTokens = await this.countInputMessageTokens(message);
 
       if (currentTokens + messageTokens <= remainingBudget) {
-        messagesToKeep.unshift(message);
+        messagesToKeep.unshift(message); // Add to beginning to maintain order
         currentTokens += messageTokens;
       }
+      // Continue checking all messages, don't break early
     }
 
     // Remove messages that don't fit within the token budget

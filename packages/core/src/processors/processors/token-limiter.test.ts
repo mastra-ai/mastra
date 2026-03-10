@@ -63,6 +63,9 @@ describe('TokenLimiterProcessor', () => {
     it('should truncate when token limit is exceeded (default strategy)', async () => {
       processor = new TokenLimiterProcessor({ limit: 5 });
 
+      // Use the same state object across all calls to simulate a single stream
+      const state: Record<string, any> = {};
+
       // First part should be allowed
       const chunk1: ChunkType = {
         type: 'text-delta',
@@ -73,7 +76,7 @@ describe('TokenLimiterProcessor', () => {
       const result1 = await processor.processOutputStream({
         part: chunk1,
         streamParts: [],
-        state: {},
+        state,
         abort: mockAbort,
       });
       expect(result1).toEqual(chunk1);
@@ -88,7 +91,7 @@ describe('TokenLimiterProcessor', () => {
       const result2 = await processor.processOutputStream({
         part: chunk2,
         streamParts: [],
-        state: {},
+        state,
         abort: mockAbort,
       });
       expect(result2).toBeNull();
@@ -117,6 +120,9 @@ describe('TokenLimiterProcessor', () => {
         strategy: 'abort',
       });
 
+      // Use the same state object across all calls to simulate a single stream
+      const state: Record<string, any> = {};
+
       // First part should be allowed
       const chunk1: ChunkType = {
         type: 'text-delta',
@@ -127,7 +133,7 @@ describe('TokenLimiterProcessor', () => {
       const result1 = await processor.processOutputStream({
         part: chunk1,
         streamParts: [],
-        state: {},
+        state,
         abort: mockAbort,
       });
       expect(result1).toEqual(chunk1);
@@ -141,7 +147,7 @@ describe('TokenLimiterProcessor', () => {
       };
 
       // The abort function should be called
-      await processor.processOutputStream({ part: chunk2, streamParts: [], state: {}, abort: mockAbort });
+      await processor.processOutputStream({ part: chunk2, streamParts: [], state, abort: mockAbort });
       expect(mockAbort).toHaveBeenCalledWith(expect.stringContaining('Token limit of 5 exceeded'));
     });
   });
@@ -393,11 +399,14 @@ describe('TokenLimiterProcessor', () => {
         { type: 'text-delta', payload: { text: '!', id: 'test-id' }, runId: 'test-run-id', from: ChunkFrom.AGENT },
       ] as ChunkType[];
 
+      // Use the same state object across all calls to simulate a single stream
+      const state: Record<string, any> = {};
+
       for (let i = 0; i < chunks.length; i++) {
         const result = await processor.processOutputStream({
           part: chunks[i],
           streamParts: [],
-          state: {},
+          state,
           abort: mockAbort,
         });
         if (i < 3) {
@@ -428,11 +437,14 @@ describe('TokenLimiterProcessor', () => {
         },
       ];
 
+      // Use the same state object across all calls to simulate a single stream
+      const state: Record<string, any> = {};
+
       for (let i = 0; i < chunks.length; i++) {
         const result = await processor.processOutputStream({
           part: chunks[i],
           streamParts: [],
-          state: {},
+          state,
           abort: mockAbort,
         });
         if (i < 2) {
