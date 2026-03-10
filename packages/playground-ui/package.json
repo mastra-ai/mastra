@@ -112,7 +112,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "papaparse": "^5.5.3",
-    "prettier": "^3.6.2",
+    "prettier": "^3.8.1",
     "prism-react-renderer": "^2.4.1",
     "react-day-picker": "^8.10.1",
     "react-hook-form": "^7.59.0",
