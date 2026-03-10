@@ -40,13 +40,15 @@ export async function handleMcpCommand(ctx: SlashCommandContext, args: string[])
         `        "env": {}\n` +
         `      },\n` +
         `      "remote-api": {\n` +
-        `        "url": "https://mcp.example.com/sse",\n` +
-        `        "headers": { "Authorization": "Bearer <token>" }\n` +
+        `        "url": "https://mcp.example.com/mcp",\n` +
+        `        "headers": { "X-Custom": "value" },\n` +
+        `        "auth": "oauth"\n` +
         `      }\n` +
         `    }\n` +
         `  }\n\n` +
-        `Note: For dynamic auth (token refresh), use a stdio wrapper.\n` +
-        `"headers" only supports static values.`,
+        `Set "auth": "oauth" on HTTP servers that require OAuth authentication.\n` +
+        `When the server returns 401, mastracode opens a browser for authorization\n` +
+        `and persists tokens automatically.`,
     );
     return;
   }
