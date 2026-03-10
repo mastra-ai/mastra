@@ -55,12 +55,12 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace } from '@mastra/core/workspace'
 import { DaytonaSandbox } from '@mastra/daytona'
 
-const sandbox = new DaytonaSandbox({
-  language: 'typescript',
-  timeout: 120_000,
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    language: 'typescript',
+    timeout: 120_000,
+  }),
 })
-
-const workspace = new Workspace({ sandbox })
 
 const agent = new Agent({
   id: 'code-agent',

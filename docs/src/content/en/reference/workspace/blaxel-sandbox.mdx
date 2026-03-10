@@ -1,0 +1,113 @@
+---
+title: "Reference: BlaxelSandbox | Workspace"
+description: "Documentation for the BlaxelSandbox provider for isolated cloud code execution."
+packages:
+  - "@mastra/daytona"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# BlaxelSandbox
+
+Executes commands in isolated [Blaxel](https://blaxel.ai/) cloud sandboxes. Provides secure, isolated code execution environments with support for mounting cloud storage (S3, GCS) via FUSE.
+
+:::info
+
+For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/blaxel
+```
+
+## Usage
+
+Add a `BlaxelSandbox` to a workspace and assign it to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { BlaxelSandbox } from '@mastra/blaxel'
+
+const workspace = new Workspace({
+  sandbox: new BlaxelSandbox(),
+})
+
+const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You are a coding assistant working in this workspace.',
+  model: 'anthropic/claude-sonnet-4-6',
+  workspace,
+})
+```
+
+### Custom image with resources
+
+Use a custom Docker image:
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new BlaxelSandbox({
+    image: 'node:20-slim',
+  }),
+})
+```
+
+## Constructor parameters
+
+TODO
+
+## Properties
+
+TODO
+
+## Methods
+
+TODO
+
+## Mounting cloud storage
+
+Blaxel sandboxes can mount S3 or GCS filesystems, making cloud storage accessible as a local directory inside the sandbox.
+
+### S3
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { S3Filesystem } from '@mastra/s3'
+import { BlaxelSandbox } from '@mastra/blaxel'
+
+const workspace = new Workspace({
+  mounts: {
+    '/data': new S3Filesystem({
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    }),
+  },
+  sandbox: new BlaxelSandbox(),
+})
+```
+
+### GCS
+
+```typescript
+import { Workspace } from '@mastra/core/workspace'
+import { GCSFilesystem } from '@mastra/gcs'
+import { BlaxelSandbox } from '@mastra/blaxel'
+
+const workspace = new Workspace({
+  mounts: {
+    '/data': new GCSFilesystem({
+      bucket: 'my-bucket',
+      serviceAccountKey: process.env.GCS_SERVICE_ACCOUNT_KEY,
+    }),
+  },
+  sandbox: new BlaxelSandbox(),
+})
+```
