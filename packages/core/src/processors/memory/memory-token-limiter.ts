@@ -58,11 +58,20 @@ export class MemoryTokenLimiter implements Processor {
   }
 
   async processInput(args: ProcessInputArgs): Promise<MessageList> {
-    const { messageList } = args;
+    const { messageList, systemMessages } = args;
     const encoder = await getTiktoken();
 
-    const allMessages = messageList.get.all.db();
+    // Count system message tokens (instructions, etc.) — these are never removed
     let totalTokens = 0;
+    if (systemMessages && systemMessages.length > 0) {
+      for (const msg of systemMessages) {
+        if (typeof msg.content === 'string') {
+          totalTokens += encoder.encode(msg.content).length;
+        }
+      }
+    }
+
+    const allMessages = messageList.get.all.db();
     for (const message of allMessages) {
       totalTokens += countMessageTokens(encoder, message);
     }

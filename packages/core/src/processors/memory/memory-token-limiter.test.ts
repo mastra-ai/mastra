@@ -158,6 +158,34 @@ describe('MemoryTokenLimiter', () => {
     expect(limiter.id).toBe('memory-token-limiter');
   });
 
+  it('should account for system message tokens in the budget', async () => {
+    // Use a limit that fits messages alone but not messages + system prompt
+    // Messages: ~8 tokens total. System: large enough to push over the limit.
+    const limiter = new MemoryTokenLimiter({ maxTokens: 20 });
+    const messageList = new MessageList();
+
+    messageList.add(createMessage('mem-1', 'user', 'Hello from memory'), 'memory');
+    messageList.add(createMessage('input-1', 'user', 'Hi'), 'input');
+
+    // Without system messages, total ≈ 8 tokens (under 20)
+    // With a large system message, total will exceed 20
+    const largeSystemPrompt = 'You are a helpful assistant. '.repeat(10);
+
+    await limiter.processInput({
+      messages: messageList.get.all.db(),
+      messageList,
+      abort: createAbort(),
+      systemMessages: [{ role: 'system' as const, content: largeSystemPrompt }],
+      state: {},
+      retryCount: 0,
+    });
+
+    // Memory should be trimmed because system + messages exceeds budget
+    expect(messageList.get.remembered.db()).toHaveLength(0);
+    // Input preserved
+    expect(messageList.get.input.db()).toHaveLength(1);
+  });
+
   it('should remove all memory messages when maxTokens is 0', async () => {
     const limiter = new MemoryTokenLimiter({ maxTokens: 0 });
     const messageList = new MessageList();
