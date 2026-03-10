@@ -1009,12 +1009,18 @@ export const GENERATE_AGENT_ROUTE: ServerRoute<
         };
       }
 
-      const result = await agent.generate<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const result = structuredOutput
+        ? await agent.generate(messages, { ...options, structuredOutput })
+        : await agent.generate(messages, options);
 
       return result;
     } catch (error) {
@@ -1282,12 +1288,18 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         };
       }
 
-      const streamResult = await agent.stream<unknown>(messages, {
-        ...rest,
+      const { structuredOutput, ...restOptions } = rest;
+
+      const options = {
+        ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
-      });
+      };
+
+      const streamResult = structuredOutput
+        ? await agent.stream(messages, { ...options, structuredOutput })
+        : await agent.stream(messages, options);
 
       return streamResult.fullStream;
     } catch (error) {

@@ -152,7 +152,7 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
 
 ### `appendFile(path, content)`
 
-Append content to a file, creating it if it does not already exist. Parent directories are created automatically.
+Append content to a file, creating it if it doesn't already exist. Parent directories are created automatically.
 
 ```typescript
 await filesystem.appendFile('/logs/app.log', 'New log entry\n')

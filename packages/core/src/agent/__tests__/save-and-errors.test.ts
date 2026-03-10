@@ -1527,3 +1527,137 @@ function saveAndErrorTests(version: 'v1' | 'v2') {
 
 saveAndErrorTests('v1');
 saveAndErrorTests('v2');
+
+/**
+ * Regression test for https://github.com/mastra-ai/mastra/issues/13984
+ *
+ * savePerStep: true does not actually persist messages to storage during step execution.
+ * It only accumulates messages in the in-memory MessageList via saveStepMessages(),
+ * which calls messageList.add() but never calls saveQueueManager.flushMessages().
+ *
+ * The actual persistence only happens in executeOnFinish, which is gated by
+ * !abortSignal.aborted. This means if the stream is aborted mid-generation,
+ * executeOnFinish is skipped and NO messages are persisted — including the user's
+ * original message.
+ */
+describe('savePerStep should persist messages during step execution (issue #13984)', () => {
+  it('should persist messages from completed steps when stream is aborted', async () => {
+    let doStreamCallCount = 0;
+
+    // Model that produces a tool call on first invocation, then text on second
+    const toolCallModel = new MockLanguageModelV2({
+      doStream: async () => {
+        doStreamCallCount++;
+        if (doStreamCallCount === 1) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'echo-tool',
+                input: '{"input": "hello"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Response after tool' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const mockMemory = new MockMemory();
+    const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+
+    const echoTool = createTool({
+      id: 'echo-tool',
+      description: 'Echoes the input',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async input => ({ output: input.input }),
+    });
+
+    const agent = new Agent({
+      id: 'save-per-step-abort-agent',
+      name: 'Save Per Step Abort Test',
+      instructions: 'test',
+      model: toolCallModel,
+      memory: mockMemory,
+      tools: { 'echo-tool': echoTool },
+    });
+
+    const abortController = new AbortController();
+    let stepFinishCount = 0;
+
+    const result = await agent.stream('test message', {
+      memory: {
+        thread: 'thread-save-per-step-abort',
+        resource: 'resource-save-per-step-abort',
+      },
+      savePerStep: true,
+      abortSignal: abortController.signal,
+      onStepFinish: async () => {
+        stepFinishCount++;
+        if (stepFinishCount === 1) {
+          // Abort after the first step completes (simulating page refresh).
+          // At this point savePerStep should have already persisted the user message
+          // and the first step's response to storage.
+          abortController.abort();
+        }
+      },
+    });
+
+    // Consume the stream (may throw due to abort)
+    try {
+      for await (const _chunk of result.fullStream) {
+        // consume
+      }
+    } catch {
+      // Expected: stream may error on abort
+    }
+
+    // Wait a tick for any async persistence to complete
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // The first step completed and onStepFinish fired with savePerStep: true.
+    // The abort signal then fired, causing executeOnFinish to be skipped.
+    //
+    // BUG: saveMessages should have been called at least once during step execution
+    // to persist the user message and/or the first step's response messages.
+    // Currently, onStepFinish only calls messageList.add() via saveStepMessages()
+    // but never calls saveQueueManager.flushMessages(), so nothing is persisted.
+    // executeOnFinish (the only persistence path) is gated by !abortSignal.aborted.
+    expect(stepFinishCount).toBeGreaterThanOrEqual(1);
+    expect(saveMessagesSpy).toHaveBeenCalled();
+
+    // Verify the persisted messages include the user's original message
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-save-per-step-abort',
+      resourceId: 'resource-save-per-step-abort',
+    });
+    expect(recalled.messages.length).toBeGreaterThan(0);
+    expect(recalled.messages.some(m => m.role === 'user')).toBe(true);
+  });
+});

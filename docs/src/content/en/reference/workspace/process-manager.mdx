@@ -131,7 +131,7 @@ for (const proc of procs) {
 
 ### `get(pid)`
 
-Get a handle to a process by PID. Returns `undefined` if the process is not found or has already been dismissed.
+Get a handle to a process by PID. Returns `undefined` if the process isn't found or has already been dismissed.
 
 ```typescript
 const handle = await sandbox.processes.get(1234)
@@ -145,7 +145,7 @@ if (handle) {
 
 ### `kill(pid)`
 
-Kill a process by PID. Waits for the process to terminate before returning. Returns `true` if the process was killed, `false` if it was not found.
+Kill a process by PID. Waits for the process to terminate before returning. Returns `true` if the process was killed, `false` if it wasn't found.
 
 ```typescript
 const killed = await sandbox.processes.kill(handle.pid)
@@ -365,7 +365,7 @@ const killed = await handle.kill()
 
 #### `sendStdin(data)`
 
-Send data to the process's stdin. Throws if the process has already exited or stdin is not available.
+Send data to the process's stdin. Throws if the process has already exited or stdin isn't available.
 
 ```typescript
 await handle.sendStdin('console.log("hello")\n')
