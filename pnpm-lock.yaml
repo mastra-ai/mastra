@@ -6263,8 +6263,8 @@ importers:
   workspaces/blaxel:
     dependencies:
       '@blaxel/core':
-        specifier: ^0.2.66
-        version: 0.2.67(@hey-api/openapi-ts@0.93.0(magicast@0.5.1)(typescript@5.9.3))
+        specifier: ^0.2.71
+        version: 0.2.71(@hey-api/openapi-ts@0.93.0(magicast@0.5.1)(typescript@5.9.3))
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -8187,8 +8187,8 @@ packages:
   '@better-fetch/fetch@1.1.21':
     resolution: {integrity: sha512-/ImESw0sskqlVR94jB+5+Pxjf+xBwDZF/N5+y2/q4EqD7IARUTSpPfIo8uf39SYpCxyOCtbyYpUrZ3F/k0zT4A==}
 
-  '@blaxel/core@0.2.67':
-    resolution: {integrity: sha512-KpdfdalCmnXy7sxi6h9tDGxRcHyWRjI5uxAp4dCPUt98VsQcWBTNjWFpc8U5h4+WcSbd1/IIOBe058aGYrF3cw==}
+  '@blaxel/core@0.2.71':
+    resolution: {integrity: sha512-gXGF6bITKQS4N2wWz7SO/nLT26mgzrpplDO2wQDnuncjN/+11Ye8YZGqgU6mNb1Td7WzAegCpEhRv5+sDEsZPw==}
     engines: {node: '>=18'}
 
   '@bufbuild/protobuf@2.10.0':
@@ -26942,7 +26942,7 @@ snapshots:
 
   '@better-fetch/fetch@1.1.21': {}
 
-  '@blaxel/core@0.2.67(@hey-api/openapi-ts@0.93.0(magicast@0.5.1)(typescript@5.9.3))':
+  '@blaxel/core@0.2.71(@hey-api/openapi-ts@0.93.0(magicast@0.5.1)(typescript@5.9.3))':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.93.0(magicast@0.5.1)(typescript@5.9.3))
       '@modelcontextprotocol/sdk': 1.20.1
