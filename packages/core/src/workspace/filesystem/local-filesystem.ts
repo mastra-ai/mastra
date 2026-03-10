@@ -50,12 +50,10 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * When true, all file operations are restricted to stay within basePath.
    * Prevents path traversal attacks and symlink escapes.
    *
-   * Path resolution depends on this setting:
-   * - `contained: true` (default) — Absolute paths that fall within basePath are
-   *   used as-is; all other absolute paths are treated as virtual (resolved
-   *   relative to basePath, e.g. `/file.txt` → `basePath/file.txt`). Any
-   *   resolved path that escapes basePath throws a PermissionError.
-   * - `contained: false` — Absolute paths are always treated as real filesystem
+   * - `contained: true` (default) — All paths are resolved relative to
+   *   basePath. Any resolved path that escapes basePath (and allowedPaths)
+   *   throws a PermissionError.
+   * - `contained: false` — Absolute paths are treated as real filesystem
    *   paths. No containment check is applied.
    *
    * Set to `false` when the filesystem needs to access paths outside basePath,
@@ -71,18 +69,19 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    */
   readOnly?: boolean;
   /**
-   * Additional paths (absolute) that are allowed beyond basePath.
+   * Additional paths allowed beyond basePath.
    * Useful with `contained: true` to grant access to specific directories
    * outside the basePath without disabling containment entirely.
    *
-   * Paths are resolved to absolute paths using `path.resolve()`.
+   * Relative paths are resolved against `basePath`.
+   * Absolute paths are used as-is.
    *
    * @example
    * ```typescript
    * new LocalFilesystem({
-   *   basePath: '/project',
+   *   basePath: '/project/workspace',
    *   contained: true,
-   *   allowedPaths: ['/home/user/.config'],
+   *   allowedPaths: ['../skills', '/home/user/.config'],
    * })
    * ```
    */
@@ -106,11 +105,10 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
  * the sandbox creates a symlink from `<workingDir>/<mountPath>` → `basePath`.
  * No FUSE tools are needed for local mounts.
  *
- * **`contained: false` caveat:** `CompositeFilesystem` strips mount prefixes and
- * produces absolute virtual paths (e.g. `/file.txt`). A non-contained
- * `LocalFilesystem` interprets these as real host paths instead of paths relative
- * to `basePath`, causing incorrect path resolution. Workspace warns at construction
- * time if this combination is detected.
+ * **`contained: false` caveat:** `CompositeFilesystem` strips mount prefixes
+ * before passing paths to mounted filesystems. A non-contained `LocalFilesystem`
+ * may interpret these paths as real host paths instead of paths relative to
+ * `basePath`. Workspace warns at construction time if this combination is detected.
  */
 export interface LocalMountConfig extends FilesystemMountConfig {
   type: 'local';
@@ -132,7 +130,7 @@ export interface LocalMountConfig extends FilesystemMountConfig {
  * });
  *
  * await workspace.init();
- * await workspace.writeFile('/hello.txt', 'Hello World!');
+ * await workspace.writeFile('hello.txt', 'Hello World!');
  * ```
  */
 export class LocalFilesystem extends MastraFilesystem {
@@ -159,21 +157,22 @@ export class LocalFilesystem extends MastraFilesystem {
   /**
    * Whether file operations are restricted to stay within basePath.
    *
-   * When `true` (default), absolute paths that don't fall within basePath are
-   * treated as virtual paths (resolved relative to basePath). When `false`,
-   * absolute paths are treated as real filesystem paths.
+   * When `true` (default), all paths are resolved relative to basePath.
+   * Any resolved path that escapes basePath (and allowedPaths) throws a
+   * PermissionError. When `false`, absolute paths are treated as real
+   * filesystem paths with no containment check.
    *
    * **Important:** `contained: false` is incompatible with CompositeFilesystem
-   * mounts because CompositeFilesystem strips mount prefixes and produces
-   * absolute paths (e.g. `/file.txt`), which a non-contained filesystem
-   * interprets as the real host path instead of `basePath/file.txt`.
+   * mounts because CompositeFilesystem strips mount prefixes and passes
+   * paths like `file.txt`, which a non-contained filesystem may resolve
+   * incorrectly.
    */
   get contained(): boolean {
     return this._contained;
   }
 
   /**
-   * Current set of additional allowed paths (absolute, resolved).
+   * Current set of resolved allowed paths.
    * These paths are permitted beyond basePath when containment is enabled.
    */
   get allowedPaths(): readonly string[] {
@@ -736,13 +735,20 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private _getDefaultInstructions(): string {
-    const allowedNote =
-      this._allowedPaths.length > 0
-        ? ` Additionally, the following paths outside basePath are accessible: ${this._allowedPaths.join(', ')}.`
-        : '';
+    const parts = [`Local filesystem at "${this.basePath}". Relative paths resolve from this directory.`];
+
     if (this._contained) {
-      return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.${allowedNote}`;
+      if (this._allowedPaths.length > 0) {
+        parts.push(
+          `File access is restricted to this directory and the following allowed paths: ${this._allowedPaths.join(', ')}.`,
+        );
+      } else {
+        parts.push('File access is restricted to this directory.');
+      }
+    } else {
+      parts.push('Containment is disabled, so any path on the host filesystem is accessible.');
     }
-    return `Local filesystem rooted at "${this.basePath}". Containment is disabled so absolute paths access the real filesystem. Use paths relative to "${this.basePath}" (e.g. "foo/bar.txt") for workspace files. Avoid unnecessary listing "/" as it would traverse the entire host filesystem.${allowedNote}`;
+
+    return parts.join(' ');
   }
 }

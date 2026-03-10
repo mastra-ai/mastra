@@ -69,7 +69,7 @@ const response = await agent.generate('List all files in the workspace')
     name: 'allowedPaths',
     type: 'string[]',
     description:
-      'Additional absolute paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Paths are resolved to absolute paths.',
+      'Additional paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Relative paths are resolved against `basePath`. Absolute paths are used as-is.',
     isOptional: true,
     defaultValue: '[]',
   },
@@ -123,7 +123,7 @@ const response = await agent.generate('List all files in the workspace')
     name: 'allowedPaths',
     type: 'readonly string[]',
     description:
-      'Current set of additional allowed paths (absolute, resolved). These paths are permitted beyond basePath when containment is enabled.',
+      'Current set of resolved allowed paths. These paths are permitted beyond basePath when containment is enabled.',
   },
 ]}
 />

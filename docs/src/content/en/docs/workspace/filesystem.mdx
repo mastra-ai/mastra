@@ -70,14 +70,14 @@ In contained mode:
 - **Absolute paths** (e.g. `/home/user/.config/file.txt`) are treated as real filesystem paths — if they fall outside `basePath` and any `allowedPaths`, a `PermissionError` is thrown
 - **Tilde paths** (e.g. `~/Documents`) expand to the home directory and follow the same containment rules
 
-If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely:
+If your agent needs to access specific paths outside `basePath`, use `allowedPaths` to grant access without disabling containment entirely. Relative paths are resolved against `basePath`, and absolute paths are used as-is:
 
 ```typescript
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
     basePath: './workspace',
     // highlight-next-line
-    allowedPaths: ['/home/user/.config', '/home/user/documents'],
+    allowedPaths: ['~/.claude/skills', '../shared-data'],
   }),
 })
 ```

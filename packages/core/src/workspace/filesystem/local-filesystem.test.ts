@@ -926,7 +926,7 @@ describe('LocalFilesystem', () => {
     describe('getInstructions with allowedPaths', () => {
       it('should not mention allowedPaths when empty', () => {
         const instructions = localFs.getInstructions();
-        expect(instructions).not.toContain('Additionally');
+        expect(instructions).not.toContain('allowed paths');
       });
 
       it('should mention allowedPaths when set', () => {
@@ -935,7 +935,7 @@ describe('LocalFilesystem', () => {
           allowedPaths: [outsideDir],
         });
         const instructions = fsWithAllowed.getInstructions();
-        expect(instructions).toContain('Additionally');
+        expect(instructions).toContain('allowed paths');
         expect(instructions).toContain(outsideDir);
       });
     });

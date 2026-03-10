@@ -31,36 +31,31 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Mock
     }
   }
 
-  // Normalize ./ prefixed paths to relative (no leading slash).
-  // The real LocalFilesystem resolves relative paths to basePath; the mock stores files without / prefix.
-  const normalizePath = (p: string): string =>
-    p === '.' || p === './' ? '' : p.startsWith('./') ? p.slice(2) : p.startsWith('/') ? p.slice(1) : p;
-
   return {
     readFile: vi.fn(async (path: string) => {
-      const content = fileSystem.get(normalizePath(path));
+      const content = fileSystem.get(path);
       if (content === undefined) {
         throw new Error(`File not found: ${path}`);
       }
       return content;
     }),
     writeFile: vi.fn(async (path: string, content: string | Buffer) => {
-      fileSystem.set(normalizePath(path), content);
+      fileSystem.set(path, content);
       // Add parent directories
-      let dir = normalizePath(path);
+      let dir = path;
       while (dir.includes('/')) {
         dir = dir.substring(0, dir.lastIndexOf('/'));
         if (dir) directories.add(dir);
       }
     }),
     exists: vi.fn(async (path: string) => {
-      const n = normalizePath(path);
-      return fileSystem.has(n) || directories.has(n);
+      const p = path === '.' ? '' : path;
+      return fileSystem.has(p) || directories.has(p);
     }),
     readdir: vi.fn(async (path: string): Promise<SkillSourceEntry[]> => {
       const entries: SkillSourceEntry[] = [];
-      const normalizedPath = normalizePath(path);
-      const prefix = normalizedPath === '' ? '' : `${normalizedPath}/`;
+      const normalized = path === '.' ? '' : path;
+      const prefix = normalized === '' ? '' : `${normalized}/`;
 
       // Find immediate children
       for (const [filePath] of fileSystem) {
@@ -114,9 +109,9 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Mock
       directories.delete(path);
     }),
     stat: vi.fn(async (path: string): Promise<SkillSourceStat> => {
-      const n = normalizePath(path);
-      const name = n.split('/').pop() || n;
-      const content = fileSystem.get(n);
+      const p = path === '.' ? '' : path;
+      const name = p.split('/').pop() || p;
+      const content = fileSystem.get(p);
       if (content) {
         return {
           name,
@@ -126,7 +121,7 @@ function createMockFilesystem(files: Record<string, string | Buffer> = {}): Mock
           modifiedAt: new Date(),
         };
       }
-      if (directories.has(n)) {
+      if (directories.has(p)) {
         return {
           name,
           type: 'directory',
