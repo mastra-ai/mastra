@@ -122,8 +122,9 @@ describe('MemoryTokenLimiter', () => {
   });
 
   it('should remove memory messages in chronological order (oldest first)', async () => {
-    // Set a token limit that allows some but not all messages
-    const limiter = new MemoryTokenLimiter({ maxTokens: 200 });
+    // Each short message ≈ 4-6 tiktoken tokens, 3 memory + 1 input ≈ 16-20 tokens total.
+    // Set maxTokens to 10 so that some (but not all) memory messages must be removed.
+    const limiter = new MemoryTokenLimiter({ maxTokens: 10 });
     const messageList = new MessageList();
 
     // Add memory messages oldest first
@@ -143,14 +144,17 @@ describe('MemoryTokenLimiter', () => {
       retryCount: 0,
     });
 
-    // Check that if any memory messages remain, they are the newer ones
     const remainingMemory = messageList.get.remembered.db();
     const remainingIds = remainingMemory.map(m => m.id);
 
+    // Some memory messages should have been removed
+    expect(remainingMemory.length).toBeLessThan(3);
+
     // mem-1 (oldest) should be removed first
-    if (remainingIds.length > 0 && remainingIds.length < 3) {
-      expect(remainingIds).not.toContain('mem-1');
-    }
+    expect(remainingIds).not.toContain('mem-1');
+
+    // Input is always preserved
+    expect(messageList.get.input.db()).toHaveLength(1);
   });
 
   it('should have the correct processor id', () => {

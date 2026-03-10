@@ -121,9 +121,11 @@ export const agent = new Agent({
 
 When `maxTokens` is set, Mastra automatically adds a `MemoryTokenLimiter` processor that:
 
-1. Counts the total tokens of all messages (memory history + new input) using tiktoken (o200k\_base encoding)
+1. Counts the total tokens of all messages (system messages + memory history + new input) using tiktoken (o200k\_base encoding)
 1. If the total exceeds `maxTokens`, removes the oldest memory history messages first
-1. Never removes input messages from the current turn
+1. Never removes system messages or input messages from the current turn
+
+Since system messages (like agent `instructions`) are included in the token count, you can set `maxTokens` to your model's context window size and the processor will automatically reserve space for the system prompt.
 
 You can use `maxTokens` alongside `lastMessages` to apply both count-based and token-based limits. This is useful for preventing context window overflow while keeping a reasonable number of recent messages.
 
