@@ -108,7 +108,7 @@ export type ServerRoute<
   TSchemas extends RouteSchemas = RouteSchemas,
   TMethod extends string = string,
   TPath extends string = string,
-> = Omit<ApiRoute, 'handler' | 'createHandler' | 'method' | 'path'> & {
+> = Omit<ApiRoute, 'handler' | 'createHandler' | 'method' | 'path' | 'openapi'> & {
   method: TMethod;
   path: TPath;
   responseType: TResponseType;
