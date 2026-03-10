@@ -247,7 +247,7 @@ await harness.sendMessage({ content: 'Hello!' })
   {
     name: 'idGenerator',
     type: '() => string',
-    description: 'Custom ID generator for threads, messages, and other entities.',
+    description: 'Custom ID generator for Harness-managed IDs such as threads and mode-run identifiers.',
     isOptional: true,
     defaultValue: 'timestamp + random string',
   },
