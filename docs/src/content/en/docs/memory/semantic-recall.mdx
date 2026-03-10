@@ -50,7 +50,7 @@ const agent = new Agent({
 
 ## Using the recall() Method
 
-While `listMessages` retrieves messages by thread ID with basic pagination, [`recall()`](/reference/memory/recall) adds support for **semantic search**. When you need to find messages by meaning rather than just recency, use `recall()` with a `vectorSearchString`:
+While `listMessages` retrieves messages by thread ID with basic pagination, [`recall()`](/reference/memory/recall) adds support for **semantic search**. When you need to find messages by meaning rather than recency, use `recall()` with a `vectorSearchString`:
 
 ```typescript
 const memory = await agent.getMemory()
@@ -259,7 +259,7 @@ For detailed information about index configuration options and performance tunin
 
 ## Disabling
 
-There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
+Semantic recall has a performance impact. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
 
 Semantic recall is enabled by default but can be disabled when not needed:
 

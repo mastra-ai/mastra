@@ -1,4 +1,6 @@
-import type { Schema } from '@internal/ai-v6';
+import type { Schema as SchemaV4 } from '@internal/ai-sdk-v4';
+import type { Schema as SchemaV5 } from '@internal/ai-sdk-v5';
+import type { Schema as SchemaV6 } from '@internal/ai-v6';
 import type { JSONSchema7 } from 'json-schema';
 import type z3 from 'zod/v3';
 import type z4 from 'zod/v4';
@@ -17,7 +19,9 @@ export type ZodDefault = z4.ZodDefault<any> | z3.ZodDefault<any>;
 export type PublicSchema<Output = unknown, Input = Output> =
   | z4.ZodType<Output, Input>
   | z3.Schema<Output, z3.ZodTypeDef, Input>
-  | Schema<Output>
+  | SchemaV4<Output>
+  | SchemaV5<Output>
+  | SchemaV6<Output>
   | JSONSchema7
   | StandardSchemaWithJSON<Input, Output>;
 

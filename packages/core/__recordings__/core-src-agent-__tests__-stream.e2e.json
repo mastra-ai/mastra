@@ -1,0 +1,1710 @@
+{
+  "meta": {
+    "name": "core-src-agent-__tests__-stream.e2e",
+    "testFile": "packages/core/src/agent/__tests__/stream.e2e.test.ts",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-03-09T19:13:05.149Z"
+  },
+  "recordings": [
+    {
+      "hash": "7543e645e3afe0d4",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "test!"
+            },
+            {
+              "role": "user",
+              "content": "hello!"
+            }
+          ],
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        },
+        "timestamp": 1773083567079
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64a6bfaf17f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Mon, 09 Mar 2026 19:12:47 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "180",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999994",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_0a8dc3967f964ccdbea770557c3d1125"
+        },
+        "chunks": [
+          "data: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"refusal\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"B3e4pChG7\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"bVfATb\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"RBYcKxOFXo\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" How\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"bbQcs9u\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" can\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"suNsELS\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" I\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"0bAh4A1A3\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" assist\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"lxsw\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" you\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"ghzLdi3\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" today\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"MlQwo\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"?\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"P1mrpprhp2\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":null,\"obfuscation\":\"V9zqk\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzbHxukcMm5ueegcRfdv9yQPYk\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_373a14eb6f\",\"choices\":[],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":9,\"total_tokens\":24,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0}},\"obfuscation\":\"Z9UYEQUGzkD\"}\n\ndata: [DONE]\n\n"
+        ],
+        "chunkTimings": [4, 22, 21, 24, 34, 14, 1],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "70e3aa763692b0a4",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "test!"
+            },
+            {
+              "role": "user",
+              "content": "hello!"
+            },
+            {
+              "role": "assistant",
+              "content": "hi, how are you?"
+            },
+            {
+              "role": "user",
+              "content": "I'm good, how are you?"
+            }
+          ],
+          "stream": true,
+          "stream_options": {
+            "include_usage": true
+          }
+        },
+        "timestamp": 1773083567604
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64a9fe0c28a9-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Mon, 09 Mar 2026 19:12:48 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "266",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999982",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_c0c3bbfc7c3d4eae9cbb43af1dfe10ee"
+        },
+        "chunks": [
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"refusal\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"LRHWqM3uO\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"I'm\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"V7dB2ax8\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" just\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"i1TKF6\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" a\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"6sSZHQThD\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" program\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"DOa\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\",\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"1tV0tlKXXa\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" but\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"jNj3CEV\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" I'm\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"XSjLtqL\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" here\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"YnKtKA\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" and\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"1l3Kd32\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" ready\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"4H69T\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" to\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"KZgKoejP\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" help\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"c9aduC\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" you\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"wVSnzaC\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"wBhEWLioQ1\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" What\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"joRXp5\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" can\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"IqDGhcd\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" I\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"ufsgOPcsV\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" assist\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"hZHv\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" you\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"CViEf7M\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" with\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"0lWCav\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" today\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"9YWvc\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"?\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"x92uOOOk0i\"}\n\n",
+          "data: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":null,\"obfuscation\":\"5WMjk\"}\n\ndata: {\"id\":\"chatcmpl-DHaJzptFpDZTWiPSELKzLAPnPa8x5\",\"object\":\"chat.completion.chunk\",\"created\":1773083567,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_4c3cd50875\",\"choices\":[],\"usage\":{\"prompt_tokens\":36,\"completion_tokens\":22,\"total_tokens\":58,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0}},\"obfuscation\":\"Wa0BBepREu\"}\n\n",
+          "data: [DONE]\n\n"
+        ],
+        "chunkTimings": [0, 34, 25, 23, 37, 27, 35, 48, 26, 25, 28, 19, 8, 12],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "eb482f18361301c5",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": "What is the weather in London?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083569122
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64b349a717f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:49 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "443",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999976",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_3dd1a31799cb490c9467b6f2859b8aea"
+        },
+        "body": {
+          "id": "chatcmpl-DHaK1UvaGVaBqV3TOMEY3pNyLBFfi",
+          "object": "chat.completion",
+          "created": 1773083569,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [
+                  {
+                    "id": "call_1xxU1UJsVMxRReMMvZVfXrJI",
+                    "type": "function",
+                    "function": {
+                      "name": "get_weather",
+                      "arguments": "{\"postalCode\":\"EC1A\"}"
+                    }
+                  }
+                ],
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 73,
+            "completion_tokens": 17,
+            "total_tokens": 90,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_a1ddba3226"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "9711fe1e63dc2d45",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": "What is the weather in London?"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "call_1xxU1UJsVMxRReMMvZVfXrJI",
+                  "type": "function",
+                  "function": {
+                    "name": "get_weather",
+                    "arguments": "{\"postalCode\":\"EC1A\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "call_1xxU1UJsVMxRReMMvZVfXrJI",
+              "content": "\"The weather in EC1A is sunny. It is currently 70 degrees and feels like 65 degrees.\""
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083569737
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64b71f2517f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:50 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "822",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999953",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_4667c910d9d04f6e8b2b63c2d86e9d03"
+        },
+        "body": {
+          "id": "chatcmpl-DHaK1vonGwnv85XEWYUgVjVHZJjt6",
+          "object": "chat.completion",
+          "created": 1773083569,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Arrr matey! The weather in London be sunny, with a temperature of 70 degrees, but it feels like 65 degrees. A fine day fer sailin' the high seas!",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 40,
+            "total_tokens": 160,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_a1ddba3226"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "6452d8b4b9d04cae",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": "What is the weather in London?"
+            },
+            {
+              "role": "assistant",
+              "content": "Arrr matey! The weather in London be sunny, with a temperature of 70 degrees, but it feels like 65 degrees. A fine day fer sailin' the high seas!"
+            },
+            {
+              "role": "user",
+              "content": "What was the tool you just used?"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "get_weather",
+                "description": "Get the weather for a given location",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "postalCode": {
+                      "type": "string",
+                      "description": "The location to get the weather for"
+                    }
+                  },
+                  "required": ["postalCode"],
+                  "additionalProperties": false,
+                  "$schema": "http://json-schema.org/draft-07/schema#"
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083570762
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64bd8bfd17f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:52 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1755",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999930",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8ebc5e5661814f129b54e0b7cd43e04b"
+        },
+        "body": {
+          "id": "chatcmpl-DHaK23ZhoRjMmtHHjTTXYshHCqexi",
+          "object": "chat.completion",
+          "created": 1773083570,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Arrr, I be usin' the \"get_weather\" tool to fetch the weather fer London, but it seems I be givin' ye a made-up forecast instead! If ye want the real weather, I can fetch it fer ye now! Just say the word!",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 128,
+            "completion_tokens": 57,
+            "total_tokens": 185,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_1883e75a49"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "210366360ac6b891",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "test!"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "hello!"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "stream": true
+        },
+        "timestamp": 1773083572709
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64c9ae6b17f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Mon, 09 Mar 2026 19:12:52 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "51",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_5c04f5a49b3f46c6b1c941c1af166ed3"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_09387c4f23d782470069af1bb4d4c4819696428a254e191015\",\"object\":\"response\",\"created_at\":1773083572,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_09387c4f23d782470069af1bb4d4c4819696428a254e191015\",\"object\":\"response\",\"created_at\":1773083572,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Hello\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"t9GqqIXQhOx\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"hjPwUt1aaXSFEAI\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" How\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"XVb2aoEnkQDl\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" can\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"u6az7uiOzMrO\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" I\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"IGyg0uwrF4CBSC\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" assist\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"BBtfqjlGz\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"tGAYaecIBJDs\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" today\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"oOiNrvQkG7\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"?\",\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"obfuscation\":\"xbBLTxeqeJAxk9b\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":13,\"text\":\"Hello! How can I assist you today?\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"},\"sequence_number\":14}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_09387c4f23d782470069af1bb4d4c4819696428a254e191015\",\"object\":\"response\",\"created_at\":1773083572,\"status\":\"completed\",\"background\":false,\"completed_at\":1773083573,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"msg_09387c4f23d782470069af1bb53a6c81968ed29abaa14dd51f\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"Hello! How can I assist you today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":15,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":10,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":25},\"user\":null,\"metadata\":{}},\"sequence_number\":16}\n\n"
+        ],
+        "chunkTimings": [3, 8, 342, 1, 16, 1, 23, 2, 56, 0, 14, 1, 2, 43, 0, 1, 125],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "c11fcd9315f15f40",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "test!"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "hello!"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "hi, how are you?"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "I'm good, how are you?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "stream": true
+        },
+        "timestamp": 1773083573557
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64cf29344718-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Mon, 09 Mar 2026 19:12:53 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "63",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_dad548bf933e45b3a243e4518a99d388"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_028321c06bf0ccab0069af1bb5b5c481969fb5e34e171c4e12\",\"object\":\"response\",\"created_at\":1773083573,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_028321c06bf0ccab0069af1bb5b5c481969fb5e34e171c4e12\",\"object\":\"response\",\"created_at\":1773083573,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"I'm\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"CiGKoSPief4oC\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" doing\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"090R8hn8p1\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" well\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"ppjlvZc4xft\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"0xes6l3uu2A9WFY\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" thanks\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"DslQBKVZj\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"DUBHi9EralHc8rb\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" What\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"hdxzaXDGdZi\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"’s\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"fimreBRs4VPXoz\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" on\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"Mu2awy8XqbR3J\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" your\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"kiXaM9ldLYl\",\"output_index\":0,\"sequence_number\":13}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" mind\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"557HF2opNoc\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" today\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"bIXm4p9XxM\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"?\",\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"obfuscation\":\"8V3mUg8dfAM5x79\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":17,\"text\":\"I'm doing well, thanks! What’s on your mind today?\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I'm doing well, thanks! What’s on your mind today?\"},\"sequence_number\":18}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I'm doing well, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_028321c06bf0ccab0069af1bb5b5c481969fb5e34e171c4e12\",\"object\":\"response\",\"created_at\":1773083573,\"status\":\"completed\",\"background\":false,\"completed_at\":1773083574,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"output\":[{\"id\":\"msg_028321c06bf0ccab0069af1bb6653c8196bf9b34d9f291725c\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I'm doing well, thanks! What’s on your mind today?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":null,\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":0.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":36,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":14,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":50},\"user\":null,\"metadata\":{}},\"sequence_number\":20}\n\n"
+        ],
+        "chunkTimings": [2, 8, 619, 2, 38, 0, 46, 1, 30, 1, 9, 3, 18, 1, 21, 2, 0, 34, 2, 1, 111],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "0e4af0a0885ce89e",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in London?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083575632
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64dbfb9d17f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:56 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "838",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999713",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "1ms",
+          "x-request-id": "req_7243c836b4af43ae94caaab3fc94e41a"
+        },
+        "body": {
+          "id": "resp_02bd360458ba74d50069af1bb7c17c819587c081e9d78a0b85",
+          "object": "response",
+          "created_at": 1773083575,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083576,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "fc_02bd360458ba74d50069af1bb868f8819598d06a04ca05d4ae",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"postalCode\":\"EC1A\"}",
+              "call_id": "call_vpwb4M4H3AZzPoX5MyWerU1j",
+              "name": "get_weather"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 70,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 18,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 88
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "992d860a624ce722",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in London?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_02bd360458ba74d50069af1bb868f8819598d06a04ca05d4ae"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_vpwb4M4H3AZzPoX5MyWerU1j",
+              "output": "The weather in EC1A is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083576649
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64e248ff17f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:58 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1202",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999665",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "2ms",
+          "x-request-id": "req_63f1d09bd8f24b5291bccb859378a419"
+        },
+        "body": {
+          "id": "resp_02bd360458ba74d50069af1bb8c6208195a279321ff3d34c71",
+          "object": "response",
+          "created_at": 1773083576,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083577,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_02bd360458ba74d50069af1bb93a2c8195a9f312512e601d53",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Arrr, matey! The weather in London be sunny, with a temperature of 70 degrees, but it feels like 65 degrees. Fair winds to ye! ☀️🏴‍☠️"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 118,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 45,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 163
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "22cb4ece858a7205",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in London?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_02bd360458ba74d50069af1bb868f8819598d06a04ca05d4ae"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_vpwb4M4H3AZzPoX5MyWerU1j",
+              "output": "The weather in EC1A is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_02bd360458ba74d50069af1bb93a2c8195a9f312512e601d53"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What was the tool you just used?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083578030
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c64eaee0517f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:59 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1042",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999606",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "2ms",
+          "x-request-id": "req_da03def81ac1432398ca80539d689952"
+        },
+        "body": {
+          "id": "resp_02bd360458ba74d50069af1bba26648195a6ac8425391e3c06",
+          "object": "response",
+          "created_at": 1773083578,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083579,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_02bd360458ba74d50069af1bbaa93c8195a9b335062a0be94d",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "I be usin' a weather tool to fetch the current weather in London, savvy? It gives me the details like temperature and conditions. Arrr! 🌤️"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 177,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 36,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 213
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "090f98ac1527c93a",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in London?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083581964
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c65038c3f17f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:13:02 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "639",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999713",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "1ms",
+          "x-request-id": "req_acea27184765477d837fd962bc8c364e"
+        },
+        "body": {
+          "id": "resp_02cceccd668feab00069af1bbe18bc8193bb9c275b8cc63bcd",
+          "object": "response",
+          "created_at": 1773083582,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083582,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "fc_02cceccd668feab00069af1bbe75ac81939183859212162349",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"postalCode\":\"EC1A\"}",
+              "call_id": "call_m5gk6cK9hX5zPGpZLV4QicJP",
+              "name": "get_weather"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 70,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 18,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 88
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "359b378e08e15586",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in London?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_02cceccd668feab00069af1bbe75ac81939183859212162349"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_m5gk6cK9hX5zPGpZLV4QicJP",
+              "output": "The weather in EC1A is sunny. It is currently 70 degrees and feels like 65 degrees."
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083582789
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c6508ad0417f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:13:04 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1038",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999665",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "2ms",
+          "x-request-id": "req_319160dd07394e6f95d02fa4b96c3625"
+        },
+        "body": {
+          "id": "resp_02cceccd668feab00069af1bbeea90819386825b2973a27efc",
+          "object": "response",
+          "created_at": 1773083583,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083583,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_02cceccd668feab00069af1bbf53848193bb5b09d814a8902a",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Arrr, matey! The weather in London be sunny, with a temperature of 70 degrees, but it feels like 65 degrees. Fair winds to ye! ☀️🏴‍☠️"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 118,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 45,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 163
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "c7c8974fef16ba71",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "Testing tool calls! Please respond in a pirate accent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What is the weather in London?"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_02cceccd668feab00069af1bbe75ac81939183859212162349"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_m5gk6cK9hX5zPGpZLV4QicJP",
+              "output": "The weather in EC1A is sunny. It is currently 70 degrees and feels like 65 degrees."
+            },
+            {
+              "type": "item_reference",
+              "id": "msg_02cceccd668feab00069af1bbf53848193bb5b09d814a8902a"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What was the tool you just used?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0,
+          "tools": [
+            {
+              "type": "function",
+              "name": "get_weather",
+              "description": "Get the weather for a given location",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1773083584012
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c65105f7917f1-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:13:05 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "965",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999606",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "2ms",
+          "x-request-id": "req_205178f148a1421c96ec8937daf24154"
+        },
+        "body": {
+          "id": "resp_02cceccd668feab00069af1bc0225481939a987171cf04c1e7",
+          "object": "response",
+          "created_at": 1773083584,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083584,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "output": [
+            {
+              "id": "msg_02cceccd668feab00069af1bc06b248193982819baecdf8916",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "I be usin' a weather tool to fetch the current weather in London, savvy? It gives me the details like temperature and conditions. Arrr! 🌤️"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Get the weather for a given location",
+              "name": "get_weather",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "postalCode": {
+                    "type": "string",
+                    "description": "The location to get the weather for"
+                  }
+                },
+                "required": ["postalCode"],
+                "additionalProperties": false
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 177,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 36,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 213
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

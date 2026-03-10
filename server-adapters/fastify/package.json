@@ -38,7 +38,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "^20.19.30",
+    "@types/node": "^20.19.35",
     "eslint": "^9.37.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
@@ -48,7 +48,7 @@
     "@fastify/swagger": "^9.6.1",
     "@fastify/swagger-ui": "^5.2.5",
     "@ai-sdk/openai": "^2.0.62",
-    "zod": "^3.25.0"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",

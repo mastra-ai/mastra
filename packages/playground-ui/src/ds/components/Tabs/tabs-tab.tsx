@@ -21,7 +21,7 @@ export const Tab = ({ children, value, onClick, onClose, className }: TabProps) 
         transitions.all,
         focusRing.visible,
         'hover:text-neutral4',
-        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-accent1',
+        'data-[state=active]:text-neutral5 data-[state=active]:border-b-2 data-[state=active]:border-white/50',
         className,
       )}
       onClick={onClick}

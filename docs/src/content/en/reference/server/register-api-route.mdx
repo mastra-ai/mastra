@@ -27,7 +27,7 @@ The URL path for the route. Supports path parameters using `:param` syntax.
 registerApiRoute("/items/:itemId", { ... })
 ```
 
-**Note:** Paths cannot start with `/api/` as this prefix is reserved for Mastra server routes.
+**Note:** Paths can't start with `/api/` as this prefix is reserved for Mastra server routes.
 
 ### options
 
@@ -68,7 +68,7 @@ registerApiRoute("/items/:itemId", { ... })
 
 ## OpenAPI Options
 
-The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi). Routes without an `openapi` property are not included in Swagger UI.
+The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-openapi](https://github.com/honojs/middleware/tree/main/packages/openapi). Routes without an `openapi` property aren't included in Swagger UI.
 
 <PropertiesTable
   content={[
