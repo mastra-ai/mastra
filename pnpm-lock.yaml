@@ -1481,10 +1481,10 @@ importers:
         version: link:../mastra
       braintrust:
         specifier: ^2.2.0
-        version: 2.2.0(@aws-sdk/credential-provider-web-identity@3.972.18)(chokidar@3.6.0)(zod@3.25.76)
+        version: 2.2.0(@aws-sdk/credential-provider-web-identity@3.972.18)(chokidar@3.6.0)(zod@4.3.6)
       zod:
         specifier: ^3.25.34 || ^4.0.0
-        version: 3.25.76
+        version: 4.3.6
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1667,8 +1667,8 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       langsmith:
-        specifier: '>=0.3.79'
-        version: 0.3.81(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
+        specifier: '>=0.4.6'
+        version: 0.4.6(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.35
@@ -2072,11 +2072,11 @@ importers:
         version: 1.1.3
       zod:
         specifier: ^3.25.0 || ^4.0.0
-        version: 3.25.76
+        version: 4.3.6
     devDependencies:
       '@ai-sdk/provider-utils':
         specifier: ^3.0.20
-        version: 3.0.20(zod@3.25.76)
+        version: 3.0.20(zod@4.3.6)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -2097,7 +2097,7 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
-        version: 4.3.19(react@19.2.4)(zod@3.25.76)
+        version: 4.3.19(react@19.2.4)(zod@4.3.6)
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
@@ -2213,17 +2213,17 @@ importers:
     dependencies:
       zod:
         specifier: ^3.25.0 || ^4.0.0
-        version: 3.25.76
+        version: 4.3.6
     devDependencies:
       '@ai-sdk/provider':
         specifier: 1.1.3
         version: 1.1.3
       '@ai-sdk/provider-utils':
         specifier: 2.2.8
-        version: 2.2.8(zod@3.25.76)
+        version: 2.2.8(zod@4.3.6)
       '@ai-sdk/ui-utils':
         specifier: 1.2.11
-        version: 1.2.11(zod@3.25.76)
+        version: 1.2.11(zod@4.3.6)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -2247,7 +2247,7 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^4.3.19
-        version: 4.3.19(react@19.2.4)(zod@3.25.76)
+        version: 4.3.19(react@19.2.4)(zod@4.3.6)
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
@@ -2334,17 +2334,17 @@ importers:
     dependencies:
       zod:
         specifier: ^3.25.76 || ^4.0.0
-        version: 3.25.76
+        version: 4.3.6
     devDependencies:
       '@ai-sdk/gateway':
         specifier: ^3.0.0
-        version: 3.0.66(zod@3.25.76)
+        version: 3.0.66(zod@4.3.6)
       '@ai-sdk/provider':
         specifier: ^3.0.0
         version: 3.0.8
       '@ai-sdk/provider-utils':
         specifier: ^4.0.0
-        version: 4.0.19(zod@3.25.76)
+        version: 4.0.19(zod@4.3.6)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -2368,7 +2368,7 @@ importers:
         version: 4.0.18(vitest@4.0.18)
       ai:
         specifier: ^6.0.1
-        version: 6.0.116(zod@3.25.76)
+        version: 6.0.116(zod@4.3.6)
       eslint:
         specifier: ^9.39.4
         version: 9.39.4(jiti@2.6.1)
@@ -8248,6 +8248,9 @@ packages:
   '@codemirror/commands@6.10.1':
     resolution: {integrity: sha512-uWDWFypNdQmz2y1LaNJzK7fL7TYKLeUAU0npEC685OKTF3KcQ2Vu3klIM78D7I6wGhktme0lh3CuQLv0ZCrD9Q==}
 
+  '@codemirror/commands@6.10.2':
+    resolution: {integrity: sha512-vvX1fsih9HledO1c9zdotZYUZnE4xV0m6i3m25s5DIfXofuprk6cRcLUZvSk3CASUbwjQX21tOGbkY2BH8TpnQ==}
+
   '@codemirror/lang-angular@0.1.4':
     resolution: {integrity: sha512-oap+gsltb/fzdlTQWD6BFF4bSLKcDnlxDsLdePiJpCVNKWXSTAbiiQeYI3UmES+BLAdkmIC1WjyztC1pi/bX4g==}
 
@@ -8337,6 +8340,9 @@ packages:
 
   '@codemirror/view@6.39.16':
     resolution: {integrity: sha512-m6S22fFpKtOWhq8HuhzsI1WzUP/hB9THbDj0Tl5KX4gbO6Y91hwBl7Yky33NdvB6IffuRFiBxf1R8kJMyXmA4Q==}
+
+  '@codemirror/view@6.39.17':
+    resolution: {integrity: sha512-Aim4lFqhbijnchl83RLfABWueSGs1oUCSv0mru91QdhpXQeNKprIdRO9LWA4cYkJvuYTKGJN7++9MXx8XW43ag==}
 
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
@@ -16190,6 +16196,9 @@ packages:
   confbox@0.2.2:
     resolution: {integrity: sha512-1NB+BKqhtNipMsov4xI/NnhCKp9XG9NamYp5PVm9klAT0fsrNPjaFICsCFhNhwZJKNh7zB/3q8qXz0E9oaMNtQ==}
 
+  confbox@0.2.4:
+    resolution: {integrity: sha512-ysOGlgTFbN2/Y6Cg3Iye8YKulHw+R2fNXHrgSmXISQdMnomY6eNDprVdW9R5xBguEqI954+S6709UyiO7B+6OQ==}
+
   config-chain@1.1.13:
     resolution: {integrity: sha512-qj+f8APARXHrM0hraqXYb2/bOVSV4PvJQlNZ/DVj0QrmNM2q2euizkeuVckQ57J+W0mRH6Hvi+k50M4Jul2VRQ==}
 
@@ -18592,6 +18601,10 @@ packages:
     resolution: {integrity: sha512-UcVfVfaK4Sc4m7X3dUSoHoozQGBEFeDC+zVo06t98xe8CzHSZZBekNXH+tu0NalHolcJ/QAGqS46Hef7QXBIMw==}
     engines: {node: '>=16'}
 
+  is-wsl@3.1.1:
+    resolution: {integrity: sha512-e6rvdUCiQCAuumZslxRJWR/Doq4VpPR82kqclvcS0efgt430SlGIk05vdCN58+VrzgtIcfNODjozVielycD4Sw==}
+    engines: {node: '>=16'}
+
   is-yarn-global@0.4.1:
     resolution: {integrity: sha512-/kppl+R+LO5VmhYSEWARUFjodS25D68gvj8W7z0I7OWhUla5xWu8KL6CtB2V0R6yqhnRgbcaREMr4EEM6htLPQ==}
     engines: {node: '>=12'}
@@ -18906,8 +18919,8 @@ packages:
     resolution: {integrity: sha512-mtwfsNGIYvObRh+NYNGlJQJDiBN+Wr3Hnr++wN25mxuOpSTdXX+JQqVCyAqGL5GD2TAXRZ7COsN42Vmp9krYmg==}
     engines: {node: '>=18'}
 
-  langsmith@0.3.81:
-    resolution: {integrity: sha512-NFmp7TDrrbCE6TIfHqutN9xhdgvx0EOhULVo8bDW+ib5idprwjMTvmS0S1n9uVFwjN03zU2zVEWViXnwy5XPrw==}
+  langsmith@0.4.6:
+    resolution: {integrity: sha512-9aYop1fEwA8RgFuvv8XPeV9ieeSnKnVRn3bNemkFQCyINLAxfNHC547bVMW8i8MuS1F1pgKwopqhLNf80qS1bQ==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -24242,13 +24255,6 @@ snapshots:
       '@vercel/oidc': 3.1.0
       zod: 4.3.6
 
-  '@ai-sdk/gateway@3.0.66(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.19(zod@3.25.76)
-      '@vercel/oidc': 3.1.0
-      zod: 3.25.76
-
   '@ai-sdk/gateway@3.0.66(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -24355,13 +24361,6 @@ snapshots:
     optionalDependencies:
       zod: 4.3.6
 
-  '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      nanoid: 3.3.11
-      secure-json-parse: 2.7.0
-      zod: 3.25.76
-
   '@ai-sdk/provider-utils@2.2.8(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -24418,13 +24417,6 @@ snapshots:
       eventsource-parser: 3.0.6
       zod: 4.3.6
 
-  '@ai-sdk/provider-utils@4.0.19(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.8
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.6
-      zod: 3.25.76
-
   '@ai-sdk/provider-utils@4.0.19(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.8
@@ -24460,16 +24452,6 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/react@1.2.12(react@19.2.4)(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
-      react: 19.2.4
-      swr: 2.3.6(react@19.2.4)
-      throttleit: 2.1.0
-    optionalDependencies:
-      zod: 3.25.76
-
   '@ai-sdk/react@1.2.12(react@19.2.4)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.3.6)
@@ -24496,13 +24478,6 @@ snapshots:
       '@ai-sdk/provider': 2.0.1
       '@ai-sdk/provider-utils': 3.0.20(zod@4.3.6)
       zod: 4.3.6
-
-  '@ai-sdk/ui-utils@1.2.11(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
 
   '@ai-sdk/ui-utils@1.2.11(zod@4.3.6)':
     dependencies:
@@ -26702,6 +26677,13 @@ snapshots:
       '@codemirror/view': 6.39.16
       '@lezer/common': 1.5.1
 
+  '@codemirror/commands@6.10.2':
+    dependencies:
+      '@codemirror/language': 6.11.3
+      '@codemirror/state': 6.5.4
+      '@codemirror/view': 6.39.17
+      '@lezer/common': 1.5.1
+
   '@codemirror/lang-angular@0.1.4':
     dependencies:
       '@codemirror/lang-html': 6.4.11
@@ -26930,7 +26912,7 @@ snapshots:
   '@codemirror/search@6.5.11':
     dependencies:
       '@codemirror/state': 6.5.4
-      '@codemirror/view': 6.39.16
+      '@codemirror/view': 6.39.17
       crelt: 1.0.6
 
   '@codemirror/state@6.5.4':
@@ -26941,10 +26923,17 @@ snapshots:
     dependencies:
       '@codemirror/language': 6.11.3
       '@codemirror/state': 6.5.4
-      '@codemirror/view': 6.39.16
+      '@codemirror/view': 6.39.17
       '@lezer/highlight': 1.2.3
 
   '@codemirror/view@6.39.16':
+    dependencies:
+      '@codemirror/state': 6.5.4
+      crelt: 1.0.6
+      style-mod: 4.1.3
+      w3c-keyname: 2.2.8
+
+  '@codemirror/view@6.39.17':
     dependencies:
       '@codemirror/state': 6.5.4
       crelt: 1.0.6
@@ -35448,18 +35437,6 @@ snapshots:
       clean-stack: 2.2.0
       indent-string: 4.0.0
 
-  ai@4.3.19(react@19.2.4)(zod@3.25.76):
-    dependencies:
-      '@ai-sdk/provider': 1.1.3
-      '@ai-sdk/provider-utils': 2.2.8(zod@3.25.76)
-      '@ai-sdk/react': 1.2.12(react@19.2.4)(zod@3.25.76)
-      '@ai-sdk/ui-utils': 1.2.11(zod@3.25.76)
-      '@opentelemetry/api': 1.9.0
-      jsondiffpatch: 0.7.3
-      zod: 3.25.76
-    optionalDependencies:
-      react: 19.2.4
-
   ai@4.3.19(react@19.2.4)(zod@4.3.6):
     dependencies:
       '@ai-sdk/provider': 1.1.3
@@ -35503,14 +35480,6 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.17(zod@4.3.6)
       '@opentelemetry/api': 1.9.0
       zod: 4.3.6
-
-  ai@6.0.116(zod@3.25.76):
-    dependencies:
-      '@ai-sdk/gateway': 3.0.66(zod@3.25.76)
-      '@ai-sdk/provider': 3.0.8
-      '@ai-sdk/provider-utils': 4.0.19(zod@3.25.76)
-      '@opentelemetry/api': 1.9.0
-      zod: 3.25.76
 
   ai@6.0.116(zod@4.3.6):
     dependencies:
@@ -36060,7 +36029,7 @@ snapshots:
     dependencies:
       fill-range: 7.1.1
 
-  braintrust@2.2.0(@aws-sdk/credential-provider-web-identity@3.972.18)(chokidar@3.6.0)(zod@3.25.76):
+  braintrust@2.2.0(@aws-sdk/credential-provider-web-identity@3.972.18)(chokidar@3.6.0)(zod@4.3.6):
     dependencies:
       '@ai-sdk/provider': 1.1.3
       '@next/env': 14.2.33
@@ -36086,8 +36055,8 @@ snapshots:
       source-map: 0.7.6
       termi-link: 1.1.0
       uuid: 9.0.1
-      zod: 3.25.76
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
+      zod: 4.3.6
+      zod-to-json-schema: 3.25.1(zod@4.3.6)
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-web-identity'
       - chokidar
@@ -36149,7 +36118,7 @@ snapshots:
   c12@3.3.3(magicast@0.5.1):
     dependencies:
       chokidar: 5.0.0
-      confbox: 0.2.2
+      confbox: 0.2.4
       defu: 6.1.4
       dotenv: 17.3.1
       exsolve: 1.0.8
@@ -36520,12 +36489,12 @@ snapshots:
   codemirror@6.0.2:
     dependencies:
       '@codemirror/autocomplete': 6.20.1
-      '@codemirror/commands': 6.10.1
+      '@codemirror/commands': 6.10.2
       '@codemirror/language': 6.11.3
       '@codemirror/lint': 6.9.0
       '@codemirror/search': 6.5.11
       '@codemirror/state': 6.5.4
-      '@codemirror/view': 6.39.16
+      '@codemirror/view': 6.39.17
 
   collapse-white-space@2.1.0: {}
 
@@ -36667,6 +36636,8 @@ snapshots:
   confbox@0.1.8: {}
 
   confbox@0.2.2: {}
+
+  confbox@0.2.4: {}
 
   config-chain@1.1.13:
     dependencies:
@@ -39651,6 +39622,10 @@ snapshots:
     dependencies:
       is-inside-container: 1.0.0
 
+  is-wsl@3.1.1:
+    dependencies:
+      is-inside-container: 1.0.0
+
   is-yarn-global@0.4.1: {}
 
   isarray@0.0.1: {}
@@ -40004,13 +39979,12 @@ snapshots:
     dependencies:
       langfuse-core: 3.38.6
 
-  langsmith@0.3.81(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)):
+  langsmith@0.4.6(@opentelemetry/api@1.9.0)(@opentelemetry/exporter-trace-otlp-proto@0.208.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.2.0(@opentelemetry/api@1.9.0))(openai@6.21.0(ws@8.19.0)(zod@4.3.6)):
     dependencies:
       '@types/uuid': 10.0.0
       chalk: 4.1.2
       console-table-printer: 2.15.0
       p-queue: 6.6.2
-      p-retry: 4.6.2
       semver: 7.7.4
       uuid: 10.0.0
     optionalDependencies:
@@ -46421,7 +46395,7 @@ snapshots:
 
   wsl-utils@0.3.1:
     dependencies:
-      is-wsl: 3.1.0
+      is-wsl: 3.1.1
       powershell-utils: 0.1.0
 
   xdg-basedir@5.1.0: {}
