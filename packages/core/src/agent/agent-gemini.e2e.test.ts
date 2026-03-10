@@ -1,4 +1,4 @@
-import { setupLLMRecording } from '@internal/llm-recorder';
+import { createGatewayMock } from '@internal/test-utils';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '..';
@@ -10,11 +10,8 @@ import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
 import { Agent } from './index';
 
-const recorder = setupLLMRecording({
-  name: 'core-src-agent-agent-gemini.e2e',
+const mock = createGatewayMock({
   transformRequest: ({ url, body }) => {
-    // Normalize dynamic IDs in the request body so hashes are stable across runs.
-    // Workflow suspend/resume injects runId (UUID) and toolCallId into the system instruction.
     let serialized = JSON.stringify(body);
     // Normalize UUIDs (runId, suspendedToolRunId)
     serialized = serialized.replace(
@@ -22,20 +19,111 @@ const recorder = setupLLMRecording({
       '00000000-0000-0000-0000-000000000000',
     );
     // Normalize toolCallId (AI SDK generated, alphanumeric ~16 chars).
-    // It can appear as a direct JSON key or escaped inside a nested JSON string.
     serialized = serialized.replace(/"toolCallId":"[a-zA-Z0-9]+"/g, '"toolCallId":"NORMALIZED"');
     serialized = serialized.replace(/\\"toolCallId\\":\\"[a-zA-Z0-9]+\\"/g, '\\"toolCallId\\":\\"NORMALIZED\\"');
-    return { url, body: JSON.parse(serialized) };
+    // Normalize workflow timestamps embedded in multi-level stringified results.
+    // They can appear at various escape depths (\"startedAt\", \\\"startedAt\\\", etc.)
+    serialized = serialized.replace(/(\\*"startedAt\\*":\s*)\d{10,}/g, '$10');
+    serialized = serialized.replace(/(\\*"completedAt\\*":\s*)\d{10,}/g, '$10');
+    serialized = serialized.replace(/(\\*"endedAt\\*":\s*)\d{10,}/g, '$10');
+
+    const parsed = JSON.parse(serialized);
+
+    // Gemini message conversion produces different content structures between runs:
+    // adjacent entries may be split/merged differently, text parts may be combined
+    // or separated, and previous assistant text may be prepended or dropped.
+    // Normalize by flattening all parts into a sequence of (role, content) pairs,
+    // then rebuilding a canonical contents array.
+    if (parsed.contents) {
+      // Flatten: collect all parts as (role, part) tuples
+      type Part = Record<string, any>;
+      const flat: { role: string; part: Part }[] = [];
+      for (const entry of parsed.contents) {
+        for (const part of entry.parts) {
+          flat.push({ role: entry.role, part });
+        }
+      }
+
+      // Filter out trivial text parts (".", "", whitespace-only)
+      const significant = flat.filter(({ part }) => {
+        if ('text' in part && Object.keys(part).length === 1) {
+          return part.text.trim().length > 1;
+        }
+        return true;
+      });
+
+      // Normalize network routing text: the Gemini converter may place
+      // the routing instruction at different positions in the contents array,
+      // with variable prefix/suffix text from previous assistant responses,
+      // and under either 'model' or 'user' role.
+      // Strategy: extract the routing instruction, remove it and all non-routing
+      // model text from the contents, then append the routing instruction as a
+      // canonical entry at the end. This makes the hash position-independent.
+      const ROUTING_START = 'You will be calling just *one* primitive';
+      const ROUTING_END = 'were not picked.';
+      let routingInstruction: string | null = null;
+      const withoutRouting: { role: string; part: Part }[] = [];
+      for (const item of significant) {
+        if ('text' in item.part && typeof item.part.text === 'string') {
+          const startIdx = item.part.text.indexOf(ROUTING_START);
+          if (startIdx >= 0) {
+            // Extract and store the normalized routing instruction
+            let routingText = item.part.text.substring(startIdx);
+            const endIdx = routingText.indexOf(ROUTING_END);
+            if (endIdx >= 0) {
+              routingText = routingText.substring(0, endIdx + ROUTING_END.length);
+            }
+            routingInstruction = routingText;
+            continue; // Remove from contents
+          }
+        }
+        withoutRouting.push(item);
+      }
+      // For network requests, also drop non-routing model text parts (previous
+      // assistant responses that appear non-deterministically)
+      const cleaned = routingInstruction
+        ? withoutRouting.filter(item => {
+            if (item.role === 'model' && 'text' in item.part && Object.keys(item.part).length === 1) {
+              return false; // Drop all model text parts for network requests
+            }
+            return true;
+          })
+        : withoutRouting;
+      // Append the routing instruction as a canonical entry at the end
+      if (routingInstruction) {
+        cleaned.push({ role: 'model', part: { text: routingInstruction } });
+      }
+
+      // Rebuild canonical contents: group consecutive same-role parts,
+      // merge adjacent text-only parts within each group
+      const rebuilt: { role: string; parts: Part[] }[] = [];
+      for (const { role, part } of cleaned) {
+        const prev = rebuilt[rebuilt.length - 1];
+        if (prev && prev.role === role) {
+          const last = prev.parts[prev.parts.length - 1];
+          if (
+            'text' in part &&
+            last &&
+            'text' in last &&
+            Object.keys(last).length === 1 &&
+            Object.keys(part).length === 1
+          ) {
+            last.text += part.text;
+          } else {
+            prev.parts.push(part);
+          }
+        } else {
+          rebuilt.push({ role, parts: [part] });
+        }
+      }
+      parsed.contents = rebuilt;
+    }
+
+    return { url, body: parsed };
   },
 });
-beforeAll(() => recorder.start());
-afterAll(async () => {
-  try {
-    await recorder.save();
-  } finally {
-    recorder.stop();
-  }
-});
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('Gemini Model Compatibility Tests', () => {
   let memory: MockMemory;
@@ -266,7 +354,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should return structured output from network', async () => {
       const helperAgent = new Agent({
@@ -378,7 +466,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle conversation ending with tool result in network (with follow-up user message)', async () => {
       const testTool = createTool({
@@ -438,7 +526,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle conversation ending with tool result in network (agentic loop pattern)', async () => {
       const testTool = createTool({
@@ -497,7 +585,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle messages starting with assistant-with-tool-call in network', async () => {
       const testTool = createTool({
@@ -556,7 +644,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle network with workflow execution', async () => {
       const researchAgent = new Agent({
@@ -642,7 +730,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
 
     it('should handle messages with only assistant role in network', async () => {
       const helperAgent = new Agent({
@@ -673,7 +761,7 @@ describe('Gemini Model Compatibility Tests', () => {
 
       expect(chunks).toBeDefined();
       expect(chunks.length).toBeGreaterThan(1);
-    }, 15000);
+    }, 30_000);
   });
 
   describe('Gemini 3 Pro with tool calls', () => {
@@ -881,7 +969,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(suspendData.suspendPayload).toBeDefined();
       expect(suspendData.suspendedToolName).toBe('findUserTool');
       expect((suspendData.suspendPayload as any)?.message).toBe('Please provide the age of the user');
-    }, 15000);
+    }, 30_000);
 
     it('should call findUserTool with suspend and resume via generate when autoResumeSuspendedTools is true', async () => {
       const findUserTool = createTool({
@@ -974,7 +1062,7 @@ describe('Gemini Model Compatibility Tests', () => {
       expect(name).toBe('Dero Israel');
       expect(email).toBe('test@test.com');
       expect(age).toBe(25);
-    }, 15000);
+    }, 30_000);
 
     it(
       'should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true',

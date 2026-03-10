@@ -1,6 +1,4 @@
-import type { ReadableStreamDefaultReader } from 'node:stream/web';
 import type { StreamVNextChunkType } from '@mastra/client-js';
-import { RequestContext } from '@mastra/core/request-context';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { mapWorkflowStreamChunkToWatchResult } from '../lib/ai-sdk/utils/toUIMessage';
 import { useMutation } from '../lib/use-mutation';
@@ -132,16 +130,12 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       setIsStreaming(true);
       setStreamResult({ input: inputData } as WorkflowStreamResult);
-      const requestContext = new RequestContext();
-      Object.entries(playgroundRequestContext).forEach(([key, value]) => {
-        requestContext.set(key as keyof RequestContext, value);
-      });
       const workflow = client.getWorkflow(workflowId);
       const run = await workflow.createRun({ runId });
       const stream = await run.stream({
         inputData,
         initialState,
-        requestContext,
+        requestContext: playgroundRequestContext,
         closeOnSuspend: true,
         tracingOptions,
         perStep: perStep ?? debugMode,
@@ -276,15 +270,11 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       setIsStreaming(true);
       const workflow = client.getWorkflow(workflowId);
-      const requestContext = new RequestContext();
-      Object.entries(playgroundRequestContext).forEach(([key, value]) => {
-        requestContext.set(key as keyof RequestContext, value);
-      });
       const run = await workflow.createRun({ runId });
       const stream = await run.resumeStream({
         step,
         resumeData,
-        requestContext,
+        requestContext: playgroundRequestContext,
         tracingOptions,
         perStep: perStep ?? debugMode,
       });
@@ -349,15 +339,11 @@ export function useStreamWorkflow({ debugMode, tracingOptions, onError }: UseStr
 
       setIsStreaming(true);
       const workflow = client.getWorkflow(workflowId);
-      const requestContext = new RequestContext();
-      Object.entries(playgroundRequestContext).forEach(([key, value]) => {
-        requestContext.set(key as keyof RequestContext, value);
-      });
       const run = await workflow.createRun({ runId });
       const stream = await run.timeTravelStream({
         ...params,
         perStep: perStep ?? debugMode,
-        requestContext,
+        requestContext: playgroundRequestContext,
         tracingOptions,
       });
 

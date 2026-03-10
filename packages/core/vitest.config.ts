@@ -22,6 +22,12 @@ export default defineConfig({
           exclude: ['src/**/*.e2e.test.ts'],
           setupFiles: ['@internal/test-utils/setup'],
           testTimeout: 120000,
+          env: {
+            OPENROUTER_API_KEY: '',
+            GOOGLE_GENERATIVE_AI_API_KEY: '',
+            ANTHROPIC_API_KEY: '',
+            OPENAI_API_KEY: '',
+          },
         },
       },
       {

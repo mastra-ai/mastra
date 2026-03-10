@@ -4,7 +4,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { stepCountIs, tool } from '@internal/ai-sdk-v5';
-import { setupLLMRecording } from '@internal/llm-recorder';
+import { createGatewayMock } from '@internal/test-utils';
 import { config } from 'dotenv';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -36,15 +36,9 @@ const mockFindUser = vi.fn().mockImplementation(async data => {
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const openai_v5 = createOpenAIV5({ apiKey: process.env.OPENAI_API_KEY });
 
-const recorder = setupLLMRecording({ name: 'core-src-agent-agent.e2e' });
-beforeAll(() => recorder.start());
-afterAll(async () => {
-  try {
-    await recorder.save();
-  } finally {
-    recorder.stop();
-  }
-});
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
   const integration = new TestIntegration();
@@ -123,8 +117,10 @@ function agentE2ETests({ version }: { version: 'v1' | 'v2' }) {
         weather: expect.any(String),
         temperature: expect.any(Number),
         humidity: expect.any(Number),
+        // .optional() fields: compat layer transforms null → undefined
         windSpeed: undefined,
         barometricPressure: undefined,
+        // .nullable() (without .optional()) stays null
         precipitation: null,
       };
 
