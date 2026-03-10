@@ -39,7 +39,7 @@
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsx": "^4.21.0",
     "typescript": "catalog:",
     "vitest": "catalog:"

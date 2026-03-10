@@ -38,7 +38,7 @@
     "@types/node": "^20.19.35",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "pnpm": "10.29.3",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
