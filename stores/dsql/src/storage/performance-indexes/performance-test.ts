@@ -385,11 +385,11 @@ export class DSQLPerformanceTest {
     const results: PerformanceResult[] = [];
 
     const resourceId = 'resource_0';
-    // Test listThreadsByResourceId
+    // Test listThreads with resourceId filter
     results.push(
       await this.measureOperation(
-        'listThreadsByResourceId',
-        () => this.memory.listThreadsByResourceId({ resourceId, page: 0, perPage: 20 }),
+        'listThreads',
+        () => this.memory.listThreads({ filter: { resourceId }, page: 0, perPage: 20 }),
         scenario,
       ),
     );

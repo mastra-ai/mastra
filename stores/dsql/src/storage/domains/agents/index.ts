@@ -5,6 +5,7 @@ import {
   normalizePerPage,
   calculatePagination,
   TABLE_AGENTS,
+  TABLE_AGENT_VERSIONS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
 import type {
@@ -14,7 +15,14 @@ import type {
   StorageListAgentsInput,
   StorageListAgentsOutput,
   CreateIndexOptions,
+  AgentInstructionBlock,
 } from '@mastra/core/storage';
+import type {
+  AgentVersion,
+  CreateVersionInput,
+  ListVersionsInput,
+  ListVersionsOutput,
+} from '@mastra/core/storage/domains/agents';
 import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
 import type { DsqlDomainConfig } from '../../db';
@@ -27,7 +35,7 @@ export class AgentsDSQL extends AgentsStorage {
   #indexes?: CreateIndexOptions[];
 
   /** Tables managed by this domain */
-  static readonly MANAGED_TABLES = [TABLE_AGENTS] as const;
+  static readonly MANAGED_TABLES = [TABLE_AGENTS, TABLE_AGENT_VERSIONS] as const;
 
   constructor(config: DsqlDomainConfig) {
     super();
@@ -60,6 +68,7 @@ export class AgentsDSQL extends AgentsStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
+    await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -83,6 +92,7 @@ export class AgentsDSQL extends AgentsStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#db.clearTable({ tableName: TABLE_AGENT_VERSIONS });
     await this.#db.clearTable({ tableName: TABLE_AGENTS });
   }
 
@@ -116,25 +126,16 @@ export class AgentsDSQL extends AgentsStorage {
   private parseRow(row: any): StorageAgentType {
     return {
       id: row.id as string,
-      name: row.name as string,
-      description: row.description as string | undefined,
-      instructions: row.instructions as string,
-      model: this.parseJson(row.model, 'model'),
-      tools: this.parseJson(row.tools, 'tools'),
-      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
-      workflows: this.parseJson(row.workflows, 'workflows'),
-      agents: this.parseJson(row.agents, 'agents'),
-      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
-      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
-      memory: this.parseJson(row.memory, 'memory'),
-      scorers: this.parseJson(row.scorers, 'scorers'),
+      status: row.status as 'draft' | 'published' | 'archived',
+      activeVersionId: row.activeVersionId as string | undefined,
+      authorId: row.authorId as string | undefined,
       metadata: this.parseJson(row.metadata, 'metadata'),
       createdAt: row.createdAtZ || row.createdAt,
       updatedAt: row.updatedAtZ || row.updatedAt,
     };
   }
 
-  async getAgentById({ id }: { id: string }): Promise<StorageAgentType | null> {
+  async getById(id: string): Promise<StorageAgentType | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
@@ -146,6 +147,7 @@ export class AgentsDSQL extends AgentsStorage {
 
       return this.parseRow(result);
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'GET_AGENT_BY_ID', 'FAILED'),
@@ -158,47 +160,71 @@ export class AgentsDSQL extends AgentsStorage {
     }
   }
 
-  async createAgent({ agent }: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+  async create(input: { agent: StorageCreateAgentInput }): Promise<StorageAgentType> {
+    const { agent } = input;
     const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
     const now = new Date();
     const nowIso = now.toISOString();
 
-    await withRetry(
-      async () => {
-        await this.#db.client.none(
+    try {
+      // 1. Create the thin agent record with status='draft' and activeVersionId=null
+      await withRetry(() =>
+        this.#db.client.none(
           `INSERT INTO ${tableName} (
-            id, name, description, instructions, model, tools, 
-            "defaultOptions", workflows, agents, "inputProcessors", "outputProcessors", memory, scorers, metadata, 
-            "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+              id, status, "authorId", metadata,
+              "activeVersionId",
+              "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             agent.id,
-            agent.name,
-            agent.description ?? null,
-            agent.instructions,
-            JSON.stringify(agent.model),
-            agent.tools ? JSON.stringify(agent.tools) : null,
-            agent.defaultOptions ? JSON.stringify(agent.defaultOptions) : null,
-            agent.workflows ? JSON.stringify(agent.workflows) : null,
-            agent.agents ? JSON.stringify(agent.agents) : null,
-            agent.inputProcessors ? JSON.stringify(agent.inputProcessors) : null,
-            agent.outputProcessors ? JSON.stringify(agent.outputProcessors) : null,
-            agent.memory ? JSON.stringify(agent.memory) : null,
-            agent.scorers ? JSON.stringify(agent.scorers) : null,
+            'draft',
+            agent.authorId ?? null,
             agent.metadata ? JSON.stringify(agent.metadata) : null,
+            null, // activeVersionId starts as null
             nowIso,
             nowIso,
             nowIso,
             nowIso,
           ],
+        ),
+      );
+
+      // 2. Extract config fields from the flat input
+      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
+
+      // Create version 1 from the config
+      const versionId = crypto.randomUUID();
+      await this.createVersion({
+        id: versionId,
+        agentId: agent.id,
+        versionNumber: 1,
+        ...snapshotConfig,
+        changedFields: Object.keys(snapshotConfig),
+        changeMessage: 'Initial version',
+      });
+
+      // 3. Return the thin agent record
+      return {
+        id: agent.id,
+        status: 'draft',
+        activeVersionId: undefined,
+        authorId: agent.authorId,
+        metadata: agent.metadata,
+        createdAt: now,
+        updatedAt: now,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      // Best-effort cleanup to prevent orphaned draft records
+      try {
+        await this.#db.client.none(
+          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+          [agent.id],
         );
-      },
-      {
-        onRetry: (error, attempt, delay) => {
-          this.logger?.warn?.(`createAgent retry ${attempt} for ${agent.id} after ${delay}ms: ${error.message}`);
-        },
-      },
-    ).catch(error => {
+      } catch {
+        // Ignore cleanup errors
+      }
+
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'CREATE_AGENT', 'FAILED'),
@@ -208,145 +234,82 @@ export class AgentsDSQL extends AgentsStorage {
         },
         error,
       );
-    });
-
-    return {
-      ...agent,
-      createdAt: now,
-      updatedAt: now,
-    };
+    }
   }
 
-  async updateAgent({ id, ...updates }: StorageUpdateAgentInput): Promise<StorageAgentType> {
-    const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+  async update(input: StorageUpdateAgentInput): Promise<StorageAgentType> {
+    const { id, ...updates } = input;
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
-    const { result } = await withRetry(
-      async () => {
-        // Get the existing agent inside retry block to ensure fresh data on retry
-        const existingAgent = await this.getAgentById({ id });
-        if (!existingAgent) {
-          throw new MastraError({
-            id: createStorageErrorId('DSQL', 'UPDATE_AGENT', 'NOT_FOUND'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Agent ${id} not found`,
-            details: { agentId: id },
-          });
-        }
-
-        const setClauses: string[] = [];
-        const values: any[] = [];
-        let paramIndex = 1;
-
-        if (updates.name !== undefined) {
-          setClauses.push(`name = $${paramIndex++}`);
-          values.push(updates.name);
-        }
-
-        if (updates.description !== undefined) {
-          setClauses.push(`description = $${paramIndex++}`);
-          values.push(updates.description);
-        }
-
-        if (updates.instructions !== undefined) {
-          setClauses.push(`instructions = $${paramIndex++}`);
-          values.push(updates.instructions);
-        }
-
-        if (updates.model !== undefined) {
-          setClauses.push(`model = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.model));
-        }
-
-        if (updates.tools !== undefined) {
-          setClauses.push(`tools = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.tools));
-        }
-
-        if (updates.defaultOptions !== undefined) {
-          setClauses.push(`"defaultOptions" = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.defaultOptions));
-        }
-
-        if (updates.workflows !== undefined) {
-          setClauses.push(`workflows = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.workflows));
-        }
-
-        if (updates.agents !== undefined) {
-          setClauses.push(`agents = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.agents));
-        }
-
-        if (updates.inputProcessors !== undefined) {
-          setClauses.push(`"inputProcessors" = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.inputProcessors));
-        }
-
-        if (updates.outputProcessors !== undefined) {
-          setClauses.push(`"outputProcessors" = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.outputProcessors));
-        }
-
-        if (updates.memory !== undefined) {
-          setClauses.push(`memory = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.memory));
-        }
-
-        if (updates.scorers !== undefined) {
-          setClauses.push(`scorers = $${paramIndex++}`);
-          values.push(JSON.stringify(updates.scorers));
-        }
-
-        if (updates.metadata !== undefined) {
-          // Merge metadata
-          const mergedMetadata = { ...existingAgent.metadata, ...updates.metadata };
-          setClauses.push(`metadata = $${paramIndex++}`);
-          values.push(JSON.stringify(mergedMetadata));
-        }
-
-        // Always update the updatedAt timestamp
-        const now = new Date().toISOString();
-        setClauses.push(`"updatedAt" = $${paramIndex++}`);
-        values.push(now);
-        setClauses.push(`"updatedAtZ" = $${paramIndex++}`);
-        values.push(now);
-
-        // Add the ID for the WHERE clause
-        values.push(id);
-
-        if (setClauses.length > 2) {
-          // More than just updatedAt and updatedAtZ
-          await this.#db.client.none(
-            `UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
-            values,
-          );
-        }
-
-        // Return the updated agent
-        const updatedAgent = await this.getAgentById({ id });
-        if (!updatedAgent) {
-          throw new MastraError({
-            id: createStorageErrorId('DSQL', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.SYSTEM,
-            text: `Agent ${id} not found after update`,
-            details: { agentId: id },
-          });
-        }
-
-        return updatedAgent;
-      },
-      {
-        onRetry: (error, attempt, delay) => {
-          this.logger?.warn?.(`updateAgent retry ${attempt} for ${id} after ${delay}ms: ${error.message}`);
-        },
-      },
-    ).catch(error => {
-      // Re-throw MastraErrors as-is (e.g., agent not found)
-      if (error instanceof MastraError) {
-        throw error;
+      // First, get the existing agent
+      const existingAgent = await this.getById(id);
+      if (!existingAgent) {
+        throw new MastraError({
+          id: createStorageErrorId('DSQL', 'UPDATE_AGENT', 'NOT_FOUND'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Agent ${id} not found`,
+          details: { agentId: id },
+        });
       }
+
+      const { authorId, activeVersionId, metadata, status } = updates;
+
+      // Update metadata fields on the agent record
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      if (authorId !== undefined) {
+        setClauses.push(`"authorId" = $${paramIndex++}`);
+        values.push(authorId);
+      }
+
+      if (activeVersionId !== undefined) {
+        setClauses.push(`"activeVersionId" = $${paramIndex++}`);
+        values.push(activeVersionId);
+      }
+
+      if (status !== undefined) {
+        setClauses.push(`status = $${paramIndex++}`);
+        values.push(status);
+      }
+
+      if (metadata !== undefined) {
+        setClauses.push(`metadata = $${paramIndex++}`);
+        values.push(JSON.stringify(metadata));
+      }
+
+      // Always update the updatedAt timestamp
+      const now = new Date().toISOString();
+      setClauses.push(`"updatedAt" = $${paramIndex++}`);
+      values.push(now);
+      setClauses.push(`"updatedAtZ" = $${paramIndex++}`);
+      values.push(now);
+
+      // Add the ID for the WHERE clause
+      values.push(id);
+
+      await withRetry(() =>
+        this.#db.client.none(`UPDATE ${tableName} SET ${setClauses.join(', ')} WHERE id = ${paramIndex}`, values),
+      );
+
+      // Return the updated agent
+      const updatedAgent = await this.getById(id);
+      if (!updatedAgent) {
+        throw new MastraError({
+          id: createStorageErrorId('DSQL', 'UPDATE_AGENT', 'NOT_FOUND_AFTER_UPDATE'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: `Agent ${id} not found after update`,
+          details: { agentId: id },
+        });
+      }
+
+      return updatedAgent;
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'UPDATE_AGENT', 'FAILED'),
@@ -356,24 +319,20 @@ export class AgentsDSQL extends AgentsStorage {
         },
         error,
       );
-    });
-
-    return result;
+    }
   }
 
-  async deleteAgent({ id }: { id: string }): Promise<void> {
-    const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
+  async delete(id: string): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
-    await withRetry(
-      async () => {
-        await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
-      },
-      {
-        onRetry: (error, attempt, delay) => {
-          this.logger?.warn?.(`deleteAgent retry ${attempt} for ${id} after ${delay}ms: ${error.message}`);
-        },
-      },
-    ).catch(error => {
+      // Delete all versions for this agent first
+      await this.deleteVersionsByParentId(id);
+
+      // Then delete the agent
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'DELETE_AGENT', 'FAILED'),
@@ -383,11 +342,11 @@ export class AgentsDSQL extends AgentsStorage {
         },
         error,
       );
-    });
+    }
   }
 
-  async listAgents(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy } = args || {};
+  async list(args?: StorageListAgentsInput): Promise<StorageListAgentsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -408,8 +367,34 @@ export class AgentsDSQL extends AgentsStorage {
     try {
       const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
 
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const queryParams: any[] = [];
+      let paramIdx = 1;
+
+      if (status) {
+        conditions.push(`status = $${paramIdx++}`);
+        queryParams.push(status);
+      }
+
+      if (authorId !== undefined) {
+        conditions.push(`"authorId" = $${paramIdx++}`);
+        queryParams.push(authorId);
+      }
+
+      // Note: Aurora DSQL stores JSONB as TEXT, so we compare as text
+      if (metadata && Object.keys(metadata).length > 0) {
+        conditions.push(`metadata::text = $${paramIdx++}`);
+        queryParams.push(JSON.stringify(metadata));
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
       // Get total count
-      const countResult = await this.#db.client.one(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const countResult = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
+        queryParams,
+      );
       const total = parseInt(countResult.count, 10);
 
       if (total === 0) {
@@ -422,11 +407,12 @@ export class AgentsDSQL extends AgentsStorage {
         };
       }
 
-      // Get paginated results
       const limitValue = perPageInput === false ? total : perPage;
+
+      // Fetch the actual data
       const dataResult = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ORDER BY "${field}" ${direction} LIMIT $1 OFFSET $2`,
-        [limitValue, offset],
+        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
+        [...queryParams, limitValue, offset],
       );
 
       const agents = (dataResult || []).map(row => this.parseRow(row));
@@ -439,6 +425,7 @@ export class AgentsDSQL extends AgentsStorage {
         hasMore: perPageInput === false ? false : offset + perPage < total,
       };
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'LIST_AGENTS', 'FAILED'),
@@ -448,5 +435,317 @@ export class AgentsDSQL extends AgentsStorage {
         error,
       );
     }
+  }
+
+  // ==========================================================================
+  // Agent Version Methods
+  // ==========================================================================
+
+  async createVersion(input: CreateVersionInput): Promise<AgentVersion> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const now = new Date();
+      const nowIso = now.toISOString();
+
+      await withRetry(() =>
+        this.#db.client.none(
+          `INSERT INTO ${tableName} (
+              id, "agentId", "versionNumber",
+              name, description, instructions, model, tools,
+              "defaultOptions", workflows, agents, "integrationTools",
+              "inputProcessors", "outputProcessors", memory, scorers,
+              "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
+              "changedFields", "changeMessage",
+              "createdAt", "createdAtZ"
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
+          [
+            input.id,
+            input.agentId,
+            input.versionNumber,
+            input.name,
+            input.description ?? null,
+            this.serializeInstructions(input.instructions),
+            JSON.stringify(input.model),
+            input.tools ? JSON.stringify(input.tools) : null,
+            input.defaultOptions ? JSON.stringify(input.defaultOptions) : null,
+            input.workflows ? JSON.stringify(input.workflows) : null,
+            input.agents ? JSON.stringify(input.agents) : null,
+            input.integrationTools ? JSON.stringify(input.integrationTools) : null,
+            input.inputProcessors ? JSON.stringify(input.inputProcessors) : null,
+            input.outputProcessors ? JSON.stringify(input.outputProcessors) : null,
+            input.memory ? JSON.stringify(input.memory) : null,
+            input.scorers ? JSON.stringify(input.scorers) : null,
+            input.mcpClients ? JSON.stringify(input.mcpClients) : null,
+            input.requestContextSchema ? JSON.stringify(input.requestContextSchema) : null,
+            input.workspace ? JSON.stringify(input.workspace) : null,
+            input.skills ? JSON.stringify(input.skills) : null,
+            input.skillsFormat ?? null,
+            input.changedFields ? JSON.stringify(input.changedFields) : null,
+            input.changeMessage ?? null,
+            nowIso,
+            nowIso,
+          ],
+        ),
+      );
+
+      return {
+        ...input,
+        createdAt: now,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'CREATE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: input.id, agentId: input.agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersion(id: string): Promise<AgentVersion | null> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE id = $1`, [id]);
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseVersionRow(result);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'GET_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async getVersionByNumber(agentId: string, versionNumber: number): Promise<AgentVersion | null> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE "agentId" = $1 AND "versionNumber" = $2`,
+        [agentId, versionNumber],
+      );
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseVersionRow(result);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'GET_VERSION_BY_NUMBER', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId, versionNumber },
+        },
+        error,
+      );
+    }
+  }
+
+  async getLatestVersion(agentId: string): Promise<AgentVersion | null> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.oneOrNone(
+        `SELECT * FROM ${tableName} WHERE "agentId" = $1 ORDER BY "versionNumber" DESC LIMIT 1`,
+        [agentId],
+      );
+
+      if (!result) {
+        return null;
+      }
+
+      return this.parseVersionRow(result);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'GET_LATEST_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async listVersions(input: ListVersionsInput): Promise<ListVersionsOutput> {
+    const { agentId, page = 0, perPage: perPageInput, orderBy } = input;
+
+    const perPage = normalizePerPage(perPageInput, 100);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    const sortField = orderBy?.field || 'versionNumber';
+    const sortDirection = orderBy?.direction || 'DESC';
+
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+
+      const countResult = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`,
+        [agentId],
+      );
+      const total = parseInt(countResult.count, 10);
+
+      if (total === 0) {
+        return {
+          versions: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      const limitValue = perPageInput === false ? total : perPage;
+
+      const rows = await this.#db.client.manyOrNone(
+        `SELECT * FROM ${tableName} WHERE "agentId" = $1 ORDER BY "${sortField}" ${sortDirection} LIMIT $2 OFFSET $3`,
+        [agentId, limitValue, offset],
+      );
+
+      const versions = (rows || []).map(row => this.parseVersionRow(row));
+
+      return {
+        versions,
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'LIST_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersion(id: string): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE id = $1`, [id]);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'DELETE_VERSION', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { versionId: id },
+        },
+        error,
+      );
+    }
+  }
+
+  async deleteVersionsByParentId(agentId: string): Promise<void> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      await this.#db.client.none(`DELETE FROM ${tableName} WHERE "agentId" = $1`, [agentId]);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'DELETE_VERSIONS_BY_PARENT', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  async countVersions(agentId: string): Promise<number> {
+    try {
+      const tableName = getTableName({ indexName: TABLE_AGENT_VERSIONS, schemaName: getSchemaName(this.#schema) });
+      const result = await this.#db.client.one(
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE "agentId" = $1`,
+        [agentId],
+      );
+      return parseInt(result.count, 10);
+    } catch (error) {
+      if (error instanceof MastraError) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'COUNT_VERSIONS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { agentId },
+        },
+        error,
+      );
+    }
+  }
+
+  // ==========================================================================
+  // Private Helpers
+  // ==========================================================================
+
+  private serializeInstructions(instructions: string | AgentInstructionBlock[] | undefined | null): string | undefined {
+    if (instructions == null) return undefined;
+    return Array.isArray(instructions) ? JSON.stringify(instructions) : instructions;
+  }
+
+  private deserializeInstructions(raw: string | null | undefined): string | AgentInstructionBlock[] {
+    if (!raw) return '';
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as AgentInstructionBlock[];
+    } catch {
+      // Not JSON — plain string
+    }
+    return raw;
+  }
+
+  private parseVersionRow(row: any): AgentVersion {
+    return {
+      id: row.id as string,
+      agentId: row.agentId as string,
+      versionNumber: row.versionNumber as number,
+      name: row.name as string,
+      description: row.description as string | undefined,
+      instructions: this.deserializeInstructions(row.instructions as string),
+      model: this.parseJson(row.model, 'model'),
+      tools: this.parseJson(row.tools, 'tools'),
+      defaultOptions: this.parseJson(row.defaultOptions, 'defaultOptions'),
+      workflows: this.parseJson(row.workflows, 'workflows'),
+      agents: this.parseJson(row.agents, 'agents'),
+      integrationTools: this.parseJson(row.integrationTools, 'integrationTools'),
+      inputProcessors: this.parseJson(row.inputProcessors, 'inputProcessors'),
+      outputProcessors: this.parseJson(row.outputProcessors, 'outputProcessors'),
+      memory: this.parseJson(row.memory, 'memory'),
+      scorers: this.parseJson(row.scorers, 'scorers'),
+      mcpClients: this.parseJson(row.mcpClients, 'mcpClients'),
+      requestContextSchema: this.parseJson(row.requestContextSchema, 'requestContextSchema'),
+      workspace: this.parseJson(row.workspace, 'workspace'),
+      skills: this.parseJson(row.skills, 'skills'),
+      skillsFormat: row.skillsFormat as 'xml' | 'json' | 'markdown' | undefined,
+      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      changeMessage: row.changeMessage as string | undefined,
+      createdAt: row.createdAtZ || row.createdAt,
+    };
   }
 }

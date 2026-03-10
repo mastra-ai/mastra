@@ -5,6 +5,7 @@ import {
   ObservabilityStorage,
   TABLE_SCHEMAS,
   TABLE_SPANS,
+  toTraceSpans,
   TraceStatus,
 } from '@mastra/core/storage';
 import type {
@@ -377,7 +378,8 @@ export class ObservabilityDSQL extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     // Parse args through schema to apply defaults
     const { filters, pagination, orderBy } = listTracesArgsSchema.parse(args);
-    const { page, perPage } = pagination;
+    const page = pagination?.page ?? 0;
+    const perPage = pagination?.perPage ?? 100;
 
     const tableName = getTableName({
       indexName: TABLE_SPANS,
@@ -528,8 +530,8 @@ export class ObservabilityDSQL extends ObservabilityStorage {
 
       // Build ORDER BY clause with proper NULL handling for endedAt
       // Note: Aurora DSQL does not support NULLS FIRST/LAST syntax
-      const sortField = `${orderBy.field}Z`;
-      const sortDirection = orderBy.direction;
+      const sortField = `${orderBy?.field ?? 'startedAt'}Z`;
+      const sortDirection = orderBy?.direction ?? 'DESC';
       const orderClause = `ORDER BY r."${sortField}" ${sortDirection}`;
 
       // Get total count
@@ -577,11 +579,13 @@ export class ObservabilityDSQL extends ObservabilityStorage {
           perPage,
           hasMore: (page + 1) * perPage < count,
         },
-        spans: spans.map(span =>
-          transformFromSqlRow<SpanRecord>({
-            tableName: TABLE_SPANS,
-            sqlRow: span,
-          }),
+        spans: toTraceSpans(
+          spans.map(span =>
+            transformFromSqlRow<SpanRecord>({
+              tableName: TABLE_SPANS,
+              sqlRow: span,
+            }),
+          ),
         ),
       };
     } catch (error) {

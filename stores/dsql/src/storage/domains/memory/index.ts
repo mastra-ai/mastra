@@ -16,8 +16,8 @@ import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
-  StorageListThreadsByResourceIdInput,
-  StorageListThreadsByResourceIdOutput,
+  StorageListThreadsInput,
+  StorageListThreadsOutput,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { withRetry } from '../../../shared/retry';
@@ -191,31 +191,61 @@ export class MemoryDSQL extends MemoryStorage {
     }
   }
 
-  public async listThreadsByResourceId(
-    args: StorageListThreadsByResourceIdInput,
-  ): Promise<StorageListThreadsByResourceIdOutput> {
-    const { resourceId, page = 0, perPage: perPageInput, orderBy } = args;
+  public async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    const { page = 0, perPage: perPageInput, orderBy, filter } = args;
 
-    if (page < 0) {
+    try {
+      this.validatePaginationInput(page, perPageInput ?? 100);
+    } catch (error) {
       throw new MastraError({
-        id: createStorageErrorId('DSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'INVALID_PAGE'),
+        id: createStorageErrorId('DSQL', 'LIST_THREADS', 'INVALID_PAGE'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: 'Page number must be non-negative',
-        details: {
-          resourceId,
-          page,
-        },
+        text: error instanceof Error ? error.message : 'Invalid pagination parameters',
+        details: { page, ...(perPageInput !== undefined && { perPage: perPageInput }) },
+      });
+    }
+
+    const perPage = normalizePerPage(perPageInput, 100);
+
+    try {
+      this.validateMetadataKeys(filter?.metadata);
+    } catch (error) {
+      throw new MastraError({
+        id: createStorageErrorId('DSQL', 'LIST_THREADS', 'INVALID_METADATA_KEY'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: error instanceof Error ? error.message : 'Invalid metadata key',
+        details: { metadataKeys: filter?.metadata ? Object.keys(filter.metadata).join(', ') : '' },
       });
     }
 
     const { field, direction } = this.parseOrderBy(orderBy);
-    const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
     try {
       const tableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-      const baseQuery = `FROM ${tableName} WHERE "resourceId" = $1`;
-      const queryParams: any[] = [resourceId];
+      const whereClauses: string[] = [];
+      const queryParams: any[] = [];
+      let paramIndex = 1;
+
+      if (filter?.resourceId) {
+        whereClauses.push(`"resourceId" = ${paramIndex}`);
+        queryParams.push(filter.resourceId);
+        paramIndex++;
+      }
+
+      // Aurora DSQL stores JSONB as TEXT, so cast to jsonb for containment operator
+      if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+        for (const [key, value] of Object.entries(filter.metadata)) {
+          whereClauses.push(`metadata::jsonb @> ${paramIndex}::jsonb`);
+          queryParams.push(JSON.stringify({ [key]: value }));
+          paramIndex++;
+        }
+      }
+
+      const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+      const baseQuery = `FROM ${tableName} ${whereClause}`;
 
       const countQuery = `SELECT COUNT(*) ${baseQuery}`;
       const countResult = await this.#db.client.one(countQuery, queryParams);
@@ -232,7 +262,7 @@ export class MemoryDSQL extends MemoryStorage {
       }
 
       const limitValue = perPageInput === false ? total : perPage;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $2 OFFSET $3`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT ${paramIndex} OFFSET ${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -257,11 +287,12 @@ export class MemoryDSQL extends MemoryStorage {
     } catch (error) {
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('DSQL', 'LIST_THREADS_BY_RESOURCE_ID', 'FAILED'),
+          id: createStorageErrorId('DSQL', 'LIST_THREADS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: {
-            resourceId,
+            ...(filter?.resourceId && { resourceId: filter.resourceId }),
+            hasMetadataFilter: !!filter?.metadata,
             page,
           },
         },
