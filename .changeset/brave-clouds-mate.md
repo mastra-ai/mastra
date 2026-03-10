@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed writer being undefined in processOutputStream when output processors run on data-\* chunks in the workflow loop stream. This ensures custom output processors (like guardrail processors) can emit stream events via writer.custom() in all execution paths.
+Fixed `writer` being undefined in `processOutputStream` for all output processors. The root cause was that `processPart` in `ProcessorRunner` did not pass the `writer` to `executeWorkflowAsProcessor` in the outputStream phase. Since all user processors are wrapped into workflows via `combineProcessorsIntoWorkflow`, this meant no processor ever received a `writer`. Custom output processors (like guardrail processors) can now reliably use `writer.custom()` to emit stream events.
