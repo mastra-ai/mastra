@@ -11,7 +11,32 @@ import TabItem from "@theme/TabItem";
 
 # Storage Overview
 
-Mastra requires the following tables to be present in the database.
+Mastra storage is organized into domains. Each domain owns a set of tables or collections. Depending on your adapter and configuration, you may use all domains or only a subset.
+
+## Storage domains
+
+`MastraCompositeStore` can route the following domain keys:
+
+Not every storage adapter implements every domain. Composite storage lets you mix adapters per domain when the adapter packages export the corresponding domain classes.
+
+| Domain | Description |
+| - | - |
+| `memory` | Conversation persistence: messages, threads, and resources (including working memory). |
+| `workflows` | Workflow run snapshots used for suspend and resume. |
+| `scores` | Evaluation score records from eval runs. |
+| `observability` | Traces and spans used by observability exporters and Studio. |
+| `agents` | Versioned stored-agent entities. |
+| `datasets` | Dataset records, versioned items, and dataset versions used by experiments. |
+| `experiments` | Experiment runs and per-item experiment results. |
+| `promptBlocks` | Versioned prompt block entities. |
+| `scorerDefinitions` | Versioned scorer definition entities. |
+| `mcpClients` | Versioned MCP client entities. |
+| `mcpServers` | Versioned MCP server entities. |
+| `workspaces` | Versioned workspace entities. |
+| `skills` | Versioned skill entities. |
+| `blobs` | Content-addressable blob storage used by published skills and other versioned editor artifacts. |
+
+The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
 
 ## Core Schema
 

@@ -28,7 +28,7 @@ npm install @mastra/pg@latest @mastra/libsql@latest
 
 ## Storage domains
 
-Mastra organizes storage into five specialized domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
+Mastra organizes storage into domains, each handling a specific type of data. Each domain can be backed by a different storage adapter, and domain classes are exported from each storage package.
 
 | Domain | Description |
 | - | - |
@@ -37,6 +37,23 @@ Mastra organizes storage into five specialized domains, each handling a specific
 | `scores` | Evaluation results from Mastra's evals system. Scores and metrics are persisted here for analysis and comparison over time. |
 | `observability` | Telemetry data including traces and spans. Agent interactions, tool calls, and LLM requests generate spans collected into traces for debugging and performance analysis. |
 | `agents` | Agent configurations for stored agents. Enables agents to be defined and updated at runtime without code deployments. |
+| `datasets` | Evaluation datasets used for experiment runs. Stores dataset definitions, schemas, and versioned items. |
+| `experiments` | Experiment runs and per-item experiment results linked to datasets and targets. |
+| `promptBlocks` | Versioned prompt block entities used by the editor runtime. |
+| `scorerDefinitions` | Versioned scorer definitions used by eval workflows and editor tooling. |
+| `mcpClients` | Versioned MCP client definitions and configuration. |
+| `mcpServers` | Versioned MCP server definitions and transport configuration. |
+| `workspaces` | Versioned workspace entities used to group editor resources. |
+| `skills` | Versioned skill definitions for editor-managed skills. |
+| `blobs` | Content-addressable blob storage used by published skills and other versioned editor artifacts. |
+
+Mastra resolves domains in this order: `domains` overrides, then `editor` for `agents`, `promptBlocks`, `scorerDefinitions`, `mcpClients`, `mcpServers`, `workspaces`, and `skills`, then `default` as a fallback. Configure `blobs` separately with `domains.blobs`.
+
+:::note
+
+`MastraCompositeStore` accepts all of the domain keys above, but storage adapter support varies by package. You can mix adapters per domain, but only for domains implemented and exported by those adapters. For example, `memory: new MemoryLibSQL(...)` and `workflows: new WorkflowsPG(...)` is valid because both packages export those domain classes.
+
+:::
 
 ## Usage
 
@@ -106,10 +123,17 @@ export const mastra = new Mastra({
     isOptional: true,
   },
   {
+    name: 'editor',
+    type: 'MastraCompositeStore',
+    description:
+      'Optional shorthand for routing editor domains (`agents`, `promptBlocks`, `scorerDefinitions`, `mcpClients`, `mcpServers`, `workspaces`, `skills`) to one storage adapter.',
+    isOptional: true,
+  },
+  {
     name: 'domains',
     type: 'object',
     description:
-      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over the default storage.',
+      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage.',
     isOptional: true,
   },
   {
@@ -140,6 +164,60 @@ export const mastra = new Mastra({
     name: 'domains.agents',
     type: 'AgentsStorage',
     description: 'Storage for stored agent configurations.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.datasets',
+    type: 'DatasetsStorage',
+    description: 'Storage for dataset metadata, dataset items, and dataset versions.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.experiments',
+    type: 'ExperimentsStorage',
+    description: 'Storage for experiment runs and per-item experiment results.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.promptBlocks',
+    type: 'PromptBlocksStorage',
+    description: 'Storage for versioned prompt block entities.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.scorerDefinitions',
+    type: 'ScorerDefinitionsStorage',
+    description: 'Storage for versioned scorer definition entities.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.mcpClients',
+    type: 'MCPClientsStorage',
+    description: 'Storage for versioned MCP client entities.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.mcpServers',
+    type: 'MCPServersStorage',
+    description: 'Storage for versioned MCP server entities.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.workspaces',
+    type: 'WorkspacesStorage',
+    description: 'Storage for versioned workspace entities.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.skills',
+    type: 'SkillsStorage',
+    description: 'Storage for versioned skill entities.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.blobs',
+    type: 'BlobStore',
+    description: 'Content-addressable blob storage used by published skills and other versioned editor artifacts.',
     isOptional: true,
   },
   {
