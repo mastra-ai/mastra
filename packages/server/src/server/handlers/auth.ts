@@ -70,8 +70,8 @@ function getAuthProvider(mastra: any): MastraAuthProvider | null {
  * Always uses https when behind a proxy — Knative's queue-proxy overwrites
  * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
  */
-function getPublicOrigin(request: Request): string {
-  const forwardedHost = request.headers.get('x-forwarded-host');
+export function getPublicOrigin(request: Request): string {
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
   if (forwardedHost) {
     return `https://${forwardedHost}`;
   }

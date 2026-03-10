@@ -71,6 +71,20 @@ export type { MastraTUIOptions } from './state.js';
 
 /** How often to recheck for updates during a long-running session (ms). */
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
+const IMAGE_PLACEHOLDER_PATTERN = /\[image\]\s*/g;
+
+export function consumePendingImages(
+  text: string,
+  pendingImages: TUIState['pendingImages'],
+): { content: string; images?: TUIState['pendingImages'] } {
+  const imageMarkerCount = text.match(/\[image\]/g)?.length ?? 0;
+  const images = imageMarkerCount > 0 ? pendingImages.slice(0, imageMarkerCount) : undefined;
+
+  return {
+    content: text.replace(IMAGE_PLACEHOLDER_PATTERN, '').trim(),
+    images: images && images.length > 0 ? images : undefined,
+  };
+}
 
 export class MastraTUI {
   private state: TUIState;
@@ -185,8 +199,7 @@ export class MastraTUI {
           continue;
         }
 
-        // Collect any pending images from clipboard paste
-        const images = this.state.pendingImages.length > 0 ? [...this.state.pendingImages] : undefined;
+        const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
         this.state.pendingImages = [];
 
         // Add user message to chat immediately
@@ -194,7 +207,7 @@ export class MastraTUI {
           id: `user-${Date.now()}`,
           role: 'user',
           content: [
-            { type: 'text', text: userInput },
+            { type: 'text', text: content },
             ...(images?.map(img => ({
               type: 'image' as const,
               data: img.data,
@@ -210,12 +223,12 @@ export class MastraTUI {
           // Clear follow-up tracking since steer replaces the current response
           this.state.followUpComponents = [];
           this.state.pendingSlashCommands = [];
-          this.state.harness.steer({ content: userInput }).catch(error => {
+          this.state.harness.steer({ content }).catch(error => {
             showError(this.state, error instanceof Error ? error.message : 'Steer failed');
           });
         } else {
           // Normal send — fire and forget; events handle the rest
-          this.fireMessage(userInput, images);
+          this.fireMessage(content, images);
         }
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');

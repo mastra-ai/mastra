@@ -48,10 +48,18 @@ export function AgentVersionCombobox({
       const isPublished = version.id === activeVersionId;
       const isDraft = activeVersionNumber !== undefined && version.versionNumber > activeVersionNumber;
 
+      const trimmedMessage = version.changeMessage?.trim();
+      const description = [
+        formatTimestamp(version.createdAt),
+        trimmedMessage && trimmedMessage !== 'Auto-saved after edit' ? trimmedMessage : undefined,
+      ]
+        .filter(Boolean)
+        .join(' — ');
+
       return {
         label: `v${version.versionNumber}`,
         value: version.id,
-        description: formatTimestamp(version.createdAt),
+        description,
         end: isPublished ? (
           <Badge variant="success">Published</Badge>
         ) : isDraft ? (

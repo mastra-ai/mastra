@@ -1,11 +1,16 @@
 import { openai } from '@ai-sdk/openai-v5';
 import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
-import { describe, expect, it } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import z from 'zod';
 import { MessageList } from '../../agent/message-list';
 import { RequestContext } from '../../request-context';
 import { MastraLLMVNext } from './model.loop';
 import type { MastraLanguageModelV2 } from './shared.types';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 const model = new MastraLLMVNext({
   models: [{ model: openai('gpt-4o-mini') as unknown as MastraLanguageModelV2, maxRetries: 0, id: 'test-model' }],

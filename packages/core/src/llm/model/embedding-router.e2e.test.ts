@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, vi, beforeEach, afterEach } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, describe, it, expect, beforeAll, vi, beforeEach, afterEach } from 'vitest';
 import { ModelRouterEmbeddingModel } from './embedding-router.js';
 
 // Mock the @ai-sdk/openai-compatible-v5 module for custom URL tests
@@ -11,6 +12,10 @@ vi.mock('@ai-sdk/openai-compatible-v5', async () => {
 });
 
 const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v5');
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('ModelRouterEmbeddingModel Integration', () => {
   beforeAll(() => {

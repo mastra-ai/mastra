@@ -1,10 +1,9 @@
-import type { z } from 'zod';
-
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
+import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
@@ -38,7 +37,7 @@ export interface HeartbeatHandler {
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-export interface HarnessMode<TState extends HarnessStateSchema = HarnessStateSchema> {
+export interface HarnessMode<TState> {
   /** Unique identifier for this mode (e.g., "plan", "build", "review") */
   id: string;
 
@@ -61,7 +60,7 @@ export interface HarnessMode<TState extends HarnessStateSchema = HarnessStateSch
    * The agent for this mode.
    * Can be a static Agent or a function that receives harness state.
    */
-  agent: Agent | ((state: z.infer<TState>) => Agent);
+  agent: Agent | ((state: TState) => Agent);
 }
 
 // =============================================================================
@@ -105,17 +104,26 @@ export interface HarnessSubagent {
 
   /** Optional stop condition for this subagent's execution loop */
   stopWhen?: LoopOptions['stopWhen'];
+
+  /**
+   * Workspace tool keys (after any renames) the model is allowed to call.
+   * When set, workspace tools not in this list are hidden via `prepareStep`.
+   * Non-workspace tools are never affected. When omitted, all workspace
+   * tools are visible.
+   */
+  allowedWorkspaceTools?: string[];
 }
 
 /**
- * Schema type for harness state - must be a Zod object schema.
+ * Schema type for harness state.
+ * Accepts any PublicSchema variant: Zod v3/v4, JSON Schema, AI SDK Schema, or Standard Schema.
  */
-export type HarnessStateSchema = z.ZodObject<z.ZodRawShape>;
+export type HarnessStateSchema<T> = PublicSchema<T>;
 
 /**
  * Configuration for creating a Harness instance.
  */
-export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateSchema> {
+export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
   id: string;
 
@@ -128,11 +136,11 @@ export interface HarnessConfig<TState extends HarnessStateSchema = HarnessStateS
   /** Storage backend for persistence (threads, messages, state) */
   storage?: MastraCompositeStore;
 
-  /** Zod schema defining the shape of harness state */
+  /** Schema defining the shape of harness state (Zod, JSON Schema, Standard Schema, etc.) */
   stateSchema?: TState;
 
   /** Initial state values (must conform to schema) */
-  initialState?: Partial<z.infer<TState>>;
+  initialState?: Partial<TState>;
 
   /** Memory configuration (shared across all modes) */
   memory?: DynamicArgument<MastraMemory>;
@@ -823,18 +831,18 @@ export type HarnessMessageContent =
  * Harness-specific context set on the RequestContext under the 'harness' key.
  * Tools can access harness state and methods through requestContext.get('harness').
  */
-export interface HarnessRequestContext<TState extends HarnessStateSchema = HarnessStateSchema> {
+export interface HarnessRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
 
   /** Current harness state (read-only snapshot) */
-  state: z.infer<TState>;
+  state: TState;
 
   /** Get the current harness state (live, not snapshot) */
-  getState: () => z.infer<TState>;
+  getState: () => TState;
 
   /** Update harness state */
-  setState: (updates: Partial<z.infer<TState>>) => Promise<void>;
+  setState: (updates: Partial<TState>) => Promise<void>;
 
   /** Current thread ID */
   threadId: string | null;
