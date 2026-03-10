@@ -5,7 +5,7 @@ import { UpdateModelParams, Provider } from '@mastra/client-js';
 import { useModelReset } from '../../context/model-reset-context';
 import { Alert, AlertDescription, AlertTitle } from '@/ds/components/Alert';
 import { Button } from '@/ds/components/Button';
-import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId } from '@/domains/llm';
+import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -44,17 +44,19 @@ export const AgentMetadataModelSwitcher = ({
 
   const currentModelProvider = cleanProviderId(selectedProvider);
 
+  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
+  const resolvedProvider = findProviderById(providers, currentModelProvider);
+  const fullProviderId = resolvedProvider?.id || currentModelProvider;
+
   // Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
     setSelectedModel(modelId);
 
-    const providerToUse = currentModelProvider || selectedProvider;
-
-    if (modelId && providerToUse) {
+    if (modelId && fullProviderId) {
       setLoading(true);
       try {
         const result = await updateModel({
-          provider: providerToUse as UpdateModelParams['provider'],
+          provider: fullProviderId as UpdateModelParams['provider'],
           modelId,
         });
         console.log('Model updated:', result);
@@ -98,10 +100,12 @@ export const AgentMetadataModelSwitcher = ({
         setSelectedProvider(cleanProviderId(originalProvider));
         setSelectedModel(originalModel);
 
-        // Update back to original configuration
-        if (originalProvider && originalModel) {
+        // Update back to original configuration - resolve full provider ID
+        const resolvedOriginalProvider = findProviderById(providers, originalProvider);
+        const fullOriginalProviderId = resolvedOriginalProvider?.id || originalProvider;
+        if (fullOriginalProviderId && originalModel) {
           updateModel({
-            provider: originalProvider as UpdateModelParams['provider'],
+            provider: fullOriginalProviderId as UpdateModelParams['provider'],
             modelId: originalModel,
           }).catch(error => {
             console.error('Failed to reset model:', error);
@@ -156,7 +160,7 @@ export const AgentMetadataModelSwitcher = ({
     }
   };
 
-  const currentProvider = providers.find((p: Provider) => p.id === currentModelProvider);
+  const currentProvider = findProviderById(providers, currentModelProvider);
 
   return (
     <div className="@container">

@@ -118,6 +118,16 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/alibaba-coding-plan',
+          label: 'Alibaba Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/alibaba-coding-plan-cn',
+          label: 'Alibaba Coding Plan (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/amazon-bedrock',
           label: 'Amazon Bedrock',
         },
@@ -138,6 +148,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/berget',
+          label: 'Berget.AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -145,6 +160,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/chutes',
           label: 'Chutes',
+        },
+        {
+          type: 'doc',
+          id: 'providers/clarifai',
+          label: 'Clarifai',
+        },
+        {
+          type: 'doc',
+          id: 'providers/cloudferro-sherlock',
+          label: 'CloudFerro Sherlock',
         },
         {
           type: 'doc',
@@ -168,8 +193,18 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/drun',
+          label: 'D.Run (China)',
+        },
+        {
+          type: 'doc',
           id: 'providers/deepinfra',
           label: 'Deep Infra',
+        },
+        {
+          type: 'doc',
+          id: 'providers/evroc',
+          label: 'evroc',
         },
         {
           type: 'doc',
@@ -233,8 +268,23 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/jiekou',
+          label: 'Jiekou.AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kilo',
+          label: 'Kilo Gateway',
+        },
+        {
+          type: 'doc',
           id: 'providers/kimi-for-coding',
           label: 'Kimi For Coding',
+        },
+        {
+          type: 'doc',
+          id: 'providers/kuae-cloud-coding-plan',
+          label: 'KUAE Cloud Coding Plan',
         },
         {
           type: 'doc',
@@ -250,6 +300,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/meganova',
+          label: 'Meganova',
         },
         {
           type: 'doc',
@@ -308,6 +363,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/nova',
+          label: 'Nova',
+        },
+        {
+          type: 'doc',
           id: 'providers/novita-ai',
           label: 'NovitaAI',
         },
@@ -328,6 +388,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/opencode-go',
+          label: 'OpenCode Go',
+        },
+        {
+          type: 'doc',
           id: 'providers/opencode',
           label: 'OpenCode Zen',
         },
@@ -343,6 +408,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/perplexity-agent',
+          label: 'Perplexity Agent',
+        },
+        {
+          type: 'doc',
           id: 'providers/poe',
           label: 'Poe',
         },
@@ -350,6 +420,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/privatemode-ai',
           label: 'Privatemode AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/qihang-ai',
+          label: 'QiHang',
+        },
+        {
+          type: 'doc',
+          id: 'providers/qiniu-ai',
+          label: 'Qiniu',
         },
         {
           type: 'doc',
@@ -370,6 +450,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/siliconflow-cn',
           label: 'SiliconFlow (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stackit',
+          label: 'STACKIT',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun',
+          label: 'StepFun',
         },
         {
           type: 'doc',

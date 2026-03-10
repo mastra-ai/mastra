@@ -6,25 +6,38 @@ import type { TripWireOptions } from '../agent/trip-wire';
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
-import type { TracingContext } from '../observability';
+import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { ChunkType, InferSchemaOutput, OutputSchema } from '../stream';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '../schema';
+import type { ChunkType } from '../stream';
+import type { DataChunkType, LanguageModelUsage, LLMStepResult } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
 /**
+ * Writer interface for processors to emit custom data chunks to the stream.
+ * This enables real-time streaming of processor-specific data (e.g., observation markers).
+ */
+export interface ProcessorStreamWriter {
+  /**
+   * Emit a custom data chunk to the stream.
+   * The chunk type must start with 'data-' prefix.
+   * @param data - The data chunk to emit
+   */
+  custom<T extends { type: string }>(data: T extends { type: `data-${string}` } ? DataChunkType : T): Promise<void>;
+}
+
+/**
  * Base context shared by all processor methods
  */
-export interface ProcessorContext<TTripwireMetadata = unknown> {
+export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<ObservabilityContext> {
   /**
    * Function to abort processing with an optional reason and options.
    * @param reason - The reason for aborting
    * @param options - Options including retry flag and metadata
    */
   abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
-  /** Optional tracing context for observability */
-  tracingContext?: TracingContext;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
   /**
@@ -32,6 +45,18 @@ export interface ProcessorContext<TTripwireMetadata = unknown> {
    * Use this to implement retry limits within your processor.
    */
   retryCount: number;
+  /**
+   * Optional stream writer for emitting custom data chunks.
+   * Available when the agent is streaming and outputWriter is provided.
+   * Use writer.custom() to emit data-* chunks that will be streamed to the client.
+   */
+  writer?: ProcessorStreamWriter;
+  /**
+   * Optional abort signal from the parent agent execution.
+   * Processors should pass this to any long-running operations (e.g., LLM calls)
+   * so they can be canceled when the parent agent is aborted.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -70,6 +95,23 @@ export type ProcessInputResult = MessageList | MastraDBMessage[] | ProcessInputR
 export interface ProcessInputArgs<TTripwireMetadata = unknown> extends ProcessorMessageContext<TTripwireMetadata> {
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+}
+
+/**
+ * Resolved generation result passed to processOutputResult.
+ * Contains the same data available in the onFinish callback.
+ */
+export interface OutputResult {
+  /** The accumulated text from all steps */
+  text: string;
+  /** Token usage (cumulative across all steps) */
+  usage: LanguageModelUsage;
+  /** Why the generation finished (e.g. 'stop', 'tool-calls', 'length') */
+  finishReason: string;
+  /** All LLM step results (each contains text, toolCalls, toolResults, usage, sources, files, reasoning, etc.) */
+  steps: LLMStepResult[];
 }
 
 /**
@@ -77,7 +119,12 @@ export interface ProcessInputArgs<TTripwireMetadata = unknown> extends Processor
  */
 export interface ProcessOutputResultArgs<
   TTripwireMetadata = unknown,
-> extends ProcessorMessageContext<TTripwireMetadata> {}
+> extends ProcessorMessageContext<TTripwireMetadata> {
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
+  /** Resolved generation result with usage, text, steps, and finish reason */
+  result: OutputResult;
+}
 
 /**
  * Arguments for processInputStep method
@@ -90,9 +137,15 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   /** The current step number (0-indexed) */
   stepNumber: number;
   steps: Array<StepResult<any>>;
+  /** The active assistant response message ID for this step, when this processor is running inside an agent loop */
+  messageId?: string;
+  /** Mark the current assistant response message ID as complete and rotate to a fresh one, when supported by the caller */
+  rotateResponseMessageId?: () => string;
 
   /** All system messages (agent instructions, user-provided, memory) for read/modify access */
   systemMessages: CoreMessageV4[];
+  /** Per-processor state that persists across all method calls within this request */
+  state: Record<string, unknown>;
 
   /**
    * Current model for this step.
@@ -107,10 +160,10 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
-   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  structuredOutput?: StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -118,16 +171,25 @@ export interface ProcessInputStepArgs<TTripwireMetadata = unknown> extends Proce
   retryCount: number;
 }
 
-export type RunProcessInputStepArgs = Omit<ProcessInputStepArgs, 'messages' | 'systemMessages' | 'abort'>;
+export type RunProcessInputStepArgs = Omit<
+  ProcessInputStepArgs,
+  'messages' | 'systemMessages' | 'abort' | 'state' | 'messageId' | 'rotateResponseMessageId' | 'retryCount'
+> & {
+  messageId?: string;
+  rotateResponseMessageId?: () => string;
+  retryCount?: number;
+};
 
 /**
  * Result from processInputStep method
  *
- * Note: structuredOutput.schema is typed as OutputSchema (not the specific OUTPUT type) because
+ * Note: structuredOutput.schema is typed as StandardSchemaWithJSON (not the specific OUTPUT type) because
  * processors can modify it dynamically, and the actual type is only known at runtime.
  */
 export type ProcessInputStepResult = {
   model?: LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
+  /** Override the active assistant response message ID for this step */
+  messageId?: string;
   /** Replace tools for this step - accepts both AI SDK tools and Mastra createTool results */
   tools?: Record<string, unknown>;
   toolChoice?: ToolChoice<any>;
@@ -140,10 +202,10 @@ export type ProcessInputStepResult = {
   providerOptions?: SharedProviderOptions;
   modelSettings?: Omit<CallSettings, 'abortSignal'>;
   /**
-   * Structured output configuration. The schema type is OutputSchema (not the specific OUTPUT)
+   * Structured output configuration. The schema type is StandardSchemaWithJSON (not the specific OUTPUT)
    * because processors can modify it, and the actual type is only known at runtime.
    */
-  structuredOutput?: StructuredOutputOptions<InferSchemaOutput<OutputSchema>>;
+  structuredOutput?: StructuredOutputOptions<InferStandardSchemaOutput<StandardSchemaWithJSON>>;
   /**
    * Number of times processors have triggered retry for this generation.
    * Use this to implement retry limits within your processor.
@@ -193,6 +255,8 @@ export interface ProcessOutputStepArgs<TTripwireMetadata = unknown> extends Proc
   systemMessages: CoreMessageV4[];
   /** All completed steps so far (including the current step) */
   steps: Array<StepResult<any>>;
+  /** Mutable state object that persists across steps */
+  state: Record<string, unknown>;
 }
 
 /**
@@ -207,6 +271,9 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
   readonly description?: string;
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
+
+  /** When true, this processor will also receive `data-*` chunks in processOutputStream. Default: false. */
+  processDataParts?: boolean;
 
   /**
    * Process input messages before they are sent to the LLM

@@ -104,14 +104,6 @@ function findCategoryOverviewUrl(items: SidebarItem[], baseUrl: string): string 
   return null
 }
 
-function addLlmsPostfix(url: string): string {
-  if (url.endsWith('/')) {
-    return `${url}llms.txt`
-  } else {
-    return `${url}/llms.txt`
-  }
-}
-
 /**
  * Generate markdown list for sidebar items recursively
  */
@@ -130,14 +122,14 @@ export function generateMarkdownList(
 
     if (typeof item === 'string' || item.type === 'doc') {
       // It's a doc item - create a link
-      const url = docId === 'index' ? addLlmsPostfix(baseUrl) : addLlmsPostfix(`${baseUrl}/${docId}`)
+      const url = docId === 'index' ? baseUrl : `${baseUrl}/${docId}`
       output += `${indent}- [${label}](${url})\n`
     } else if (item.type === 'category') {
       // Check if this category should be condensed to just its overview link
       if (condensedCategories.includes(label)) {
         const overviewUrl = findCategoryOverviewUrl(item.items, baseUrl)
         if (overviewUrl) {
-          output += `${indent}- [${label}](${addLlmsPostfix(overviewUrl)})\n`
+          output += `${indent}- [${label}](${overviewUrl})\n`
         } else {
           // Fallback: just show category name without link
           output += `${indent}- ${label}\n`

@@ -1,7 +1,7 @@
 // To setup an ElasticSearch server, run the docker compose file in the elasticsearch directory
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
 import dotenv from 'dotenv';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ElasticSearchVector } from './index';
 

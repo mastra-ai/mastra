@@ -10,6 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 
 /** Model specification version for tool type conversion */
 export type ModelSpecVersion = 'v2' | 'v3';
@@ -47,6 +48,46 @@ function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');
 }
 
+function fixTypelessProperties(schema: Record<string, unknown>): Record<string, unknown> {
+  if (typeof schema !== 'object' || schema === null) return schema;
+
+  const result = { ...schema };
+
+  if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties as Record<string, unknown>).map(([key, value]) => {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          return [key, value];
+        }
+
+        const propSchema = value as Record<string, unknown>;
+        const hasType = 'type' in propSchema;
+        const hasRef = '$ref' in propSchema;
+        const hasAnyOf = 'anyOf' in propSchema;
+        const hasOneOf = 'oneOf' in propSchema;
+        const hasAllOf = 'allOf' in propSchema;
+
+        if (!hasType && !hasRef && !hasAnyOf && !hasOneOf && !hasAllOf) {
+          const { items: _items, ...rest } = propSchema;
+          return [key, { ...rest, type: ['string', 'number', 'integer', 'boolean', 'object', 'null'] }];
+        }
+
+        return [key, fixTypelessProperties(propSchema)];
+      }),
+    );
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = (result.items as Record<string, unknown>[]).map(item => fixTypelessProperties(item));
+    } else if (typeof result.items === 'object') {
+      result.items = fixTypelessProperties(result.items as Record<string, unknown>);
+    }
+  }
+
+  return result;
+}
+
 export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools,
   toolChoice,
@@ -63,9 +104,10 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   toolChoice: PreparedToolChoice | undefined;
 } {
   if (Object.keys(tools || {}).length === 0) {
+    // Preserve explicit 'none' toolChoice to tell the LLM not to attempt tool calls
     return {
       tools: undefined,
-      toolChoice: undefined,
+      toolChoice: toolChoice === 'none' ? { type: 'none' as const } : undefined,
     };
   }
 
@@ -116,11 +158,50 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
             case undefined:
             case 'dynamic':
             case 'function':
+              // Convert tool input schema to JSON Schema
+              let parameters;
+              if (sdkTool.inputSchema) {
+                if (
+                  '$schema' in sdkTool.inputSchema &&
+                  typeof sdkTool.inputSchema.$schema === 'string' &&
+                  sdkTool.inputSchema.$schema.startsWith('http://json-schema.org/')
+                ) {
+                  parameters = sdkTool.inputSchema;
+                } else if (isStandardSchemaWithJSON(sdkTool.inputSchema)) {
+                  parameters = standardSchemaToJSONSchema(sdkTool.inputSchema, {
+                    io: 'input',
+                    target: 'draft-07',
+                  });
+                } else {
+                  // Fallback to AI SDK's asSchema for non-standard schemas
+                  parameters = asSchema(sdkTool.inputSchema).jsonSchema;
+                }
+
+                // Normalize $schema field to draft-07 for consistency
+                // Some tools (created with tool() helper) use Zod v4's native generation
+                // which defaults to draft 2020-12, but we want draft-07 for LLM compatibility
+                if (
+                  parameters &&
+                  typeof parameters === 'object' &&
+                  '$schema' in parameters &&
+                  parameters.$schema !== 'http://json-schema.org/draft-07/schema#'
+                ) {
+                  parameters.$schema = 'http://json-schema.org/draft-07/schema#';
+                }
+              } else {
+                // No schema provided - use empty object
+                parameters = {
+                  type: 'object',
+                  properties: {},
+                  additionalProperties: false,
+                };
+              }
+
               return {
                 type: 'function' as const,
                 name,
                 description: sdkTool.description,
-                inputSchema: asSchema(sdkTool.inputSchema).jsonSchema,
+                inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
                 providerOptions: sdkTool.providerOptions,
               };
             case 'provider-defined': {

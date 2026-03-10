@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
-import type { InternalCoreTool } from './tools';
+import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
@@ -233,9 +233,9 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeDefined();
 
     if (coreTool.execute) {
-      const result = await coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] });
-      expect(result).toBeInstanceOf(MastraError);
-      expect(result.message).toBe('Test error');
+      await expect(coreTool.execute({ name: 'test' }, { toolCallId: 'test-id', messages: [] })).rejects.toThrow(
+        MastraError,
+      );
       expect(errorSpy).toHaveBeenCalled();
     }
     errorSpy.mockRestore();
@@ -257,6 +257,53 @@ describe('makeCoreTool', () => {
     expect(coreTool.execute).toBeUndefined();
   });
 
+  it('should preserve lifecycle hooks through createTool → makeCoreTool pipeline', () => {
+    const onInputStart = vi.fn();
+    const onInputDelta = vi.fn();
+    const onInputAvailable = vi.fn();
+    const onOutput = vi.fn();
+
+    const tool = createTool({
+      id: 'hook-test',
+      description: 'Tool with hooks',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ ok: true }),
+      onInputStart,
+      onInputDelta,
+      onInputAvailable,
+      onOutput,
+    });
+
+    // Break 1 fix: Tool instance preserves hooks from createTool options
+    expect(tool.onInputStart).toBe(onInputStart);
+    expect(tool.onInputDelta).toBe(onInputDelta);
+    expect(tool.onInputAvailable).toBe(onInputAvailable);
+    expect(tool.onOutput).toBe(onOutput);
+
+    // Break 2 fix: CoreToolBuilder.build() transfers hooks to CoreTool
+    const coreTool = makeCoreTool(tool, mockOptions);
+    expect((coreTool as any).onInputStart).toBe(onInputStart);
+    expect((coreTool as any).onInputDelta).toBe(onInputDelta);
+    expect((coreTool as any).onInputAvailable).toBe(onInputAvailable);
+    expect((coreTool as any).onOutput).toBe(onOutput);
+  });
+
+  it('should not add hook properties when tool has no hooks', () => {
+    const tool = createTool({
+      id: 'no-hooks',
+      description: 'Tool without hooks',
+      inputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const coreTool = makeCoreTool(tool, mockOptions);
+
+    expect((coreTool as any).onInputStart).toBeUndefined();
+    expect((coreTool as any).onInputDelta).toBeUndefined();
+    expect((coreTool as any).onInputAvailable).toBeUndefined();
+    expect((coreTool as any).onOutput).toBeUndefined();
+  });
+
   it('should have default parameters if no parameters are provided for Vercel tool', () => {
     const coreTool = makeCoreTool(
       {
@@ -267,9 +314,11 @@ describe('makeCoreTool', () => {
       mockOptions,
     );
 
+    const schema = toStandardSchema(coreTool.parameters);
+
     // Test the schema behavior instead of structure
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({})).not.toThrow();
-    expect(() => (coreTool as InternalCoreTool).parameters.validate({ extra: 'field' })).not.toThrow();
+    expect(() => schema['~standard'].validate({})).not.toThrow();
+    expect(() => schema['~standard'].validate({ extra: 'field' })).not.toThrow();
   });
 });
 

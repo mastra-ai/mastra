@@ -15,6 +15,17 @@ export interface WorkspaceSafety {
   readOnly: boolean;
 }
 
+export interface WorkspaceFilesystemInfo {
+  id: string;
+  name: string;
+  provider: string;
+  status?: string;
+  error?: string;
+  readOnly?: boolean;
+  icon?: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface WorkspaceInfo {
   isWorkspaceConfigured: boolean;
   id?: string;
@@ -22,6 +33,8 @@ export interface WorkspaceInfo {
   status?: string;
   capabilities?: WorkspaceCapabilities;
   safety?: WorkspaceSafety;
+  filesystem?: WorkspaceFilesystemInfo;
+  mounts?: MountInfo[];
 }
 
 export interface WorkspaceItem {
@@ -43,10 +56,32 @@ export interface WorkspacesListResponse {
 // Filesystem Types
 // =============================================================================
 
+/** Provider status values for mount points */
+export type ProviderStatus =
+  | 'pending'
+  | 'initializing'
+  | 'ready'
+  | 'starting'
+  | 'running'
+  | 'stopping'
+  | 'stopped'
+  | 'destroying'
+  | 'destroyed'
+  | 'error';
+
 export interface FileEntry {
   name: string;
   type: 'file' | 'directory';
   size?: number;
+  /** Mount point metadata (only set for CompositeFilesystem mount points) */
+  mount?: {
+    provider: string;
+    icon?: string;
+    displayName?: string;
+    description?: string;
+    status?: ProviderStatus;
+    error?: string;
+  };
 }
 
 export interface FileReadResponse {
@@ -127,12 +162,22 @@ export type SkillSource =
   | { type: 'local'; projectPath: string }
   | { type: 'managed'; mastraPath: string };
 
+/** Source info for skills installed via skills.sh */
+export interface SkillsShSource {
+  owner: string;
+  repo: string;
+}
+
 export interface SkillMetadata {
   name: string;
   description: string;
   license?: string;
   compatibility?: unknown;
   metadata?: Record<string, unknown>;
+  /** Path to the skill directory */
+  path: string;
+  /** Source info for skills installed via skills.sh (from .meta.json) */
+  skillsShSource?: SkillsShSource;
 }
 
 export interface Skill extends SkillMetadata {
@@ -187,4 +232,96 @@ export interface SearchSkillsParams {
   minScore?: number;
   skillNames?: string[];
   includeReferences?: boolean;
+}
+
+// =============================================================================
+// Mount Types
+// =============================================================================
+
+export interface MountInfo {
+  path: string;
+  provider: string;
+  readOnly: boolean;
+  displayName?: string;
+  icon?: string;
+  name?: string;
+}
+
+// =============================================================================
+// skills.sh Types
+// =============================================================================
+
+export interface SkillsShSkill {
+  id: string;
+  name: string;
+  installs: number;
+  topSource: string;
+}
+
+export interface SkillsShSearchResponse {
+  query: string;
+  searchType: string;
+  skills: SkillsShSkill[];
+  count: number;
+}
+
+export interface SkillsShListResponse {
+  skills: SkillsShSkill[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+// =============================================================================
+// skills.sh Install Types
+// =============================================================================
+
+export interface SkillsShInstallParams {
+  workspaceId: string;
+  owner: string;
+  repo: string;
+  skillName: string;
+  mount?: string;
+}
+
+export interface SkillsShInstallResponse {
+  success: boolean;
+  skillName: string;
+  installedPath: string;
+  filesWritten: number;
+}
+
+// =============================================================================
+// skills.sh Remove Types
+// =============================================================================
+
+export interface SkillsShRemoveParams {
+  workspaceId: string;
+  skillName: string;
+}
+
+export interface SkillsShRemoveResponse {
+  success: boolean;
+  skillName: string;
+  removedPath: string;
+}
+
+// =============================================================================
+// skills.sh Update Types
+// =============================================================================
+
+export interface SkillsShUpdateParams {
+  workspaceId: string;
+  skillName?: string;
+}
+
+export interface SkillUpdateResult {
+  skillName: string;
+  success: boolean;
+  filesWritten?: number;
+  error?: string;
+}
+
+export interface SkillsShUpdateResponse {
+  updated: SkillUpdateResult[];
 }

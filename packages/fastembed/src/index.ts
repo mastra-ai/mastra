@@ -4,8 +4,8 @@ import path from 'node:path';
 import { customProvider as customProviderV2 } from '@internal/ai-sdk-v5';
 import { customProvider as customProviderLegacy } from '@internal/ai-sdk-v4';
 import type { EmbeddingModelV3 } from '@internal/ai-v6';
-import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
-import type { EmbeddingModelV1 } from '@internal/ai-sdk-v4';
+import type { EmbeddingModel as EmbeddingModelV2 } from '@internal/ai-sdk-v5';
+import type { EmbeddingModel as EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import { customProvider as customProviderV3 } from '@internal/ai-v6';
 import { FlagEmbedding, EmbeddingModel } from 'fastembed';
 
@@ -17,6 +17,17 @@ async function getModelCachePath() {
   const cachePath = path.join(os.homedir(), '.cache', 'mastra', 'fastembed-models');
   await fsp.mkdir(cachePath, { recursive: true });
   return cachePath;
+}
+
+/**
+ * Pre-download fastembed models without creating ONNX sessions.
+ * Call this before running tests in parallel to avoid concurrent download races.
+ */
+export async function warmup() {
+  const cacheDir = await getModelCachePath();
+  const retrieve = (FlagEmbedding as any).retrieveModel.bind(FlagEmbedding);
+  await retrieve(EmbeddingModel.BGESmallENV15, cacheDir, false);
+  await retrieve(EmbeddingModel.BGEBaseENV15, cacheDir, false);
 }
 
 // Shared function to generate embeddings using fastembed

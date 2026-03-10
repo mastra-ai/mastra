@@ -1,20 +1,20 @@
-import { Link } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
   Crumb,
-  HeaderGroup,
   Button,
   HeaderAction,
   Icon,
   DocsIcon,
   AgentIcon,
   AgentCombobox,
+  useIsCmsAvailable,
 } from '@mastra/playground-ui';
-import { EyeIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
 export function AgentHeader({ agentId }: { agentId: string }) {
+  const { isCmsAvailable } = useIsCmsAvailable();
+
   return (
     <Header>
       <Breadcrumb>
@@ -25,18 +25,9 @@ export function AgentHeader({ agentId }: { agentId: string }) {
           Agents
         </Crumb>
         <Crumb as="span" to="" isCurrent>
-          <AgentCombobox value={agentId} variant="ghost" />
+          <AgentCombobox value={agentId} variant="ghost" showSourceIcon={isCmsAvailable} />
         </Crumb>
       </Breadcrumb>
-
-      <HeaderGroup>
-        <Button as={Link} to={`/observability?entity=${agentId}`}>
-          <Icon>
-            <EyeIcon />
-          </Icon>
-          Traces
-        </Button>
-      </HeaderGroup>
 
       <HeaderAction>
         <Button as={Link} to="https://mastra.ai/en/docs/agents/overview" target="_blank">

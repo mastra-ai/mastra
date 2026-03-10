@@ -85,6 +85,47 @@ function modelListTests(version: 'v1' | 'v2') {
         expect(model1.modelId).toBe('gpt-4o-mini');
       });
 
+      it('should keep unlisted models at the end when reordering with a partial list', async () => {
+        const agent = new Agent({
+          id: 'test-agent',
+          name: 'Test Agent',
+          instructions: 'test agent instructions',
+          model: [
+            {
+              model: openai('gpt-4o'),
+            },
+            {
+              model: openai('gpt-4o-mini'),
+            },
+            {
+              model: openai('gpt-4.1'),
+            },
+          ],
+        });
+
+        const modelList = await agent.getModelList();
+        if (!modelList) {
+          expect.fail('Model list should exist');
+        }
+
+        // Reorder with only 2 of 3 models — gpt-4.1 first, then gpt-4o
+        // gpt-4o-mini is NOT in the list and should stay at the end
+        agent.reorderModels([modelList[2]!.id, modelList[0]!.id]);
+
+        const reorderedModelList = await agent.getModelList();
+        if (!reorderedModelList) {
+          expect.fail('Reordered model list should exist');
+        }
+
+        expect(reorderedModelList.length).toBe(3);
+        const model0 = reorderedModelList[0]?.model as LanguageModelV2;
+        const model1 = reorderedModelList[1]?.model as LanguageModelV2;
+        const model2 = reorderedModelList[2]?.model as LanguageModelV2;
+        expect(model0.modelId).toBe('gpt-4.1');
+        expect(model1.modelId).toBe('gpt-4o');
+        expect(model2.modelId).toBe('gpt-4o-mini');
+      });
+
       it(`should update model list`, async () => {
         const agent = new Agent({
           id: 'test-agent',
@@ -314,7 +355,9 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        // Stream-read errors are not retried on the same model - the fallback loop
+        // tries each model once and moves on to the next on error.
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
         expect(usedModelName).toBe('premium');
       });
 
@@ -436,8 +479,9 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
-        expect(streamErrorFn2).toHaveBeenCalledTimes(3);
+        // Stream-read errors are not retried on the same model - each model is tried once
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
+        expect(streamErrorFn2).toHaveBeenCalledTimes(1);
         expect(usedModelName).toBe('premium');
       });
 
@@ -560,7 +604,8 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        // Stream-read errors are not retried on the same model - each model is tried once
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
         expect(streamErrorFn2).toHaveBeenCalledTimes(0);
         expect(usedModelName).toBe('premium');
       });
@@ -717,7 +762,8 @@ function modelListTests(version: 'v1' | 'v2') {
 
         const fullText = await streamResult.text;
         expect(fullText).toBe('Hello, Premium Title');
-        expect(streamErrorFn).toHaveBeenCalledTimes(4);
+        // Stream-read errors are not retried on the same model - each model is tried once
+        expect(streamErrorFn).toHaveBeenCalledTimes(1);
         expect(premiumModel2Fn).toHaveBeenCalledTimes(0);
         expect(usedModelName).toBe('premium');
       });

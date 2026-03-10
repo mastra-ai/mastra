@@ -1,9 +1,10 @@
+import type { StandardSchemaV1 } from '@standard-schema/spec';
 import { isEmpty } from 'radash';
-import type z from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
-import { isZodType, removeUndefinedValues } from '../utils';
+import type { StandardSchemaWithJSON } from '../schema';
+import { removeUndefinedValues } from '../utils';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
@@ -14,10 +15,30 @@ import type {
   WorkflowRunState,
 } from './types';
 
-export function getZodErrors(error: z.ZodError) {
-  // zod v4 returns issues instead of errors
-  const errors = error.issues;
-  return errors;
+/**
+ * Validates data against a StandardSchema and returns the result.
+ * Works with both sync and async schemas.
+ */
+async function validateWithStandardSchema<T>(
+  schema: StandardSchemaWithJSON<T>,
+  data: unknown,
+): Promise<{ success: true; data: T } | { success: false; issues: { path?: (string | number)[]; message: string }[] }> {
+  const result = schema['~standard'].validate(data);
+  const resolvedResult = result instanceof Promise ? await result : result;
+
+  if ('issues' in resolvedResult && resolvedResult.issues) {
+    return {
+      success: false,
+      issues: resolvedResult.issues.map((issue: StandardSchemaV1.Issue) => ({
+        path: issue.path?.map((p: PropertyKey | StandardSchemaV1.PathSegment) =>
+          typeof p === 'object' && 'key' in p ? p.key : p,
+        ) as (string | number)[] | undefined,
+        message: issue.message,
+      })),
+    };
+  }
+
+  return { success: true, data: resolvedResult.value as T };
 }
 
 export async function validateStepInput({
@@ -33,14 +54,12 @@ export async function validateStepInput({
 
   let validationError: Error | undefined;
 
-  if (validateInputs && isZodType(step.inputSchema)) {
-    const inputSchema = step.inputSchema;
-
-    const validatedInput = await inputSchema.safeParseAsync(prevOutput);
+  const inputSchema = step.inputSchema;
+  if (validateInputs && inputSchema) {
+    const validatedInput = await validateWithStandardSchema(inputSchema, prevOutput);
 
     if (!validatedInput.success) {
-      const errors = getZodErrors(validatedInput.error);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      const errorMessages = validatedInput.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
       validationError = new MastraError(
         {
           id: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
@@ -48,8 +67,7 @@ export async function validateStepInput({
           category: ErrorCategory.USER,
           text: 'Step input validation failed: \n' + errorMessages,
         },
-        // keep the original zod error as the cause for consumers
-        validatedInput.error,
+        { issues: validatedInput.issues },
       );
     } else {
       const isEmptyData = isEmpty(validatedInput.data);
@@ -69,21 +87,16 @@ export async function validateStepResumeData({ resumeData, step }: { resumeData?
 
   const resumeSchema = step.resumeSchema;
 
-  if (resumeSchema && isZodType(resumeSchema)) {
-    const validatedResumeData = await resumeSchema.safeParseAsync(resumeData);
+  if (resumeSchema) {
+    const validatedResumeData = await validateWithStandardSchema(resumeSchema, resumeData);
     if (!validatedResumeData.success) {
-      const errors = getZodErrors(validatedResumeData.error);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new MastraError(
-        {
-          id: 'WORKFLOW_STEP_RESUME_DATA_VALIDATION_FAILED',
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.USER,
-          text: 'Step resume data validation failed: \n' + errorMessages,
-        },
-        // keep the original zod error as the cause for consumers
-        validatedResumeData.error,
-      );
+      const errorMessages = validatedResumeData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new MastraError({
+        id: 'WORKFLOW_STEP_RESUME_DATA_VALIDATION_FAILED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'Step resume data validation failed: \n' + errorMessages,
+      });
     } else {
       resumeData = validatedResumeData.data;
     }
@@ -108,21 +121,16 @@ export async function validateStepSuspendData({
 
   const suspendSchema = step.suspendSchema;
 
-  if (suspendSchema && validateInputs && isZodType(suspendSchema)) {
-    const validatedSuspendData = await suspendSchema.safeParseAsync(suspendData);
+  if (suspendSchema && validateInputs) {
+    const validatedSuspendData = await validateWithStandardSchema(suspendSchema, suspendData);
     if (!validatedSuspendData.success) {
-      const errors = getZodErrors(validatedSuspendData.error!);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new MastraError(
-        {
-          id: 'WORKFLOW_STEP_SUSPEND_DATA_VALIDATION_FAILED',
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.USER,
-          text: 'Step suspend data validation failed: \n' + errorMessages,
-        },
-        // keep the original zod error as the cause for consumers
-        validatedSuspendData.error,
-      );
+      const errorMessages = validatedSuspendData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new MastraError({
+        id: 'WORKFLOW_STEP_SUSPEND_DATA_VALIDATION_FAILED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'Step suspend data validation failed: \n' + errorMessages,
+      });
     } else {
       suspendData = validatedSuspendData.data;
     }
@@ -147,11 +155,10 @@ export async function validateStepStateData({
 
   const stateSchema = step.stateSchema;
 
-  if (stateSchema && validateInputs && isZodType(stateSchema)) {
-    const validatedStateData = await stateSchema.safeParseAsync(stateData);
+  if (stateSchema && validateInputs) {
+    const validatedStateData = await validateWithStandardSchema(stateSchema, stateData);
     if (!validatedStateData.success) {
-      const errors = getZodErrors(validatedStateData.error!);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      const errorMessages = validatedStateData.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
       validationError = new Error('Step state data validation failed: \n' + errorMessages);
     } else {
       stateData = validatedStateData.data;
@@ -173,23 +180,18 @@ export async function validateStepRequestContext({
 
   const requestContextSchema = step.requestContextSchema;
 
-  if (requestContextSchema && validateInputs && isZodType(requestContextSchema)) {
+  if (requestContextSchema && validateInputs) {
     // Get all values from requestContext
     const contextValues = requestContext?.all ?? {};
-    const validatedRequestContext = await requestContextSchema.safeParseAsync(contextValues);
+    const validatedRequestContext = await validateWithStandardSchema(requestContextSchema, contextValues);
     if (!validatedRequestContext.success) {
-      const errors = getZodErrors(validatedRequestContext.error!);
-      const errorMessages = errors.map((e: z.ZodIssue) => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
-      validationError = new MastraError(
-        {
-          id: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.USER,
-          text: `Step request context validation failed for step '${step.id}': \n` + errorMessages,
-        },
-        // keep the original zod error as the cause for consumers
-        validatedRequestContext.error,
-      );
+      const errorMessages = validatedRequestContext.issues.map(e => `- ${e.path?.join('.')}: ${e.message}`).join('\n');
+      validationError = new MastraError({
+        id: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Step request context validation failed for step '${step.id}': \n` + errorMessages,
+      });
     }
   }
   return { validationError };
@@ -403,6 +405,7 @@ export const createTimeTravelExecutionParams = (params: {
     nestedStepResults: nestedStepsContext as any,
     state: initialState ?? snapshot.value ?? {},
     resumeData,
+    stepExecutionPath: snapshot?.stepExecutionPath,
   };
 
   return timeTravelData;
@@ -425,4 +428,84 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
     }
   }
   return steps;
+}
+
+/**
+ * Cleans a single step result object by removing internal properties.
+ * This is a helper for cleanStepResult that handles one level of cleaning.
+ */
+function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
+  const { __state: _state, metadata, ...rest } = result;
+
+  // Strip nestedRunId from metadata but keep other user-defined fields
+  if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    if (Object.keys(userMetadata).length > 0) {
+      return { ...rest, metadata: userMetadata };
+    }
+  }
+
+  return rest;
+}
+
+/**
+ * Cleans step result data by removing internal properties at known structural levels.
+ *
+ * Removes:
+ * - `__state` properties (internal workflow state for state propagation)
+ * - `nestedRunId` from `metadata` objects (internal tracking for nested workflow retrieval)
+ *
+ * ## Why targeted cleaning instead of recursive?
+ *
+ * Internal properties only appear at specific, known locations:
+ *
+ * 1. **`__state`** - Added by step-executor.ts to every step result. For forEach,
+ *    suspended iterations store the full result (including __state) while completed
+ *    iterations only store the output value. See workflow-event-processor/index.ts:1227-1230.
+ *
+ * 2. **`metadata.nestedRunId`** - Added when nested workflows complete, stored at the
+ *    step result level. For forEach with nested workflows, each iteration result can
+ *    have this. See workflow-event-processor/index.ts:1449-1453.
+ *
+ * By only cleaning at the step result level and forEach iteration level, we avoid
+ * accidentally stripping user data that happens to use `__state` as a property name
+ * in their actual output values.
+ *
+ * @param stepResult - A step result object, or an array of iteration results (forEach)
+ * @returns The cleaned step result with internal properties removed
+ */
+export function cleanStepResult(stepResult: unknown): unknown {
+  if (stepResult === null || stepResult === undefined) {
+    return stepResult;
+  }
+
+  if (typeof stepResult !== 'object') {
+    return stepResult;
+  }
+
+  // Handle arrays (forEach iteration results) - clean each element at the result level only
+  if (Array.isArray(stepResult)) {
+    return stepResult.map(item => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        return cleanSingleResult(item as Record<string, unknown>);
+      }
+      return item;
+    });
+  }
+
+  const result = stepResult as Record<string, unknown>;
+  const cleaned = cleanSingleResult(result);
+
+  // If output is an array (forEach results), clean each iteration result
+  // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)
+  if (Array.isArray(cleaned.output)) {
+    cleaned.output = cleaned.output.map((item: unknown) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        return cleanSingleResult(item as Record<string, unknown>);
+      }
+      return item;
+    });
+  }
+
+  return cleaned;
 }

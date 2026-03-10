@@ -59,6 +59,22 @@ describe('tokenize', () => {
     const tokens = tokenize('the a an');
     expect(tokens).toEqual([]);
   });
+
+  it('should support custom splitPattern to split on underscores and hyphens', () => {
+    const tokens = tokenize('github_create_issue', {
+      splitPattern: /[\s\-_.,;:!?()[\]{}'"]+/,
+      removePunctuation: false,
+      stopwords: new Set(),
+    });
+    expect(tokens).toEqual(['github', 'create', 'issue']);
+  });
+
+  it('should keep underscored names intact with default splitPattern', () => {
+    const tokens = tokenize('github_create_issue', {
+      stopwords: new Set(),
+    });
+    expect(tokens).toEqual(['github_create_issue']);
+  });
 });
 
 describe('BM25Index', () => {
