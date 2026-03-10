@@ -59,6 +59,7 @@ describe('MCP Tool Tracing', () => {
         serverVersion: '1.2.0',
       },
       tracingPolicy: undefined,
+      requestContext: expect.any(RequestContext),
     });
 
     expect(mockToolSpan.end).toHaveBeenCalledWith({ attributes: { success: true }, output: { files: ['/tmp'] } });
@@ -112,6 +113,7 @@ describe('MCP Tool Tracing', () => {
         toolType: 'tool',
       },
       tracingPolicy: undefined,
+      requestContext: expect.any(RequestContext),
     });
   });
 
