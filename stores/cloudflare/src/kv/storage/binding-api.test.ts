@@ -19,11 +19,11 @@ import dotenv from 'dotenv';
 import { Miniflare } from 'miniflare';
 import { vi } from 'vitest';
 
+import { CloudflareStore } from '..';
 import { MemoryStorageCloudflare } from './domains/memory';
 import { ScoresStorageCloudflare } from './domains/scores';
 import { WorkflowsStorageCloudflare } from './domains/workflows';
 import type { CloudflareWorkersConfig } from './types';
-import { CloudflareStore } from '.';
 
 export interface Env {
   [TABLE_THREADS]: KVNamespace;
