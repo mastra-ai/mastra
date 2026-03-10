@@ -32,6 +32,8 @@ type TracesListProps = {
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   groupByThread?: boolean;
+  threadTitles?: Record<string, string>;
+  columns?: typeof tracesListColumns;
 };
 
 function traceToEntry(trace: Trace, selectedTraceId?: string) {
@@ -92,11 +94,13 @@ function GroupedTracesList({
   selectedTraceId,
   onTraceClick,
   filtersApplied,
+  threadTitles,
 }: {
   traces: Trace[];
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
   filtersApplied?: boolean;
+  threadTitles?: Record<string, string>;
 }) {
   const { groups, ungrouped } = groupTracesByThread(traces as SpanRecord[]);
 
@@ -122,7 +126,11 @@ function GroupedTracesList({
               )}
             >
               <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Thread {getShortId(group.threadId) || group.threadId}</span>
+              <span className="truncate">
+                {threadTitles?.[group.threadId]
+                  ? <>Thread '{threadTitles[group.threadId]}' ({getShortId(group.threadId) || group.threadId})</>
+                  : <>Thread {getShortId(group.threadId) || group.threadId}</>}
+              </span>
               <span className="text-neutral3">({group.traces.length})</span>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -173,6 +181,8 @@ export function TracesList({
   isFetchingNextPage,
   hasNextPage,
   groupByThread,
+  threadTitles,
+  columns = tracesListColumns,
 }: TracesListProps) {
   if (!traces) {
     return null;
@@ -192,6 +202,7 @@ export function TracesList({
             selectedTraceId={selectedTraceId}
             onTraceClick={onTraceClick}
             filtersApplied={filtersApplied}
+            threadTitles={threadTitles}
           />
         )}
         <EntryList.NextPageLoading
