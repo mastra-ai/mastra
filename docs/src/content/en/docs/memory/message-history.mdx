@@ -125,6 +125,8 @@ When `maxTokens` is set, Mastra automatically adds a `MemoryTokenLimiter` proces
 1. If the total exceeds `maxTokens`, removes the oldest memory history messages first
 1. Never removes input messages from the current turn
 
+Token estimation uses a character count / 4 approximation, which works well for English text. For CJK languages (Japanese, Chinese, Korean), actual token counts may differ. Consider setting `maxTokens` conservatively (e.g., 80% of your model's context window) to account for estimation variance.
+
 You can use `maxTokens` alongside `lastMessages` to apply both count-based and token-based limits. This is useful for preventing context window overflow while keeping a reasonable number of recent messages.
 
 ## Accessing Memory

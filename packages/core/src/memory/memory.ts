@@ -688,7 +688,7 @@ https://mastra.ai/en/docs/memory/overview`,
     }
 
     // Add memory token limiter if maxTokens is configured
-    if (effectiveConfig.maxTokens) {
+    if (effectiveConfig.maxTokens !== undefined) {
       const hasTokenLimiter = configuredProcessors.some(
         p => !isProcessorWorkflow(p) && p.id === 'memory-token-limiter',
       );

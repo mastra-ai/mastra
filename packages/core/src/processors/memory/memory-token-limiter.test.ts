@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../agent';
 import { MessageList } from '../../agent';
+import { MockMemory } from '../../memory/mock';
 
 import { MemoryTokenLimiter } from './memory-token-limiter';
 
@@ -154,5 +155,94 @@ describe('MemoryTokenLimiter', () => {
   it('should have the correct processor id', () => {
     const limiter = new MemoryTokenLimiter({ maxTokens: 100_000 });
     expect(limiter.id).toBe('memory-token-limiter');
+  });
+
+  it('should remove all memory messages when maxTokens is 0', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 0 });
+    const messageList = new MessageList();
+
+    messageList.add(createMessage('mem-1', 'user', 'Hello'), 'memory');
+    messageList.add(createMessage('mem-2', 'assistant', 'Hi there'), 'memory');
+    messageList.add(createMessage('input-1', 'user', 'New message'), 'input');
+
+    await limiter.processInput({
+      messages: messageList.get.all.db(),
+      messageList,
+      abort: createAbort(),
+      systemMessages: [],
+      state: {},
+      retryCount: 0,
+    });
+
+    expect(messageList.get.remembered.db()).toHaveLength(0);
+    expect(messageList.get.input.db()).toHaveLength(1);
+  });
+
+  it('should handle no memory messages gracefully', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 10 });
+    const messageList = new MessageList();
+
+    // Only input messages, no memory
+    messageList.add(createMessage('input-1', 'user', 'x'.repeat(1000)), 'input');
+
+    await limiter.processInput({
+      messages: messageList.get.all.db(),
+      messageList,
+      abort: createAbort(),
+      systemMessages: [],
+      state: {},
+      retryCount: 0,
+    });
+
+    // Input messages are never removed even if over budget
+    expect(messageList.get.input.db()).toHaveLength(1);
+    expect(messageList.get.all.db()).toHaveLength(1);
+  });
+
+  it('should preserve input messages even when they alone exceed maxTokens', async () => {
+    const limiter = new MemoryTokenLimiter({ maxTokens: 10 });
+    const messageList = new MessageList();
+
+    // Large input that exceeds maxTokens by itself
+    messageList.add(createMessage('input-1', 'user', 'x'.repeat(5000)), 'input');
+    // Small memory message
+    messageList.add(createMessage('mem-1', 'user', 'Hi'), 'memory');
+
+    await limiter.processInput({
+      messages: messageList.get.all.db(),
+      messageList,
+      abort: createAbort(),
+      systemMessages: [],
+      state: {},
+      retryCount: 0,
+    });
+
+    // Memory removed, but input preserved even though still over budget
+    expect(messageList.get.remembered.db()).toHaveLength(0);
+    expect(messageList.get.input.db()).toHaveLength(1);
+    expect(messageList.get.input.db()[0]!.id).toBe('input-1');
+  });
+});
+
+describe('Memory.getInputProcessors with maxTokens', () => {
+  it('should auto-add MemoryTokenLimiter when maxTokens is configured', async () => {
+    const memory = new MockMemory();
+    // Override threadConfig to include maxTokens
+    (memory as any).threadConfig = {
+      ...(memory as any).threadConfig,
+      maxTokens: 100_000,
+    };
+
+    const processors = await memory.getInputProcessors();
+    const tokenLimiter = processors.find(p => p.id === 'memory-token-limiter');
+    expect(tokenLimiter).toBeDefined();
+  });
+
+  it('should NOT add MemoryTokenLimiter when maxTokens is not configured', async () => {
+    const memory = new MockMemory();
+
+    const processors = await memory.getInputProcessors();
+    const tokenLimiter = processors.find(p => p.id === 'memory-token-limiter');
+    expect(tokenLimiter).toBeUndefined();
   });
 });
