@@ -50,7 +50,7 @@
     "hast-util-to-jsx-runtime": "^2.3.6",
     "lucide-react": "^0.522.0",
     "shiki": "^1.29.2",
-    "tailwind-merge": "^3.4.1"
+    "tailwind-merge": "^3.5.0"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.8.0-0 <2.0.0-0",

@@ -561,7 +561,7 @@ importers:
         specifier: ^1.29.2
         version: 1.29.2
       tailwind-merge:
-        specifier: ^3.4.1
+        specifier: ^3.5.0
         version: 3.5.0
     devDependencies:
       '@ai-sdk/react':
@@ -3983,7 +3983,7 @@ importers:
         specifier: ^9.1.10
         version: 9.1.13(@testing-library/dom@10.4.1)(msw@2.12.10(@types/node@22.19.13)(typescript@5.9.3))(prettier@3.8.1)(vite@7.3.1(@types/node@22.19.13)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1))
       tailwind-merge:
-        specifier: ^3.4.1
+        specifier: ^3.5.0
         version: 3.5.0
       tailwindcss:
         specifier: ^3.4.18
