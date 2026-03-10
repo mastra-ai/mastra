@@ -15,7 +15,10 @@ const levelFilter = args.includes('--level') ? parseInt(args[args.indexOf('--lev
 const hasLevelFilter = levelFilter !== null && !isNaN(levelFilter)
 
 const input = readFileSync('/dev/stdin', 'utf8')
-const lines = input.trim().split('\n').filter(l => l.includes('HeadingSentenceCase'))
+const lines = input
+  .trim()
+  .split('\n')
+  .filter(l => l.includes('HeadingSentenceCase'))
 
 const entries = []
 
