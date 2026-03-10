@@ -76,6 +76,10 @@ const VECTOR_DELETE_BATCH_SIZE = 100;
  * and message injection.
  */
 export class Memory extends MastraMemory {
+  /** Cached OM engine instance — created lazily by getOMEngine(). */
+  private _omEngine: any | null = null;
+  private _omEngineInitPromise: Promise<any | null> | null = null;
+
   constructor(config: Omit<SharedMemoryConfig, 'working'> = {}) {
     super({ name: 'Memory', ...config });
 
@@ -1042,6 +1046,170 @@ ${workingMemory}`;
           template: workingMemoryTemplate,
           data: workingMemoryData,
         });
+  }
+
+  /**
+   * Get everything needed for an LLM call in one shot.
+   *
+   * Assembles the system message (observations + working memory), loads
+   * unobserved messages from storage, and returns them ready to use.
+   *
+   * @example
+   * ```ts
+   * const ctx = await memory.getContext({ threadId });
+   * const result = await generateText({
+   *   model: openai('gpt-4o'),
+   *   system: ctx.systemMessage,
+   *   messages: ctx.messages.map(toAiSdkMessage),
+   * });
+   * ```
+   */
+  public async getContext(opts: {
+    threadId: string;
+    resourceId?: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<{
+    /** Fully-formed system message (observations + instructions + working memory), or undefined if none. */
+    systemMessage: string | undefined;
+    /** Messages for the LLM — unobserved messages if OM is active, or recent messages from history. */
+    messages: MastraDBMessage[];
+    /** Whether observations exist for this thread. */
+    hasObservations: boolean;
+    /** The OM record, if OM is active. */
+    omRecord: ObservationalMemoryRecord | null;
+  }> {
+    const { threadId, resourceId, memoryConfig } = opts;
+    const config = this.getMergedThreadConfig(memoryConfig);
+    const memoryStore = await this.getMemoryStore();
+
+    // Build system message parts
+    const systemParts: string[] = [];
+
+    // 1. OM observations system message
+    let hasObservations = false;
+    let omRecord: ObservationalMemoryRecord | null = null;
+
+    const omEngine = await this.getOMEngine();
+    if (omEngine) {
+      omRecord = await omEngine.getRecord(threadId, resourceId);
+      if (omRecord?.activeObservations) {
+        hasObservations = true;
+        const obsSystemMessage = await omEngine.buildContextSystemMessage({
+          threadId,
+          resourceId,
+          record: omRecord,
+        });
+        if (obsSystemMessage) {
+          systemParts.push(obsSystemMessage);
+        }
+      }
+    }
+
+    // 2. Working memory system message
+    const workingMemoryMessage = await this.getSystemMessage({ threadId, resourceId, memoryConfig: config });
+    if (workingMemoryMessage) {
+      systemParts.push(workingMemoryMessage);
+    }
+
+    // 3. Load messages — unobserved if OM is active, or recent N
+    let messages: MastraDBMessage[];
+    if (hasObservations && omRecord?.lastObservedAt) {
+      // OM is active: load messages after the observation boundary
+      const result = await memoryStore.listMessages({
+        threadId,
+        resourceId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+        perPage: false,
+        filter: {
+          dateRange: {
+            start: new Date(omRecord.lastObservedAt),
+            startExclusive: true,
+          },
+        },
+      });
+      messages = result.messages;
+    } else {
+      // No OM or no observations yet: load recent messages
+      const lastMessages = config.lastMessages;
+      if (lastMessages === false) {
+        messages = [];
+      } else {
+        const result = await memoryStore.listMessages({
+          threadId,
+          resourceId,
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+          perPage: typeof lastMessages === 'number' ? lastMessages : undefined,
+        });
+        messages = result.messages.reverse(); // DESC → chronological order
+      }
+    }
+
+    return {
+      systemMessage: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
+      messages,
+      hasObservations,
+      omRecord,
+    };
+  }
+
+  /**
+   * Get or create the cached ObservationalMemory engine instance.
+   * Returns null if OM is not configured.
+   */
+  private async getOMEngine(): Promise<any | null> {
+    if (this._omEngine !== null) return this._omEngine;
+    if (this._omEngineInitPromise) return this._omEngineInitPromise;
+
+    this._omEngineInitPromise = (async () => {
+      const omConfig = normalizeObservationalMemoryConfig(this.threadConfig.observationalMemory);
+      if (!omConfig) {
+        this._omEngine = null;
+        return null;
+      }
+
+      const memoryStore = await this.storage.getStore('memory');
+      if (!memoryStore || !memoryStore.supportsObservationalMemory) {
+        this._omEngine = null;
+        return null;
+      }
+
+      const { ObservationalMemory } = await import('./processors/observational-memory');
+
+      this._omEngine = new ObservationalMemory({
+        storage: memoryStore,
+        scope: omConfig.scope,
+        shareTokenBudget: omConfig.shareTokenBudget,
+        model: omConfig.model,
+        observation: omConfig.observation
+          ? {
+              model: omConfig.observation.model,
+              messageTokens: omConfig.observation.messageTokens,
+              modelSettings: omConfig.observation.modelSettings,
+              maxTokensPerBatch: omConfig.observation.maxTokensPerBatch,
+              providerOptions: omConfig.observation.providerOptions,
+              bufferTokens: omConfig.observation.bufferTokens,
+              bufferActivation: omConfig.observation.bufferActivation,
+              blockAfter: omConfig.observation.blockAfter,
+              instruction: omConfig.observation.instruction,
+            }
+          : undefined,
+        reflection: omConfig.reflection
+          ? {
+              model: omConfig.reflection.model,
+              observationTokens: omConfig.reflection.observationTokens,
+              modelSettings: omConfig.reflection.modelSettings,
+              providerOptions: omConfig.reflection.providerOptions,
+              bufferActivation: omConfig.reflection.bufferActivation,
+              blockAfter: omConfig.reflection.blockAfter,
+              instruction: omConfig.reflection.instruction,
+            }
+          : undefined,
+      });
+
+      return this._omEngine;
+    })();
+
+    return this._omEngineInitPromise;
   }
 
   public defaultWorkingMemoryTemplate = `

@@ -4419,6 +4419,52 @@ ${formattedMessages}
   }
 
   /**
+   * Build the observation system message string for injection into an LLM prompt.
+   *
+   * Loads thread metadata (currentTask, suggestedResponse), formats observations
+   * with context prompts and instructions, and returns the fully-formed string.
+   * Returns undefined if no observations exist.
+   *
+   * This is the public entry point for context formatting — used by both
+   * Memory.getContext() (standalone) and the processor (via injectObservationsIntoMessages).
+   *
+   * @example
+   * ```ts
+   * const systemMsg = await om.buildContextSystemMessage({ threadId: 'thread-1' });
+   * if (systemMsg) {
+   *   const result = await generateText({ system: systemMsg, messages });
+   * }
+   * ```
+   */
+  async buildContextSystemMessage(opts: {
+    threadId: string;
+    resourceId?: string;
+    record?: ObservationalMemoryRecord;
+    unobservedContextBlocks?: string;
+    currentDate?: Date;
+  }): Promise<string | undefined> {
+    const { threadId, resourceId, unobservedContextBlocks } = opts;
+    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+
+    if (!record.activeObservations) return undefined;
+
+    // Read thread metadata for continuation hints
+    const thread = await this.storage.getThreadById({ threadId });
+    const omMetadata = getThreadOMMetadata(thread?.metadata);
+    const currentTask = omMetadata?.currentTask;
+    const suggestedResponse = omMetadata?.suggestedResponse;
+    const currentDate = opts.currentDate ?? new Date();
+
+    return this.formatObservationsForContext(
+      record.activeObservations,
+      currentTask,
+      suggestedResponse,
+      unobservedContextBlocks,
+      currentDate,
+    );
+  }
+
+  /**
    * Inject observations into the message list as a system message.
    *
    * Reads thread metadata for continuation hints, formats observations,
@@ -4435,11 +4481,8 @@ ${formattedMessages}
   }): Promise<void> {
     const { messageList, record, threadId, unobservedContextBlocks, requestContext } = opts;
 
-    // Read thread metadata for continuation hints
-    const thread = await this.storage.getThreadById({ threadId });
-    const omMetadata = getThreadOMMetadata(thread?.metadata);
-    const currentTask = omMetadata?.currentTask;
-    const suggestedResponse = omMetadata?.suggestedResponse;
+    if (!record.activeObservations) return;
+
     const rawCurrentDate = requestContext?.get('currentDate');
     const currentDate =
       rawCurrentDate instanceof Date
@@ -4448,15 +4491,15 @@ ${formattedMessages}
           ? new Date(rawCurrentDate)
           : new Date();
 
-    if (!record.activeObservations) return;
-
-    const observationSystemMessage = this.formatObservationsForContext(
-      record.activeObservations,
-      currentTask,
-      suggestedResponse,
+    const observationSystemMessage = await this.buildContextSystemMessage({
+      threadId,
+      resourceId: opts.resourceId,
+      record,
       unobservedContextBlocks,
       currentDate,
-    );
+    });
+
+    if (!observationSystemMessage) return;
 
     messageList.clearSystemMessages('observational-memory');
     messageList.addSystem(observationSystemMessage, 'observational-memory');
@@ -5033,6 +5076,9 @@ ${formattedMessages}
    * When `messages` is provided, those are used directly (filtered for unobserved)
    * instead of reading from storage. This allows external systems (e.g., opencode)
    * to pass conversation messages without duplicating them into Mastra's DB.
+   *
+   * Returns a result indicating whether observation and/or reflection occurred,
+   * along with the updated record.
    */
   async observe(opts: {
     threadId: string;
@@ -5040,16 +5086,24 @@ ${formattedMessages}
     messages?: MastraDBMessage[];
     hooks?: ObserveHooks;
     requestContext?: RequestContext;
-  }): Promise<void> {
+  }): Promise<{
+    observed: boolean;
+    reflected: boolean;
+    record: ObservationalMemoryRecord;
+  }> {
     const { threadId, resourceId, messages, hooks, requestContext } = opts;
     const lockKey = this.getLockKey(threadId, resourceId);
     const reflectionHooks = hooks
       ? { onReflectionStart: hooks.onReflectionStart, onReflectionEnd: hooks.onReflectionEnd }
       : undefined;
 
+    let observed = false;
+    let generationBefore = -1;
+
     await this.withLock(lockKey, async () => {
       // Re-fetch record inside lock to get latest state
       const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
+      generationBefore = freshRecord.generationCount;
 
       if (this.scope === 'resource' && resourceId) {
         // Resource scope: check threshold before observing
@@ -5073,6 +5127,7 @@ ${formattedMessages}
             reflectionHooks,
             requestContext,
           });
+          observed = true;
         } finally {
           hooks?.onObservationEnd?.();
         }
@@ -5109,11 +5164,17 @@ ${formattedMessages}
             reflectionHooks,
             requestContext,
           });
+          observed = true;
         } finally {
           hooks?.onObservationEnd?.();
         }
       }
     });
+
+    // Fetch the latest record after lock release
+    const record = await this.getOrCreateRecord(threadId, resourceId);
+    const reflected = record.generationCount > generationBefore && generationBefore >= 0;
+    return { observed, reflected, record };
   }
 
   /**
