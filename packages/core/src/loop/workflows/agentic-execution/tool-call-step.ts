@@ -2,6 +2,7 @@ import type { ToolSet } from '@internal/ai-sdk-v5';
 import z from 'zod/v4';
 import type { MastraDBMessage } from '../../../memory';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
+import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import type { SuspendOptions } from '../../../workflows';
@@ -27,18 +28,23 @@ type AddToolMetadataOptions = {
     }
 );
 
-export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
-  tools,
-  messageList,
-  options,
-  outputWriter,
-  controller,
-  runId,
-  streamState,
-  modelSpanTracker,
-  _internal,
-  logger,
-}: OuterLLMRun<Tools, OUTPUT>) {
+export type ToolChunkEmitter<OUTPUT = undefined> = (chunk: ChunkType<OUTPUT>) => Promise<ChunkType<OUTPUT> | null>;
+
+export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
+  {
+    tools,
+    messageList,
+    options,
+    outputWriter,
+    controller,
+    runId,
+    streamState,
+    modelSpanTracker,
+    _internal,
+    logger,
+  }: OuterLLMRun<Tools, OUTPUT>,
+  chunkEmitter?: ToolChunkEmitter<OUTPUT>,
+) {
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -555,8 +561,48 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // Emit tool-result chunk immediately so the stream consumer sees it
+        // as soon as this tool finishes, rather than waiting for all parallel
+        // tools to complete (which is what happens when llmMappingStep emits).
+        if (chunkEmitter) {
+          const chunk: ChunkType<OUTPUT> = {
+            type: 'tool-result',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              args: inputData.args,
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              result,
+              providerMetadata: inputData.providerMetadata,
+              providerExecuted: inputData.providerExecuted,
+            },
+          };
+          const processed = await chunkEmitter(chunk);
+          if (processed) await options?.onChunk?.(processed);
+        }
+
         return { result, ...inputData };
       } catch (error) {
+        // Emit tool-error chunk immediately so the stream consumer sees it
+        // as soon as this tool fails, rather than waiting for all parallel tools.
+        if (chunkEmitter) {
+          const chunk: ChunkType<OUTPUT> = {
+            type: 'tool-error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              error: error as Error,
+              args: inputData.args,
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              providerMetadata: inputData.providerMetadata,
+            },
+          };
+          const processed = await chunkEmitter(chunk);
+          if (processed) await options?.onChunk?.(processed);
+        }
+
         return {
           error: error as Error,
           ...inputData,

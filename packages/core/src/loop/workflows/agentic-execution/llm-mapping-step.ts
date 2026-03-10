@@ -14,6 +14,7 @@ import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
+  options?: { chunksAlreadyEmitted?: boolean },
 ) {
   /**
    * Output processor handling for tool-result and tool-error chunks.
@@ -131,21 +132,24 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         const toolResultMessageId = rest.experimental_generateMessageId?.() || _internal?.generateId?.();
 
         if (errorResults?.length) {
-          for (const toolCall of errorResults) {
-            const chunk: ChunkType<OUTPUT> = {
-              type: 'tool-error',
-              runId: rest.runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                error: toolCall.error,
-                args: toolCall.args,
-                toolCallId: toolCall.toolCallId,
-                toolName: toolCall.toolName,
-                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
-              },
-            };
-            const processed = await processAndEnqueueChunk(chunk);
-            if (processed) await rest.options?.onChunk?.(processed);
+          // Skip chunk emission if already emitted by toolCallStep (incremental streaming)
+          if (!options?.chunksAlreadyEmitted) {
+            for (const toolCall of errorResults) {
+              const chunk: ChunkType<OUTPUT> = {
+                type: 'tool-error',
+                runId: rest.runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  error: toolCall.error,
+                  args: toolCall.args,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                },
+              };
+              const processed = await processAndEnqueueChunk(chunk);
+              if (processed) await rest.options?.onChunk?.(processed);
+            }
           }
 
           const msg: MastraDBMessage = {
@@ -191,22 +195,25 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // results need their chunks emitted and messages added to the messageList.
           const successfulResults = inputData.filter(tc => tc.result !== undefined);
           if (successfulResults.length) {
-            for (const toolCall of successfulResults) {
-              const chunk: ChunkType<OUTPUT> = {
-                type: 'tool-result',
-                runId: rest.runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  args: toolCall.args,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: toolCall.toolName,
-                  result: toolCall.result,
-                  providerMetadata: toolCall.providerMetadata,
-                  providerExecuted: toolCall.providerExecuted,
-                },
-              };
-              const processed = await processAndEnqueueChunk(chunk);
-              if (processed) await rest.options?.onChunk?.(processed);
+            // Skip chunk emission if already emitted by toolCallStep (incremental streaming)
+            if (!options?.chunksAlreadyEmitted) {
+              for (const toolCall of successfulResults) {
+                const chunk: ChunkType<OUTPUT> = {
+                  type: 'tool-result',
+                  runId: rest.runId,
+                  from: ChunkFrom.AGENT,
+                  payload: {
+                    args: toolCall.args,
+                    toolCallId: toolCall.toolCallId,
+                    toolName: toolCall.toolName,
+                    result: toolCall.result,
+                    providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                    providerExecuted: toolCall.providerExecuted,
+                  },
+                };
+                const processed = await processAndEnqueueChunk(chunk);
+                if (processed) await rest.options?.onChunk?.(processed);
+              }
             }
 
             // Split client-executed and provider-executed tools the same way as the main path
@@ -300,23 +307,26 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       }
 
       if (inputData?.length) {
-        for (const toolCall of inputData) {
-          const chunk: ChunkType<OUTPUT> = {
-            type: 'tool-result',
-            runId: rest.runId,
-            from: ChunkFrom.AGENT,
-            payload: {
-              args: toolCall.args,
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-              result: toolCall.result,
-              providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
-              providerExecuted: toolCall.providerExecuted,
-            },
-          };
+        // Skip chunk emission if already emitted by toolCallStep (incremental streaming)
+        if (!options?.chunksAlreadyEmitted) {
+          for (const toolCall of inputData) {
+            const chunk: ChunkType<OUTPUT> = {
+              type: 'tool-result',
+              runId: rest.runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                args: toolCall.args,
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                result: toolCall.result,
+                providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
+                providerExecuted: toolCall.providerExecuted,
+              },
+            };
 
-          const processed = await processAndEnqueueChunk(chunk);
-          if (processed) await rest.options?.onChunk?.(processed);
+            const processed = await processAndEnqueueChunk(chunk);
+            if (processed) await rest.options?.onChunk?.(processed);
+          }
         }
 
         // Exclude provider-executed tools from the tool-result message. These tools (e.g.
