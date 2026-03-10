@@ -234,12 +234,12 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).toContain("window.MASTRA_SERVER_PORT = '4111'");
     });
 
-    it('should use publicHost for MASTRA_SERVER_HOST when set', async () => {
+    it('should use studioHost for MASTRA_SERVER_HOST when set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         studioBase: '/',
         port: 4111,
         host: '0.0.0.0',
-        publicHost: 'my-app.run.app',
+        studioHost: 'my-app.run.app',
       });
       const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
@@ -251,7 +251,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).not.toContain("window.MASTRA_SERVER_HOST = '0.0.0.0'");
     });
 
-    it('should fall back to host when publicHost is not set', async () => {
+    it('should fall back to host when studioHost is not set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         studioBase: '/',
         port: 4111,
@@ -265,13 +265,13 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).toContain("window.MASTRA_SERVER_HOST = 'api.example.com'");
     });
 
-    it('should use publicProtocol for MASTRA_SERVER_PROTOCOL when set', async () => {
+    it('should use studioProtocol for MASTRA_SERVER_PROTOCOL when set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         studioBase: '/',
         port: 4111,
         host: '0.0.0.0',
-        publicHost: 'my-app.run.app',
-        publicProtocol: 'https',
+        studioHost: 'my-app.run.app',
+        studioProtocol: 'https',
       });
       const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
@@ -282,7 +282,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).toContain("window.MASTRA_SERVER_HOST = 'my-app.run.app'");
     });
 
-    it('should fall back to auto-detected protocol when publicProtocol is not set', async () => {
+    it('should fall back to auto-detected protocol when studioProtocol is not set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         studioBase: '/',
         port: 4111,
@@ -297,14 +297,14 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).toContain("window.MASTRA_SERVER_PROTOCOL = 'http'");
     });
 
-    it('should use publicPort for MASTRA_SERVER_PORT when set', async () => {
+    it('should use studioPort for MASTRA_SERVER_PORT when set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         studioBase: '/',
         port: 8080,
         host: '0.0.0.0',
-        publicHost: 'my-app.run.app',
-        publicProtocol: 'https',
-        publicPort: 443,
+        studioHost: 'my-app.run.app',
+        studioProtocol: 'https',
+        studioPort: 443,
       });
       const app = await createHonoServer(mockMastra, { tools: {}, studio: true });
 
@@ -315,7 +315,7 @@ describe('Mastra Studio "studioBase" functionality', () => {
       expect(html).not.toContain("window.MASTRA_SERVER_PORT = '8080'");
     });
 
-    it('should fall back to port when publicPort is not set', async () => {
+    it('should fall back to port when studioPort is not set', async () => {
       vi.mocked(mockMastra.getServer).mockReturnValue({
         studioBase: '/',
         port: 5000,
