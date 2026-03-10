@@ -182,27 +182,6 @@ export const mastra = new Mastra({
 })
 ```
 
-### How custom routes appear in the OpenAPI spec
-
-Custom routes are served at the root path (e.g. `http://localhost:4111/health`), while built-in Mastra routes are served under the `/api` prefix (e.g. `http://localhost:4111/api/agents`). To reflect this, the generated OpenAPI spec uses a per-path [`servers` override](https://spec.openapis.org/oas/v3.1.0#path-item-object) on custom route paths:
-
-```json
-{
-  "servers": [{ "url": "/api" }],
-  "paths": {
-    "/agents": {
-      "get": { "summary": "List agents" }
-    },
-    "/health": {
-      "servers": [{ "url": "/" }],
-      "get": { "summary": "Health check" }
-    }
-  }
-}
-```
-
-OpenAPI-compliant clients resolve built-in routes against `/api` (the top-level `servers`) and custom routes against `/` (the path-level override).
-
 ### Viewing in Swagger UI
 
 When running in development mode (`mastra dev`) or with `swaggerUI: true` in build options, your custom routes appear in the Swagger UI at `/swagger-ui`.
