@@ -9,7 +9,7 @@
 
 import { createRequire } from 'node:module';
 
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
@@ -80,7 +80,7 @@ export async function loadAstGrep(): Promise<AstGrepModule | null> {
       try {
         // Dynamic import with string concatenation to prevent bundlers from resolving at build time
         const moduleName = '@ast-grep' + '/napi';
-        const mod = await import(/* webpackIgnore: true */ moduleName);
+        const mod = await import(/* @vite-ignore */ /* webpackIgnore: true */ moduleName);
         astGrepModule = { parse: mod.parse, Lang: mod.Lang };
         return astGrepModule;
       } catch {
@@ -448,13 +448,13 @@ Pattern replace (for everything else):
       content = await filesystem.readFile(path, { encoding: 'utf-8' });
     } catch (error) {
       if (error instanceof FileNotFoundError) {
-        return `File not found: ${path}. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} to create it first.`;
+        return `File not found: ${path}. Use the write file tool to create it first.`;
       }
       throw error;
     }
 
     if (typeof content !== 'string') {
-      return `Cannot perform AST edits on binary files. Use ${WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE} instead.`;
+      return `Cannot perform AST edits on binary files. Use the write file tool instead.`;
     }
 
     // Parse AST

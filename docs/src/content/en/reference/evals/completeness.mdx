@@ -12,7 +12,7 @@ The `createCompletenessScorer()` function evaluates how thoroughly an LLM's outp
 
 ## Parameters
 
-The `createCompletenessScorer()` function does not take any options.
+The `createCompletenessScorer()` function doesn't take any options.
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
@@ -20,23 +20,22 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "preprocessStepResult",
-type: "object",
-description:
-"Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }",
-},
-{
-name: "score",
-type: "number",
-description:
-"Completeness score (0-1) representing the proportion of input elements covered in the output.",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description:
+      'Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Completeness score (0-1) representing the proportion of input elements covered in the output.',
+  },
 ]}
 />
 

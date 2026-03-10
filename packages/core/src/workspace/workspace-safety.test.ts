@@ -64,10 +64,10 @@ describe('Workspace Safety Features', () => {
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Should fail - file exists but wasn't read via read_file tool
-      await expect(writeTool.execute({ path: '/existing.txt', content: 'modified' })).rejects.toThrow(
+      await expect(writeTool.execute({ path: '/existing.txt', content: 'modified' }, { workspace })).rejects.toThrow(
         FileReadRequiredError,
       );
-      await expect(writeTool.execute({ path: '/existing.txt', content: 'modified' })).rejects.toThrow(
+      await expect(writeTool.execute({ path: '/existing.txt', content: 'modified' }, { workspace })).rejects.toThrow(
         'has not been read',
       );
 
@@ -94,10 +94,10 @@ describe('Workspace Safety Features', () => {
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Read first via tool
-      await readTool.execute({ path: '/test.txt' });
+      await readTool.execute({ path: '/test.txt' }, { workspace });
 
       // Now write should succeed
-      await writeTool.execute({ path: '/test.txt', content: 'modified' });
+      await writeTool.execute({ path: '/test.txt', content: 'modified' }, { workspace });
 
       const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('modified');
@@ -120,7 +120,7 @@ describe('Workspace Safety Features', () => {
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Should succeed - new file doesn't require reading
-      await writeTool.execute({ path: '/new-file.txt', content: 'content' });
+      await writeTool.execute({ path: '/new-file.txt', content: 'content' }, { workspace });
 
       const content = await workspace.filesystem!.readFile('/new-file.txt', { encoding: 'utf-8' });
       expect(content).toBe('content');
@@ -147,15 +147,17 @@ describe('Workspace Safety Features', () => {
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Read and write
-      await readTool.execute({ path: '/test.txt' });
-      await writeTool.execute({ path: '/test.txt', content: 'v2' });
+      await readTool.execute({ path: '/test.txt' }, { workspace });
+      await writeTool.execute({ path: '/test.txt', content: 'v2' }, { workspace });
 
       // Second write without re-reading should fail
-      await expect(writeTool.execute({ path: '/test.txt', content: 'v3' })).rejects.toThrow(FileReadRequiredError);
+      await expect(writeTool.execute({ path: '/test.txt', content: 'v3' }, { workspace })).rejects.toThrow(
+        FileReadRequiredError,
+      );
 
       // Read again and write should succeed
-      await readTool.execute({ path: '/test.txt' });
-      await writeTool.execute({ path: '/test.txt', content: 'v3' });
+      await readTool.execute({ path: '/test.txt' }, { workspace });
+      await writeTool.execute({ path: '/test.txt', content: 'v3' }, { workspace });
 
       const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('v3');
@@ -177,7 +179,7 @@ describe('Workspace Safety Features', () => {
       const writeTool = tools[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE];
 
       // Should succeed without reading first
-      await writeTool.execute({ path: '/test.txt', content: 'modified' });
+      await writeTool.execute({ path: '/test.txt', content: 'modified' }, { workspace });
 
       const content = await workspace.filesystem!.readFile('/test.txt', { encoding: 'utf-8' });
       expect(content).toBe('modified');
@@ -204,13 +206,16 @@ describe('Workspace Safety Features', () => {
       const editTool = tools[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE];
 
       // Should fail - file wasn't read via read_file tool
-      await expect(editTool.execute({ path: '/test.txt', old_string: 'hello', new_string: 'goodbye' })).rejects.toThrow(
-        FileReadRequiredError,
-      );
+      await expect(
+        editTool.execute({ path: '/test.txt', old_string: 'hello', new_string: 'goodbye' }, { workspace }),
+      ).rejects.toThrow(FileReadRequiredError);
 
       // Read first, then edit should succeed
-      await readTool.execute({ path: '/test.txt' });
-      const result = await editTool.execute({ path: '/test.txt', old_string: 'hello', new_string: 'goodbye' });
+      await readTool.execute({ path: '/test.txt' }, { workspace });
+      const result = await editTool.execute(
+        { path: '/test.txt', old_string: 'hello', new_string: 'goodbye' },
+        { workspace },
+      );
       expect(typeof result).toBe('string');
       expect(result).toContain('Replaced 1 occurrence');
 

@@ -50,7 +50,7 @@ const agent = new Agent({
 
 ## Using the recall() Method
 
-While `listMessages` retrieves messages by thread ID with basic pagination, [`recall()`](/reference/memory/recall) adds support for **semantic search**. When you need to find messages by meaning rather than just recency, use `recall()` with a `vectorSearchString`:
+While `listMessages` retrieves messages by thread ID with basic pagination, [`recall()`](/reference/memory/recall) adds support for **semantic search**. When you need to find messages by meaning rather than recency, use `recall()` with a `vectorSearchString`:
 
 ```typescript
 const memory = await agent.getMemory()
@@ -162,8 +162,24 @@ Supported embedding models:
 
 - **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
 - **Google**: `gemini-embedding-001`
+- **OpenRouter**: Access embedding models from various providers
 
-The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`).
+```ts {7}
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+
+const agent = new Agent({
+  memory: new Memory({
+    embedder: new ModelRouterEmbeddingModel({
+      providerId: 'openrouter',
+      modelId: 'openai/text-embedding-3-small',
+    }),
+  }),
+})
+```
+
+The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENROUTER_API_KEY`).
 
 ### Using AI SDK Packages
 
@@ -243,7 +259,7 @@ For detailed information about index configuration options and performance tunin
 
 ## Disabling
 
-There is a performance impact to using semantic recall. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
+Semantic recall has a performance impact. New messages are converted into embeddings and used to query a vector database before new messages are sent to the LLM.
 
 Semantic recall is enabled by default but can be disabled when not needed:
 

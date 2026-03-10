@@ -69,6 +69,8 @@ Subagent definitions for spawning focused child agents.
 | `tools` | `ToolsInput` | No | Tools available to this subagent |
 | `allowedHarnessTools` | `string[]` | No | Tool IDs from harness tools this subagent can use |
 | `defaultModelId` | `string` | No | Default model for this subagent type |
+| `maxSteps` | `number` | No | Optional maximum number of steps for the spawned subagent; defaults to `50` |
+| `stopWhen` | `LoopOptions['stopWhen']` | No | Optional stop condition for the spawned subagent loop |
 
 #### `StorageConfig`
 

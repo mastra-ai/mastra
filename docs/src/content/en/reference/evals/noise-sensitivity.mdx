@@ -11,7 +11,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 The `createNoiseSensitivityScorerLLM()` function creates a **CI/testing scorer** that evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information. Unlike live scorers that evaluate single production runs, this scorer requires predetermined test data including both baseline responses and noisy variations.
 
-**Important:** This is not a live scorer. It requires pre-computed baseline responses and cannot be used for real-time agent evaluation. Use this scorer in your CI/CD pipeline or testing suites only.
+**Important:** This isn't a live scorer. It requires pre-computed baseline responses and can't be used for real-time agent evaluation. Use this scorer in your CI/CD pipeline or testing suites only.
 
 Before using the noise sensitivity scorer, prepare your test data:
 
@@ -24,117 +24,112 @@ Before using the noise sensitivity scorer, prepare your test data:
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "MastraModelConfig",
-description: "The language model to use for evaluating noise sensitivity",
-required: true,
-},
-{
-name: "options",
-type: "NoiseSensitivityOptions",
-description: "Configuration options for the scorer",
-required: true,
-children: [
-{
-name: "baselineResponse",
-type: "string",
-description:
-"The expected clean response to compare against (what the agent should ideally produce without noise)",
-required: true,
-},
-{
-name: "noisyQuery",
-type: "string",
-description:
-"The user query with added noise, distractions, or misleading information",
-required: true,
-},
-{
-name: "noiseType",
-type: "string",
-description:
-"Type of noise added (e.g., 'misinformation', 'distractors', 'adversarial')",
-required: false,
-},
-{
-name: "scoring",
-type: "object",
-description:
-"Advanced scoring configuration for fine-tuning evaluation",
-required: false,
-children: [
-{
-name: "impactWeights",
-type: "object",
-description: "Custom weights for different impact levels",
-required: false,
-children: [
-{
-name: "none",
-type: "number",
-description: "Weight for no impact (default: 1.0)",
-required: false,
-},
-{
-name: "minimal",
-type: "number",
-description: "Weight for minimal impact (default: 0.85)",
-required: false,
-},
-{
-name: "moderate",
-type: "number",
-description: "Weight for moderate impact (default: 0.6)",
-required: false,
-},
-{
-name: "significant",
-type: "number",
-description: "Weight for significant impact (default: 0.3)",
-required: false,
-},
-{
-name: "severe",
-type: "number",
-description: "Weight for severe impact (default: 0.1)",
-required: false,
-},
-],
-},
-{
-name: "penalties",
-type: "object",
-description: "Penalty configuration for major issues",
-required: false,
-children: [
-{
-name: "majorIssuePerItem",
-type: "number",
-description:
-"Penalty per major issue identified (default: 0.1)",
-required: false,
-},
-{
-name: "maxMajorIssuePenalty",
-type: "number",
-description:
-"Maximum total penalty for major issues (default: 0.3)",
-required: false,
-},
-],
-},
-{
-name: "discrepancyThreshold",
-type: "number",
-description:
-"Threshold for using conservative scoring when LLM and calculated scores diverge (default: 0.2)",
-required: false,
-},
-],
-},
-],
-},
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description: 'The language model to use for evaluating noise sensitivity',
+    required: true,
+  },
+  {
+    name: 'options',
+    type: 'NoiseSensitivityOptions',
+    description: 'Configuration options for the scorer',
+    required: true,
+    children: [
+      {
+        name: 'baselineResponse',
+        type: 'string',
+        description:
+          'The expected clean response to compare against (what the agent should ideally produce without noise)',
+        required: true,
+      },
+      {
+        name: 'noisyQuery',
+        type: 'string',
+        description: 'The user query with added noise, distractions, or misleading information',
+        required: true,
+      },
+      {
+        name: 'noiseType',
+        type: 'string',
+        description: "Type of noise added (e.g., 'misinformation', 'distractors', 'adversarial')",
+        required: false,
+      },
+      {
+        name: 'scoring',
+        type: 'object',
+        description: 'Advanced scoring configuration for fine-tuning evaluation',
+        required: false,
+        children: [
+          {
+            name: 'impactWeights',
+            type: 'object',
+            description: 'Custom weights for different impact levels',
+            required: false,
+            children: [
+              {
+                name: 'none',
+                type: 'number',
+                description: 'Weight for no impact (default: 1.0)',
+                required: false,
+              },
+              {
+                name: 'minimal',
+                type: 'number',
+                description: 'Weight for minimal impact (default: 0.85)',
+                required: false,
+              },
+              {
+                name: 'moderate',
+                type: 'number',
+                description: 'Weight for moderate impact (default: 0.6)',
+                required: false,
+              },
+              {
+                name: 'significant',
+                type: 'number',
+                description: 'Weight for significant impact (default: 0.3)',
+                required: false,
+              },
+              {
+                name: 'severe',
+                type: 'number',
+                description: 'Weight for severe impact (default: 0.1)',
+                required: false,
+              },
+            ],
+          },
+          {
+            name: 'penalties',
+            type: 'object',
+            description: 'Penalty configuration for major issues',
+            required: false,
+            children: [
+              {
+                name: 'majorIssuePerItem',
+                type: 'number',
+                description: 'Penalty per major issue identified (default: 0.1)',
+                required: false,
+              },
+              {
+                name: 'maxMajorIssuePenalty',
+                type: 'number',
+                description: 'Maximum total penalty for major issues (default: 0.3)',
+                required: false,
+              },
+            ],
+          },
+          {
+            name: 'discrepancyThreshold',
+            type: 'number',
+            description:
+              'Threshold for using conservative scoring when LLM and calculated scores diverge (default: 0.2)',
+            required: false,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -147,7 +142,7 @@ This scorer is designed exclusively for CI/testing environments and has specific
 1. **Requires Baseline Data**: You must provide a pre-computed baseline response (the "correct" answer without noise)
 1. **Needs Test Variations**: Requires both the original query and a noisy variation prepared in advance
 1. **Comparative Analysis**: The scorer compares responses between baseline and noisy versions, which is only possible in controlled test conditions
-1. **Not Suitable for Production**: Cannot evaluate single, real-time agent responses without predetermined test data
+1. **Not Suitable for Production**: Can't evaluate single, real-time agent responses without predetermined test data
 
 ### Test Data Preparation
 
@@ -205,18 +200,16 @@ describe('Agent Noise Resistance Tests', () => {
 
 <PropertiesTable
   content={[
-{
-name: "score",
-type: "number",
-description:
-"Robustness score between 0 and 1 (1.0 = completely robust, 0.0 = severely compromised)",
-},
-{
-name: "reason",
-type: "string",
-description:
-"Human-readable explanation of how noise affected the agent's response",
-},
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Robustness score between 0 and 1 (1.0 = completely robust, 0.0 = severely compromised)',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: "Human-readable explanation of how noise affected the agent's response",
+  },
 ]}
 />
 

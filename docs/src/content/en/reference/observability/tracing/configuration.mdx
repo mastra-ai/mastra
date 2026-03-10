@@ -20,25 +20,25 @@ interface ObservabilityRegistryConfig {
 ```
 
 <PropertiesTable
-  props={[
-{
-name: "default",
-type: "{ enabled?: boolean }",
-description: "Enable default configuration with DefaultExporter and CloudExporter",
-required: false,
-},
-{
-name: "configs",
-type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
-description: "Named observability instance configurations or pre-instantiated instances",
-required: false,
-},
-{
-name: "configSelector",
-type: "ConfigSelector",
-description: "Runtime configuration selector function",
-required: false,
-},
+  content={[
+  {
+    name: 'default',
+    type: '{ enabled?: boolean }',
+    description: 'Enable default configuration with DefaultExporter and CloudExporter',
+    required: false,
+  },
+  {
+    name: 'configs',
+    type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
+    description: 'Named observability instance configurations or pre-instantiated instances',
+    required: false,
+  },
+  {
+    name: 'configSelector',
+    type: 'ConfigSelector',
+    description: 'Runtime configuration selector function',
+    required: false,
+  },
 ]}
 />
 
@@ -58,97 +58,86 @@ interface ObservabilityInstanceConfig {
 ```
 
 <PropertiesTable
-  props={[
-{
-name: "name",
-type: "string",
-description: "Configuration identifier",
-required: true,
-},
-{
-name: "serviceName",
-type: "string",
-description: "Service name in traces",
-required: true,
-},
-{
-name: "sampling",
-type: "SamplingStrategy",
-description: "Sampling configuration (defaults to ALWAYS)",
-required: false,
-},
-{
-name: "exporters",
-type: "ObservabilityExporter[]",
-description: "Trace data exporters",
-required: false,
-},
-{
-name: "spanOutputProcessors",
-type: "SpanOutputProcessor[]",
-description: "Span output processors",
-required: false,
-},
-{
-name: "includeInternalSpans",
-type: "boolean",
-description: "Include spans internal to Mastra operations",
-required: false,
-},
-{
-name: "requestContextKeys",
-type: "string[]",
-description: "RequestContext keys to extract as metadata (supports dot notation)",
-required: false,
-},
-{
-name: "serializationOptions",
-type: "SerializationOptions",
-description: "Options for controlling serialization of span data (input/output/attributes)",
-required: false,
-},
-]}
-/>
-
-## SerializationOptions
-
-Options for controlling how span data is serialized before export. Use these to customize truncation limits for large payloads.
-
-```typescript
-interface SerializationOptions {
-  maxStringLength?: number
-  maxDepth?: number
-  maxArrayLength?: number
-  maxObjectKeys?: number
-}
-```
-
-<PropertiesTable
-  props={[
-{
-name: "maxStringLength",
-type: "number",
-description: "Maximum length for string values (default: 1024)",
-required: false,
-},
-{
-name: "maxDepth",
-type: "number",
-description: "Maximum depth for nested objects (default: 6)",
-required: false,
-},
-{
-name: "maxArrayLength",
-type: "number",
-description: "Maximum number of items in arrays (default: 50)",
-required: false,
-},
-{
-name: "maxObjectKeys",
-type: "number",
-description: "Maximum number of keys in objects (default: 50)",
-required: false,
-},
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Configuration identifier',
+    required: true,
+  },
+  {
+    name: 'serviceName',
+    type: 'string',
+    description: 'Service name in traces',
+    required: true,
+  },
+  {
+    name: 'sampling',
+    type: 'SamplingStrategy',
+    description: 'Sampling configuration (defaults to ALWAYS)',
+    required: false,
+  },
+  {
+    name: 'exporters',
+    type: 'ObservabilityExporter[]',
+    description: 'Trace data exporters',
+    required: false,
+  },
+  {
+    name: 'spanOutputProcessors',
+    type: 'SpanOutputProcessor[]',
+    description: 'Span output processors',
+    required: false,
+  },
+  {
+    name: 'includeInternalSpans',
+    type: 'boolean',
+    description: 'Include spans internal to Mastra operations',
+    required: false,
+  },
+  {
+    name: 'requestContextKeys',
+    type: 'string[]',
+    description: 'RequestContext keys to extract as metadata (supports dot notation)',
+    required: false,
+  },
+  {
+    name: 'serializationOptions',
+    type: 'SerializationOptions',
+    description: 'Options for controlling serialization of span data (input/output/attributes)',
+    required: false,
+    properties: [
+      {
+        type: 'SerializationOptions',
+        parameters: [
+          {
+            name: 'maxStringLength',
+            type: 'number',
+            description: 'Maximum length for string values (default: 1024)',
+            isOptional: true,
+          },
+          {
+            name: 'maxDepth',
+            type: 'number',
+            description: 'Maximum depth for nested objects (default: 6)',
+            isOptional: true,
+          },
+          {
+            name: 'maxArrayLength',
+            type: 'number',
+            description: 'Maximum number of items in arrays (default: 50)',
+            isOptional: true,
+          },
+          {
+            name: 'maxObjectKeys',
+            type: 'number',
+            description: 'Maximum number of keys in objects (default: 50)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 

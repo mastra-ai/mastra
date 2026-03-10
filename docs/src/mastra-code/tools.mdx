@@ -34,10 +34,11 @@ Edit a file by replacing an exact text match with new content. Returns Language 
 - Include enough surrounding context to uniquely identify the replacement location.
 - When `new_str` is omitted or empty, the matched text is deleted.
 - After editing, TypeScript errors, linting warnings, and other diagnostics are returned automatically.
+- Relative `path` values are resolved against the project root.
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |
-| `path` | `string` | Yes | Path to the file |
+| `path` | `string` | Yes | Path to the file (relative to project root) |
 | `old_str` | `string` | Yes | Exact text to find and replace |
 | `new_str` | `string` | No | Replacement text (omit to delete the matched text) |
 | `start_line` | `number` | No | Line number to narrow the search region |
@@ -143,10 +144,11 @@ Request access to directories outside the project root. The user is prompted to 
 
 Search the web for documentation, error messages, package APIs, and other information.
 
-This tool is available through two providers:
+This tool is available through three providers:
 
-- **Tavily**: When the `TAVILY_API_KEY` environment variable is set.
-- **Anthropic web search**: Built into Anthropic models, used as a fallback when no Tavily key is configured.
+- **Tavily**: When the `TAVILY_API_KEY` environment variable is set (takes priority).
+- **Anthropic web search**: Built into Anthropic models, used when no Tavily key is configured.
+- **OpenAI web search**: Built into OpenAI models, used when no Tavily key is configured.
 
 | Parameter | Type | Required | Description |
 | - | - | - | - |

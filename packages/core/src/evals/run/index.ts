@@ -275,15 +275,19 @@ async function executeAgent(
   const observabilityContext = resolveObservabilityContext(item);
   const model = await agent.getModel();
   if (isSupportedLanguageModel(model)) {
-    return await agent.generate(item.input as any, {
-      ...targetOptions,
+    const { structuredOutput, ...restOptions } = targetOptions ?? {};
+    const baseOptions = {
+      ...restOptions,
+      ...observabilityContext,
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
-      ...observabilityContext,
-    });
+    };
+    return structuredOutput
+      ? await agent.generate(item.input, { ...baseOptions, structuredOutput })
+      : await agent.generate(item.input, baseOptions);
   } else {
-    return await agent.generateLegacy(item.input as any, {
+    return await agent.generateLegacy(item.input, {
       scorers: {},
       returnScorerData: true,
       requestContext: item.requestContext,
@@ -350,12 +354,12 @@ async function runScorers(
       const stepScorerResults: Record<string, any> = {};
       for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
         const stepResult = targetResult.scoringData.stepResults?.[stepId];
-        if (stepResult?.status === 'success' && stepResult.payload && stepResult.output) {
+        if (stepResult?.status === 'success' && stepResult.output !== undefined) {
           const stepResults: Record<string, any> = {};
           for (const scorer of stepScorers) {
             try {
               const score = await scorer.run({
-                input: stepResult.payload,
+                input: stepResult.payload !== undefined ? stepResult.payload : targetResult.scoringData.input,
                 output: stepResult.output,
                 groundTruth: item.groundTruth,
                 requestContext: item.requestContext,

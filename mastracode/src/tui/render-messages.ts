@@ -5,8 +5,8 @@
  */
 import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItem } from '@mastra/core/harness';
+import { parseSubagentMeta } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { parseSubagentMeta } from '../tools/subagent.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
@@ -225,6 +225,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               subArgs?.task ?? '',
               state.ui,
               modelId,
+              { collapseOnComplete: state.quietMode },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {

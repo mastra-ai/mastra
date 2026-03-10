@@ -76,6 +76,16 @@ Mastra is a modular AI framework built around central orchestration with pluggab
 - **Workflows** (`workflows/`) - Step-based execution with suspend/resume
 - **Storage** (`storage/`) - Pluggable backends with standardized interfaces
 
+## Enterprise Edition (EE) licensing
+
+Some code in this repository is licensed under the Mastra Enterprise License instead of Apache-2.0. EE code lives in directories named `ee/` within existing packages.
+
+- **EE directories**: Any directory named `ee/` (e.g., `packages/core/src/auth/ee/`) is under the Mastra Enterprise License (see `ee/LICENSE`)
+- **Everything else**: Apache-2.0
+- **Import convention**: EE code is accessed via subpath exports like `@mastra/core/auth/ee`
+- **When adding EE features**: Place them in an `ee/` subdirectory within the relevant package
+- **License file**: The root `LICENSE.md` maps directories to their licenses
+
 ### Key patterns
 
 1. **Dependency Injection** - Components register with central Mastra instance

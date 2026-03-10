@@ -5,7 +5,6 @@ import type {
   StreamObjectOnFinishCallback,
   StreamTextOnFinishCallback,
 } from '@internal/ai-sdk-v4';
-import type { JSONSchema7, Schema } from '@mastra/schema-compat';
 import {
   AnthropicSchemaCompatLayer,
   applyCompatLayer,
@@ -16,14 +15,15 @@ import {
   OpenAISchemaCompatLayer,
   jsonSchema,
 } from '@mastra/schema-compat';
-import { zodToJsonSchema } from '@mastra/schema-compat/zod-to-json';
-import type { ZodSchema, z } from 'zod';
+import type { JSONSchema7, Schema } from '@mastra/schema-compat';
+import type { ZodSchema, z } from 'zod/v3';
 import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContext, executeWithContextSync } from '../../observability/utils';
+import { toStandardSchema, standardSchemaToJSONSchema, isStandardSchemaWithJSON } from '../../schema';
 import { convertV4Usage } from '../../stream/aisdk/v4/usage';
 import { delay, isZodType } from '../../utils';
 import { isZodArray, getZodDef } from '../../utils/zod-utils';
@@ -109,8 +109,9 @@ export class MastraLLMV1 extends MastraBase {
       );
     }
 
+    // "Type instantiation is excessively deep" error from complex ZodSchema generic inference
     return applyCompatLayer({
-      schema: schema,
+      schema: schema as any,
       compatLayers: schemaCompatLayers,
       mode: 'aiSdkSchema',
     });
@@ -155,11 +156,28 @@ export class MastraLLMV1 extends MastraBase {
           schema = getZodDef(schema).type as z.ZodType<inferOutput<Z>>;
         }
 
-        const jsonSchemaToUse = zodToJsonSchema(schema, 'jsonSchema7');
+        // Convert Zod schema to JSON Schema via standard schema interface
+        const standardSchema = toStandardSchema(schema as any);
+        const jsonSchemaToUse = standardSchemaToJSONSchema(standardSchema);
 
         schema = jsonSchema<inferOutput<Z>>(jsonSchemaToUse);
       } else {
         schema = jsonSchema<inferOutput<Z>>(experimental_output);
+      }
+    }
+
+    // make json schema a ai sdk schema
+    if (tools && Object.keys(tools).length > 0) {
+      for (const tool of Object.values(tools)) {
+        if (tool.parameters) {
+          if ('validate' in tool.parameters) {
+            tool.parameters = tool.parameters;
+          } else if (isStandardSchemaWithJSON(tool.parameters)) {
+            tool.parameters = jsonSchema(standardSchemaToJSONSchema(tool.parameters));
+          } else {
+            tool.parameters = jsonSchema(tool.parameters);
+          }
+        }
       }
     }
 
@@ -188,6 +206,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     const argsForExecute: OriginalGenerateTextOptions<Tools, Z> = {
@@ -292,6 +311,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Generate text failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -335,13 +362,19 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {
       let output: 'object' | 'array' = 'object';
       if (isZodArray(structuredOutput)) {
         output = 'array';
-        structuredOutput = getZodDef(structuredOutput).type;
+        const zodDef = getZodDef(structuredOutput);
+        if ('element' in zodDef) {
+          structuredOutput = zodDef.element;
+        } else {
+          structuredOutput = zodDef.type;
+        }
       }
 
       const processedSchema = this._applySchemaCompat(structuredOutput!);
@@ -396,6 +429,14 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger.error('[LLM] - Generate object failed', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
@@ -419,6 +460,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Generate object schema conversion failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -490,7 +539,23 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
+
+    // make json schema a ai sdk schema
+    if (tools && Object.keys(tools).length > 0) {
+      for (const tool of Object.values(tools)) {
+        if (tool.parameters) {
+          if ('validate' in tool.parameters) {
+            tool.parameters = tool.parameters;
+          } else if (isStandardSchemaWithJSON(tool.parameters)) {
+            tool.parameters = jsonSchema(standardSchemaToJSONSchema(tool.parameters));
+          } else {
+            tool.parameters = jsonSchema(tool.parameters);
+          }
+        }
+      }
+    }
 
     const argsForExecute: OriginalStreamTextOptions<Tools, Z> = {
       model,
@@ -599,6 +664,32 @@ export class MastraLLMV1 extends MastraBase {
           resourceId,
         });
       },
+      onError: ({ error }) => {
+        const mastraError = new MastraError(
+          {
+            id: 'LLM_STREAM_TEXT_AI_SDK_STREAMING_ERROR',
+            domain: ErrorDomain.LLM,
+            category: ErrorCategory.THIRD_PARTY,
+            details: {
+              modelId: model.modelId,
+              modelProvider: model.provider,
+              runId: runId ?? 'unknown',
+              threadId: threadId ?? 'unknown',
+              resourceId: resourceId ?? 'unknown',
+            },
+          },
+          error,
+        );
+        this.logger.error('[LLM] - Stream text error', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
+        llmSpan?.error({ error: mastraError });
+      },
       ...rest,
       messages,
       experimental_output: schema
@@ -626,6 +717,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Stream text failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }
@@ -673,6 +772,7 @@ export class MastraLLMV1 extends MastraBase {
         resourceId,
       },
       tracingPolicy: this.#options?.tracingPolicy,
+      requestContext,
     });
 
     try {
@@ -746,6 +846,32 @@ export class MastraLLMV1 extends MastraBase {
             resourceId,
           });
         },
+        onError: ({ error }) => {
+          const mastraError = new MastraError(
+            {
+              id: 'LLM_STREAM_OBJECT_AI_SDK_STREAMING_ERROR',
+              domain: ErrorDomain.LLM,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                modelId: model.modelId,
+                modelProvider: model.provider,
+                runId: runId ?? 'unknown',
+                threadId: threadId ?? 'unknown',
+                resourceId: resourceId ?? 'unknown',
+              },
+            },
+            error,
+          );
+          this.logger.error('[LLM] - Stream object error', {
+            error: mastraError,
+            runId,
+            threadId,
+            resourceId,
+            modelId: model.modelId,
+            modelProvider: model.provider,
+          });
+          llmSpan?.error({ error: mastraError });
+        },
         messages,
         // @ts-expect-error - output in our implementation can only be object or array
         output,
@@ -770,6 +896,14 @@ export class MastraLLMV1 extends MastraBase {
           },
           e,
         );
+        this.logger.error('[LLM] - Stream object failed', {
+          error: mastraError,
+          runId,
+          threadId,
+          resourceId,
+          modelId: model.modelId,
+          modelProvider: model.provider,
+        });
         llmSpan?.error({ error: mastraError });
         throw mastraError;
       }
@@ -794,6 +928,14 @@ export class MastraLLMV1 extends MastraBase {
         },
         e,
       );
+      this.logger.error('[LLM] - Stream object schema conversion failed', {
+        error: mastraError,
+        runId,
+        threadId,
+        resourceId,
+        modelId: model.modelId,
+        modelProvider: model.provider,
+      });
       llmSpan?.error({ error: mastraError });
       throw mastraError;
     }

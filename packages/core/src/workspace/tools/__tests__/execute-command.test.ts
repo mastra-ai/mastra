@@ -146,6 +146,38 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
+  describe('transient chunks', () => {
+    it('marks stdout and stderr chunks as transient', async () => {
+      const { context, writerCustom } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          opts?.onStdout?.('output\n');
+          opts?.onStderr?.('warning\n');
+          return { success: true, exitCode: 0, stdout: 'output\n', stderr: 'warning\n', executionTimeMs: 10 };
+        },
+      });
+
+      await execute({ command: 'echo', args: [], timeout: null, cwd: null }, context);
+
+      const stdoutChunks = getChunks(writerCustom, 'data-sandbox-stdout');
+      const stderrChunks = getChunks(writerCustom, 'data-sandbox-stderr');
+      const exitChunks = getChunks(writerCustom, 'data-sandbox-exit');
+
+      expect(stdoutChunks).toHaveLength(1);
+      expect(stderrChunks).toHaveLength(1);
+      expect(exitChunks).toHaveLength(1);
+
+      for (const chunk of stdoutChunks) {
+        expect(chunk.transient).toBe(true);
+      }
+      for (const chunk of stderrChunks) {
+        expect(chunk.transient).toBe(true);
+      }
+      for (const chunk of exitChunks) {
+        expect(chunk.transient).toBeUndefined();
+      }
+    });
+  });
+
   describe('exit chunk data', () => {
     it('emits exit chunk with success on successful command', async () => {
       const { context, writerCustom } = createMockContext({
@@ -339,6 +371,125 @@ describe('executeCommandTool data chunks', () => {
       expect(exitChunks).toHaveLength(1);
       expect(exitChunks[0].data.success).toBe(false);
       expect(exitChunks[0].data.exitCode).toBe(-1);
+    });
+  });
+
+  describe('abort signal passthrough', () => {
+    it('passes context.abortSignal to sandbox.executeCommand', async () => {
+      const controller = new AbortController();
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      context.abortSignal = controller.signal;
+
+      await execute({ command: 'echo hi', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedOpts.abortSignal).toBe(controller.signal);
+    });
+
+    it('passes undefined abortSignal when context has none', async () => {
+      let receivedOpts: any;
+
+      const { context } = createMockContext({
+        executeCommand: async (_cmd, _args, opts) => {
+          receivedOpts = opts;
+          return { success: true, exitCode: 0, stdout: 'ok', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      await execute({ command: 'echo hi', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedOpts.abortSignal).toBeUndefined();
+    });
+  });
+
+  describe('tail pipe extraction', () => {
+    it('strips | tail -N from command and applies tail to result', async () => {
+      let receivedCommand = '';
+      const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+
+      const { context } = createMockContext({
+        executeCommand: async (cmd, _args, opts) => {
+          receivedCommand = cmd;
+          opts?.onStdout?.(lines);
+          return { success: true, exitCode: 0, stdout: lines, stderr: '', executionTimeMs: 10 };
+        },
+      });
+
+      const result = await execute(
+        { command: 'cat big.log | tail -10', timeout: null, cwd: null, tail: null },
+        context,
+      );
+
+      // Command sent to sandbox should NOT have | tail -10
+      expect(receivedCommand).toBe('cat big.log');
+      // Result should be truncated to last 10 lines
+      expect(result).toContain('[showing last 10 of 50 lines]');
+      expect(result).toContain('line 50');
+      expect(result).not.toContain('line 1\n');
+    });
+
+    it('strips | tail -n N from command', async () => {
+      let receivedCommand = '';
+
+      const { context } = createMockContext({
+        executeCommand: async cmd => {
+          receivedCommand = cmd;
+          return { success: true, exitCode: 0, stdout: 'ok\n', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      await execute({ command: 'npm test | tail -n 20', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedCommand).toBe('npm test');
+    });
+
+    it('does not strip tail pipe for background commands', async () => {
+      let receivedCommand = '';
+
+      const { context } = createMockContext({
+        executeCommand: async () => {
+          return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      // Add processes to sandbox so background mode works
+      (context.workspace as any).sandbox.processes = {
+        spawn: async (cmd: string) => {
+          receivedCommand = cmd;
+          return { pid: 123 };
+        },
+      };
+
+      const { executeCommandWithBackgroundTool } = await import('../execute-command');
+      await executeCommandWithBackgroundTool.execute!(
+        { command: 'npm start | tail -50', timeout: null, cwd: null, tail: null, background: true },
+        context,
+      );
+
+      // Background commands should keep the tail pipe intact
+      expect(receivedCommand).toBe('npm start | tail -50');
+    });
+
+    it('preserves non-tail pipes in commands', async () => {
+      let receivedCommand = '';
+
+      const { context } = createMockContext({
+        executeCommand: async cmd => {
+          receivedCommand = cmd;
+          return { success: true, exitCode: 0, stdout: 'ok\n', stderr: '', executionTimeMs: 1 };
+        },
+      });
+
+      await execute({ command: 'cat file.txt | grep error', timeout: null, cwd: null, tail: null }, context);
+
+      expect(receivedCommand).toBe('cat file.txt | grep error');
     });
   });
 });
