@@ -112,9 +112,14 @@ async function runToolCallTest(agent: Agent, modelName: string) {
     `[${modelName}] toolCalls=${toolCallCount} toolResults=${toolResultCount} finishReasons=${JSON.stringify(finishReasons)} textLen=${text.length}`,
   );
 
-  // The agent should have called multiple tools in parallel
-  expect(toolCallCount).toBeGreaterThanOrEqual(3);
-  expect(toolResultCount).toBeGreaterThanOrEqual(3);
+  // All 5 tools should have been called and returned results
+  expect(toolCallCount).toBe(5);
+  expect(toolResultCount).toBe(5);
+
+  // The agent loop must have completed at least 2 steps:
+  // step 1: tool calls (finishReason may be 'tool-calls' or 'stop' depending on the model)
+  // step 2: final text summary after processing tool results
+  expect(finishReasons.length).toBeGreaterThanOrEqual(2);
 
   // The final response should reference the gathered data
   expect(text).toBeTruthy();
