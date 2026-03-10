@@ -4506,6 +4506,9 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
       "content": {
         "content": "Hello",
         "format": 2,
+        "metadata": {
+          "modelId": "mock-model-id",
+        },
         "parts": [
           {
             "text": "Hello",
@@ -4545,6 +4548,7 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
       "id": "msg-0",
       "metadata": {
         "createdAt": 2024-01-01T00:00:00.001Z,
+        "modelId": "mock-model-id",
       },
       "parts": [
         {
@@ -4679,6 +4683,9 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
           "content": {
             "content": "Hello!",
             "format": 2,
+            "metadata": {
+              "modelId": "mock-model-id",
+            },
             "parts": [
               {
                 "data": "Hello World",
@@ -4750,6 +4757,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
           "id": "msg-0",
           "metadata": {
             "createdAt": 2024-01-01T00:00:00.001Z,
+            "modelId": "mock-model-id",
           },
           "parts": [
             {
@@ -10394,6 +10402,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
       "content": {
         "content": "Hello",
         "format": 2,
+        "metadata": {
+          "modelId": "mock-model-id",
+        },
         "parts": [
           {
             "text": "Hello",
@@ -10433,6 +10444,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
       "id": "msg-0",
       "metadata": {
         "createdAt": 2024-01-01T00:00:00.001Z,
+        "modelId": "mock-model-id",
       },
       "parts": [
         {
@@ -10567,6 +10579,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
           "content": {
             "content": "Hello!",
             "format": 2,
+            "metadata": {
+              "modelId": "mock-model-id",
+            },
             "parts": [
               {
                 "data": "Hello World",
@@ -10638,6 +10653,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
           "id": "msg-0",
           "metadata": {
             "createdAt": 2024-01-01T00:00:00.001Z,
+            "modelId": "mock-model-id",
           },
           "parts": [
             {
