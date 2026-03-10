@@ -309,7 +309,7 @@ describe('DatadogExporter', () => {
     it('converts span.tags string array to object format', async () => {
       const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
       const span = createMockSpan({
-        tags: ['production', 'experiment-v2', 'user-request'],
+        tags: ['production', 'experiment-v2', 'instance_name:career-scout-api'],
       });
 
       await exporter.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
@@ -320,7 +320,7 @@ describe('DatadogExporter', () => {
           tags: {
             production: true,
             'experiment-v2': true,
-            'user-request': true,
+            instance_name: 'career-scout-api',
           },
         }),
       );

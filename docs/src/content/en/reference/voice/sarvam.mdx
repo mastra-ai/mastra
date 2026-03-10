@@ -209,11 +209,24 @@ Converts text to speech using Sarvam's text-to-speech models.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'SarvamVoiceId',
-    description: 'Voice ID to use for speech synthesis.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'SarvamVoiceId',
+            description: 'Voice ID to use for speech synthesis.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

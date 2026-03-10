@@ -71,7 +71,7 @@
   },
   "dependencies": {
     "@arcadeai/arcadejs": "^2.2.0",
-    "@composio/core": "^0.6.3",
+    "@composio/core": "^0.6.4",
     "@composio/mastra": "^0.6.3",
     "@mastra/memory": "workspace:*",
     "@mastra/schema-compat": "workspace:*"
@@ -86,7 +86,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "hono": "^4.7.10",
-    "tsup": "^8.0.2",
+    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "^3.25.76"

@@ -1,12 +1,15 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
 import {
   buildObserverPrompt,
   buildObserverSystemPrompt,
+  buildObserverHistoryMessage,
+  buildMultiThreadObserverHistoryMessage,
   parseObserverOutput,
   optimizeObservationsForContext,
   formatMessagesForObserver,
@@ -640,6 +643,110 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).toContain('2024');
       expect(formatted).toContain('Dec');
     });
+
+    it('should include attachment placeholders for image and file parts', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please inspect these attachments.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('[Image #1: reference-board.png]');
+      expect(formatted).toContain('[File #1: floorplan.pdf]');
+    });
+  });
+
+  describe('buildObserverHistoryMessage', () => {
+    it('should preserve image attachments and image-like file attachments in observer input order', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/annotated-photo.jpg',
+            mimeType: 'application/octet-stream',
+            filename: 'annotated-photo.jpg',
+          } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]);
+      expect(historyMessage.role).toBe('user');
+      expect(Array.isArray(historyMessage.content)).toBe(true);
+
+      const content = historyMessage.content as any[];
+      expect(content[0]).toMatchObject({ type: 'text' });
+      expect(content[1]).toMatchObject({ type: 'text' });
+      expect(content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
+      expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
+      expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should preserve thread grouping while attaching multimodal content for multi-thread observer input', () => {
+      const threadA = createTestMessage('ignored', 'user', 'msg-a');
+      threadA.threadId = 'thread-a';
+      threadA.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Thread A' },
+          { type: 'image', image: 'https://example.com/a.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const threadB = createTestMessage('ignored', 'user', 'msg-b');
+      threadB.threadId = 'thread-b';
+      threadB.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Thread B' },
+          {
+            type: 'file',
+            data: 'https://example.com/b.jpeg',
+            mimeType: 'image/jpeg',
+            filename: 'b.jpeg',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(
+        new Map([
+          ['thread-a', [threadA]],
+          ['thread-b', [threadB]],
+        ]),
+        ['thread-a', 'thread-b'],
+      );
+
+      const content = historyMessage.content as any[];
+      expect(content[0].text).toContain('2 different conversation threads');
+      expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-a">'))).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('[Image #1: a.png]'))).toBe(true);
+      expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/a.png')).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('<thread id="thread-b">'))).toBe(true);
+      expect(content.some(part => part.type === 'text' && part.text.includes('[Image #2: b.jpeg]'))).toBe(true);
+      expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/b.jpeg')).toBe(true);
+    });
   });
 
   describe('buildObserverPrompt', () => {
@@ -666,6 +773,172 @@ describe('Observer Agent Helpers', () => {
       const prompt = buildObserverPrompt(undefined, messages);
 
       expect(prompt).not.toContain('Previous Observations');
+    });
+  });
+
+  describe('observer request payloads', () => {
+    it('should send multimodal observer history as structured messages', async () => {
+      let capturedPrompt: any;
+
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: { messageTokens: 1000, bufferTokens: false, model: 'test-model' },
+        reflection: { observationTokens: 1000 },
+      });
+
+      (om as any).observerAgent = {
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- saw image\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      };
+
+      const message = createTestMessage('ignored', 'user');
+      message.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please inspect these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/annotated-photo.jpg',
+            mimeType: 'application/octet-stream',
+            filename: 'annotated-photo.jpg',
+          } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      await (om as any).callObserver(undefined, [message]);
+
+      expect(Array.isArray(capturedPrompt)).toBe(true);
+      expect(capturedPrompt).toHaveLength(2);
+      expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[1]).toMatchObject({ role: 'user' });
+      expect(capturedPrompt[1].content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(capturedPrompt[1].content[1].text).toContain('[Image #2: annotated-photo.jpg]');
+      expect(capturedPrompt[1].content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(capturedPrompt[1].content[2]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/reference-board.png',
+      });
+      expect(capturedPrompt[1].content[3]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/annotated-photo.jpg',
+      });
+      expect(capturedPrompt[1].content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
+      );
+    });
+  });
+
+  describe('buildObserverHistoryMessage', () => {
+    it('should preserve placeholders and attachments in order', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Compare these.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildObserverHistoryMessage([msg]) as any;
+
+      expect(historyMessage.role).toBe('user');
+      expect(historyMessage.content[0].text).toContain('New Message History');
+      expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
+      expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+      expect(historyMessage.content[2]).toMatchObject({
+        type: 'image',
+        image: 'https://example.com/reference-board.png',
+      });
+      expect(historyMessage.content).toContainEqual(
+        expect.objectContaining({
+          type: 'file',
+          data: 'https://example.com/specs/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        }),
+      );
+    });
+
+    it('should preserve thread wrappers and attachments for multi-thread history', () => {
+      const imageMessage = createTestMessage('ignored', 'user', 'thread-a-image');
+      imageMessage.threadId = 'thread-a';
+      imageMessage.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Inspect this board.' },
+          { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      const fileMessage = createTestMessage('ignored', 'assistant', 'thread-b-file');
+      fileMessage.threadId = 'thread-b';
+      fileMessage.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Here is the floorplan.' },
+          {
+            type: 'file',
+            data: 'https://example.com/specs/floorplan.pdf',
+            mimeType: 'application/pdf',
+            filename: 'floorplan.pdf',
+          } as any,
+        ],
+      };
+
+      const historyMessage = buildMultiThreadObserverHistoryMessage(
+        new Map([
+          ['thread-a', [imageMessage]],
+          ['thread-b', [fileMessage]],
+        ]),
+        ['thread-a', 'thread-b'],
+      ) as any;
+
+      expect(historyMessage.content[0].text).toContain('2 different conversation threads');
+      expect(
+        historyMessage.content.some(
+          (part: any) => part.type === 'text' && part.text.includes('<thread id="thread-a">'),
+        ),
+      ).toBe(true);
+      expect(
+        historyMessage.content.some(
+          (part: any) => part.type === 'text' && part.text.includes('<thread id="thread-b">'),
+        ),
+      ).toBe(true);
+      expect(historyMessage.content.some((part: any) => part.type === 'image')).toBe(true);
+      expect(
+        historyMessage.content.some(
+          (part: any) =>
+            part.type === 'file' &&
+            part.filename === 'floorplan.pdf' &&
+            part.mimeType === 'application/pdf' &&
+            part.data === 'https://example.com/specs/floorplan.pdf',
+        ),
+      ).toBe(true);
     });
   });
 
@@ -1428,6 +1701,77 @@ describe('ObservationalMemory Integration', () => {
       const counter = om.getTokenCounter();
       expect(counter).toBeInstanceOf(TokenCounter);
     });
+
+    it('should use the actor model context before counting images', async () => {
+      const { MessageList } = await import('@mastra/core/agent');
+      const { RequestContext } = await import('@mastra/core/di');
+
+      const omWithDynamicObserverModel = new ObservationalMemory({
+        storage,
+        observation: {
+          messageTokens: 100_000,
+          model: ({ requestContext }) => requestContext?.get('observerModel') ?? 'openai/gpt-4o',
+        },
+        reflection: {
+          observationTokens: 100_000,
+          model: 'test-model',
+        },
+        scope: 'thread',
+      });
+
+      const makeContext = (observerModel: string) => {
+        const requestContext = new RequestContext();
+        requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+        requestContext.set('observerModel', observerModel);
+        return requestContext;
+      };
+
+      const imageMessage = {
+        id: 'image-message',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'image',
+              image: 'https://example.com/cat.png',
+              providerOptions: { openai: { detail: 'low' } },
+            },
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      } as unknown as MastraDBMessage;
+
+      const countImageForModel = async (actorModel: string) => {
+        const [provider, modelId] = actorModel.split('/');
+
+        await omWithDynamicObserverModel.processInputStep({
+          messageList: new MessageList({ threadId, resourceId }),
+          messages: [imageMessage],
+          requestContext: makeContext(actorModel),
+          stepNumber: 0,
+          state: {},
+          steps: [],
+          systemMessages: [],
+          model: { provider, modelId } as any,
+          retryCount: 0,
+          abort: (() => {
+            throw new Error('aborted');
+          }) as any,
+        });
+
+        return omWithDynamicObserverModel.getTokenCounter().runWithModelContext({ provider, modelId }, () => {
+          return omWithDynamicObserverModel.getTokenCounter().countMessage(imageMessage);
+        });
+      };
+
+      const gpt4oTokens = await countImageForModel('openai/gpt-4o');
+      const gpt4oMiniTokens = await countImageForModel('openai/gpt-4o-mini');
+
+      expect(gpt4oTokens).toBeGreaterThan(0);
+      expect(gpt4oMiniTokens).toBeGreaterThan(gpt4oTokens);
+    });
   });
 
   describe('getStorage', () => {
@@ -1435,6 +1779,144 @@ describe('ObservationalMemory Integration', () => {
       const s = om.getStorage();
       expect(s).toBe(storage);
     });
+  });
+
+  it('should trigger observation when an image-heavy message crosses the threshold', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageMessage = {
+      id: 'image-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'image',
+            image: 'https://example.com/reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [imageMessage as any],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageTokens = multimodalOm.getTokenCounter().countMessage(imageMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageTokens).toBeGreaterThan(threshold);
+  });
+
+  it('should treat image-like file parts as image-heavy for threshold checks', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const multimodalOm = new ObservationalMemory({
+      storage,
+      observation: {
+        messageTokens: 500,
+        bufferTokens: false,
+        model: 'openai/gpt-4o',
+      },
+      reflection: {
+        observationTokens: 100_000,
+        model: 'test-model',
+      },
+      scope: 'thread',
+    });
+
+    const imageLikeFileMessage = {
+      id: 'image-file-threshold-msg',
+      role: 'user' as const,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'file',
+            data: 'https://example.com/reference-board.png',
+            mimeType: 'image/png',
+            filename: 'reference-board.png',
+            providerOptions: { openai: { detail: 'high' } },
+            width: 1024,
+            height: 1024,
+          } as any,
+        ],
+      },
+      type: 'text',
+      createdAt: new Date('2025-01-01T12:00:00Z'),
+      threadId,
+      resourceId,
+    };
+
+    const textOnlyMessage = createTestMessage('Please review this design draft.', 'user', 'text-file-threshold-msg');
+
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await multimodalOm.processInputStep({
+      messageList,
+      messages: [imageLikeFileMessage as any],
+      requestContext,
+      stepNumber: 0,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: 'test-model' as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const threshold = 500;
+    const textTokens = multimodalOm.getTokenCounter().countMessage(textOnlyMessage);
+    const imageLikeFileTokens = multimodalOm.getTokenCounter().countMessage(imageLikeFileMessage as any);
+
+    expect(textTokens).toBeLessThan(threshold);
+    expect(imageLikeFileTokens).toBeGreaterThan(threshold);
   });
 
   describe('cursor-based message loading (lastObservedAt)', () => {
@@ -2342,6 +2824,73 @@ Ask about favorite vegetarian dishes
     expect(systemMessage).toBeDefined();
     expect(systemMessage.content).toContain(customInstruction);
     expect(systemMessage.content).toContain('<current-task>');
+  });
+
+  it('should send attachment parts to the observer alongside placeholder text', async () => {
+    let capturedPrompt: any = null;
+
+    const om = new ObservationalMemory({
+      storage: createInMemoryStorage(),
+      observation: {
+        messageTokens: 10,
+        model: 'test-model',
+      },
+      reflection: { observationTokens: 10000 },
+      scope: 'thread',
+    });
+
+    (om as any).observerAgent = {
+      stream: async (prompt: any) => {
+        capturedPrompt = prompt;
+        return {
+          getFullOutput: async () => ({
+            text: `<observations>\n- User shared a reference image and floorplan\n</observations>`,
+            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          }),
+        };
+      },
+    };
+
+    const attachmentMessage = createTestMessage('ignored', 'user', 'msg-attachment');
+    attachmentMessage.content = {
+      format: 2,
+      parts: [
+        { type: 'text', text: 'Please compare these attachments.' },
+        { type: 'image', image: 'https://example.com/reference-board.png', mimeType: 'image/png' } as any,
+        {
+          type: 'file',
+          data: 'https://example.com/specs/floorplan.pdf',
+          mimeType: 'application/pdf',
+          filename: 'floorplan.pdf',
+        } as any,
+      ],
+    };
+
+    await (om as any).callObserver(undefined, [attachmentMessage]);
+
+    const historyMessage = capturedPrompt.find(
+      (msg: any) =>
+        msg.role === 'user' && Array.isArray(msg.content) && msg.content.some((part: any) => part.type === 'image'),
+    );
+
+    expect(historyMessage).toBeDefined();
+    expect(historyMessage.content[0].text).toContain('New Message History');
+    expect(historyMessage.content[1].text).toContain('[Image #1: reference-board.png]');
+    expect(historyMessage.content[1].text).toContain('[File #1: floorplan.pdf]');
+    expect(
+      historyMessage.content.some(
+        (part: any) => part.type === 'image' && part.image === 'https://example.com/reference-board.png',
+      ),
+    ).toBe(true);
+    expect(
+      historyMessage.content.some(
+        (part: any) =>
+          part.type === 'file' &&
+          part.filename === 'floorplan.pdf' &&
+          part.mimeType === 'application/pdf' &&
+          part.data === 'https://example.com/specs/floorplan.pdf',
+      ),
+    ).toBe(true);
   });
 
   it('should pass reflection instruction to reflector agent during synchronous reflection', async () => {
@@ -4087,6 +4636,30 @@ describe('Async Buffering Storage Operations', () => {
 });
 
 describe('Model Requirement', () => {
+  const originalCoreFeatures = new Set(coreFeatures);
+
+  afterEach(() => {
+    coreFeatures.clear();
+    for (const feature of originalCoreFeatures) {
+      coreFeatures.add(feature);
+    }
+  });
+
+  it('should throw when core does not support request-response-id-rotation', () => {
+    coreFeatures.delete('request-response-id-rotation');
+
+    expect(
+      () =>
+        new ObservationalMemory({
+          storage: createInMemoryStorage(),
+          scope: 'thread',
+          model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+          observation: { messageTokens: 50000 },
+          reflection: { observationTokens: 20000 },
+        }),
+    ).toThrow('Please bump @mastra/core to a newer version');
+  });
+
   it('should throw when no model is provided at all', () => {
     expect(
       () =>
@@ -7543,7 +8116,8 @@ describe('Full Async Buffering Flow', () => {
     // Lower thresholds so step 1 crosses them → triggers handleThresholdReached
     (om as any).observationConfig.messageTokens = 1000;
     (om as any).observationConfig.bufferTokens = 500;
-    (om as any).observationConfig.blockAfter = 1200;
+    // Lower blockAfter so activation still runs after refreshed pending-token recount
+    (om as any).observationConfig.blockAfter = 1100;
 
     const msgCountBefore = contextMsgs.length;
 
@@ -8314,5 +8888,677 @@ describe('Per-step save deduplication', () => {
 
     expect(sameLogical.length).toBe(1);
     expect(sameLogical[0]!.id).toBe('user-1');
+  });
+});
+
+describe('Single-thread replay red tests', () => {
+  async function createReplayFixture() {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'single-thread-replay';
+    const resourceId = 'single-thread-replay-resource';
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: new MockLanguageModelV2({}) as any,
+      observation: { messageTokens: 5_000 },
+      reflection: { observationTokens: 200_000 },
+    });
+
+    const messageList = new MessageList({ threadId, resourceId });
+
+    return { om, messageList, threadId, resourceId };
+  }
+
+  function getModelTextParts(message: any): string[] {
+    if (typeof message?.content === 'string') return [message.content];
+    if (Array.isArray(message?.content)) {
+      return message.content.filter((p: any) => p?.type === 'text').map((p: any) => p.text);
+    }
+    return [];
+  }
+
+  function getModelVisibleText(messageList: any): string {
+    return messageList.get.all.aiV5
+      .model()
+      .flatMap((m: any) => getModelTextParts(m))
+      .join(' | ');
+  }
+
+  it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date(t0.getTime() + 1);
+
+    messageList.add(
+      {
+        id: 'boundary-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'old-at-boundary' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'boundary-new',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'new-after-boundary' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('old-at-boundary');
+    expect(remainingText).toContain('new-after-boundary');
+  });
+
+  it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'pre-marker',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fully-observed-before-marker' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'marker-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'observed-prefix-in-marker-message' },
+            { type: 'data-om-observation-end', data: { cycleId: 'marker-cycle' } },
+            { type: 'text', text: 'fresh-post-marker-tail' },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      lastObservedAt: t1,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remaining.map((m: any) => m.id)).toEqual(['marker-msg']);
+    expect(remainingText).not.toContain('fully-observed-before-marker');
+    expect(remainingText).not.toContain('observed-prefix-in-marker-message');
+    expect(remainingText).toContain('fresh-post-marker-tail');
+  });
+
+  it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [
+            { type: 'text', text: 'sealed-prefix', metadata: { mastra: { sealedAt: t0.getTime() } } },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'sealed-prefix' },
+            { type: 'data-om-observation-end', data: { cycleId: 'c1' } },
+            { type: 'text', text: 'fresh-tail' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const messagesAfterRemint = messageList.get.all.db();
+    const reminted = messagesAfterRemint.find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('sealed-prefix');
+    expect(remainingText).toContain('fresh-tail');
+  });
+
+  it('T1-B: reminted +1ms boundary should not leak observed prefix on next turn', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'new-content-after-seal' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+    expect(reminted!.createdAt.getTime()).toBe(t0.getTime() + 1);
+
+    await (om as any).filterAlreadyObservedMessages(messageList, {
+      observedMessageIds: ['A'],
+      lastObservedAt: t0,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).not.toContain('already-observed');
+    expect(remainingText).toContain('new-content-after-seal');
+  });
+
+  it('T4-B: post-activation step>0 should still prune already observed content before model sees it', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['old-1'],
+    });
+
+    messageList.add(
+      {
+        id: 'old-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed' }] },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'new-1',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-after-activation' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-activation');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-C: post-activation step>0 should not replay sealed-split prefix when ID A is reused', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'already-observed' },
+            { type: 'text', text: 'fresh-after-split' },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    const reminted = messageList.get.all.db().find((m: any) => m.id !== 'A');
+    expect(reminted).toBeDefined();
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-after-split');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-D: repeated loop re-add of id A should not replay observed prefix across reminted tails on step>0', async () => {
+    const { RequestContext } = await import('@mastra/core/di');
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    await (om as any).storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'replay',
+        metadata: {},
+        createdAt: new Date('2025-01-01T09:00:00.000Z'),
+        updatedAt: new Date('2025-01-01T09:00:00.000Z'),
+      },
+    });
+
+    const record = await (om as any).storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    await (om as any).storage.updateActiveObservations({
+      id: record.id,
+      observations: '- observed',
+      tokenCount: 10,
+      lastObservedAt: t0,
+      observedMessageIds: ['A'],
+    });
+
+    messageList.add(
+      {
+        id: 'A',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mastra: { sealed: true } },
+          parts: [{ type: 'text', text: 'already-observed', metadata: { mastra: { sealedAt: t0.getTime() } } }],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    for (let i = 1; i <= 3; i++) {
+      messageList.add(
+        {
+          id: 'A',
+          threadId,
+          resourceId,
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'already-observed' },
+              { type: 'text', text: `fresh-${i}` },
+            ],
+          },
+          createdAt: new Date(t0.getTime() + i),
+        } as any,
+        'response',
+      );
+    }
+
+    const reminted = messageList.get.all.db().filter((m: any) => m.id !== 'A');
+    expect(reminted.length).toBeGreaterThan(0);
+
+    const ctx = new RequestContext();
+    ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+
+    await om.processInputStep({
+      messageList,
+      messages: [],
+      requestContext: ctx,
+      stepNumber: 6,
+      state: {},
+      steps: [],
+      systemMessages: [],
+      model: new MockLanguageModelV2({}) as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    const remainingText = getModelVisibleText(messageList);
+
+    expect(remainingText).toContain('fresh-3');
+    expect(remainingText).not.toContain('already-observed');
+  });
+
+  it('T4-A: activation/save ordering race should not replay previously observed content', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    const saveStarted: { value: boolean } = { value: false };
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      saveStarted.value = true;
+      await new Promise(resolve => setTimeout(resolve, 25));
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(saveStarted.value).toBe(true);
+
+    await (om as any).filterAlreadyObservedMessages(
+      messageList,
+      {
+        observedMessageIds: ['race-old'],
+        lastObservedAt: t0,
+      },
+      { useMarkerBoundaryPruning: true },
+    );
+
+    const duringRaceText = getModelVisibleText(messageList);
+
+    expect(duringRaceText).not.toContain('already-observed-race');
+
+    await cleanupPromise;
+  });
+
+  it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    messageList.add(
+      {
+        id: 'race-old-debug',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-race' }] },
+        createdAt: t0,
+      } as any,
+      'response',
+    );
+
+    messageList.add(
+      {
+        id: 'race-fresh-debug',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'fresh-next-turn' }] },
+        createdAt: new Date(t0.getTime() + 1),
+      } as any,
+      'input',
+    );
+
+    const originalSave = (om as any).saveMessagesWithSealedIdTracking.bind(om);
+    let releaseSave!: () => void;
+    const saveBlocked = new Promise<void>(resolve => {
+      releaseSave = resolve;
+    });
+    (om as any).saveMessagesWithSealedIdTracking = async (...args: any[]) => {
+      await saveBlocked;
+      return originalSave(...args);
+    };
+
+    const cleanupPromise = (om as any).cleanupAfterObservation(
+      messageList,
+      new Set<string>(),
+      threadId,
+      resourceId,
+      {},
+      undefined,
+      undefined,
+    );
+
+    // Assert intermediate state before save completes.
+    const duringRaceText = getModelVisibleText(messageList);
+
+    // Keep this assertion as a debug signal for post-activation under-inclusion windows.
+    expect(duringRaceText).toContain('fresh-next-turn');
+
+    releaseSave();
+    await cleanupPromise;
+  });
+
+  it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {
+    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const observed = {
+      id: 'obs-1',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'already-seen' }] },
+      createdAt: t0,
+    } as any;
+    const fresh = {
+      id: 'obs-2',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'new-seen' }] },
+      createdAt: new Date(t0.getTime() + 1),
+    } as any;
+
+    const record = {
+      observedMessageIds: ['obs-1'],
+      lastObservedAt: t0,
+      bufferedObservations: [],
+    } as any;
+
+    const unobserved = (om as any).getUnobservedMessages([observed, fresh], record);
+    const unobservedIds = unobserved.map((m: any) => m.id);
+    expect(unobservedIds).toEqual(['obs-2']);
+
+    messageList.add(observed, 'memory');
+    messageList.add(fresh, 'memory');
+    await (om as any).filterAlreadyObservedMessages(messageList, record);
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    expect(remainingIds).toEqual(unobservedIds);
   });
 });

@@ -5,6 +5,9 @@ packages:
   - "@mastra/daytona"
 ---
 
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
 # DaytonaSandbox
 
 Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, filesystem mounting (S3, GCS), and network isolation.
@@ -17,26 +20,31 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 
 ## Installation
 
-```bash
+```bash npm2yarn
 npm install @mastra/daytona
 ```
 
-Set your Daytona API key in one of three ways:
+Set your Daytona API key in one of three ways.
 
-```bash
-# Shell export
-export DAYTONA_API_KEY=your-api-key
-```
+<Tabs>
+  <TabItem value="shell-export" label="Shell export">
+    ```bash
+    export DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
 
-```bash
-# .env file
-DAYTONA_API_KEY=your-api-key
-```
+  <TabItem value="env-file" label=".env file">
+    ```bash
+    DAYTONA_API_KEY=your-api-key
+    ```
+  </TabItem>
 
-```typescript
-// Passed directly as constructor argument
-new DaytonaSandbox({ apiKey: 'your-api-key' })
-```
+  <TabItem value="constructor" label="Constructor">
+    ```typescript
+    new DaytonaSandbox({ apiKey: 'your-api-key' })
+    ```
+  </TabItem>
+</Tabs>
 
 ## Usage
 
@@ -47,12 +55,12 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace } from '@mastra/core/workspace'
 import { DaytonaSandbox } from '@mastra/daytona'
 
-const sandbox = new DaytonaSandbox({
-  language: 'typescript',
-  timeout: 120_000,
+const workspace = new Workspace({
+  sandbox: new DaytonaSandbox({
+    language: 'typescript',
+    timeout: 120_000,
+  }),
 })
-
-const workspace = new Workspace({ sandbox })
 
 const agent = new Agent({
   id: 'code-agent',
@@ -149,7 +157,7 @@ const result = await sandbox2.executeCommand('cat', ['/tmp/state.txt'])
 console.log(result.stdout) // "session 1"
 ```
 
-If the sandbox is in a stopped or archived state, it is restarted automatically. If it is in a dead state (destroyed, errored), a fresh sandbox is created instead.
+If the sandbox is in a stopped or archived state, it's restarted automatically. If it's in a dead state (destroyed, errored), a fresh sandbox is created instead.
 
 ### Filesystem mounting
 
@@ -429,179 +437,36 @@ const workspace = new Workspace({
     description:
       'The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
   },
+  {
+    name: 'processes',
+    type: 'DaytonaProcessManager',
+    description:
+      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+  },
 ]}
 />
 
-## Methods
+## Background processes
 
-### `start()`
-
-Create and start the Daytona sandbox.
+`DaytonaSandbox` includes a built-in process manager for spawning and managing background processes. Processes run in the Daytona cloud sandbox using session-based command execution.
 
 ```typescript
+const sandbox = new DaytonaSandbox({ language: 'typescript' })
 await sandbox.start()
-```
 
-Called automatically on first command execution or by `workspace.init()`.
-
-### `stop()`
-
-Stop the sandbox. The sandbox can be restarted later — files and state persist.
-
-```typescript
-await sandbox.stop()
-```
-
-### `destroy()`
-
-Delete the sandbox and clean up all resources.
-
-```typescript
-await sandbox.destroy()
-```
-
-### `executeCommand(command, args?, options?)`
-
-Execute a shell command in the sandbox. Automatically starts the sandbox if not already running, and retries once if the sandbox has timed out.
-
-```typescript
-const result = await sandbox.executeCommand('node', ['-e', 'console.log("Hello!")'])
-const output = await sandbox.executeCommand('pip', ['install', 'requests'], {
-  timeout: 60_000,
-  cwd: '/workspace',
+// Spawn a background process
+const handle = await sandbox.processes.spawn('node server.js', {
+  env: { PORT: '3000' },
+  onStdout: data => console.log(data),
 })
 
-// Stream output in real time
-await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
-  onStdout: chunk => process.stdout.write(chunk),
-  onStderr: chunk => process.stderr.write(chunk),
-})
+// Interact with the process
+console.log(handle.stdout)
+await handle.sendStdin('input\n')
+await handle.kill()
 ```
 
-**Parameters:**
-
-<PropertiesTable
-  content={[
-  {
-    name: 'command',
-    type: 'string',
-    description: 'Command to execute.',
-  },
-  {
-    name: 'args',
-    type: 'string[]',
-    description: 'Command arguments.',
-    isOptional: true,
-  },
-  {
-    name: 'options.timeout',
-    type: 'number',
-    description: 'Execution timeout in milliseconds. Overrides the instance default.',
-    isOptional: true,
-  },
-  {
-    name: 'options.cwd',
-    type: 'string',
-    description: 'Working directory for the command.',
-    isOptional: true,
-  },
-  {
-    name: 'options.env',
-    type: 'Record<string, string>',
-    description: 'Additional environment variables for this command. Merged with instance-level env.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStdout',
-    type: '(data: string) => void',
-    description: 'Callback for stdout streaming.',
-    isOptional: true,
-  },
-  {
-    name: 'options.onStderr',
-    type: '(data: string) => void',
-    description: 'Callback for stderr streaming.',
-    isOptional: true,
-  },
-]}
-/>
-
-### `mount(filesystem, mountPath)`
-
-Mount a filesystem at a path in the sandbox using FUSE tools (`s3fs` for S3, `gcsfuse` for GCS). FUSE tools are installed automatically if not present.
-
-```typescript
-import { S3Filesystem } from '@mastra/s3'
-
-const result = await sandbox.mount(
-  new S3Filesystem({
-    bucket: process.env.S3_BUCKET!,
-    region: 'us-east-1',
-    accessKeyId: process.env.S3_ACCESS_KEY_ID,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-  }),
-  '/data',
-)
-// { success: true, mountPath: '/data' }
-```
-
-Returns a `MountResult`: `{ success: boolean; mountPath: string; error?: string }`.
-
-### `unmount(mountPath)`
-
-Unmount a filesystem from a path in the sandbox.
-
-```typescript
-await sandbox.unmount('/data')
-```
-
-### `getInfo()`
-
-Get sandbox status and resource information.
-
-```typescript
-const info = await sandbox.getInfo()
-// {
-//   id: 'daytona-sandbox-abc123',
-//   name: 'DaytonaSandbox',
-//   provider: 'daytona',
-//   status: 'running',
-//   createdAt: Date,
-//   mounts: [],
-//   resources: {
-//     cpuCores: 2,        // vCPU count from the running sandbox
-//     memoryMB: 4096,     // converted from GB (×1024)
-//     diskMB: 20480,      // converted from GiB (×1024)
-//   },
-//   metadata: {
-//     language: 'typescript',
-//     ephemeral: false,
-//     snapshot: 'my-snapshot-id',   // only when snapshot is set
-//     image: 'node:20-slim',        // only when image is set
-//     target: 'us',                 // only when sandbox is running
-//   },
-// }
-```
-
-### `getInstructions()`
-
-Get a description of the sandbox environment. Used in tool descriptions so agents understand the execution context.
-
-```typescript
-// Default (no options)
-new DaytonaSandbox().getInstructions()
-// 'Cloud sandbox with isolated execution (typescript runtime). Default working directory: /home/daytona. Command timeout: 300s. Running as user: daytona.'
-
-// All options set
-new DaytonaSandbox({
-  language: 'python',
-  timeout: 60_000,
-  user: 'app',
-  volumes: [{ volumeId: 'vol-123', mountPath: '/data' }],
-  networkBlockAll: true,
-}).getInstructions()
-// 'Cloud sandbox with isolated execution (python runtime). Default working directory: /home/daytona. Command timeout: 60s. Running as user: app. 1 volume(s) attached. Network access is blocked.'
-```
+See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
 ## Mounting Cloud Storage
 
@@ -725,7 +590,7 @@ await daytonaSandbox.fs.uploadFile(Buffer.from('hello'), '/tmp/hello.txt')
 await daytonaSandbox.git.clone('https://github.com/org/repo', '/workspace/repo')
 ```
 
-The `instance` getter throws `SandboxNotReadyError` if the sandbox has not been started yet.
+The `instance` getter throws `SandboxNotReadyError` if the sandbox hasn't been started yet.
 
 ## Sandbox creation modes
 
@@ -741,6 +606,7 @@ Resources are only applied when `image` is set. Passing `resources` without `ima
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
 - [WorkspaceSandbox interface](/reference/workspace/sandbox)
 - [LocalSandbox reference](/reference/workspace/local-sandbox)
 - [S3Filesystem reference](/reference/workspace/s3-filesystem)

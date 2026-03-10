@@ -41,7 +41,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     // Validate config with Zod
     const validationResult = observabilityRegistryConfigSchema.safeParse(config);
     if (!validationResult.success) {
-      const errorMessages = validationResult.error.errors
+      const errorMessages = validationResult.error.issues
         .map(err => `${err.path.join('.') || 'config'}: ${err.message}`)
         .join('; ');
       throw new MastraError({
@@ -61,7 +61,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
         if (!isInstance(configValue)) {
           const configValidation = observabilityConfigValueSchema.safeParse(configValue);
           if (!configValidation.success) {
-            const errorMessages = configValidation.error.errors
+            const errorMessages = configValidation.error.issues
               .map(err => `${err.path.join('.')}: ${err.message}`)
               .join('; ');
             throw new MastraError({

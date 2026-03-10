@@ -271,6 +271,8 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
     skills,
     workspace,
     requestContextSchema,
+    // Version metadata
+    changeMessage,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -351,6 +353,7 @@ export const UPDATE_STORED_AGENT_ROUTE = createRoute({
         existing,
         updatedAgent,
         providedConfigFields,
+        changeMessage ? { changeMessage } : undefined,
       );
 
       if (!autoVersionResult) {
