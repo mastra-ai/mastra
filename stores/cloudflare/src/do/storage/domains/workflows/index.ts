@@ -28,6 +28,11 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
     this.#db = new DODB(config);
   }
 
+  supportsConcurrentUpdates(): boolean {
+    // updateWorkflowResults and updateWorkflowState are not yet implemented
+    return false;
+  }
+
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] });
   }
