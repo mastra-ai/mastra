@@ -15,6 +15,8 @@ type CompletionResult = {
   totalDuration: number;
 };
 
+// Browser-safe copy of the core completion-feedback formatter.
+// Keep this local so @mastra/react does not pull @mastra/core/loop into client bundles.
 const formatBaseCompletionFeedback = (
   result: CompletionResult,
   maxIterationReached: boolean,
