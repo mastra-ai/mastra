@@ -219,7 +219,7 @@ export class LocalProcessManager extends SandboxProcessManager<LocalSandbox> {
     }
 
     const handle = new LocalProcessHandle(subprocess, subprocess.pid, Date.now(), options);
-    this._tracked.set(this.pidKey(handle.pid), handle);
+    this._tracked.set(String(handle.pid), handle);
     return handle;
   }
 
