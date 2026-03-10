@@ -5162,6 +5162,9 @@ describe('Async Buffering Defaults & Disabling', () => {
 // =============================================================================
 
 describe('Async Buffering Processor Logic', () => {
+  // Helper to wrap engine in a processor for testing methods that moved to the processor.
+  const createProcessor = (om: ObservationalMemory) => new ObservationalMemoryProcessor(om);
+
   describe('getUnobservedMessages filtering with buffered chunks', () => {
     it('should exclude messages already in buffered chunks from unobserved list', async () => {
       const storage = createInMemoryStorage();
@@ -5436,8 +5439,9 @@ describe('Async Buffering Processor Logic', () => {
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
+      const proc = createProcessor(om);
 
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(false);
     });
 
     it('should return true when crossing a bufferTokens interval boundary', () => {
@@ -5452,12 +5456,13 @@ describe('Async Buffering Processor Logic', () => {
         },
         reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
+      const proc = createProcessor(om);
 
       // At 5000 tokens, interval = 0, lastBoundary = 0 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(5000, 'thread:test', mockRecord)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(5000, 'thread:test', mockRecord)).toBe(false);
 
       // At 10000 tokens, interval = 1, lastBoundary = 0 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(10000, 'thread:test', mockRecord)).toBe(true);
     });
 
     it('should treat stale isBufferingObservation flag as cleared (no active op in process)', () => {
@@ -5472,10 +5477,11 @@ describe('Async Buffering Processor Logic', () => {
         },
         reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
+      const proc = createProcessor(om);
 
       // isBufferingObservation=true but no op registered in this process → stale, should allow trigger
       const bufferingRecord = { isBufferingObservation: true, lastBufferedAtTokens: 0 } as any;
-      expect((om as any).shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(10000, 'thread:test', bufferingRecord)).toBe(true);
     });
 
     it('should not re-trigger for the same interval using record.lastBufferedAtTokens', () => {
@@ -5490,20 +5496,21 @@ describe('Async Buffering Processor Logic', () => {
         },
         reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
+      const proc = createProcessor(om);
 
       const lockKey = 'thread:test';
 
       // Simulate first trigger at 10000 — record shows lastBufferedAtTokens=0
-      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that buffering completed and persisted lastBufferedAtTokens=10000
       const afterBufferRecord = { isBufferingObservation: false, lastBufferedAtTokens: 10000 } as any;
 
       // Same interval should not re-trigger (using DB state, not in-memory)
-      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey, afterBufferRecord)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(12000, lockKey, afterBufferRecord)).toBe(false);
 
       // Next interval boundary should trigger
-      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, afterBufferRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(20000, lockKey, afterBufferRecord)).toBe(true);
     });
 
     it('should not re-trigger for the same interval after lastBufferedBoundary is set (in-memory fallback)', () => {
@@ -5518,21 +5525,22 @@ describe('Async Buffering Processor Logic', () => {
         },
         reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
+      const proc = createProcessor(om);
 
       const lockKey = 'thread:test';
       const bufferKey = (om as any).getObservationBufferKey(lockKey);
 
       // Simulate first trigger at 10000
-      expect((om as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(10000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that startAsyncBufferedObservation updated lastBufferedBoundary (in-memory)
       (ObservationalMemory as any).lastBufferedBoundary.set(bufferKey, 10000);
 
       // Same interval should not re-trigger
-      expect((om as any).shouldTriggerAsyncObservation(12000, lockKey, mockRecord)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(12000, lockKey, mockRecord)).toBe(false);
 
       // Next interval boundary should trigger
-      expect((om as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(20000, lockKey, mockRecord)).toBe(true);
     });
 
     it('should halve the buffer interval when within ~1 bufferTokens of the threshold', () => {
@@ -5547,32 +5555,33 @@ describe('Async Buffering Processor Logic', () => {
         },
         reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
+      const proc = createProcessor(om);
 
       // threshold=40000, bufferTokens=4000, rampPoint=40000-4000*1.1=35600, halved=2000
       const lockKey = 'thread:halve-test';
 
       // Well below ramp point (35600): normal 4000 interval
       // At 3000 tokens, interval = floor(3000/4000) = 0, last = 0 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(3000, lockKey, mockRecord, 40000)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(3000, lockKey, mockRecord, 40000)).toBe(false);
       // At 4000 tokens, interval = floor(4000/4000) = 1, last = 0 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(4000, lockKey, mockRecord, 40000)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(4000, lockKey, mockRecord, 40000)).toBe(true);
 
       // Still below ramp point: normal 4000 interval
       const recordAt32k = { isBufferingObservation: false, lastBufferedAtTokens: 32000 } as any;
       // At 35000 tokens (below rampPoint 35600), interval = floor(35000/4000) = 8, last = floor(32000/4000) = 8 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(35000, lockKey, recordAt32k, 40000)).toBe(false);
 
       // Above ramp point (35600): halved 2000 interval
       // At 36000 tokens, halved interval = 2000
       // interval = floor(36000/2000) = 18, last = floor(32000/2000) = 16 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, 40000)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(36000, lockKey, recordAt32k, 40000)).toBe(true);
 
       // Simulate buffering at 36000
       const recordAt36k = { isBufferingObservation: false, lastBufferedAtTokens: 36000 } as any;
       // At 37000 tokens, interval = floor(37000/2000) = 18, last = floor(36000/2000) = 18 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, 40000)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(37000, lockKey, recordAt36k, 40000)).toBe(false);
       // At 38000 tokens, interval = floor(38000/2000) = 19, last = 18 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, 40000)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(38000, lockKey, recordAt36k, 40000)).toBe(true);
     });
 
     it('should not halve interval when no threshold is provided', () => {
@@ -5587,15 +5596,16 @@ describe('Async Buffering Processor Logic', () => {
         },
         reflection: { observationTokens: 20000, bufferActivation: 0.5 },
       });
+      const proc = createProcessor(om);
 
       const lockKey = 'thread:no-threshold-test';
       const recordAt28k = { isBufferingObservation: false, lastBufferedAtTokens: 28000 } as any;
 
       // Without threshold, even near messageTokens limit, the normal 4000 interval is used
       // At 31000 tokens, interval = floor(31000/4000) = 7, last = floor(28000/4000) = 7 → no trigger
-      expect((om as any).shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncObservation(31000, lockKey, recordAt28k)).toBe(false);
       // At 32000 tokens, interval = floor(32000/4000) = 8, last = 7 → trigger
-      expect((om as any).shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncObservation(32000, lockKey, recordAt28k)).toBe(true);
     });
   });
 
@@ -5610,8 +5620,9 @@ describe('Async Buffering Processor Logic', () => {
         observation: { messageTokens: 50000, bufferTokens: false },
         reflection: { observationTokens: 20000 },
       });
+      const proc = createProcessor(om);
 
-      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', mockRecord)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncReflection(15000, 'thread:test', mockRecord)).toBe(false);
     });
 
     it('should trigger when observation tokens reach threshold * bufferActivation', () => {
@@ -5629,12 +5640,13 @@ describe('Async Buffering Processor Logic', () => {
           bufferActivation: 0.5, // trigger at 20000 * 0.5 = 10000 observation tokens
         },
       });
+      const proc = createProcessor(om);
 
       // Below activation point
-      expect((om as any).shouldTriggerAsyncReflection(5000, 'thread:test', mockRecord)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncReflection(5000, 'thread:test', mockRecord)).toBe(false);
 
       // At activation point (20000 * 0.5 = 10000)
-      expect((om as any).shouldTriggerAsyncReflection(10000, 'thread:test', mockRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncReflection(10000, 'thread:test', mockRecord)).toBe(true);
     });
 
     it('should not trigger when record already has bufferedReflection', () => {
@@ -5652,9 +5664,10 @@ describe('Async Buffering Processor Logic', () => {
           bufferActivation: 0.5,
         },
       });
+      const proc = createProcessor(om);
 
       const recordWithBuffer = { bufferedReflection: 'some existing reflection', isBufferingReflection: false } as any;
-      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', recordWithBuffer)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncReflection(15000, 'thread:test', recordWithBuffer)).toBe(false);
     });
 
     it('should treat stale isBufferingReflection flag as cleared (no active op in process)', () => {
@@ -5672,10 +5685,11 @@ describe('Async Buffering Processor Logic', () => {
           bufferActivation: 0.5,
         },
       });
+      const proc = createProcessor(om);
 
       // isBufferingReflection=true but no op registered in this process → stale, should allow trigger
       const bufferingRecord = { bufferedReflection: undefined, isBufferingReflection: true } as any;
-      expect((om as any).shouldTriggerAsyncReflection(15000, 'thread:test', bufferingRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncReflection(15000, 'thread:test', bufferingRecord)).toBe(true);
     });
 
     it('should only trigger once per buffer key (in-memory fallback)', () => {
@@ -5693,18 +5707,19 @@ describe('Async Buffering Processor Logic', () => {
           bufferActivation: 0.5,
         },
       });
+      const proc = createProcessor(om);
 
       const lockKey = 'thread:test';
       const reflectionKey = (om as any).getReflectionBufferKey(lockKey);
 
       // First trigger
-      expect((om as any).shouldTriggerAsyncReflection(15000, lockKey, mockRecord)).toBe(true);
+      expect((proc as any).shouldTriggerAsyncReflection(15000, lockKey, mockRecord)).toBe(true);
 
       // Simulate that reflection was started (sets lastBufferedBoundary)
       (ObservationalMemory as any).lastBufferedBoundary.set(reflectionKey, 15000);
 
       // Should not trigger again
-      expect((om as any).shouldTriggerAsyncReflection(18000, lockKey, mockRecord)).toBe(false);
+      expect((proc as any).shouldTriggerAsyncReflection(18000, lockKey, mockRecord)).toBe(false);
     });
   });
 
@@ -6350,6 +6365,7 @@ describe('Full Async Buffering Flow', () => {
     return {
       storage,
       om,
+      processor,
       threadId,
       resourceId,
       step,
@@ -7385,7 +7401,8 @@ describe('Full Async Buffering Flow', () => {
       });
 
       // shouldTriggerAsyncReflection should return false because bufferedReflection exists
-      const shouldTrigger = (om as any).shouldTriggerAsyncReflection(
+      const proc = new ObservationalMemoryProcessor(om);
+      const shouldTrigger = (proc as any).shouldTriggerAsyncReflection(
         60,
         `thread:${threadId}`,
         await storage.getObservationalMemory(threadId, resourceId),
@@ -8215,7 +8232,7 @@ describe('Full Async Buffering Flow', () => {
   });
 
   it('should retain at least the configured absolute bufferActivation floor after chunk activation', async () => {
-    const { storage, threadId, resourceId, step, waitForAsyncOps, om } = await setupAsyncBufferingScenario({
+    const { storage, threadId, resourceId, step, waitForAsyncOps, om, processor } = await setupAsyncBufferingScenario({
       messageTokens: 999999,
       bufferTokens: 999998,
       bufferActivation: 0.5,
@@ -8254,9 +8271,9 @@ describe('Full Async Buffering Flow', () => {
     (om as any).observationConfig.blockAfter = 1200;
     (om as any).observationConfig.bufferActivation = 2000;
 
-    const originalCleanup = (om as any).cleanupAfterObservation.bind(om);
+    const originalCleanup = (processor as any).cleanupAfterObservation.bind(processor);
     let capturedMinRemaining: number | undefined;
-    (om as any).cleanupAfterObservation = async (...args: any[]) => {
+    (processor as any).cleanupAfterObservation = async (...args: any[]) => {
       capturedMinRemaining = args[6];
       return originalCleanup(...args);
     };
@@ -8937,7 +8954,7 @@ describe('Single-thread replay red tests', () => {
   }
 
   it('T1-A: messages at exact lastObservedAt boundary should not replay on next turn', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
     const t1 = new Date(t0.getTime() + 1);
@@ -8966,7 +8983,7 @@ describe('Single-thread replay red tests', () => {
       'memory',
     );
 
-    await (om as any).filterAlreadyObservedMessages(messageList, {
+    await (processor as any).filterAlreadyObservedMessages(messageList, {
       lastObservedAt: t0,
     });
 
@@ -8977,7 +8994,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
     const t1 = new Date('2025-01-01T10:00:01.000Z');
@@ -9013,7 +9030,7 @@ describe('Single-thread replay red tests', () => {
       'memory',
     );
 
-    await (om as any).filterAlreadyObservedMessages(messageList, {
+    await (processor as any).filterAlreadyObservedMessages(messageList, {
       lastObservedAt: t1,
     });
 
@@ -9027,7 +9044,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T3-A: sealed remint (id=A->id=B) should not replay sealed prefix', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9073,7 +9090,7 @@ describe('Single-thread replay red tests', () => {
     const reminted = messagesAfterRemint.find((m: any) => m.id !== 'A');
     expect(reminted).toBeDefined();
 
-    await (om as any).filterAlreadyObservedMessages(messageList, {
+    await (processor as any).filterAlreadyObservedMessages(messageList, {
       observedMessageIds: ['A'],
       lastObservedAt: t0,
     });
@@ -9085,7 +9102,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T1-B: reminted +1ms boundary should not leak observed prefix on next turn', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9127,7 +9144,7 @@ describe('Single-thread replay red tests', () => {
     expect(reminted).toBeDefined();
     expect(reminted!.createdAt.getTime()).toBe(t0.getTime() + 1);
 
-    await (om as any).filterAlreadyObservedMessages(messageList, {
+    await (processor as any).filterAlreadyObservedMessages(messageList, {
       observedMessageIds: ['A'],
       lastObservedAt: t0,
     });
@@ -9408,7 +9425,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T4-A: activation/save ordering race should not replay previously observed content', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { om, processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9444,7 +9461,7 @@ describe('Single-thread replay red tests', () => {
       return originalSave(...args);
     };
 
-    const cleanupPromise = (om as any).cleanupAfterObservation(
+    const cleanupPromise = (processor as any).cleanupAfterObservation(
       messageList,
       new Set<string>(),
       threadId,
@@ -9457,7 +9474,7 @@ describe('Single-thread replay red tests', () => {
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(saveStarted.value).toBe(true);
 
-    await (om as any).filterAlreadyObservedMessages(
+    await (processor as any).filterAlreadyObservedMessages(
       messageList,
       {
         observedMessageIds: ['race-old'],
@@ -9474,7 +9491,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T4-A-debug: activation/save ordering sample can drop fresh-next-turn during race window', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { om, processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
 
@@ -9512,7 +9529,7 @@ describe('Single-thread replay red tests', () => {
       return originalSave(...args);
     };
 
-    const cleanupPromise = (om as any).cleanupAfterObservation(
+    const cleanupPromise = (processor as any).cleanupAfterObservation(
       messageList,
       new Set<string>(),
       threadId,
@@ -9533,7 +9550,7 @@ describe('Single-thread replay red tests', () => {
   });
 
   it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {
-    const { om, messageList, threadId, resourceId } = await createReplayFixture();
+    const { om, processor, messageList, threadId, resourceId } = await createReplayFixture();
 
     const t0 = new Date('2025-01-01T10:00:00.000Z');
     const observed = {
@@ -9565,7 +9582,7 @@ describe('Single-thread replay red tests', () => {
 
     messageList.add(observed, 'memory');
     messageList.add(fresh, 'memory');
-    await (om as any).filterAlreadyObservedMessages(messageList, record);
+    await (processor as any).filterAlreadyObservedMessages(messageList, record);
 
     const remainingIds = messageList.get.all.db().map((m: any) => m.id);
     expect(remainingIds).toEqual(unobservedIds);
