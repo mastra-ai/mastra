@@ -628,10 +628,10 @@ describe('AnthropicSchemaCompatLayer', () => {
       };
 
       let metadataSchema;
-      // @ts-expect-error - zod v3 does have _zod property
       if ('_zod' in z.object()) {
         metadataSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
       } else {
+        // @ts-expect-error - zod v3 does have _zod property
         metadataSchema = z.record(z.union([z.string(), z.number(), z.boolean()]));
       }
 

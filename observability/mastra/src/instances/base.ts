@@ -204,6 +204,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       metadata: enrichedMetadata,
       traceState,
       tags,
+      requestContext,
     });
 
     if (span.isEvent) {

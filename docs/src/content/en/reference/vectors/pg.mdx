@@ -166,6 +166,13 @@ const vectorStore = new PgVector({
     defaultValue: 'true',
     description: 'Whether to build the index',
   },
+  {
+    name: 'metadataIndexes',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Array of metadata field names to create btree indexes on. Improves query performance when filtering by these metadata fields.',
+  },
 ]}
 />
 

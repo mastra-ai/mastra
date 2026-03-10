@@ -48,13 +48,14 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^5.0.97",
-    "eslint": "^9.36.0",
+    "eslint": "^9.39.4",
     "json-schema": "^0.4.0",
     "msw": "^2.12.10",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.1",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "zod": "^3.25.76 || ^4.0.0"
