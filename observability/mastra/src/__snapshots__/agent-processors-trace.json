@@ -440,7 +440,8 @@
                   "content": {
                     "format": 2,
                     "parts": ["[Circular]"],
-                    "content": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                    "content": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                    "metadata": { "modelId": "mock-model-id" }
                   },
                   "createdAt": "<date>"
                 }

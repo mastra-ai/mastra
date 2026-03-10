@@ -2576,6 +2576,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 {
                   "content": {
                     "format": 2,
+                    "metadata": {
+                      "modelId": "mock-model-id",
+                    },
                     "parts": [
                       {
                         "providerExecuted": undefined,
