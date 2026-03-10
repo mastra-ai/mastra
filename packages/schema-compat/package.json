@@ -119,7 +119,7 @@
     "@vitest/ui": "catalog:",
     "ajv": "^8.17.1",
     "arktype": "^2.1.29",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "json-schema-traverse": "^1.0.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

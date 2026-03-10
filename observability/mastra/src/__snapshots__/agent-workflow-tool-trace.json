@@ -191,7 +191,8 @@
                       "workflowId": "simpleWorkflow",
                       "input": {
                         "input": "test input"
-                      }
+                      },
+                      "suspendedToolRunId": ""
                     },
                     "output": {
                       "result": {
