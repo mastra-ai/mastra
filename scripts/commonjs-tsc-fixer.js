@@ -2,6 +2,11 @@ import { readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import { globby } from 'globby';
 
+/** Convert Windows backslashes to posix forward slashes */
+function slash(p) {
+  return p.replaceAll('\\', '/');
+}
+
 async function cleanupDtsFiles() {
   const rootPath = process.cwd();
   const files = await globby('./*.d.ts', { cwd: rootPath });
@@ -31,28 +36,20 @@ async function writeDtsFiles() {
           // For wildcard patterns, derive the subpath relative to dist/
           const dir = dirname(file);
           const distRoot = join(rootPath, 'dist');
-          const subPath = relative(distRoot, dir).replaceAll('\\', '/');
+          const subPath = slash(relative(distRoot, dir));
           const filename = key.replace('*', subPath);
 
           const targetPath = join(rootPath, filename) + '.d.ts';
           await mkdir(dirname(targetPath), { recursive: true });
 
-          await writeFile(
-            targetPath,
-            `export * from './${relative(dirname(targetPath), file)
-              .replace(/[/\\]index\.d\.ts$/, '')
-              .replaceAll('\\', '/')}';`,
-          );
+          const relPath = slash(relative(dirname(targetPath), file)).replace('/index.d.ts', '');
+          await writeFile(targetPath, `export * from './${relPath}';`);
         } else {
           const targetPath = join(rootPath, key) + '.d.ts';
           await mkdir(dirname(targetPath), { recursive: true });
 
-          await writeFile(
-            targetPath,
-            `export * from './${relative(dirname(targetPath), file)
-              .replace(/[/\\]index\.d\.ts$/, '')
-              .replaceAll('\\', '/')}';`,
-          );
+          const relPath = slash(relative(dirname(targetPath), file)).replace('/index.d.ts', '');
+          await writeFile(targetPath, `export * from './${relPath}';`);
         }
       }
     }
