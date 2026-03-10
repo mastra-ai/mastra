@@ -100,11 +100,13 @@ function GroupedTracesList({
   selectedTraceId,
   onTraceClick,
   filtersApplied,
+  threadTitles,
 }: {
   traces: Trace[];
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
   filtersApplied?: boolean;
+  threadTitles?: Record<string, string>;
 }) {
   const { groups, ungrouped } = groupTracesByThread(traces as SpanRecord[]);
 
@@ -130,7 +132,11 @@ function GroupedTracesList({
               )}
             >
               <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Thread {getShortId(group.threadId) || group.threadId}</span>
+              <span className="truncate">
+                {threadTitles?.[group.threadId]
+                  ? <>Thread '{threadTitles[group.threadId]}' ({getShortId(group.threadId) || group.threadId})</>
+                  : <>Thread {getShortId(group.threadId) || group.threadId}</>}
+              </span>
               <span className="text-neutral3">({group.traces.length})</span>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -202,6 +208,7 @@ export function TracesList({
             selectedTraceId={selectedTraceId}
             onTraceClick={onTraceClick}
             filtersApplied={filtersApplied}
+            threadTitles={threadTitles}
           />
         )}
         <EntryList.NextPageLoading

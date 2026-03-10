@@ -57,7 +57,7 @@ export default function Observability() {
   const scoreId = searchParams.get('scoreId');
 
   const {
-    data: traces = [],
+    data: tracesData,
     isLoading: isTracesLoading,
     isFetchingNextPage,
     hasNextPage,
@@ -82,6 +82,9 @@ export default function Observability() {
       }),
     },
   });
+
+  const traces = tracesData?.spans ?? [];
+  const threadTitles = tracesData?.threadTitles ?? {};
 
   // Sync URL traceId to state
   if (traceId && traceId !== selectedTraceId) {
@@ -249,6 +252,7 @@ export default function Observability() {
                 isFetchingNextPage={isFetchingNextPage}
                 hasNextPage={hasNextPage}
                 groupByThread={groupByThread}
+                threadTitles={threadTitles}
               />
             )}
           </div>

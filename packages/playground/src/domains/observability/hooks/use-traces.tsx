@@ -40,16 +40,28 @@ export function getTracesNextPageParam(
   return undefined;
 }
 
-/** Deduplicates traces by traceId across all loaded pages, keeping the first occurrence. */
-export function selectUniqueTraces(data: { pages: ListTracesResponse[] }) {
+type TracesPageResponse = ListTracesResponse & { threadTitles?: Record<string, string> };
+
+/** Deduplicates traces by traceId across all loaded pages, keeping the first occurrence.
+ *  Also merges threadTitles from all pages for thread grouping display. */
+export function selectUniqueTraces(data: { pages: TracesPageResponse[] }) {
   const seen = new Set<string>();
-  return data.pages
+  const spans = data.pages
     .flatMap(page => page.spans ?? [])
     .filter(span => {
       if (seen.has(span.traceId)) return false;
       seen.add(span.traceId);
       return true;
     });
+
+  const threadTitles: Record<string, string> = {};
+  for (const page of data.pages) {
+    if (page.threadTitles) {
+      Object.assign(threadTitles, page.threadTitles);
+    }
+  }
+
+  return { spans, threadTitles };
 }
 
 export const useTraces = ({ filters }: TracesFilters) => {
