@@ -2117,7 +2117,7 @@ importers:
         specifier: ^8.0.3
         version: 8.0.3
       msw:
-        specifier: ^2.8.4
+        specifier: ^2.12.10
         version: 2.12.10(@types/node@22.19.13)(typescript@5.9.3)
       string-similarity:
         specifier: ^4.0.4
