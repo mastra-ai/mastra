@@ -4,7 +4,7 @@ import type { MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import { getTiktoken } from '../../utils/tiktoken';
-import type { ProcessInputArgs, ProcessInputResult, ProcessInputStepArgs, Processor } from '../index';
+import type { ProcessInputStepArgs, Processor } from '../index';
 
 /**
  * Configuration options for TokenLimiter processor
@@ -83,93 +83,11 @@ export class TokenLimiterProcessor implements Processor<'token-limiter', { syste
   }
 
   /**
-   * Process input messages to limit them to the configured token limit.
-   * This filters historical messages to fit within the token budget,
-   * prioritizing the most recent messages.
-   *
-   * Uses messageList.get.all.db() to access ALL messages (memory + input),
-   * not just the input messages passed in the messages parameter.
-   * System messages are accessed via args.systemMessages (they're stored separately).
-   * Removes filtered messages directly from messageList and returns it.
-   */
-  async processInput(args: ProcessInputArgs): Promise<ProcessInputResult> {
-    const { messageList, systemMessages: coreSystemMessages } = args;
-
-    // Use messageList to get ALL messages (memory + input)
-    // Note: System messages are NOT in messageList.get.all.db() - they're in args.systemMessages
-    const messages = messageList?.get.all.db() ?? args.messages;
-    const limit = this.maxTokens;
-
-    // If no messages or empty array, throw TripWire - can't send LLM a request with no messages
-    if (!messages || messages.length === 0) {
-      throw new TripWire('TokenLimiterProcessor: No messages to process. Cannot send LLM a request with no messages.', {
-        retry: false,
-      });
-    }
-
-    // Calculate token count for system messages (always included, never filtered)
-    // System messages come from args.systemMessages, not from the messages array
-    let systemTokens = 0;
-    if (coreSystemMessages && coreSystemMessages.length > 0) {
-      for (const msg of coreSystemMessages) {
-        systemTokens += await this.countCoreSystemMessageTokens(msg);
-      }
-    }
-
-    // All messages from messageList.get.all.db() are non-system messages
-    const nonSystemMessages = messages;
-
-    // If system messages alone exceed the limit (accounting for conversation overhead),
-    // throw TripWire - can't send LLM a request with only system messages
-    if (systemTokens + TokenLimiterProcessor.TOKENS_PER_CONVERSATION >= limit) {
-      throw new TripWire(
-        'TokenLimiterProcessor: System messages alone exceed token limit. Requests cannot be completed by removing system messages.',
-        { retry: false, metadata: { systemTokens, limit } },
-      );
-    }
-
-    // Calculate remaining budget for non-system messages (accounting for conversation overhead)
-    const remainingBudget = limit - systemTokens - TokenLimiterProcessor.TOKENS_PER_CONVERSATION;
-
-    // Process non-system messages in reverse order (newest first)
-    const messagesToKeep: MastraDBMessage[] = [];
-    let currentTokens = 0;
-
-    // Iterate through messages in reverse to prioritize recent messages
-    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
-      const message = nonSystemMessages[i];
-      if (!message) continue;
-
-      const messageTokens = await this.countInputMessageTokens(message);
-
-      if (currentTokens + messageTokens <= remainingBudget) {
-        messagesToKeep.unshift(message); // Add to beginning to maintain order
-        currentTokens += messageTokens;
-      }
-      // Continue checking all messages, don't break early
-    }
-
-    // If we have messageList, remove filtered messages directly and return messageList
-    if (messageList) {
-      const keepIds = new Set(messagesToKeep.map(m => m.id));
-      const idsToRemove = messages.filter(m => !keepIds.has(m.id)).map(m => m.id);
-      if (idsToRemove.length > 0) {
-        messageList.removeByIds(idsToRemove);
-      }
-      return messageList;
-    }
-
-    // Fallback: return array of filtered non-system messages
-    return messagesToKeep;
-  }
-
-  /**
    * Process input messages at each step of the agentic loop, before they are sent to the LLM.
-   * Unlike processInput which runs once at the start, this runs at every step (including tool call continuations).
-   * This prevents the conversation history from growing unboundedly during multi-step agent workflows.
+   * Runs at every step (including tool call continuations), preventing the conversation history
+   * from growing unboundedly during multi-step agent workflows.
    *
-   * Reuses the same token counting and message pruning logic as processInput:
-   * system messages are always preserved, and the most recent non-system messages are kept
+   * System messages are always preserved, and the most recent non-system messages are kept
    * within the token budget.
    */
   async processInputStep(args: ProcessInputStepArgs): Promise<void> {
