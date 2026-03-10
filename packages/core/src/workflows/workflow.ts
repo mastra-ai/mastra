@@ -3675,15 +3675,20 @@ export class Run<
     // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
     const persistedTracingContext = snapshot?.tracingContext;
     const userProvidedTraceId = params.tracingOptions?.traceId;
-    const effectiveTraceId = userProvidedTraceId ?? persistedTracingContext?.traceId;
+    const userProvidedParentSpanId = params.tracingOptions?.parentSpanId;
+
+    // Only fall back to persisted traceId when the caller didn't provide either tracing identifier.
+    // If the caller provided parentSpanId without traceId, using the persisted traceId would create
+    // invalid cross-trace parentage (a span in one trace claiming a parent from another trace).
+    const effectiveTraceId =
+      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
 
     // Only use persisted spanId as parentSpanId if:
     // 1. User didn't provide their own parentSpanId, AND
     // 2. Either no user traceId was provided, OR user traceId matches persisted traceId
     // This prevents cross-trace parentage where a span in one trace claims a parent from another trace
     const shouldUsePersistedParentSpan =
-      !params.tracingOptions?.parentSpanId &&
-      (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
+      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
 
     const resumeTracingOptions = {
       ...params.tracingOptions,
