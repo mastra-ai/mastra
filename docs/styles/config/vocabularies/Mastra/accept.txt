@@ -3,6 +3,8 @@
 (?i)APIs
 Amazon
 Apache
+App Services
+Assistant UI
 Astra
 Astro
 (?i)Auth0
@@ -42,6 +44,8 @@ GCS
 (?i)GET
 (?i)GitHub
 Google
+Google Gemini
+Google Gemini Live
 GraphRAG
 gRPC
 (?i)Hono
@@ -63,6 +67,7 @@ LanceDB
 LLM
 (?i)MAP
 (?i)Mastra
+Mastra Cloud
 (?i)MCP
 MinIO
 MLflow
@@ -76,6 +81,7 @@ Nuxt
 OAuth
 (?i)OpenAI
 (?i)OpenAPI
+OpenAI Realtime
 OpenSearch
 OpenTelemetry
 OS
@@ -90,6 +96,7 @@ Prisma
 Qdrant
 R2
 (?i)RAG
+Retrieval-Augmented Generation
 (?i)React
 Redis
 Remix
