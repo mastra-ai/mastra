@@ -650,8 +650,6 @@ harness.respondToPlanApproval({
 
 Grant a tool category for the current session. Tools in this category are auto-approved without prompting.
 
-When a granted tool pauses for approval, the harness waits for the suspended source stream to finish before resuming the run. This ensures the workflow snapshot is persisted before `approveToolCall()` is triggered.
-
 ```typescript
 harness.grantSessionCategory({ category: 'edit' })
 ```
