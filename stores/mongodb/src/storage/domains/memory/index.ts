@@ -223,7 +223,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Fetch the target message + previous messages (createdAt <= target, ordered DESC, limited)
       const prevMessages = await collection
         .find({ thread_id: target.threadId, createdAt: { $lte: target.createdAt } })
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, id: -1 })
         .limit(withPreviousMessages + 1)
         .toArray();
       includedMessages.push(...prevMessages);
@@ -232,7 +232,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (withNextMessages > 0) {
         const nextMessages = await collection
           .find({ thread_id: target.threadId, createdAt: { $gt: target.createdAt } })
-          .sort({ createdAt: 1 })
+          .sort({ createdAt: 1, id: 1 })
           .limit(withNextMessages)
           .toArray();
         includedMessages.push(...nextMessages);
@@ -332,6 +332,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '$lt' : '$lte';
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
+      }
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
       }
 
       // When perPage is 0, we only need included messages — skip COUNT and data queries
@@ -492,6 +497,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '$lt' : '$lte';
         query.createdAt = { ...query.createdAt, [endOp]: formatDateForMongoDB(filter.dateRange.end) };
+      }
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
       }
 
       // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.

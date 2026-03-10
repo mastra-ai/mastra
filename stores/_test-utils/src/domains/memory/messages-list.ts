@@ -622,7 +622,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
           perPage: 0,
         });
         expect(result0.messages).toHaveLength(0);
-        expect(result0.total).toBe(5); // Total should still reflect actual count
+        expect(result0.total).toBe(0); // Count query is skipped when perPage is 0 with no includes
         expect(result0.perPage).toBe(0);
 
         // Test negative perPage - should throw an error (invalid input)

@@ -649,7 +649,7 @@ export class MemoryStorageD1 extends MemoryStorage {
         FROM ${tableName}
         WHERE thread_id = ?
           AND createdAt <= ?
-        ORDER BY createdAt DESC
+        ORDER BY createdAt DESC, id DESC
         LIMIT ?
       )`);
       params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
@@ -661,7 +661,7 @@ export class MemoryStorageD1 extends MemoryStorage {
           FROM ${tableName}
           WHERE thread_id = ?
             AND createdAt > ?
-          ORDER BY createdAt ASC
+          ORDER BY createdAt ASC, id ASC
           LIMIT ?
         )`);
         params.push(target.threadId, target.createdAt, withNextMessages);
@@ -674,7 +674,7 @@ export class MemoryStorageD1 extends MemoryStorage {
     if (unionQueries.length === 1) {
       finalQuery = unionQueries[0]!;
     } else {
-      finalQuery = `${unionQueries.join(' UNION ALL ')} ORDER BY createdAt ASC`;
+      finalQuery = `${unionQueries.join(' UNION ALL ')} ORDER BY createdAt ASC, id ASC`;
     }
     const messages = await this.#db.executeQuery({ sql: finalQuery, params });
 
@@ -821,6 +821,11 @@ export class MemoryStorageD1 extends MemoryStorage {
 
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
 
       // When perPage is 0 and we have include targets, skip COUNT and data queries.
       // This is the semantic recall path where we only need the included messages.

@@ -714,7 +714,7 @@ export class MemoryPG extends MemoryStorage {
         FROM ${tableName} m
         WHERE m.thread_id = ${p1}
           AND m."createdAt" <= ${p2}
-        ORDER BY m."createdAt" DESC
+        ORDER BY m."createdAt" DESC, m.id DESC
         LIMIT ${p3}
       )`);
       params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
@@ -730,7 +730,7 @@ export class MemoryPG extends MemoryStorage {
           FROM ${tableName} m
           WHERE m.thread_id = ${p4}
             AND m."createdAt" > ${p5}
-          ORDER BY m."createdAt" ASC
+          ORDER BY m."createdAt" ASC, m.id ASC
           LIMIT ${p6}
         )`);
         params.push(target.threadId, target.createdAt, withNextMessages);
@@ -749,7 +749,7 @@ export class MemoryPG extends MemoryStorage {
       finalQuery = unionQueries[0]!.slice(1, -1); // Remove ( and )
     } else {
       // Multiple queries - UNION ALL and sort the result
-      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC`;
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) AS combined ORDER BY "createdAt" ASC, id ASC`;
     }
     const includedRows = await this.#db.client.manyOrNone(finalQuery, params);
 
@@ -882,6 +882,11 @@ export class MemoryPG extends MemoryStorage {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
 
       // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
       // This is the semantic recall path where we only need the included messages.
@@ -1044,6 +1049,11 @@ export class MemoryPG extends MemoryStorage {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
 
       // Fast path: when perPage is 0 and include is provided, skip COUNT(*) and the
       // main data query entirely. This is the semantic recall path where only included

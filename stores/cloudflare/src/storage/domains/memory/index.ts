@@ -860,6 +860,11 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         };
       }
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       // Step 1: Get thread messages from all specified threads (for pagination)
       const threadMessageIds = new Set<string>();
       for (const tid of threadIds) {
@@ -894,17 +899,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Get total count for pagination
       const total = filteredThreadMessages.length;
-
-      // If perPage is 0 AND there are no include messages, return empty array immediately
-      if (perPage === 0 && (!include || include.length === 0)) {
-        return {
-          messages: [],
-          total,
-          page,
-          perPage: perPageForResponse,
-          hasMore: offset < total,
-        };
-      }
 
       // Sort thread messages by createdAt BEFORE pagination
       filteredThreadMessages.sort((a, b) => {

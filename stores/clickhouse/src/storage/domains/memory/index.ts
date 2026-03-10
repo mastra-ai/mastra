@@ -274,6 +274,11 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPageForQuery === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       // When perPage is 0, we only need included messages — skip data and COUNT queries
       if (perPageForQuery === 0 && include && include.length > 0) {
         const includeResult = await this._getIncludedMessages({ include });
@@ -484,7 +489,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = {${threadParam}:String}
           AND createdAt <= parseDateTime64BestEffort({${createdAtParam}:String}, 3)
-        ORDER BY createdAt DESC
+        ORDER BY createdAt DESC, id DESC
         LIMIT {${limitParam}:Int64}
       `);
       params[threadParam] = target.threadId;
@@ -502,7 +507,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
           FROM "${TABLE_MESSAGES}"
           WHERE thread_id = {${threadParam2}:String}
             AND createdAt > parseDateTime64BestEffort({${createdAtParam2}:String}, 3)
-          ORDER BY createdAt ASC
+          ORDER BY createdAt ASC, id ASC
           LIMIT {${limitParam2}:Int64}
         `);
         params[threadParam2] = target.threadId;
@@ -520,7 +525,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     if (unionQueries.length === 1) {
       finalQuery = unionQueries[0]!;
     } else {
-      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) ORDER BY "createdAt" ASC`;
+      finalQuery = `SELECT * FROM (${unionQueries.join(' UNION ALL ')}) ORDER BY "createdAt" ASC, id ASC`;
     }
 
     const includeResult = await this.client.query({

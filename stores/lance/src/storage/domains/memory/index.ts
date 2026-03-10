@@ -373,6 +373,11 @@ export class StoreMemoryLance extends MemoryStorage {
 
       const whereClause = conditions.join(' AND ');
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       // When perPage is 0, we only need included messages — skip COUNT and data queries
       if (perPage === 0 && include && include.length > 0) {
         const includedMessages = await this._getIncludedMessages(table, include);

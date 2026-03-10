@@ -198,7 +198,7 @@ export class MemoryLibSQL extends MemoryStorage {
         FROM "${TABLE_MESSAGES}"
         WHERE thread_id = ?
           AND "createdAt" <= ?
-        ORDER BY "createdAt" DESC
+        ORDER BY "createdAt" DESC, id DESC
         LIMIT ?
       )`);
       params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
@@ -210,7 +210,7 @@ export class MemoryLibSQL extends MemoryStorage {
           FROM "${TABLE_MESSAGES}"
           WHERE thread_id = ?
             AND "createdAt" > ?
-          ORDER BY "createdAt" ASC
+          ORDER BY "createdAt" ASC, id ASC
           LIMIT ?
         )`);
         params.push(target.threadId, target.createdAt, withNextMessages);
@@ -223,7 +223,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (unionQueries.length === 1) {
       finalQuery = unionQueries[0]!;
     } else {
-      finalQuery = `${unionQueries.join(' UNION ALL ')} ORDER BY "createdAt" ASC`;
+      finalQuery = `${unionQueries.join(' UNION ALL ')} ORDER BY "createdAt" ASC, id ASC`;
     }
     const includedResult = await this.#client.execute({ sql: finalQuery, args: params });
     const includedRows = includedResult.rows?.map(row => this.parseRow(row));
@@ -336,6 +336,11 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
 
       // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
       // This is the semantic recall path where we only need the included messages.
@@ -503,6 +508,11 @@ export class MemoryLibSQL extends MemoryStorage {
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
 
       // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.
       if (perPage === 0 && include && include.length > 0) {

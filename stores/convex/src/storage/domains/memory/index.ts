@@ -217,6 +217,11 @@ export class MemoryConvex extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
+    // When perPage is 0 with no includes, there's nothing to return.
+    if (perPage === 0 && (!include || include.length === 0)) {
+      return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+    }
+
     // When perPage is 0, we only need included messages — skip full thread load
     if (perPage === 0 && include && include.length > 0) {
       const messages = await this._getIncludedMessages(include);
@@ -263,7 +268,7 @@ export class MemoryConvex extends MemoryStorage {
 
     const totalThreadMessages = rows.length;
     const paginatedRows = perPageInput === false ? rows : rows.slice(offset, offset + perPage);
-    const messages = paginatedRows.map(row => this.parseStoredMessage(row));
+    let messages = paginatedRows.map(row => this.parseStoredMessage(row));
     const messageIds = new Set(messages.map(msg => msg.id));
 
     if (include && include.length > 0) {
@@ -290,7 +295,7 @@ export class MemoryConvex extends MemoryStorage {
       }
     }
 
-    this._sortMessages(messages, field, direction);
+    messages = this._sortMessages(messages, field, direction);
 
     const hasMore =
       include && include.length > 0

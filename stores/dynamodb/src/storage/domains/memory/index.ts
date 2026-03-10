@@ -396,6 +396,11 @@ export class MemoryStorageDynamoDB extends MemoryStorage {
         direction,
       });
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       // When perPage is 0, we only need included messages — skip thread load entirely
       if (perPage === 0 && include && include.length > 0) {
         const includeMessages = await this._getIncludedMessages({ include });
