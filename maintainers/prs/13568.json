@@ -1,0 +1,55 @@
+{
+  "number": 13568,
+  "title": "feat(memory): opt-in observer context optimization",
+  "url": "https://github.com/mastra-ai/mastra/pull/13568",
+  "author": {
+    "login": "TylerBarnes",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-27T00:57:23Z",
+    "lastUpdated": "2026-02-27T23:44:23Z",
+    "ageInDays": 11,
+    "daysSinceLastUpdate": 10
+  },
+  "size": {
+    "additions": 1131,
+    "deletions": 23,
+    "changedFiles": 14,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": true,
+  "branch": {
+    "head": "feat/lower-obs-token-usage",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds two opt-in settings to observational memory's Observer to reduce input token costs in long-running conversations: (1) `previousObservationTokens` truncates the previous observations section to a token budget, keeping the most recent entries and preserving important (🔴) observations; (2) `useBufferedReflection` includes pending buffered reflection content in the observer context. Both are disabled by default. Changes span core types, memory package implementation, observer-agent prompt building, mastracode memory factory, tests (new describe blocks with multiple test cases), and documentation for both guide and reference pages. Includes 2 changesets (minor for @mastra/memory, patch for @mastra/core).",
+  "maintainerNotes": "Author (TylerBarnes) is an active maintainer with many recent merged OM PRs. PR is still in draft state with merge conflicts against main and several CI failures (Core, E2E, Memory, Observability tests). The failures in Memory tests are likely directly related to this PR. The 10 days without update suggest the author may have shifted focus to other OM work (PRs #13877, #13887, #13946, #13953, #13955 were all opened and merged after this one). May need rebasing against main given the significant OM changes merged since. Check with author if this is still planned or if parts were superseded by later PRs.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

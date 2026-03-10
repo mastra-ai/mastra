@@ -1,0 +1,60 @@
+{
+  "number": 11149,
+  "title": "feat(core): add support for passing custom `assistantMessageId`",
+  "url": "https://github.com/mastra-ai/mastra/pull/11149",
+  "author": {
+    "login": "RostiMelk",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-13T15:10:24Z",
+    "lastUpdated": "2025-12-19T16:14:24Z",
+    "ageInDays": 452,
+    "daysSinceLastUpdate": 446
+  },
+  "size": {
+    "additions": 75,
+    "deletions": 2,
+    "changedFiles": 9,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/core/allow-for-custom-assistant-message-id",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13796,
+        "title": "fix(core): fix message ID mismatch between stream/generate response and memory",
+        "state": "MERGED",
+        "relationship": "related-but-different"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds support for passing a custom `assistantMessageId` when calling `agent.stream()` or `agent.generate()`, allowing callers to specify the ID for the assistant response message saved to memory. Useful for optimistic UI updates, offline reconciliation, or pre-associating message IDs. The change threads the new parameter from the agent API through prepare-stream, model loop types, and into the core loop where it takes priority over `experimental_generateMessageId` and `generateId`. Includes a test in the loop test utils.",
+  "maintainerNotes": "Well-written PR from an external contributor with clear description, good code quality, and a test. However, it is very stale (450+ days, no activity since Dec 2025) and has merge conflicts (CONFLICTING state). Missing a changeset. A related PR (#13796) fixing message ID mismatch between stream/generate response and memory was merged in March 2026, but it addresses a different concern (ID consistency bug) rather than this feature (user-supplied custom IDs). The feature itself is still not in the codebase. CI checks are stuck in pending state (likely due to the staleness/conflicts). Several test suites never ran. If the feature is desired, this would need a rebase, changeset, and fresh CI run.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

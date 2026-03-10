@@ -1,0 +1,66 @@
+{
+  "number": 12183,
+  "title": "[feat] Add new filters to traces list",
+  "url": "https://github.com/mastra-ai/mastra/pull/12183",
+  "author": {
+    "login": "greglobinski",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-01-22T08:50:36Z",
+    "lastUpdated": "2026-02-05T15:26:15Z",
+    "ageInDays": 47,
+    "daysSinceLastUpdate": 33
+  },
+  "size": {
+    "additions": 464,
+    "deletions": 198,
+    "changedFiles": 21,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "traces-filters",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13938,
+        "title": "feat(playground): agent playground, traces tab, and dataset iteration workflow",
+        "state": "MERGED",
+        "relevance": "Touches traces tab UI in playground, merged Mar 6 — likely caused merge conflicts and may overlap with filter functionality"
+      },
+      {
+        "number": 11711,
+        "title": "Update Observability traces list to use listTraces",
+        "state": "MERGED",
+        "relevance": "Earlier traces list refactor, already merged before this PR was opened"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds advanced filtering to the traces list in the playground UI: type filter (agent run, workflow run), status filter (success, error, running), run ID filter, thread ID filter, and a collapsible 'More Filters' panel. Also renames Column→EntryListColumn, adds tooltips to status indicators, expands status types (running, suspended), and adds a horizontal layout option to input fields. Changes span 21 files across playground-ui and playground packages.",
+  "maintainerNotes": "Draft PR from maintainer greglobinski, stale for 33 days with no human reviews. Has merge conflicts (likely caused by #13938 which was merged Mar 6 and touched overlapping traces/playground code). E2E tests are failing. PR description template was not filled in — no description of changes or linked issues. The changeset and e2e test updates are present. The author may have deprioritized this work. Should check with author whether this is still planned or has been superseded by #13938.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

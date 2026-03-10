@@ -1,0 +1,53 @@
+{
+  "number": 13213,
+  "title": "feat(core): pass through experimental_toToolResultContent for multi-modal tool results",
+  "url": "https://github.com/mastra-ai/mastra/pull/13213",
+  "author": {
+    "login": "williamwang0",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-18T19:18:26Z",
+    "lastUpdated": "2026-03-05T00:41:32Z",
+    "ageInDays": 20,
+    "daysSinceLastUpdate": 5
+  },
+  "size": {
+    "additions": 42,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/experimental-to-tool-result-content",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Community PR that adds passthrough support for AI SDK's `experimental_toToolResultContent` property on Mastra tools. This enables tools to return multi-modal content (images, text) as native content blocks in tool results. Changes span 3 files: adds the property to ToolAction interface and CoreTool/InternalCoreTool types, stores it in the Tool class constructor, and passes it through in CoreToolBuilder.build(). The pattern follows existing conventions (same approach as providerOptions and mcp passthrough).",
+  "maintainerNotes": "Merge conflicts need resolution. No changeset included. CI checks are stuck in pending (likely due to external contributor — secrets-gated jobs didn't run). CodeRabbit review raised two valid points: (1) the property is not mapped to `toModelOutput` in buildV5() for AI SDK v5 compatibility, and (2) the inline return type is duplicated 4 times and should be extracted to a named alias. Author has pinged maintainers twice asking for review (Feb 28 and Mar 5). Claims they are running a patched version and wants to get off it. Despite PR description checking 'has tests', no actual test files were added or modified.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,55 @@
+{
+  "number": 10930,
+  "title": "add @mastra/dsql - Amazon Aurora DSQL storage provider",
+  "url": "https://github.com/mastra-ai/mastra/pull/10930",
+  "author": {
+    "login": "vvatanabe",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-05T07:52:53Z",
+    "lastUpdated": "2026-01-17T07:34:02Z",
+    "ageInDays": 95,
+    "daysSinceLastUpdate": 52
+  },
+  "size": {
+    "additions": 9538,
+    "deletions": 174,
+    "changedFiles": 33,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "dsql-storage-provider",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#10929"
+    ]
+  },
+  "summary": "Adds @mastra/dsql, a new storage provider package for Amazon Aurora DSQL under stores/dsql/. Implements the full Mastra storage interface (threads, messages, workflows, traces, spans, scores) with Aurora DSQL-specific adaptations: IAM auth via @aws/aurora-dsql-node-postgres-connector, OCC retry logic with exponential backoff, batch processing (3000-row limit), CREATE INDEX ASYNC, JSON stored as TEXT with ::jsonb casting, and 55-min connection pool lifetime. Includes unit and integration tests, changeset, documentation (dsql.mdx reference page), and README. Approved by maintainer abhiaiyer91. Author has been responsive to feedback, fixing CI issues and rebasing multiple times.",
+  "maintainerNotes": "PR was approved by abhiaiyer91 but has gone stale (52 days since last update). Has merge conflicts that need resolving. CI shows 10 pending checks and 3 failures (Vercel deploy auth issues, common for external contributors). The author (vvatanabe) was very responsive earlier, rebasing and fixing conflicts multiple times through Dec-Jan. Last activity was a gentle ping on Jan 11 asking for merge. The code quality looks solid with proper tests, docs, changeset, and good Aurora DSQL-specific engineering (batch limits, OCC retries, JSONB workarounds). Needs author to rebase to resolve conflicts, then a maintainer to re-check and merge.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

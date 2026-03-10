@@ -1,0 +1,53 @@
+{
+  "number": 13409,
+  "title": "feat: add AiList to MCP registry registry",
+  "url": "https://github.com/mastra-ai/mastra/pull/13409",
+  "author": {
+    "login": "hifriendbot",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-23T15:58:57Z",
+    "lastUpdated": "2026-02-23T15:59:06Z",
+    "ageInDays": 15,
+    "daysSinceLastUpdate": 15
+  },
+  "size": {
+    "additions": 35,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/add-ailist-registry",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "External contributor adds their own project 'AiList' (a directory of 1,200+ AI projects) to the MCP registry registry. Adds a new processor file (ailist.ts) that extracts a 'projects' array from the API response and maps entries using the shared createServerEntry utility. Also adds the registry entry in registry.ts (correctly sorted alphabetically) and includes a changeset.",
+  "maintainerNotes": "Self-promotion PR: author 'hifriendbot' created their GitHub account on 2026-02-16, one week before this PR. The domain hifriendbot.com in the registry entry matches the author's username. The code itself is clean and follows existing patterns — it uses createServerEntry from utils.ts which is actually more consistent than some existing processors (e.g., pulse.ts manually constructs objects). No tests are included, but other registry processors also lack tests. CI has pending/stuck checks (core, MCP, RAG tests never ran; memory test setup failed). Maintainers should decide whether to accept the AiList directory as a legitimate registry entry — the API endpoint (hifriendbot.com/wp-json/ailist/v1/projects) is a WordPress REST API which may raise durability/reliability concerns.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

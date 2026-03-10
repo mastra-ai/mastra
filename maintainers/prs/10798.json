@@ -1,0 +1,60 @@
+{
+  "number": 10798,
+  "title": "fix: preserve system messages when prepareStep returns messages",
+  "url": "https://github.com/mastra-ai/mastra/pull/10798",
+  "author": {
+    "login": "zshannon",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-03T06:14:52Z",
+    "lastUpdated": "2025-12-05T02:40:11Z",
+    "ageInDays": 462,
+    "daysSinceLastUpdate": 460
+  },
+  "size": {
+    "additions": 174,
+    "deletions": 3,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/preserve-system-message-in-prepare-step",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 10774,
+        "title": "feat: expand processInputStep and integrate prepareStep as processor",
+        "state": "MERGED",
+        "relevance": "This PR was merged the day before #10798 was opened and refactored prepareStep into the processor pattern, fundamentally changing the code this PR modifies."
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes a bug where system messages (agent instructions) were silently dropped when prepareStep returned modified messages. The fix preserves original system messages unless prepareStep explicitly provides a system override, and skips system-role messages in the returned messages array. Includes two tests and a changeset.",
+  "maintainerNotes": "This PR is almost certainly superseded. The code it modifies in llm-execution-step.ts has been completely refactored since December 2025. The inline prepareStep handling (the if/else block this PR patches) no longer exists — prepareStep is now wrapped in PrepareStepProcessor and runs through the processor pipeline, which has explicit systemMessages support in ProcessInputStepResult. The file also now has a replaceAllSystemMessages reset mechanism at the top of each step execution. The PR has merge conflicts (CONFLICTING state) and CI checks are stuck in PENDING. Over 20 commits have landed on the modified file since this PR was opened. The underlying bug is likely resolved by the processor architecture. Recommend closing with a thank-you note explaining the refactoring.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,68 @@
+{
+  "number": 10678,
+  "title": "Make tool ip/op/suspend data validation async to allow for zod refine…",
+  "url": "https://github.com/mastra-ai/mastra/pull/10678",
+  "author": {
+    "login": "ak681443",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-01T01:09:33Z",
+    "lastUpdated": "2025-12-28T05:13:16Z",
+    "ageInDays": 465,
+    "daysSinceLastUpdate": 72
+  },
+  "size": {
+    "additions": 74,
+    "deletions": 21,
+    "changedFiles": 7,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "asugumar/fix-async-tool-validation",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12238,
+        "title": "feat: Add Standard Schema support with Zod v3/v4 compatibility",
+        "state": "merged",
+        "mergedAt": "2026-03-09T16:51:42Z",
+        "relationship": "supersedes"
+      },
+      {
+        "number": 13239,
+        "title": "fix(core): use structural typing for ZodLikeSchema to prevent tsc OOM",
+        "state": "merged",
+        "mergedAt": "2026-02-19T03:37:10Z",
+        "relationship": "related"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Converts tool input/output/suspend validation functions from sync to async by replacing Zod's safeParse() with safeParseAsync(). This enables Zod schemas using .refine(async ...) or .superRefine(async ...) to work in tool validation. Adds safeParseAsync to ZodLikeSchema type and includes tests for async refinement on both input and output schemas. Includes a changeset.",
+  "maintainerNotes": "This PR has been completely superseded by the Standard Schema migration in #12238 (merged 2026-03-09). The current validation.ts was rewritten to use Standard Schema's ~standard.validate() instead of Zod's safeParse/safeParseAsync. Furthermore, the current codebase now explicitly throws an error for async schemas ('Your schema is async, which is not supported. Please use a sync schema.'). The ZodLikeSchema type was also rewritten in #13239 and no longer includes safeParseAsync. The PR has merge conflicts (mergeable_state: dirty, not rebaseable) and CI checks are stuck in pending. Should be closed with a comment thanking the contributor and explaining the Standard Schema migration superseded this approach.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

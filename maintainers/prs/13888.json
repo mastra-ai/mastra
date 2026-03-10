@@ -1,0 +1,66 @@
+{
+  "number": 13888,
+  "title": "fix: add OM runtime backpressure near the token threshold",
+  "url": "https://github.com/mastra-ai/mastra/pull/13888",
+  "author": {
+    "login": "TylerBarnes",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T00:29:01Z",
+    "lastUpdated": "2026-03-09T20:47:32Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 535,
+    "deletions": 106,
+    "changedFiles": 4,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "fix/om-backpressure-runtime",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13476,
+        "title": "fix: observational memory buffering precision",
+        "state": "MERGED",
+        "relationship": "related-prior-fix"
+      },
+      {
+        "number": 13955,
+        "title": "fix: refresh buffered chunk tokens before OM activation",
+        "state": "MERGED",
+        "relationship": "related-prior-fix"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds runtime backpressure to observational memory (OM) when message tokens approach the configured threshold. Key changes: (1) new backpressure.ts module with tiered wait logic (0-4s based on ratio to threshold), message sealed-for-buffering detection, and projected-removal readiness checks; (2) pre-sealing of eligible unobserved messages shortly before threshold to give buffered activation cleaner swap points; (3) more aggressive async buffering intervals once pending tokens reach >=0.8x threshold (warm band) instead of the previous rampPoint approach; (4) updated and new tests covering warm-band intervals, pre-seal behavior, and threshold-crossing with backpressure. Changes are scoped to 4 files in packages/memory observational-memory module plus a changeset.",
+  "maintainerNotes": "This is a draft PR from a maintainer (TylerBarnes) that is still in progress. CI has 2 failures (Agent Builder Tests, Observability Package Tests) which appear unrelated to the memory changes — this PR only modifies OM files. Memory Tests and E2E Tests are still pending. The PR is well-structured with a clear description, changeset, and tests. It builds on prior OM buffering fixes (#13476, #13955). The backpressure approach uses tiered waits with a short-circuit when buffered chunks already look activation-ready, which should avoid unnecessary blocking. Review should focus on the wait durations in resolveObservationBackpressureWaitMs (hardcoded 1000-4000ms tiers) and whether the warm-band threshold of 0.8x is appropriate. Wait for the author to mark it ready for review.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

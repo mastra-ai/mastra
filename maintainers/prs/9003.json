@@ -1,0 +1,72 @@
+{
+  "number": 9003,
+  "title": "fix: pass writable stream through workflow resume path",
+  "url": "https://github.com/mastra-ai/mastra/pull/9003",
+  "author": {
+    "login": "gorpacrate",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-10-19T08:39:55Z",
+    "lastUpdated": "2025-10-20T02:16:14Z",
+    "ageInDays": 507,
+    "daysSinceLastUpdate": 506
+  },
+  "size": {
+    "additions": 7,
+    "deletions": 0,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/workflows-resume-streaming",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 9139,
+        "title": "fix(workflows): pass writableStream parameter to workflow execution",
+        "state": "MERGED",
+        "mergedAt": "2025-10-23T17:55:08Z"
+      },
+      {
+        "number": 10720,
+        "title": "fix(workflows): pass writable stream to workflow resume",
+        "state": "MERGED",
+        "mergedAt": "2025-12-01T21:35:23Z"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 8956,
+        "title": "[DISCORD:1428490649078071407] Using writer in workflow step with agent",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Adds the missing `writableStream` parameter to the workflow resume execution path so resumed steps can emit streaming output chunks. A well-written community contribution with a clear description, changeset, and sequence diagrams from Greptile review. However, this exact fix was independently merged via PR #9139 (4 days after this PR opened) and further refined in PR #10720. The related issue #8956 is closed. The underlying code has since been significantly refactored and the `writableStream` parameter pattern no longer exists in the current workflow.ts.",
+  "maintainerNotes": "This PR is fully superseded. PR #9139 merged the same fix on 2025-10-23 and PR #10720 further addressed writable stream passing on 2025-12-01. The referenced issue #8956 is closed. The workflow code has been heavily refactored since — `writableStream` as a parameter name no longer appears in workflow.ts. Should be closed with a thank-you to the contributor for the well-crafted fix.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

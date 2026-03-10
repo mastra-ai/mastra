@@ -1,0 +1,57 @@
+{
+  "number": 11779,
+  "title": "fix/feat(deployer): add dynamicPackages bundler config for runtime-loaded packages and auto detect pino",
+  "url": "https://github.com/mastra-ai/mastra/pull/11779",
+  "author": {
+    "login": "graysonhicks",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-01-09T18:47:47Z",
+    "lastUpdated": "2026-03-10T15:37:24Z",
+    "ageInDays": 60,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 927,
+    "deletions": 15,
+    "changedFiles": 15,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/10893--odd-imports",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#10893"
+    ]
+  },
+  "summary": "Adds a new `dynamicPackages` bundler config option for packages loaded dynamically at runtime that static analysis cannot detect (e.g., pino transports). Also implements automatic detection of pino transport targets via a Babel plugin that scans for `pino.transport({ target: '...' })` patterns. This fixes runtime crashes when deploying .mastra/output where dynamically-loaded packages were missing from the bundled package.json. Previously users had to abuse the `externals` config as a workaround. Changes span the deployer package (new Babel detection plugin, analyze.ts integration, bundler options type additions), core bundler types, e2e tests, documentation, and a changeset.",
+  "maintainerNotes": "Approved by wardpeet. CI has some failures: 'Lint docs' failed, 'Full Test Suite' and 'Observability Package Tests' failed, 'E2E Tests' and 'Memory Tests' are still pending. The Lint docs and Observability/Full Test Suite failures are likely unrelated to this PR's deployer changes (the PR touches docs/src/content/en/reference/core/mastra-class.mdx which could cause a docs lint issue). Build, unit tests, combined store tests, workspace cloud tests, and code analysis all pass. The PR is well-structured with comprehensive unit tests for the pino transport detection (461 lines of tests), snapshot tests, e2e test additions, a fixture file, and updated documentation. The changeset is a patch for @mastra/deployer. Moved @mastra/server from devDependencies to dependencies in the deployer package. The approach cleanly separates 'dynamicPackages' (packages needed at runtime) from 'externals' (packages to exclude from bundling).",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

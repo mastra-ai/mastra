@@ -1,0 +1,60 @@
+{
+  "number": 9705,
+  "title": "fix: remove deprecated content and toolInvocations from MastraMessageContentV2",
+  "url": "https://github.com/mastra-ai/mastra/pull/9705",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2025-11-04T21:05:31Z",
+    "lastUpdated": "2025-11-18T16:32:30Z",
+    "ageInDays": 492,
+    "daysSinceLastUpdate": 478
+  },
+  "size": {
+    "additions": 1961,
+    "deletions": 1529,
+    "changedFiles": 59,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "break/remove-deprecated-MastraDBMessage-content",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "passing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11658,
+        "title": "refactor(core): modularize MessageList class into specialized components",
+        "state": "MERGED",
+        "relationship": "The MessageList was heavily refactored in #11658, but the deprecated fields (content, toolInvocations, reasoning, annotations, experimental_attachments) on MastraMessageContentV2 were NOT removed. The refactored code still uses toolInvocations in MessageMerger.ts and tests. This PR's goal is still relevant but the code has diverged significantly."
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Removes deprecated fields (content, toolInvocations, reasoning, experimental_attachments, annotations) from MastraMessageContentV2 type, consolidating all message data into the parts array to align with AI SDK v5. Adds a MastraMessageContentV2WithDeprecated type for backward-compatible migration of old DB records. Updates 59 files across core, storage adapters, processors, and tests to read/write exclusively from the parts array. Includes a migration helper that converts deprecated fields into proper parts entries.",
+  "maintainerNotes": "This PR has been stale for ~478 days with merge conflicts and changes requested by TylerBarnes (empty review body). The codebase has undergone major refactoring since (#11658 modularized MessageList into ~15 separate files), making this PR unmergeable without a complete rewrite. However, the underlying goal is still valid — MastraMessageContentV2 on main still carries the deprecated fields (content, toolInvocations, reasoning, annotations, experimental_attachments) and toolInvocations is still actively used in MessageMerger.ts. If this cleanup is still desired, it should be redone as a fresh PR against the current codebase. Missing changesets. Close and track as a future task, or reopen as a new PR.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

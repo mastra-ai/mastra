@@ -1,0 +1,55 @@
+{
+  "number": 13042,
+  "title": "Add Elysia server adapter",
+  "url": "https://github.com/mastra-ai/mastra/pull/13042",
+  "author": {
+    "login": "joel611",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-13T11:40:30Z",
+    "lastUpdated": "2026-03-03T12:37:17Z",
+    "ageInDays": 25,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 1728,
+    "deletions": 23,
+    "changedFiles": 15,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/server-adapter-elysia",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": false
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "https://github.com/mastra-ai/mastra/issues/13041"
+    ]
+  },
+  "summary": "Adds a new Elysia (Bun-native) server adapter package under server-adapters/elysia, implementing MastraServer with auth middleware, OpenAPI generation with Scalar UI, SSE/stream support, and context middleware. Includes helper tests and an example app. Also modifies packages/server to export openapi-utils and renames storedAgentId to agentId in stored-agents handlers/schemas (a breaking change unrelated to the adapter).",
+  "maintainerNotes": "Several issues need attention: (1) Has merge conflicts that must be resolved. (2) No changeset included. (3) Includes an unrelated breaking change — renames storedAgentId path param to agentId in packages/server stored-agents routes/schemas, which affects all existing server adapters. This should be split into a separate PR. (4) CodeRabbit flagged ~12 actionable issues including type-unsafe casts (sendResponse tunnels Elysia context through Response param), redundant body re-parsing in context middleware, TextEncoder instantiation per chunk, auth middleware passing full ctx instead of Request to authorize, and misleading JSDoc on cache-clearing. (5) CI checks are stuck in PENDING (likely because fork PRs can't trigger secrets-dependent CI). (6) Dev script requires Bun runtime (\"bun --watch\") which is reasonable for Elysia but differs from other adapters. (7) No documentation updates included. (8) The example includes hardcoded agent configurations that likely shouldn't ship in the adapter package.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

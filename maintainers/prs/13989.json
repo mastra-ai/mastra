@@ -1,0 +1,59 @@
+{
+  "number": 13989,
+  "title": "fix(server): fallback to agent toolsResolver in EXECUTE_TOOL_ROUTE",
+  "url": "https://github.com/mastra-ai/mastra/pull/13989",
+  "author": {
+    "login": "Aayush-engineer",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-09T03:51:22Z",
+    "lastUpdated": "2026-03-09T16:34:47Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 14,
+    "deletions": 0,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/tool-execute-dynamic-resolver",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13987,
+        "title": "[BUG] /tools/:toolId/execute cannot find dynamically-resolved agent tools (toolsResolver)",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes #13987. The global tool execute endpoint (POST /tools/:toolId/execute) returns 404 for tools dynamically resolved via an agent's toolsResolver because it only checks statically registered tools. This PR adds a fallback that iterates all agents and calls agent.listTools({ requestContext }) to find the tool — mirroring how EXECUTE_AGENT_TOOL_ROUTE already works. The change is a 14-line addition to a single file (packages/server/src/server/handlers/tools.ts).",
+  "maintainerNotes": "Maintainer abhiaiyer91 left a review comment 'should pass requestContext' on line 163 (the `mastra.listAgents()` call). The author asked for clarification since listAgents() takes no parameters but requestContext IS already passed to agent.listTools(). This conversation appears unresolved. The approach is sound and mirrors EXECUTE_AGENT_TOOL_ROUTE, but has concerns: (1) iterating ALL agents on every global tool execute when the tool isn't statically registered could be slow with many agents; (2) uses `as any[]` type assertion; (3) no changeset included; (4) no automated tests. The unresolved review comment needs to be addressed before merging. CI has several checks still pending (Core Package Tests, Combined store Tests, E2E Tests, MCP Package Tests, Memory Tests, RAG Tests).",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

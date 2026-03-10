@@ -1,0 +1,55 @@
+{
+  "number": 11545,
+  "title": "fix(server): remove explicit Transfer-Encoding header to fix streaming in Bun runtime",
+  "url": "https://github.com/mastra-ai/mastra/pull/11545",
+  "author": {
+    "login": "roaminro",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-01-02T19:26:24Z",
+    "lastUpdated": "2026-03-04T16:45:00Z",
+    "ageInDays": 67,
+    "daysSinceLastUpdate": 6
+  },
+  "size": {
+    "additions": 262,
+    "deletions": 12,
+    "changedFiles": 7,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "roamin/remove-transfer-encoding-header",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "https://github.com/mastra-ai/mastra/issues/11510"
+    ]
+  },
+  "summary": "Removes explicit `Transfer-Encoding: chunked` header from streaming responses in @mastra/hono, @mastra/express, and @mastra/server. Bun runtime automatically adds this header for ReadableStream responses, causing duplicate headers that break HTTP protocol compliance and result in 502 errors. Node.js is unaffected since it also adds the header automatically. Includes thorough tests with both in-memory and real HTTP server integration tests for Express and Hono adapters. Changed 7 files across 3 packages with a changeset.",
+  "maintainerNotes": "Approved by wardpeet (maintainer) and reviewed positively by CodeRabbit. High-quality PR with excellent test coverage and clear description. However, it now has merge conflicts (CONFLICTING state) and some CI checks are incomplete (Full Test Suite pending, Vercel assistant-ui deployment failed — likely unrelated). Author needs to rebase/resolve conflicts before this can be merged. Given the age (67 days) and that it's been approved, it would be good to nudge the author to rebase so this can land quickly.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,53 @@
+{
+  "number": 13996,
+  "title": "fix(mastracode): restore /om typing in Kitty terminals",
+  "url": "https://github.com/mastra-ai/mastra/pull/13996",
+  "author": {
+    "login": "RainerAtSpirit",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-09T09:05:45Z",
+    "lastUpdated": "2026-03-09T14:58:51Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 140,
+    "deletions": 2,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/mastracode-om-search-typing",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Fixes /om model search input in Kitty terminals by decoding CSI-u key sequences before passing them to the search input. Kitty terminals send printable characters as CSI-u escape sequences (e.g., \\x1b[97u for 'a') instead of raw characters, which caused typing in the model selector to not work. Adds a decodeKittyPrintable() function that parses CSI-u sequences, respects modifier keys (blocks Alt/Ctrl combos but allows Shift and lock keys), and normalizes them to plain characters. Includes a well-written regression test covering both standard and Kitty CSI-u input scenarios.",
+  "maintainerNotes": "Clean, well-scoped community fix. Approved by abhiaiyer91. CI failures are unrelated to this PR: Vercel deploy failures are expected for external contributors (authorization required), and Agent Builder/Core test failures are in separate packages not touched by this PR. The 'Full Test Suite' aggregated check reports all tests passed. Only 3 files changed, all within mastracode/. Includes changeset and test. Ready to merge.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

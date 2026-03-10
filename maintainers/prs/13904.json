@@ -1,0 +1,55 @@
+{
+  "number": 13904,
+  "title": "fix(deployer): patch fetch-to-node ReadableStream controller crash on client disconnect",
+  "url": "https://github.com/mastra-ai/mastra/pull/13904",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-06T10:07:06Z",
+    "lastUpdated": "2026-03-06T10:51:13Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 48,
+    "deletions": 3,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/patch-fetch-to-node-stream-controller-crash",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13899"
+    ]
+  },
+  "summary": "Applies a pnpm patch to fetch-to-node@2.1.0 to fix a crash (TypeError ERR_INVALID_STATE) in FetchServerResponse._toFetchResponse() when a client disconnects mid-stream. The patch adds a `cancelled` flag set by a ReadableStream cancel() callback, guards controller.close() and controller.enqueue() with that flag plus try-catch, preventing the crash when the controller is already closed. Changes are in package.json (patchedDependencies config), a new patch file, and pnpm-lock.yaml.",
+  "maintainerNotes": "This is a well-documented external library bug fix using pnpm's patchedDependencies mechanism. The approach is sound — patching the upstream fetch-to-node library rather than working around it in Mastra code. The issue (#13899) provides clear reproduction steps and stack traces showing the crash in production Docker deployments under load. No tests or changesets are included. CI checks are stuck in PENDING (likely needs org member approval to run). The author also provided a separate reproduction repo. Consider whether to accept the patch approach long-term or upstream the fix to fetch-to-node. The author should be asked to add a changeset.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

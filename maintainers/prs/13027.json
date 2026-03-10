@@ -1,0 +1,53 @@
+{
+  "number": 13027,
+  "title": "fix(core): prevent workflow hangs and memory leaks in evented workflows",
+  "url": "https://github.com/mastra-ai/mastra/pull/13027",
+  "author": {
+    "login": "roaminro",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-12T23:47:22Z",
+    "lastUpdated": "2026-02-20T18:49:08Z",
+    "ageInDays": 26,
+    "daysSinceLastUpdate": 18
+  },
+  "size": {
+    "additions": 616,
+    "deletions": 71,
+    "changedFiles": 3,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "roamin/workflow-timeout-issue",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Fixes 5 distinct issues causing workflow hangs and a 1.5 GB memory leak in evented workflows: (1) race condition in parallel step completion where stale return values from updateWorkflowResults cause both branches to return early — fixed by re-reading from storage after write; (2) unhandled errors in process() silently dropped by EventEmitterPubSub — fixed with try/catch; (3) processWorkflowFail itself throwing prevents workflows-finish event — fixed with last-resort catch publishing workflows-finish; (4) parentWorkflow events carrying full stepResults recursively causing O(N² × depth) memory growth — fixed by stripping stepResults from events and loading from storage on completion; (5) WorkflowRunOutput.#bufferedChunks retaining all stream events forever when fullStream is never consumed — fixed by clearing buffer on stream close. Includes 5 regression tests in new workflow-timeout-repro.test.ts. Author notes additional unfixed issues: PostgreSQL updateWorkflowResults/updateWorkflowState throw 'not implemented', forEach concurrency has same stale-read race, sleep steps lose errors.",
+  "maintainerNotes": "High-impact bug fix from a collaborator. Still in draft status with no reviews yet. CI is failing (Core, E2E, Memory, Full Test Suite) — needs investigation whether failures are related to these changes or pre-existing. Missing changeset. The PR description is exceptionally thorough with heap snapshot analysis and clear root cause explanations for all 5 fixes. The changes are well-scoped to 3 files in packages/core (RunOutput.ts, workflow-event-processor/index.ts, and a new test file). Author flagged additional issues not addressed here (PostgreSQL storage methods not implemented, forEach concurrency race, sleep step error handling). This should be prioritized for review given it fixes production workflow hangs and significant memory leaks.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

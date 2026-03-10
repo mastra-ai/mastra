@@ -1,0 +1,69 @@
+{
+  "number": 11521,
+  "title": "feat(memory): add thread branching functionality",
+  "url": "https://github.com/mastra-ai/mastra/pull/11521",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2025-12-31T21:48:02Z",
+    "lastUpdated": "2025-12-31T22:01:59Z",
+    "ageInDays": 69,
+    "daysSinceLastUpdate": 69
+  },
+  "size": {
+    "additions": 4344,
+    "deletions": 26,
+    "changedFiles": 24,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/memory/branching-threads",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": false
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11517,
+        "title": "Thread cloning capabilities (related predecessor)",
+        "state": "unknown"
+      },
+      {
+        "number": 13569,
+        "title": "feat(memory): clone Observational Memory when forking threads",
+        "state": "merged"
+      },
+      {
+        "number": 12833,
+        "title": "fix(memory): copy working memory when cloning threads",
+        "state": "merged"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds thread branching (forking) to memory, allowing conversations to diverge at a specific message without duplicating history. Branches inherit parent messages up to a branch point and can be promoted back. Full-stack implementation: core abstractions, 4 storage adapters (InMemory, PG, LibSQL, Upstash), server routes (branch, promote, list branches, parent, history), client-js SDK methods, and playground UI (branch button on messages, breadcrumbs, tree-indented thread list, promote action). Includes unit and integration tests.",
+  "maintainerNotes": "Very large PR (4344 additions, 24 files) touching every layer of the stack. Has merge conflicts and CI failures (Memory Tests, Lint, Validate redirects, hono/express server tests). Missing changeset. No reviews received. Stale for 69 days with no activity since opening day. Related thread-cloning work (#13569, #12833) has been merged since this was opened, likely contributing to the conflicts. The scope is ambitious — branching across core, 4 storage adapters, server, client SDK, and playground UI in one PR would benefit from being split. Author notes branching in Studio UI only works one level deep. Needs rebase, conflict resolution, CI fixes, changeset, and possibly scope reduction before review.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

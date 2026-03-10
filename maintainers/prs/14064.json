@@ -1,0 +1,62 @@
+{
+  "number": 14064,
+  "title": "fix(docs): complete JSON-LD structured data for /learn section",
+  "url": "https://github.com/mastra-ai/mastra/pull/14064",
+  "author": {
+    "login": "axe312ger",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T11:19:09Z",
+    "lastUpdated": "2026-03-10T11:24:29Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 24,
+    "deletions": 8,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/learn-json-ld",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "passing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13137,
+        "title": "feat(docs): add /learn section with video course",
+        "state": "MERGED",
+        "relationship": "original feature this PR fixes"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes three Schema.org validation errors in the /learn section's JSON-LD structured data: (1) moves `instructor` from Course level into CourseInstance where Schema.org expects it, (2) adds required `offers` with price:0 for the free course, (3) adds `uploadDate` to VideoObject by introducing a `publishedDate` field on lessons. Changes span 4 docs source files — types, course data, and two page components.",
+  "maintainerNotes": "Clean, well-scoped docs-only fix from a maintainer. No changeset needed since no packages are affected. The Observability Package Tests failure is a known flaky issue across all PRs and unrelated. Some CI checks (Core, E2E, Memory, etc.) are still pending but are unlikely to be affected by docs-only changes. The PR description clearly explains each Schema.org fix with before/after reasoning. Ready for a quick review and merge.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

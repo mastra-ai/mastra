@@ -1,0 +1,53 @@
+{
+  "number": 13638,
+  "title": "feat(stores): add MySQL storage adapter",
+  "url": "https://github.com/mastra-ai/mastra/pull/13638",
+  "author": {
+    "login": "luzhuang",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-01T14:29:26Z",
+    "lastUpdated": "2026-03-03T14:49:52Z",
+    "ageInDays": 9,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 9136,
+    "deletions": 1,
+    "changedFiles": 33,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/mysql-store",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a new @mastra/mysql package implementing the full MastraStorage interface for MySQL. Covers all 14 domain stores (agents, memory, workflows, datasets, experiments, observability, blobs, scores, skills, MCP clients/servers, prompt blocks, scorer definitions, workspaces). Uses mysql2/promise with connection pooling. Includes 372 integration/unit tests, a Docker Compose for local MySQL 8.0, changeset, tsup build config, and follows the stores/mssql pattern. Also adds MySQLStore to the sort whitelist in stores/_test-utils. CodeRabbit flagged several actionable items: non-transactional multi-step mutations risking partial writes, use of 'any' types where stricter typing is preferred, and potential race conditions in version number computation.",
+  "maintainerNotes": "Large but well-structured community contribution adding MySQL as a storage backend. The PR follows existing monorepo conventions (mirroring stores/mssql). Author claims 372 tests passing locally but CI checks remain in PENDING state (likely need secrets/environment setup for MySQL). CodeRabbit raised substantive concerns: (1) several multi-step create/delete operations are not wrapped in transactions, risking partial writes on failure; (2) pervasive use of 'any' types in safeParseJSON and queryParams; (3) version number computation has a TOCTOU race. No human reviews yet—only CodeRabbit automated reviews. Vercel deploy checks fail due to authorization (expected for external contributors). The single changed file outside the new package is a 1-line addition to stores/_test-utils sort whitelist. Needs a maintainer to review the transactional safety concerns, validate test coverage runs in CI, and confirm the package meets quality standards before merge.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

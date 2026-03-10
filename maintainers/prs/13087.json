@@ -1,0 +1,60 @@
+{
+  "number": 13087,
+  "title": "Add User-Agent header for Anthropic API calls",
+  "url": "https://github.com/mastra-ai/mastra/pull/13087",
+  "author": {
+    "login": "mikelambert",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-16T00:27:46Z",
+    "lastUpdated": "2026-03-10T15:32:23Z",
+    "ageInDays": 22,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 81,
+    "deletions": 37,
+    "changedFiles": 8,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "mike/user-agent",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13740,
+        "title": "add user-agent tracking header to ES client",
+        "state": "MERGED",
+        "relevance": "Related but different scope — ES client vs AI provider SDK gateways"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "External contributor adds a `mastra/<version>` User-Agent header to all outbound AI provider API requests across models.dev, Netlify, and Azure gateways. Uses a build-time `__MASTRA_VERSION__` constant injected via tsup `define` (with vitest config updated similarly). Covers OpenAI, Anthropic, Google, Mistral, Groq, xAI, DeepSeek, and OpenAI-compatible providers. Includes a new constants.test.ts with 3 tests validating the header format.",
+  "maintainerNotes": "Approved by maintainer wardpeet. CI checks for Combined Store, E2E, and Memory tests are still pending (just triggered). Vercel deploy authorization failures are expected for external contributor PRs. The implementation is clean: a `MASTRA_USER_AGENT` constant is defined in constants.ts, and `mastraHeaders` is constructed in each gateway's `resolveLanguageModel` method, merging User-Agent with caller-supplied headers. The `define` approach in tsup.config.ts and vitest.config.ts to inject the version at build time is appropriate. Once pending CI checks pass, this is ready to merge.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

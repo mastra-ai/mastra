@@ -1,0 +1,65 @@
+{
+  "number": 12804,
+  "title": "feat: enable tracing for tool executions through mcp server",
+  "url": "https://github.com/mastra-ai/mastra/pull/12804",
+  "author": {
+    "login": "Shaik-Sirajuddin",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-07T09:35:25Z",
+    "lastUpdated": "2026-02-11T06:01:17Z",
+    "ageInDays": 31,
+    "daysSinceLastUpdate": 27
+  },
+  "size": {
+    "additions": 50,
+    "deletions": 12,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "tracing_for_tools",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13274,
+        "title": "feat: mcp tool tracing",
+        "state": "open",
+        "relationship": "competing/overlapping"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 10889,
+        "title": "Client Side tool tracing"
+      }
+    ]
+  },
+  "summary": "Replaces `createChildSpan()` with `getOrCreateSpan()` in CoreToolBuilder so that tool executions create a root tracing span when no parent agent span exists (e.g., MCP server tool calls). Includes a changeset, updated test, and passes mastra/requestContext/tracingContext to the new helper. Reviewer epinzur approved the approach but requested changes: initially mastra wasn't being forwarded (critical), test assertions were too weak (medium), and extra fields being spread into createChildSpan needed verification (minor). The author addressed the mastra forwarding and test assertion issues in follow-up commits, but the review was never re-approved.",
+  "maintainerNotes": "This PR has merge conflicts and has been inactive for 27 days since the author's last push. A maintainer (epinzur) reviewed and requested changes on the initial version; the author addressed feedback across 3 follow-up commits but the review was never re-approved. Additionally, a competing PR #13274 ('feat: mcp tool tracing') was opened 12 days later by a different author with a more granular approach (dedicated MCP_TOOL_CALL span type). Consider whether #13274 supersedes this PR or if both should be reconciled. CI checks are stuck in pending state (likely due to external contributor permissions). The PR needs conflict resolution against current main before it can proceed.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

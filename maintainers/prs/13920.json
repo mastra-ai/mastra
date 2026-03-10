@@ -1,0 +1,57 @@
+{
+  "number": 13920,
+  "title": "fix(server): serialize plain JSON Schema tool schemas",
+  "url": "https://github.com/mastra-ai/mastra/pull/13920",
+  "author": {
+    "login": "TheIsrael1",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T15:58:12Z",
+    "lastUpdated": "2026-03-10T14:06:08Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 81,
+    "deletions": 45,
+    "changedFiles": 6,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/13909-json-schema-tool-serialization",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13909"
+    ]
+  },
+  "summary": "Fixes #13909 where getSerializedAgentTools in @mastra/server would call zodToJsonSchema on tool schemas that are already plain JSON Schema objects (e.g. Composio tools), causing those tools to disappear in Studio. The fix replaces the complex multi-branch serialization logic with core's existing asJsonSchema helper (which handles Zod, AI SDK wrappers, and plain JSON Schema uniformly) and adds a resolveLazySchema function to unwrap function-backed schemas first. Also re-exports asJsonSchema from @mastra/core/utils/zod-to-json and bumps the server's peer dependency minimum to @mastra/core >=1.10.1. Includes a regression test for plain JSON Schema serialization and two changesets.",
+  "maintainerNotes": "Well-scoped fix from a maintainer. The core change is minimal (just a re-export of the already-existing asJsonSchema from stream/base/schema.ts). The server-side change is a net simplification: ~45 lines of repetitive multi-branch schema handling replaced with ~20 lines using asJsonSchema. CI has some failures but they appear to be in unrelated suites (Combined store Tests, Observability Tests, Full Test Suite). The Lint check also fails — worth verifying if it's related. CodeRabbit suggested adding a lazy-schema test case which would strengthen coverage. The peer dependency bump to @mastra/core >=1.10.1 is notable and should be verified as correct.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

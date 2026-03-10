@@ -1,0 +1,63 @@
+{
+  "number": 13817,
+  "title": "chore(deps): bump @hono/node-server from 1.19.9 to 1.19.10",
+  "url": "https://github.com/mastra-ai/mastra/pull/13817",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T21:50:03Z",
+    "lastUpdated": "2026-03-10T12:10:59Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 82,
+    "deletions": 107,
+    "changedFiles": 9,
+    "category": "M"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/hono/node-server-1.19.10",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13816,
+        "title": "chore(deps): bump @hono/node-server from 1.19.9 to 1.19.10 in /scripts/gh-issue-triage",
+        "state": "MERGED",
+        "relevance": "Same dependency bump for a different workspace path, already merged"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot security update bumping @hono/node-server from 1.19.9 to 1.19.10 across 6 package.json files and the pnpm-lock.yaml. The upstream release fixes an authorization bypass in Serve Static Middleware caused by inconsistent URL decoding (%2F handling) between the router and static file resolution (GHSA-wc8c-qw6v-h7f6). The lockfile diff also includes unrelated transitive dependency churn (codemirror, ai SDK, braintrust, confbox). CI is currently failing: Build, Validate build outputs, and several test suites (Agent Builder, Core, MCP, Observability, RAG) are failing, with E2E, Full Test Suite, and Memory tests still pending.",
+  "maintainerNotes": "This is a security fix and should be prioritized. The CI failures need investigation — the Build step itself is failing, which cascades to test failures. The build failure and lockfile churn (removal of zod@3.25.76 resolution paths, codemirror version bumps) suggest the lockfile may have drifted from main. A rebase via `@dependabot rebase` may resolve the CI issues. PR #13816 (same bump for scripts/gh-issue-triage) was already merged. No changeset is included, which is expected for a dependency-only bump with no API changes.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

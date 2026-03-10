@@ -1,0 +1,59 @@
+{
+  "number": 13942,
+  "title": "fix(playground-ui): split barrel export into domain sub-path entries",
+  "url": "https://github.com/mastra-ai/mastra/pull/13942",
+  "author": {
+    "login": "rphansen91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T21:24:43Z",
+    "lastUpdated": "2026-03-09T23:28:34Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 333,
+    "deletions": 204,
+    "changedFiles": 75,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/barrel-split",
+    "base": "fix/route-level-code-splitting"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "passing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13939,
+        "relationship": "parent/stacked-on",
+        "note": "This PR is stacked on #13939 (route-level code splitting), which is still OPEN. Must merge #13939 first."
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Splits the monolithic @mastra/playground-ui barrel export (1.8MB single ESM file) into 16 domain-specific sub-path exports (e.g., ./agents, ./workflows, ./observability). Adds new entry point files, updates vite.config.ts build entries, updates package.json exports map, and migrates ~55 import sites in the playground package to use the new sub-paths. Combined with the parent PR's route-level code splitting, this reduces the main bundle from 5,122 KB to 3,135 KB (-39%).",
+  "maintainerNotes": "Approved by abhiaiyer91. All CI checks pass, no merge conflicts, changeset present. Note: this PR targets the fix/route-level-code-splitting branch (PR #13939), NOT main. PR #13939 must be merged first. No test files changed, but this is purely a build/export restructuring with no logic changes — the test plan consists of verifying builds and tsc pass. High-quality PR with excellent description including bundle size tables.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

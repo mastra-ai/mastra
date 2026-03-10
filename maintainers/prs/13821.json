@@ -1,0 +1,62 @@
+{
+  "number": 13821,
+  "title": "chore(deps): update dependency @uiw/react-codemirror to ^4.25.7",
+  "url": "https://github.com/mastra-ai/mastra/pull/13821",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-05T00:38:13Z",
+    "lastUpdated": "2026-03-10T12:24:04Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 180,
+    "deletions": 93,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/uiw-react-codemirror-4.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11843,
+        "title": "chore(deps): update dependency @uiw/react-codemirror to ^4.25.4",
+        "state": "MERGED",
+        "note": "Previous version of this same Renovate update"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Renovate bot PR bumping @uiw/react-codemirror from ^4.25.4 to ^4.25.7 in packages/playground-ui. Patch-level update including bug fixes (hyperlink trailing slash fix, explicit language package dependencies). Changes are limited to package.json and pnpm-lock.yaml plus an auto-generated changeset. Approved only by github-actions bot, not by a human reviewer.",
+  "maintainerNotes": "This PR has merge conflicts and needs a rebase. Two CI checks are failing (Full Test Suite, Observability Package Tests) though these appear unrelated to the dependency change. Two other checks (Memory Tests, E2E Tests) are still pending. The approval is only from github-actions, not a human reviewer. Renovate can rebase automatically if the rebase checkbox is ticked in the PR description. The actual code change is minimal (one line in package.json), with the rest being lockfile churn.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

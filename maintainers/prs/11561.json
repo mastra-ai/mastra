@@ -1,0 +1,53 @@
+{
+  "number": 11561,
+  "title": "fix(core): respect sub-agent defaultOptions.memory when called as tool",
+  "url": "https://github.com/mastra-ai/mastra/pull/11561",
+  "author": {
+    "login": "dev-vishnu",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-04T18:01:56Z",
+    "lastUpdated": "2026-01-24T11:59:08Z",
+    "ageInDays": 65,
+    "daysSinceLastUpdate": 45
+  },
+  "size": {
+    "additions": 121,
+    "deletions": 2,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/sub-agent-memory-override",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Fixes a bug where parent agents unconditionally override a sub-agent's defaultOptions.memory config when calling it as a tool. The fix checks if the sub-agent has its own memory config before applying parent-derived thread/resource IDs. Changes are minimal: 2 lines modified in agent.ts (both generate and stream paths) plus 3 new tests and a changeset.",
+  "maintainerNotes": "Approved by @wardpeet on 2026-01-24. However, the PR now has merge conflicts and CI checks are stuck in pending state (likely due to conflicts preventing them from running). The code change is small and well-scoped: it adds a guard (`!subAgentHasOwnMemoryConfig`) before the parent overrides sub-agent memory in both the generate and stream code paths. Tests cover sub-agents with object defaultOptions, no defaultOptions, and function-based defaultOptions. Author needs to rebase/resolve conflicts before this can be merged.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

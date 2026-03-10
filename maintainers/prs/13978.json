@@ -1,0 +1,66 @@
+{
+  "number": 13978,
+  "title": "fix(core): widen TrailingAssistantGuard to block all trailing assistant messages for Claude 4.6",
+  "url": "https://github.com/mastra-ai/mastra/pull/13978",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-08T06:44:37Z",
+    "lastUpdated": "2026-03-08T07:04:33Z",
+    "ageInDays": 2,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 204,
+    "deletions": 10,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/trailing-assistant-guard-all-messages",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12835,
+        "title": "fix(core): prevent trailing assistant message with structured output",
+        "state": "MERGED",
+        "relationship": "predecessor — this PR extends the original guard added in #12835"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13969,
+        "title": "TrailingAssistantGuard too narrow — Claude 4.6 rejects all trailing assistant messages, not just structured output",
+        "state": "open"
+      }
+    ]
+  },
+  "summary": "The TrailingAssistantGuard processor (added in #12835) only appended a user message when structured output was active. Claude 4.6 removed assistant message prefilling entirely, so any trailing assistant message — thread resumption, agent handoffs, tool-call rounds — causes a 400 error. This PR removes the early return on willUseResponseFormat so the guard fires for all trailing assistant messages. The injected text is contextual: 'Generate the structured response.' for structured output, 'Continue.' otherwise. Changes span 3 files: a changeset, 185 lines of new tests, and a small logic change in trailing-assistant-guard.ts.",
+  "maintainerNotes": "Well-scoped community fix for a real bug (#13969). The code change is minimal and correct: the willUseResponseFormat check is moved from a gate that skips the guard entirely to a conditional that selects the appropriate continuation text. The 185-line test file is thorough, covering structured output, plain trailing assistant, user-last no-op, and isMaybeClaude46 detection. CodeRabbit flagged minor issues (test type strictness, changeset wording) which the author addressed. CI tests are still pending (stuck at 'Setup actions with secrets' — likely needs org secrets for fork PRs). Vercel checks fail due to authorization (expected for external contributors). No merge conflicts. This is a logical extension of #12835 and addresses a valid reported issue.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

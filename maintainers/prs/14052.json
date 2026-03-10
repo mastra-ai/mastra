@@ -1,0 +1,62 @@
+{
+  "number": 14052,
+  "title": "chore(deps): update dependency @composio/mastra to ^0.6.4",
+  "url": "https://github.com/mastra-ai/mastra/pull/14052",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T06:25:13Z",
+    "lastUpdated": "2026-03-10T14:40:34Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 12,
+    "deletions": 7,
+    "changedFiles": 3,
+    "category": "XS"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/composio-mastra-0.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 14046,
+        "title": "chore(deps): update dependency @composio/core to ^0.6.4",
+        "state": "MERGED",
+        "relation": "related companion update (@composio/core peer dep already merged)"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Renovate Bot patch bump of @composio/mastra from ^0.6.3 to ^0.6.4 in packages/editor/package.json. The companion @composio/core ^0.6.4 update was already merged in PR #14046. Changes are limited to package.json version specifier, pnpm-lock.yaml, and an auto-generated changeset.",
+  "maintainerNotes": "PR is approved and mergeable with no conflicts. CI shows 2 failures (Full Test Suite and Observability Package Tests) but these appear unrelated to this dependency bump — the diff only touches the @composio/mastra version specifier. Memory Tests and E2E Tests are still pending. The companion @composio/core update was already merged, so this aligns the @composio/mastra peer dependency to the same version. Safe to merge once pending checks complete or if failures are confirmed unrelated.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

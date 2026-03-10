@@ -1,0 +1,60 @@
+{
+  "number": 13424,
+  "title": "[Aikido] Fix 8 security issues in systeminformation, fastify, pino and 3 more",
+  "url": "https://github.com/mastra-ai/mastra/pull/13424",
+  "author": {
+    "login": "app/aikido-autofix",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-23T21:38:11Z",
+    "lastUpdated": "2026-02-23T21:39:37Z",
+    "ageInDays": 15,
+    "daysSinceLastUpdate": 15
+  },
+  "size": {
+    "additions": 85,
+    "deletions": 66,
+    "changedFiles": 2,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/aikido-security-update-packages-17192353-an1w",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13699,
+        "title": "[Aikido] Fix security issue in fast-xml-parser via minor version upgrade from 5.3.4 to 5.3.8",
+        "state": "MERGED",
+        "relationship": "same-author-pattern"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Automated security bot PR that upgrades dependencies in the observability/_examples/otel-bridge/agent-hub/ example project to patch 8 CVEs. Bumps systeminformation 5.30.3→5.31.0 (2 HIGH command injection CVEs), fastify 5.6.0→5.7.3 (HIGH validation bypass + LOW DoS), pino 9.11.0→10.1.1 (MEDIUM prototype pollution), ajv 8.17.1→8.18.0 (LOW ReDoS), minimatch 10.1.1→10.2.1 (LOW ReDoS), and replaces @isaacs/brace-expansion with brace-expansion (LOW DoS). Only touches package.json and pnpm-lock.yaml in an examples subfolder.",
+  "maintainerNotes": "Changes are scoped entirely to observability/_examples/ which is an isolated example project. The Lint CI check is failing — likely a lockfile or formatting issue that may need a quick fix. Previous Aikido PRs (e.g. #13699, #12853, #12898) have been merged successfully. The pino bump is a major version change (9→10) which could have breaking changes in the example, but since this is only an example project the risk is low. The changeset check is skipped which is appropriate for example-only changes. Consider merging after verifying the lint failure is unrelated or trivially fixable.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

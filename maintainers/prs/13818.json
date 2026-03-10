@@ -1,0 +1,53 @@
+{
+  "number": 13818,
+  "title": "Feature/voiceforge saas",
+  "url": "https://github.com/mastra-ai/mastra/pull/13818",
+  "author": {
+    "login": "OARANHA",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T22:16:49Z",
+    "lastUpdated": "2026-03-04T22:29:09Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 6
+  },
+  "size": {
+    "additions": 2025,
+    "deletions": 0,
+    "changedFiles": 25,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/voiceforge-saas",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "close-candidate",
+    "priority": "low",
+    "quality": "poor",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": false,
+      "hasChangesets": false,
+      "followsConventions": false,
+      "scopeIsReasonable": false
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds an entirely new 'voiceforge' example under examples/ — a multi-channel AI sales agent SaaS product with WhatsApp, voice (Twilio), email, and web chat channels, plus a Next.js dashboard and marketing landing page. All 25 files are new additions. Content is in Brazilian Portuguese. References non-existent models ('qwen3-coder-next'), non-existent integrations (baileys), and uses fabricated testimonials/metrics. No actual Mastra integration patterns are followed correctly.",
+  "maintainerNotes": "This PR has significant quality issues: (1) Empty PR description — template not filled out, no checklist items checked. (2) No tests whatsoever. (3) No changeset. (4) References non-existent model providers and integrations (e.g., 'qwen' provider, 'qwen3-coder-next' model, baileys integration). (5) All UI components use hardcoded mock data with no real functionality. (6) The example is essentially a marketing landing page and static dashboard mockup for a Brazilian SaaS product, not a useful Mastra example. (7) Appears AI-generated — comprehensive but non-functional boilerplate. (8) CI tests are stuck in pending state. (9) External contributor with no prior contributions. Should likely be closed as it doesn't provide a working, instructive example of Mastra usage.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,55 @@
+{
+  "number": 13232,
+  "title": "feat(sonic): add support for nova sonic",
+  "url": "https://github.com/mastra-ai/mastra/pull/13232",
+  "author": {
+    "login": "krokoko",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-18T23:51:24Z",
+    "lastUpdated": "2026-03-06T22:04:06Z",
+    "ageInDays": 19,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 8791,
+    "deletions": 423,
+    "changedFiles": 44,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/aws-nova-sonic",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "https://github.com/mastra-ai/mastra/issues/5901"
+    ]
+  },
+  "summary": "Adds a new @mastra/voice-aws-nova-sonic package under voice/aws-nova-sonic/ implementing bidirectional real-time voice streaming with Amazon Nova 2 Sonic via the AWS Bedrock Runtime SDK. Includes a full Next.js example app (examples/voice/aws-nova-sonic-test/) with browser-based UI for testing voice conversations. The main implementation is ~2400 lines with 839 lines of unit tests using mocked AWS SDK. The package supports features like speaker selection (18 voices), endpointing sensitivity control, barge-in, and SSE-based live event streaming.",
+  "maintainerNotes": "External community contribution addressing issue #5901. The PR has merge conflicts that need resolving. CI checks are stuck in PENDING (common for external contributor PRs needing workflow approval). No changeset was added (flagged by changeset-bot). CodeRabbit flagged that the example path is hardcoded in pnpm-workspace.yaml instead of using a glob pattern. The main source file (index.ts) is very large (~2400 lines) and may benefit from being split up. All author commits are from Feb 19; the Mar 6 update timestamp likely reflects an automated re-check. No maintainer has reviewed yet — only CodeRabbit bot comments exist. The author has been responsive to CodeRabbit feedback, iterating through multiple 'addressing comments' commits. Worth a maintainer review given it fills a requested feature gap for AWS voice support.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

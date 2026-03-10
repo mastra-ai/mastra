@@ -1,0 +1,55 @@
+{
+  "number": 13450,
+  "title": "feat(workspaces): add @mastra/agentfs workspace filesystem provider",
+  "url": "https://github.com/mastra-ai/mastra/pull/13450",
+  "author": {
+    "login": "penberg",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-24T12:44:50Z",
+    "lastUpdated": "2026-03-05T11:42:10Z",
+    "ageInDays": 14,
+    "daysSinceLastUpdate": 5
+  },
+  "size": {
+    "additions": 2249,
+    "deletions": 1,
+    "changedFiles": 29,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "agentfs",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a new @mastra/agentfs workspace filesystem provider that stores files in a Turso/SQLite database via agentfs-sdk. Implements the full WorkspaceFilesystem interface (read, write, append, delete, copy, move, mkdir, rmdir, readdir, exists, stat) with read-only mode enforcement and error mapping. Includes unit tests, integration tests, documentation (provider reference + sidebar entry), a changeset, and an example project. 29 files changed across workspaces/agentfs/, docs/, examples/agentfs-workspace/, and root config. Author notes it was mostly generated with Claude Code with manual touch-ups.",
+  "maintainerNotes": "Well-structured community contribution adding a new workspace filesystem provider. Has merge conflicts that need resolving. CI checks are stuck in PENDING state (Core, E2E, MCP, Memory, RAG tests never ran — likely blocked by the merge conflicts or Vercel authorization). Vercel deploy checks fail because the external contributor needs authorization. CodeRabbit reviewed and flagged some issues (error swallowing in catch blocks, @types/node pinning); author addressed most feedback in follow-up commits. No human maintainer has reviewed yet. The pnpm-lock.yaml for the example project adds significant bulk. Author interacted with NikAiyer who apparently helped fix some issues. Needs: (1) resolve merge conflicts, (2) get a maintainer review of the implementation and the agentfs-sdk dependency.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

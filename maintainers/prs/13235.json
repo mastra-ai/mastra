@@ -1,0 +1,63 @@
+{
+  "number": 13235,
+  "title": "chore(deps): bump systeminformation from 5.30.3 to 5.31.1 in /observability/_examples/otel-bridge/agent-hub",
+  "url": "https://github.com/mastra-ai/mastra/pull/13235",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-19T00:17:17Z",
+    "lastUpdated": "2026-02-19T07:54:16Z",
+    "ageInDays": 19,
+    "daysSinceLastUpdate": 19
+  },
+  "size": {
+    "additions": 13,
+    "deletions": 0,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/observability/_examples/otel-bridge/agent-hub/systeminformation-5.31.1",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "passing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11947,
+        "title": "Update systeminformation",
+        "state": "MERGED",
+        "relationship": "previous version bump for same dependency"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot security update bumping systeminformation from 5.30.3 to 5.31.1 in the otel-bridge agent-hub example. The update includes fixes for Command Injection vulnerabilities (CWE-78) in versions() and wifiNetworks() on Linux. Only the pnpm-lock.yaml file in the example directory is changed (adding libc fields to rollup package resolutions).",
+  "maintainerNotes": "This is a security fix PR that has been approved by abhiaiyer91 and all CI checks are passing. The change is confined to an examples lockfile so risk is minimal. A previous systeminformation bump (#11947) was merged in January. This PR has been sitting approved and green for 19 days—safe to merge immediately.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

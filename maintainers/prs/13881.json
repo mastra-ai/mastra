@@ -1,0 +1,66 @@
+{
+  "number": 13881,
+  "title": "fix(core): prevent supervisor messages from leaking into sub-agent thread",
+  "url": "https://github.com/mastra-ai/mastra/pull/13881",
+  "author": {
+    "login": "gourine",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-05T22:46:30Z",
+    "lastUpdated": "2026-03-08T11:26:05Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 10,
+    "deletions": 4,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/sub-agent-history-duplicates",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13868,
+        "title": "send correct threadId to subagent",
+        "state": "MERGED",
+        "relationship": "related — fixed a different sub-agent threading bug, merged the day after this PR opened"
+      },
+      {
+        "number": 13323,
+        "title": "feat(core): supervisor pattern for multi-agent coordination",
+        "state": "MERGED",
+        "relationship": "parent feature — introduced the supervisor delegation code this PR fixes"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "When a supervisor agent delegates to a sub-agent, the supervisor's full conversation history (filteredContextMessages) was included in the messages array passed to the sub-agent. Because MessageHistory persists all messages with source: 'input', this caused supervisor tool call records to be written into the sub-agent's thread, producing duplicate/nested badges in the studio UI. The fix moves filteredContextMessages from the messages array to the context option, which MessageList marks as source: 'context' and MessageHistory excludes from persistence. The sub-agent LLM still sees the full history, but it's no longer saved to the sub-agent's thread.",
+  "maintainerNotes": "Well-written PR with clear root cause analysis. Two concerns to address before merging: (1) CodeRabbit flagged that the context param is only added to generate/resumeGenerate/generateLegacy paths but NOT to the stream/resumeStream paths (lines ~3082-3115). This means streaming sub-agent delegations will lose supervisor history entirely — a regression. The author needs to add `context: filteredContextMessages as any` to both stream() and resumeStream() calls. (2) The `as any` cast on filteredContextMessages bypasses type safety between MastraDBMessage[] and the expected context type — minor but worth noting. (3) No automated tests are included; the test plan is manual-only. CI is stuck in PENDING state (core tests, memory tests, etc. haven't run — likely needs maintainer approval to trigger). Related PR #13868 (sub-agent threadId fix) was merged after this PR was opened, so verify there are no conflicts with that change.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

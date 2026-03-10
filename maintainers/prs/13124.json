@@ -1,0 +1,53 @@
+{
+  "number": 13124,
+  "title": "fix(deployer): bump esbuild from ^0.25.10 to ^0.27.3",
+  "url": "https://github.com/mastra-ai/mastra/pull/13124",
+  "author": {
+    "login": "croffasia",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-17T02:06:45Z",
+    "lastUpdated": "2026-02-17T02:09:41Z",
+    "ageInDays": 21,
+    "daysSinceLastUpdate": 21
+  },
+  "size": {
+    "additions": 6,
+    "deletions": 1,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/bump-esbuild",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Bumps esbuild dependency in @mastra/deployer from ^0.25.10 to ^0.27.3 to address Go stdlib CVEs (CVE-2025-22871, CVE-2025-61729) flagged by npm audit. The change is minimal: one version bump in package.json and a proper changeset file. Note that esbuild uses 0.x semver where ^0.25.x only resolves within 0.25.x, so this is effectively a major version jump (0.25 -> 0.27) that could have breaking changes in esbuild's API or output.",
+  "maintainerNotes": "Clean, well-scoped security bump from an external contributor. Includes a changeset with clear rationale. CI tests are stuck in PENDING state — likely because the workflow requires secrets authorization for external contributor forks. Vercel preview deploys also fail for the same reason. A maintainer needs to: (1) verify esbuild 0.27.x is compatible with the deployer's usage (since ^0.x bumps are effectively breaking in npm semver), (2) approve the CI workflow to run, and (3) review. The current main branch still has ^0.25.10 so this is not superseded.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

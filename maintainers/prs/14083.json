@@ -1,0 +1,68 @@
+{
+  "number": 14083,
+  "title": "chore(docs): Begin sentence case enforcement",
+  "url": "https://github.com/mastra-ai/mastra/pull/14083",
+  "author": {
+    "login": "LekoArts",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T14:29:59Z",
+    "lastUpdated": "2026-03-10T15:03:20Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 2042,
+    "deletions": 1912,
+    "changedFiles": 429,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "docs/title-case",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13995,
+        "title": "chore(docs): More vale linting",
+        "state": "MERGED",
+        "relevance": "Related prior PR by same author doing Vale linting improvements"
+      },
+      {
+        "number": 13263,
+        "title": "chore: Add docs styleguides",
+        "state": "MERGED",
+        "relevance": "Established the sentence case styleguide this PR enforces"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Bulk conversion of documentation headings from title case to sentence case across 428 MDX files in docs/, plus a new Vale heading analysis script (docs/scripts/vale-heading-analysis.mjs) and a minor update to packages/core/scripts/generate-model-docs.ts. This is the first batch of sentence case enforcement following the styleguide established in PR #13263. No changeset needed as this is docs-only.",
+  "maintainerNotes": "Large but mechanical change — all 428 doc files have heading casing lowered (e.g., 'Working with Audio Streams' → 'Working with audio streams', 'Agent Memory | Agents' → 'Agent memory | Agents'). One non-docs file touched: packages/core/scripts/generate-model-docs.ts (likely to generate headings in sentence case going forward). The 'Observability Package Tests' CI failure appears unrelated to docs changes. E2E Tests and Memory Tests are still pending. No human review yet. Author notes more changes are still needed — this is a first batch.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

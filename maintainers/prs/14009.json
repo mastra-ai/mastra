@@ -1,0 +1,57 @@
+{
+  "number": 14009,
+  "title": "perf(deployer): cache optimized dependency artifacts across builds",
+  "url": "https://github.com/mastra-ai/mastra/pull/14009",
+  "author": {
+    "login": "TheIsrael1",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T11:57:28Z",
+    "lastUpdated": "2026-03-09T14:06:16Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 808,
+    "deletions": 6,
+    "changedFiles": 5,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/13379-optimized-deps-cache",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "passing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13379"
+    ]
+  },
+  "summary": "Caches optimized dependency artifacts between builds to avoid the expensive ~32s 'Optimizing dependencies' phase on repeated builds when dependency inputs haven't changed. Key changes: (1) Bundler.prepare() now preserves the .mastra/.build directory between runs and only cleans .mastra/output. (2) analyzeBundle() computes a SHA-256 cache key from dependency names/versions/exports, bundler options, and platform, then reads/writes a JSON cache file. (3) Cache is only used for non-workspace dependency sets to avoid stale workspace snapshots. (4) Includes extensive unit tests (analyze.test.ts) and an e2e test (optimized-deps-cache.test.ts) covering cache hit, cache miss on version change, cache miss on options change, and workspace dependency exclusion.",
+  "maintainerNotes": "Maintainer @wardpeet left a comment (not a formal approval/rejection): 'Looks good but in general rollup should be capable of this. Also we have to make sure the build folder doesn't get bloated with a lot of unused chunks.' CodeRabbit flagged 4 issues: (1) cache key doesn't include enableSourcemap or external package versions, (2) file existence check resolves against projectRoot instead of outputDir, (3) docs mention workspace caveat should be more explicit, (4) tests use timing-based assertions that could be flaky. The PR description mentions adding docs under bundler externals but no docs files are in the diff — the 'Documentation' label may be auto-applied. Author has write access (maintainer). No similar/duplicate PRs found. Issue #13379 ('Optimizing dependencies phase takes ~32s') is still open.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

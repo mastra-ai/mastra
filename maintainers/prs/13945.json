@@ -1,0 +1,53 @@
+{
+  "number": 13945,
+  "title": "fix(deployer,cli): enable gzip compression for studio static assets",
+  "url": "https://github.com/mastra-ai/mastra/pull/13945",
+  "author": {
+    "login": "rphansen91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T21:45:45Z",
+    "lastUpdated": "2026-03-10T00:15:20Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 48,
+    "deletions": 1,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/enable-gzip-compression",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "passing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Enables gzip compression for studio static assets to reduce transfer sizes (~70% reduction). In the deployer (production), adds Hono's compress() middleware with SSE exclusion. In the CLI dev server, pre-compresses the HTML shell with gzipSync at startup and serves it with proper Content-Encoding headers. Reduces the main JS bundle transfer from ~5.8 MB to ~1.7 MB, cutting blank-screen time from ~5.7s to ~1.7s.",
+  "maintainerNotes": "Approved by wardpeet. abhiaiyer91 is still listed as a requested reviewer but approval threshold is met. CI is green (Observability test failure is unrelated to this PR; Memory/E2E tests pending). No merge conflicts. The changeset covers both @mastra/deployer and mastra (cli) as patch bumps. No automated tests added, but compression behavior is well-understood and the manual test plan is documented. Clean, focused change.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

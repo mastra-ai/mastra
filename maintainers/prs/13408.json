@@ -1,0 +1,64 @@
+{
+  "number": 13408,
+  "title": "feat(editor): workflow-builder",
+  "url": "https://github.com/mastra-ai/mastra/pull/13408",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-23T15:39:32Z",
+    "lastUpdated": "2026-02-23T15:40:43Z",
+    "ageInDays": 15,
+    "daysSinceLastUpdate": 15
+  },
+  "size": {
+    "additions": 1839,
+    "deletions": 247,
+    "changedFiles": 11,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "feat/editor/workflow-builder",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13285,
+        "title": "feat(editor): add MCP server storage domain and editor namespace with hydration",
+        "relation": "same feature series (editor), already merged"
+      },
+      {
+        "number": 13727,
+        "title": "feat(editor): FilesystemStore adapter with code agent override support",
+        "relation": "same feature series (editor), already merged"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds workflow compilation, file management, and publishing infrastructure to packages/core/src/workspace/workflows/. Introduces WorkflowCompiler (esbuild-based TS-to-ESM compilation with dynamic import), WorkflowFileManager (CRUD for workflow source files on disk), and workflow publisher utilities (publish/restore workflows to/from a blob store using content-addressed trees). Includes a comprehensive lifecycle test covering the full round-trip: create files -> compile -> execute -> publish -> restore -> re-execute. Also bumps pnpm from 10.29.3 to 10.30.1 and updates the lockfile. Part of the ongoing feat/editor/* feature series.",
+  "maintainerNotes": "Draft PR from maintainer with no description and no changeset. Has merge conflicts against main that need rebasing. Several CI checks are stuck in pending state (likely gated behind secrets setup which passed but downstream jobs never ran — possibly due to the conflicts). The bulk of meaningful additions (~1500 lines) are well-structured new source files with good test coverage. The lockfile diff accounts for most of the remaining churn. This is part of the editor feature series and should be reviewed once the author marks it ready. Needs: rebase to resolve conflicts, PR description, changeset.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

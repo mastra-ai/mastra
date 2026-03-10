@@ -1,0 +1,57 @@
+{
+  "number": 13986,
+  "title": "feat: add conditional event matching for workflow suspend/resume (waitForEvent)",
+  "url": "https://github.com/mastra-ai/mastra/pull/13986",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-08T19:36:34Z",
+    "lastUpdated": "2026-03-09T08:13:58Z",
+    "ageInDays": 2,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 1084,
+    "deletions": 3,
+    "changedFiles": 12,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/wait-for-event-conditional-matching",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#8689"
+    ]
+  },
+  "summary": "Adds Inngest-style conditional event matching (match/if parameters) to the waitForEvent suspend option in workflows. Introduces a new event-match.ts module with a safe recursive-descent expression parser (no eval) supporting ==, !=, &&, ||, and parentheses. Extends suspend() to accept waitForEvent with event, match, and if fields. Adds waitingPathConditions to workflow run state for persistence. Includes 34 unit tests for expression parsing and 10 integration tests for event processing. Also adds documentation for the feature.",
+  "maintainerNotes": "Community PR from external contributor addressing feature request #8689 (Inngest waitForEvent match/if parity). The implementation is well-structured: new event-match module is self-contained with a proper recursive-descent parser (no eval), good test coverage (210-line test file + sleep.test.ts), changeset included, and docs updated. CodeRabbit left actionable comments (4 in first review, 2 in a follow-up) that should be addressed. The PR currently has MERGE CONFLICTS that the author needs to resolve before review can proceed. CI checks are pending (stuck at 'Setup actions with secrets' gate — expected for external contributors). Vercel deploy checks fail due to authorization (normal for non-org members). The scope is focused on a single feature with changes across 12 files, all within the workflow domain. The custom expression parser is the main area requiring careful security review to ensure no injection vectors.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

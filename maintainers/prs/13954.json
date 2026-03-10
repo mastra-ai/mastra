@@ -1,0 +1,57 @@
+{
+  "number": 13954,
+  "title": "feat(server): add mapUserToResourceId callback to auth config for automatic resource ID scoping",
+  "url": "https://github.com/mastra-ai/mastra/pull/13954",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-07T07:37:47Z",
+    "lastUpdated": "2026-03-07T09:29:38Z",
+    "ageInDays": 3,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 402,
+    "deletions": 22,
+    "changedFiles": 11,
+    "category": "L"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/auth-map-user-to-resource-id",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13926"
+    ]
+  },
+  "summary": "Adds a `mapUserToResourceId` callback to `MastraAuthConfig` and `MastraAuthProvider` that automatically sets `MASTRA_RESOURCE_ID_KEY` on request context after successful authentication, enabling per-user memory/thread isolation without custom middleware. Also adds a security fix that strips reserved context keys (`mastra__resourceId`, `mastra__threadId`) from client-supplied request context to prevent impersonation. Includes 6 unit tests for the mapping behavior (simple, composite, null/undefined returns, missing callback, auth failure, throw handling) and 3 integration tests for reserved key stripping in the Hono adapter. Updates middleware, request-context, and configuration docs.",
+  "maintainerNotes": "Well-structured community contribution linked to issue #13926. The PR has two logical parts: (1) the `mapUserToResourceId` feature addition across core types, auth provider, and middleware helpers, and (2) a security hardening fix that strips reserved context keys from client input to prevent resource ID/thread ID injection. Both changes are sensible. Tests are thorough. Two changesets are included (one minor for the feature, one patch for the security fix). CI checks are pending (core, E2E, memory, MCP, RAG tests haven't run — likely needs maintainer approval to trigger workflows). Vercel deploy checks fail due to authorization (expected for external contributors). Documentation updates are included. The `mapUserToResourceId` callback is properly typed as optional, handles errors gracefully with logging, and the reserved key filtering is implemented cleanly via a static Set. Worth verifying the type change in `MastraAuthConfig` doesn't break any existing auth provider implementations.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

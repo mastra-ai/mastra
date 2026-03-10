@@ -1,0 +1,68 @@
+{
+  "number": 13538,
+  "title": "docs: fix SSR/client content mismatches for SEO",
+  "url": "https://github.com/mastra-ai/mastra/pull/13538",
+  "author": {
+    "login": "axe312ger",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-26T14:27:55Z",
+    "lastUpdated": "2026-02-26T14:35:45Z",
+    "ageInDays": 12,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 151,
+    "deletions": 9,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": true,
+  "branch": {
+    "head": "docs/seo-ssr-to-client-content-mismatch",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13452,
+        "title": "docs: fix SSR/client content mismatches for SEO",
+        "state": "MERGED",
+        "note": "Same fix by same author, was merged then reverted by #13458. This PR is the reworked retry."
+      },
+      {
+        "number": 13458,
+        "title": "Revert \"docs: fix SSR/client content mismatches for SEO\"",
+        "state": "MERGED",
+        "note": "Revert of #13452, which this PR aims to replace."
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Reworked attempt to fix SSR-to-client content mismatches that hurt SEO. The original fix (#13452) was merged then reverted (#13458). This PR removes the useIsBrowser guard from sidebar category links (so collapsible categories always render as <a> instead of switching to <button> after hydration) and swizzles the Docusaurus Tabs component to remove the key={String(isBrowser)} re-mount hack that caused content churn visible to crawlers. Changes are limited to 3 docs theme files.",
+  "maintainerNotes": "This is a draft rework of #13452 (merged then reverted via #13458) by the same maintainer. The Docs E2E tests are failing, which is likely related to the Tabs swizzle changes. Observability tests also fail but appear unrelated. The PR has no changeset, which may be acceptable for docs-only theme changes. Since it's still a draft with failing E2E tests, the author likely needs to fix those before requesting review. No activity in 12 days — worth a nudge to check if the author is still working on it.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,72 @@
+{
+  "number": 10547,
+  "title": "fix(langfuse): Support cross-process span linking for distributed workflows",
+  "url": "https://github.com/mastra-ai/mastra/pull/10547",
+  "author": {
+    "login": "suhasdeshpande",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-11-26T18:35:44Z",
+    "lastUpdated": "2025-11-28T19:39:40Z",
+    "ageInDays": 469,
+    "daysSinceLastUpdate": 467
+  },
+  "size": {
+    "additions": 41,
+    "deletions": 5,
+    "changedFiles": 1,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "patch-2",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11870,
+        "title": "Refactor: Extract common exporter logic into TrackingExporter base class",
+        "state": "MERGED",
+        "relevance": "Completely refactored the LangfuseExporter, extracting core logic into TrackingExporter base class. The functions this PR modifies (getTraceData, getLangfuseParent, handleSpanUpdateOrEnd) no longer exist."
+      },
+      {
+        "number": 11885,
+        "title": "Inngest observability fixes",
+        "state": "MERGED",
+        "relevance": "Directly addresses the same distributed workflow (Inngest) tracing problem with a deferred span collection approach at the workflow layer."
+      },
+      {
+        "number": 10838,
+        "title": "feature(LangfuseExporter): Reuse traces with shared traceId",
+        "state": "MERGED",
+        "relevance": "Added trace reuse with shared traceId for distributed tracing scenarios, partially addressing the same concern."
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds cross-process span linking support to the Langfuse exporter for distributed workflows (e.g., Inngest). When a span arrives from a different process where span_started occurred, the PR retroactively creates the trace and span, and falls back to the trace as parent when the real parent isn't in the local span map. Changes are limited to observability/langfuse/src/tracing.ts.",
+  "maintainerNotes": "This PR is almost certainly superseded. The entire LangfuseExporter was refactored in PR #11870 (merged 2026-01-13), extracting core logic into a TrackingExporter base class. The specific functions this PR modifies (getTraceData, getLangfuseParent, and the inline handleSpanUpdateOrEnd logic) no longer exist in the current codebase. Additionally, PR #11885 (merged same day) addressed Inngest distributed workflow tracing with a fundamentally different architecture (deferred span collection). PR #10838 also added trace reuse for shared traceIds. The PR has merge conflicts and CI checks are stuck in PENDING. The same author has newer open PRs (#11544, #12981) that target the current codebase. Recommend closing with a thank-you note explaining the refactor superseded this work.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

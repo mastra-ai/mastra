@@ -1,0 +1,72 @@
+{
+  "number": 13992,
+  "title": "test: add working memory data integrity and initialization bug tests",
+  "url": "https://github.com/mastra-ai/mastra/pull/13992",
+  "author": {
+    "login": "daichiyasunami-vottia",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-09T07:44:12Z",
+    "lastUpdated": "2026-03-09T07:50:45Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 363,
+    "deletions": 0,
+    "changedFiles": 1,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "test/working-memory-bugs-verification",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12415,
+        "title": "fix working memory getting corrupted",
+        "state": "MERGED",
+        "relevance": "Related fix for working memory corruption, but does not cover the specific bugs documented here"
+      },
+      {
+        "number": 13688,
+        "title": "add test for working memory scoped to resource in supervisor flow",
+        "state": "MERGED",
+        "relevance": "Another working memory test PR from maintainers, different scope"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13990,
+        "title": "Bug: Working Memory - multiple data integrity and initialization issues",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Community contributor adds a single new test file (working-memory-bugs.test.ts) with 8 tests documenting 5 interrelated bugs in WorkingMemory: (1) generateEmptyFromSchema fails on string schemas, ignores defaults, returns wrong types; (2) thread metadata overwrite instead of merge; (3) no partial JSON update support (full overwrite loses fields); (4) empty working_memory_data on first interaction; (5) tool description forces entire content re-send wasting tokens. Tests intentionally assert current buggy behavior with TODO comments for post-fix expectations. Related to issue #13990 filed by the same author.",
+  "maintainerNotes": "This is a test-only PR that documents bugs rather than fixing them. The tests assert the current (buggy) behavior and include commented-out assertions for expected post-fix behavior. Key considerations: (1) No changeset included, though arguably not needed for test-only additions. (2) CI has 6 pending checks (core, memory, E2E, MCP, RAG, combined store tests) that haven't run yet — these are gated behind 'Setup actions with secrets' which passed but the actual test jobs are still pending (likely require maintainer approval for fork PRs). (3) CodeRabbit flagged that createWorkingMemoryInstance() uses a partial storage stub rather than the real MockMemory wiring, and that one nested-object test lacks assertions. (4) The bugs described are real and well-documented, but some may already be partially addressed (e.g., #12415 fixed working memory corruption). (5) The same author also had PR #13991 merged recently, suggesting active community engagement. The PR is well-structured but tests that assert buggy behavior could become confusing — consider whether these should be converted to failing tests (with .todo or .skip) that will pass once fixes land.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

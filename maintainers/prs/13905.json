@@ -1,0 +1,55 @@
+{
+  "number": 13905,
+  "title": "Harness message queuing",
+  "url": "https://github.com/mastra-ai/mastra/pull/13905",
+  "author": {
+    "login": "abhiaiyer91",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T11:02:41Z",
+    "lastUpdated": "2026-03-07T23:28:42Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 357,
+    "deletions": 16,
+    "changedFiles": 12,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "cursor/harness-message-queuing-b956",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds message queuing to the Harness primitive with a new MessageDeliveryMode type ('interrupt' | 'queue'). Introduces send(), getMessageDeliveryMode(), and setMessageDeliveryMode() methods on Harness. Updates the TUI with Ctrl+Q to toggle between modes. Includes comprehensive tests, documentation updates, and changesets.",
+  "maintainerNotes": "TylerBarnes requested changes with UX concerns: (1) toggling between interrupt/queue modes feels odd—suggested Enter should just always queue when running, (2) Ctrl+Q feels like 'quit this app' as a keybinding, (3) prior behavior already had queueing via Ctrl+F for follow-ups and Enter for steering. CodeRabbit also flagged: split changesets per package, remove TUI references from core changeset, avoid direct displayState mutation in setMessageDeliveryMode (use event reducer instead), and reduce coupling to private internals in tests. PR also has merge conflicts and 2 failing CI checks (Combined store Tests, E2E Tests—likely unrelated to this PR but need verification).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

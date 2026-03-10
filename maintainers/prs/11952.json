@@ -1,0 +1,55 @@
+{
+  "number": 11952,
+  "title": "Update storybook",
+  "url": "https://github.com/mastra-ai/mastra/pull/11952",
+  "author": {
+    "login": "alliehowe29",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-01-15T00:47:43Z",
+    "lastUpdated": "2026-01-15T00:53:04Z",
+    "ageInDays": 54,
+    "daysSinceLastUpdate": 54
+  },
+  "size": {
+    "additions": 43,
+    "deletions": 41,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "allie/update-storybook-dependabot-734",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "https://github.com/mastra-ai/mastra/security/dependabot/734"
+    ]
+  },
+  "summary": "Bumps storybook from ^9.1.10 to ^9.1.17 across root package.json, client-sdks/react/package.json, and packages/playground-ui/package.json to address Dependabot security alert #734. Also adds a storybook override in the root pnpm overrides. Changes are limited to 3 package.json files and pnpm-lock.yaml.",
+  "maintainerNotes": "This PR has merge conflicts and a failing E2E test check. It has been stale for 54 days with no review activity. The reviewer requested (abhiaiyer91) never reviewed. The security vulnerability it addresses (dependabot/734) may have been resolved through other lockfile updates since January. Before reviving, check if dependabot alert #734 is still open. If so, rebase onto main, resolve conflicts, and re-run CI. If the alert is already resolved, close this PR.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

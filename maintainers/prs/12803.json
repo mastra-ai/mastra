@@ -1,0 +1,70 @@
+{
+  "number": 12803,
+  "title": "fix(deployer): resolve cross-package tsconfig path alias deps in dev",
+  "url": "https://github.com/mastra-ai/mastra/pull/12803",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-07T08:06:09Z",
+    "lastUpdated": "2026-02-26T13:59:30Z",
+    "ageInDays": 31,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 96,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/monorepo-tsconfig-path-aliases-12550",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12239,
+        "title": "fix: resolve TypeScript path aliases in transpiled workspace packages",
+        "relationship": "related-but-different-fix"
+      },
+      {
+        "number": 11788,
+        "title": "fix(deployer): support tsconfig paths when using extended configs",
+        "relationship": "same-author-previous-fix-on-same-plugin"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12550,
+        "title": "[BUG] mastra dev fails to build package aliases in Mono Repo",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "When tsconfig path aliases (e.g. @lib/*) point to files in a different monorepo package, transitive dependencies of those aliased files (e.g. better-auth) were unresolvable at runtime from .mastra/output/. The fix adds a fallback in the tsconfig-paths Rollup plugin: when a bare import can't be resolved normally and the importer was itself resolved via a tsconfig alias, it uses createRequire(importer) to resolve the dependency from the importer's location. A regression test covering the cross-package scenario is included. The changeset is present.",
+  "maintainerNotes": "Approved by abhiaiyer91 (org member). CI checks are stuck in PENDING state — 7 test suites (Core, E2E, Memory, RAG, MCP, Tool Builder, Combined store) have been pending since Feb 26 and appear to never have run, likely due to missing secrets/authorization for the fork. Vercel deploys also failed (authorization required). The code itself looks correct and well-scoped (15 lines of logic + 75 lines of test). One concern flagged by CodeRabbit: the hardcoded hono exception (request !== 'hono' && !request.startsWith('hono/')) is duplicated from the existing code path above — this is a pre-existing pattern, not introduced by this PR, but worth noting. The author is a repeat contributor who previously had PR #11788 merged on the same plugin. A maintainer should re-trigger CI from the base repo to validate tests pass before merging.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

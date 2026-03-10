@@ -1,0 +1,62 @@
+{
+  "number": 11321,
+  "title": "Upgrade glob",
+  "url": "https://github.com/mastra-ai/mastra/pull/11321",
+  "author": {
+    "login": "alliehowe29",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2025-12-21T05:28:10Z",
+    "lastUpdated": "2025-12-23T01:04:53Z",
+    "ageInDays": 444,
+    "daysSinceLastUpdate": 442
+  },
+  "size": {
+    "additions": 167,
+    "deletions": 159,
+    "changedFiles": 2,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "allie/upgrade-glob",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "passing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12853,
+        "title": "[Aikido] Fix security issue in glob via minor version upgrade from 10.4.5 to 10.5.0",
+        "state": "MERGED",
+        "mergedAt": "2026-02-10T00:57:00Z"
+      }
+    ],
+    "relatedIssues": [
+      "https://github.com/mastra-ai/mastra/security/dependabot/619"
+    ]
+  },
+  "summary": "Upgrades glob from 10.4.5 to 10.5.0 in the root package.json to address Dependabot security alert #619. Changes are limited to package.json and pnpm-lock.yaml. The bulk of the diff is lockfile churn from dependency resolution changes (jiti version alignment).",
+  "maintainerNotes": "This PR is superseded by #12853 which was merged on 2026-02-10 and addressed the exact same glob 10.4.5 → 10.5.0 security upgrade (CVE-2025-64756). This PR also has merge conflicts and has been inactive for over 14 months. Safe to close.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

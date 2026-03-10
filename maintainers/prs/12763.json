@@ -1,0 +1,74 @@
+{
+  "number": 12763,
+  "title": "fix: playground ui not picking agent prompt changes",
+  "url": "https://github.com/mastra-ai/mastra/pull/12763",
+  "author": {
+    "login": "Shaik-Sirajuddin",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-06T11:44:59Z",
+    "lastUpdated": "2026-03-03T12:39:00Z",
+    "ageInDays": 32,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 71,
+    "deletions": 16,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix_playground_ui_no_refresh",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12929,
+        "title": "fix(playground-ui): only persist experiment prompt to localStorage when edited",
+        "status": "merged",
+        "mergedAt": "2026-02-11T17:12:56Z",
+        "relevance": "Directly fixes the same localStorage prompt persistence bug this PR addresses"
+      },
+      {
+        "number": 12994,
+        "title": "refactor(playground-ui): remove agent prompt experiment mode",
+        "status": "merged",
+        "mergedAt": "2026-02-12T16:42:40Z",
+        "relevance": "Completely removes the agent-prompt-experiment-context.tsx file that this PR modifies, making all prompt experiment changes moot"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 11763,
+        "title": "[BUG] Agent CMS doesn't pick up the updated prompt in my code.",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "This PR attempted to fix two issues: (1) the playground not reflecting agent prompt changes from code because localStorage always overrode the code-defined prompt, and (2) SSE clients missing refresh signals after server restart by adding a refreshId-based deduplication mechanism with retry logic. It modifies packages/cli dev.ts, deployer client handler, playground index.html SSE handling, and the agent-prompt-experiment-context.",
+  "maintainerNotes": "This PR is fully superseded. The prompt persistence bug was fixed by PR #12929 (merged 2026-02-11), and then the entire prompt experiment mode was removed by PR #12994 (merged 2026-02-12). The file agent-prompt-experiment-context.tsx that this PR modifies no longer exists. The related issue #11763 is closed. The PR also has merge conflicts and several CI checks stuck in PENDING. The SSE refresh deduplication changes (refreshId mechanism in dev.ts, client.ts, and index.html) were not included in the merged fixes and represent additional scope, but the approach (storing refreshId in sessionStorage, 2-second TTL server-side) is somewhat fragile. Should be closed with a thank-you note explaining the fix was already merged via #12929 and #12994.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

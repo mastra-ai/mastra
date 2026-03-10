@@ -1,0 +1,66 @@
+{
+  "number": 13274,
+  "title": "feat: mcp tool tracing",
+  "url": "https://github.com/mastra-ai/mastra/pull/13274",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-19T13:18:46Z",
+    "lastUpdated": "2026-03-10T13:23:00Z",
+    "ageInDays": 19,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 320,
+    "deletions": 16,
+    "changedFiles": 9,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/mcp-tool-tracing",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12804,
+        "title": "feat: enable tracing for tool executions through mcp server",
+        "state": "OPEN",
+        "relationship": "competing/overlapping"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 10887,
+        "title": "[FEATURE] MCP tool tracing",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "MCP tool calls now produce dedicated MCP_TOOL_CALL spans instead of generic TOOL_CALL spans in traces. The MCP client attaches mcpMetadata (serverName, serverVersion) to each tool it creates. CoreToolBuilder detects this metadata and creates MCP-specific spans with additional attributes. The playground UI renders a distinct MCP icon and color for these spans. Changes span 3 packages: @mastra/core (tool builder span logic), @mastra/mcp (metadata attachment), and @mastra/playground-ui (UI rendering). Includes tests for metadata propagation and tool builder span type detection. Fixes issue #10887.",
+  "maintainerNotes": "Well-structured community PR with good description, screenshots, tests, and changesets. Directly addresses issue #10887 which requested MCP_TOOL_CALL span usage. Review requested from DanielSLew and NikAiyer but no human review has been given yet — only CodeRabbit automated reviews. Note: competing PR #12804 from a different author targets the same feature but is older (Feb 7), smaller (50 additions), stale since Feb 11, and appears less complete. This PR (#13274) is the more comprehensive implementation. CI is currently pending (tests were just triggered). Vercel deploy checks fail due to authorization (expected for external contributors). The author pinged @epinzur for review on Feb 19 but received no human response. CodeRabbit suggested minor improvements (usage example in changeset, logger mock deduplication) that appear unaddressed.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

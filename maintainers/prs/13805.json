@@ -1,0 +1,65 @@
+{
+  "number": 13805,
+  "title": "fix(core): pass agent workspace into converted workspace tools",
+  "url": "https://github.com/mastra-ai/mastra/pull/13805",
+  "author": {
+    "login": "maxrochefortshugar",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T19:23:16Z",
+    "lastUpdated": "2026-03-04T19:46:06Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 6
+  },
+  "size": {
+    "additions": 42,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/workspace-tools-missing-workspace",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13940,
+        "title": "fix(mastracode): subagents inherit workspace from parent agent",
+        "relationship": "related but different — 13940 fixes subagent workspace propagation, this PR fixes workspace fallback in listWorkspaceTools ToolOptions"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13806,
+        "title": "[BUG] Built-in workspace tools can throw NO_WORKSPACE despite configured agent workspace",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes a bug where built-in workspace tools (write_file, execute_command, etc.) throw WorkspaceNotAvailableError even when the agent has a workspace configured. The root cause is that `Agent.listWorkspaceTools` resolves the workspace but does not pass it into the `ToolOptions` object when converting tools via `makeCoreTool`. Since `makeCoreTool` builds context as `execOptions.workspace ?? options.workspace`, paths without exec-time workspace fail. The fix is a single-line addition of `workspace` to the options object at the conversion site. Includes a well-written regression test and a changeset.",
+  "maintainerNotes": "High-quality, minimal fix. The actual code change is a single line (`workspace,` added to ToolOptions in `listWorkspaceTools`). The bug is real and well-documented in issue #13806 with clear reproduction steps. The regression test directly exercises the failing path by calling `listWorkspaceTools` and executing the converted write_file tool without exec-time workspace. CI checks are pending (not failed) — the core tests, E2E, and other test suites haven't run yet (likely needs secrets/authorization). The Vercel deploy failures are expected for external contributors (authorization required). Author notes that `pnpm typecheck` fails on unrelated issues in the checkout. This is not superseded by #13940 which addresses a different workspace propagation path (subagents).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

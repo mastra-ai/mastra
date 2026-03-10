@@ -1,0 +1,75 @@
+{
+  "number": 12359,
+  "title": "feat:metadata filtering support",
+  "url": "https://github.com/mastra-ai/mastra/pull/12359",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-27T14:05:45Z",
+    "lastUpdated": "2026-03-03T12:40:19Z",
+    "ageInDays": 42,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 287,
+    "deletions": 2,
+    "changedFiles": 9,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/metadata-filtering-support",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 14040,
+        "title": "feat(core): add metadata filtering for message queries",
+        "state": "OPEN",
+        "author": "DanielSLew",
+        "relationship": "supersedes - maintainer-authored PR covering same feature with broader scope (all storage backends, 1070 additions)"
+      },
+      {
+        "number": 14034,
+        "title": "feat(pg): add btree indexes on memory_messages metadata fields",
+        "state": "MERGED",
+        "author": "DanielSLew",
+        "relationship": "related - adds metadata indexes that complement filtering"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12260,
+        "relationship": "fixes"
+      }
+    ]
+  },
+  "summary": "Adds metadata filtering to listMessages for PG and in-memory storage backends. Allows filtering messages by metadata key-value pairs using JSONB containment (@>) in PG. Includes 6 shared tests, docs updates for recall/client-js/message-history, changeset, input validation, and API filter schema update. Only covers PG and in-memory backends (not LibSQL or other stores).",
+  "maintainerNotes": "This PR is almost certainly superseded by #14040 (opened 2026-03-09 by DanielSLew), which implements the same feature (metadata filtering for listMessages, same issue #12260) but with broader coverage across all storage backends (PG, LibSQL, in-memory) and 1070 additions. PR #14034 (merged 2026-03-09) also added btree indexes on metadata fields to support this feature. This PR has merge conflicts (CONFLICTING state) and CI checks are stuck in PENDING since 2026-02-25. The contributor did solid work with good tests, docs, and validation, but a maintainer has taken over the implementation with a more comprehensive approach. Recommend closing with a thank-you to the contributor for the groundwork.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

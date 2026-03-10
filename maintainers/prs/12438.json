@@ -1,0 +1,63 @@
+{
+  "number": 12438,
+  "title": "chore(deps): bump next from 15.5.9 to 16.1.5 in /examples/ai-elements",
+  "url": "https://github.com/mastra-ai/mastra/pull/12438",
+  "author": {
+    "login": "app/dependabot",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-28T19:22:58Z",
+    "lastUpdated": "2026-03-02T14:08:14Z",
+    "ageInDays": 41,
+    "daysSinceLastUpdate": 8
+  },
+  "size": {
+    "additions": 1,
+    "deletions": 1,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/examples/ai-elements/next-16.1.5",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "passing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11216,
+        "title": "chore(deps): bump next from 15.5.7 to 15.5.9 in /examples/ai-elements",
+        "state": "MERGED",
+        "relevance": "Previous dependabot bump for same package in same example, already merged"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot automated PR to bump Next.js from 15.5.9 to 16.1.5 in the examples/ai-elements directory. This is a major version bump (15 -> 16) with only a single line change in package.json. The release notes mention security fixes (CVE-2025-59471 and CVE-2025-59472). All CI checks pass but the PR has merge conflicts.",
+  "maintainerNotes": "This is a major version bump (Next.js 15 -> 16) in an example project. The PR has merge conflicts that need rebasing. Since this is a major version upgrade, it may require additional changes beyond the package.json bump (e.g., API changes, breaking changes in Next.js 16). A maintainer should decide whether to: (1) rebase and merge if ai-elements works with Next 16, (2) close and manually upgrade with any necessary code changes, or (3) close if the example isn't being actively maintained. The PR has been open 41 days with no reviews.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

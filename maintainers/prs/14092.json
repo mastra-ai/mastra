@@ -1,0 +1,68 @@
+{
+  "number": 14092,
+  "title": "docs(storage): fix composite storage domain documentation",
+  "url": "https://github.com/mastra-ai/mastra/pull/14092",
+  "author": {
+    "login": "brennanmceachran",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-10T16:25:28Z",
+    "lastUpdated": "2026-03-10T16:27:04Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 120,
+    "deletions": 8,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "codex/storage-domain-docs",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "low",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11923,
+        "title": "chore(docs): Update composite storage",
+        "state": "MERGED",
+        "relevance": "Previous composite storage docs update; this PR extends it with newly added domains"
+      },
+      {
+        "number": 12219,
+        "title": "docs/clickhouse-composite-obs-docs",
+        "state": "MERGED",
+        "relevance": "Earlier storage docs update; this PR covers additional domain keys not in that change"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Documents the full set of MastraCompositeStore domain keys (datasets, experiments, promptBlocks, scorerDefinitions, mcpClients, mcpServers, workspaces, skills, blobs) that were missing from the storage reference docs. Also adds the `editor` shorthand field, clarifies domain resolution order (domains > editor > default), updates the storage overview with a domain table, and tightens wording in the memory storage page. Touches 4 files: changeset, memory/storage.mdx, reference/storage/composite.mdx, reference/storage/overview.mdx.",
+  "maintainerNotes": "High-quality docs-only PR from a repeat contributor (previous PR #14081 merged same day). Well-structured description with validation steps already run by author (build, vale, prettier). The changeset targets @mastra/core as a patch which is slightly odd for a docs-only change — verify this is correct or if it should be docs-only with no package bump. No conflicts, CI still pending (just opened). The Vercel deploy checks show 'Authorization required' which is normal for external contributors. No tests needed for docs changes.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

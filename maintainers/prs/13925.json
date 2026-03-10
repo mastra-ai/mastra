@@ -1,0 +1,60 @@
+{
+  "number": 13925,
+  "title": "feat(template): add Slack coding agent template",
+  "url": "https://github.com/mastra-ai/mastra/pull/13925",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T16:39:29Z",
+    "lastUpdated": "2026-03-06T16:49:01Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 3074,
+    "deletions": 0,
+    "changedFiles": 23,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/mastracode/slack",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 10910,
+        "title": "add slack agent template",
+        "state": "MERGED",
+        "note": "Earlier basic Slack agent template, not a duplicate — this PR adds a more advanced coding agent variant with E2B sandboxes"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds a new standalone template (templates/template-slack-coding-agent) that wires MastraCode harness + E2B cloud sandboxes into a Slack bot. Each Slack thread gets its own isolated E2B sandbox with the repo pre-cloned. Features include: Slack event handler with signature verification, E2BFilesystem extending MastraFilesystem for file tools, harness streaming to Slack with live status updates, interactive prompt bridging (ask_user/plan approvals posted to Slack), and thread history injection. Includes integration tests, E2E test stubs, Dockerfile, Railway config, and comprehensive README.",
+  "maintainerNotes": "Approved by graysonhicks. CI is failing on 'Full Test Suite' and 'Lint' checks — mergeableState is BLOCKED. CodeRabbit left several actionable suggestions: extract hardcoded GH CLI version to a constant, fix spinner interval leak on postMessage failure, add retry/backoff guard for gist syncing, deduplicate truncate function, extract duplicated onAskQuestion/onPlanApproval callbacks into factories, conditionally prepend SESSION_CONTEXT only for new sessions, and fix conflicting tsconfig noEmit+outDir. No changeset was included — template-only changes may not require one but worth confirming. All 23 files are new additions under templates/ so no risk to existing packages.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

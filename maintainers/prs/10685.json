@@ -1,0 +1,72 @@
+{
+  "number": 10685,
+  "title": "Update for Couchbase 8.0 release",
+  "url": "https://github.com/mastra-ai/mastra/pull/10685",
+  "author": {
+    "login": "VirajAgarwal-couchbase",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-01T05:25:55Z",
+    "lastUpdated": "2025-12-08T06:02:21Z",
+    "ageInDays": 465,
+    "daysSinceLastUpdate": 457
+  },
+  "size": {
+    "additions": 6888,
+    "deletions": 246,
+    "changedFiles": 29,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "new-vector-indexes-introduction",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": false,
+      "scopeIsReasonable": false
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13965,
+        "title": "test(couchbase): optimize vector test suite by replacing fixed sleeps with bucket.ping() and reducing wait times",
+        "state": "MERGED",
+        "relevance": "Couchbase test changes merged since this PR was opened — codebase has evolved"
+      },
+      {
+        "number": 13837,
+        "title": "chore(deps): update dependency couchbase to ^4.6.1",
+        "state": "MERGED",
+        "relevance": "Couchbase SDK dependency updated since this PR was opened"
+      },
+      {
+        "number": 11912,
+        "title": "feat: Add shared vector store test suite",
+        "state": "MERGED",
+        "relevance": "Shared vector store test suite was introduced — this PR's tests likely need to conform to it"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Major Couchbase 8.0 update from an external Couchbase contributor. Introduces two new store implementations: CouchbaseSearchStore (using Search Vector Index for Couchbase 7.6.4+) and CouchbaseQueryStore (using Hyperscale/Composite Vector Indexes for Couchbase 8.0+). Adds a comprehensive metadata filter system with operators for both store types, RAG prompts, extensive unit/integration tests, and documentation updates. Also updates metadata filter support tables to mark Couchbase as supporting all standard operators.",
+  "maintainerNotes": "This PR has been stale for over 450 days with merge conflicts. The author (a Couchbase employee, first-time contributor) pinged maintainers twice (Dec 2, Dec 8 2025) with no response. Since then, significant changes have been merged to the couchbase store and the broader vector store infrastructure (shared test suite in #11912, couchbase dep update to ^4.6.1 in #13837, test optimizations in #13965). The PR is very large (6888 additions across 29 files) and lacks a changeset. CI tests never ran (stuck PENDING, likely due to fork permissions). If the Couchbase 8.0 features are still desired, it would be better to either (1) ask the author to rebase and conform to the current shared test suite patterns, or (2) take the implementation ideas and re-implement against the current codebase. The PR also pre-dates the shared vector store test suite, so tests will need significant rework.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,65 @@
+{
+  "number": 13982,
+  "title": "fix(core): flush reasoning deltas before clearing on non-reasoning chunks",
+  "url": "https://github.com/mastra-ai/mastra/pull/13982",
+  "author": {
+    "login": "MaxwellCalkin",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-08T12:07:33Z",
+    "lastUpdated": "2026-03-08T12:14:30Z",
+    "ageInDays": 2,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 129,
+    "deletions": 0,
+    "changedFiles": 2,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/flush-reasoning-deltas-before-clear",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11494,
+        "title": "fix(@mastra/core): fix reasoning content loss due to interleaved chunks",
+        "state": "MERGED",
+        "relationship": "predecessor — fixed reasoning loss from text-start interleaving; this PR extends the same pattern to tool-input-start and other non-reasoning chunk types"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13635,
+        "title": "[BUG] reasoning_content missing in multi-turn requests when using thinking models via OpenAI-compatible provider (kimi-k2.5 / DeepSeek-R1)"
+      }
+    ]
+  },
+  "summary": "Fixes a bug where reasoning deltas are lost when non-reasoning chunks (e.g., tool-input-start) arrive before reasoning-end during streaming with OpenAI-compatible thinking models (kimi-k2.5, DeepSeek-R1). The provider emits reasoning-end in flush(), so it arrives after tool-call chunks. The existing guard code cleared reasoningDeltas without saving them first, causing empty reasoning_content and 400 errors on subsequent turns. The fix applies the same flush-before-clear pattern already used for textDeltas: save accumulated reasoning deltas to messageList before resetting state. Includes a well-written regression test covering the exact interleaving scenario.",
+  "maintainerNotes": "High-quality community PR from an AI-assisted contributor. The fix is minimal, well-scoped, and mirrors an existing pattern (textDeltas flush at lines 123-144 of llm-execution-step.ts). The regression test is thorough and covers the exact failure scenario. Missing a changeset — author will need to add one. CI is still pending (core tests, memory tests, etc. haven't run yet). CodeRabbit review had only one nitpick suggesting an additional replay-path assertion. PR #11494 (merged Dec 2025) fixed the same class of bug for text-start interleaving; this PR extends the fix to tool-input-start and other non-reasoning chunk types. The linked issue #13635 has a detailed root cause analysis that matches the fix exactly.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

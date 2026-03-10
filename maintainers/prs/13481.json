@@ -1,0 +1,71 @@
+{
+  "number": 13481,
+  "title": "fix: fallback to original schema when compat layer breaks optional fields (#13480)",
+  "url": "https://github.com/mastra-ai/mastra/pull/13481",
+  "author": {
+    "login": "echoVic",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-25T08:25:25Z",
+    "lastUpdated": "2026-03-03T12:35:10Z",
+    "ageInDays": 13,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 236,
+    "deletions": 2,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/original-schema-fallback-validation",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13695,
+        "title": "fix(schema-compat, core): fix OpenAI strict mode schema rejection for agent networks (#12284)",
+        "state": "MERGED",
+        "relevance": "Related schema-compat fix that may have caused the merge conflicts"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13480,
+        "title": "OpenAI compat layer breaks optional fields",
+        "state": "open",
+        "labels": [
+          "bug",
+          "Tools",
+          "trio-tb"
+        ]
+      }
+    ]
+  },
+  "summary": "Fixes a bug where the OpenAI compat layer converts .optional() Zod fields to .nullable().transform(), making them required in the processed schema. When LLMs omit optional fields entirely (key not present), validation fails. The fix adds a Step 6 fallback in validateToolInput that retries validation against the original unmodified schema. Also includes a Step 6b sub-fallback that strips null values before retrying the original schema. Changes span 4 files: changeset, builder.ts (threading originalSchema parameter), validation.ts (new fallback logic), and validation.test.ts (6 comprehensive test cases). CodeRabbit reviewed and the author addressed its feedback.",
+  "maintainerNotes": "Well-structured community contribution with good test coverage (6 tests), clear description, and a changeset. The approach is sound: it adds originalSchema as an optional fallback parameter, maintaining backward compatibility. However, the PR has merge conflicts (CONFLICTING state) and CI checks are stuck in PENDING — likely due to the conflicts preventing CI from running. The author needs to rebase against main. Review requested from NikAiyer and wardpeet. The related merged PR #13695 (OpenAI strict mode schema fix) likely introduced the conflicts. The validation pipeline is getting complex (6+ steps); maintainers may want to consider a broader refactor in the future, but this incremental fix is reasonable.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

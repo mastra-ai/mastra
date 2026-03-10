@@ -1,0 +1,66 @@
+{
+  "number": 9256,
+  "title": "Fix and feat: add metadata filtering support to semantic recall (Issue #8610)",
+  "url": "https://github.com/mastra-ai/mastra/pull/9256",
+  "author": {
+    "login": "blind05",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-10-24T17:50:14Z",
+    "lastUpdated": "2026-03-03T12:42:33Z",
+    "ageInDays": 137,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 606,
+    "deletions": 9,
+    "changedFiles": 6,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/memory-8610-hunterhagedorn-semantic-filter",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": false,
+      "scopeIsReasonable": false
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 14022,
+        "title": "fix: optimize semantic recall latency across all storage adapters",
+        "state": "open",
+        "relevance": "Related - also modifies semantic recall code path, potential conflicts"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 8610,
+        "title": "Semantic recall with resource scope and metadata filtering (user thread folders)",
+        "state": "open"
+      }
+    ]
+  },
+  "summary": "Adds metadata filtering support to semantic recall, enabling users to filter vector search results by metadata fields (e.g., projectId) using MongoDB-style query syntax. Key changes: (1) adds `filter?: VectorFilter` to SemanticRecall type, (2) combines scope-based filters with user-provided filters via $and operator, (3) propagates thread metadata to vector embeddings during upsert so filtering actually works, (4) adds integration tests for metadata filtering, and (5) updates docs. The initial Greptile review flagged a critical bug (thread metadata not stored in vectors), which the author addressed in subsequent commits. However, the PR also bundles an unrelated MCP filesystem test (issue #8660) and is missing a changeset.",
+  "maintainerNotes": "Several issues need resolution before merge: (1) Merge conflicts with main - the memory package has seen significant changes since this was opened 4+ months ago (e.g., observational memory features, stream embedding persistence). The core `packages/memory/src/index.ts` file is likely substantially different now. (2) No changeset included (changeset-bot flagged this). (3) Includes unrelated MCP filesystem server test (~144 lines for issue #8660) that should be in a separate PR. (4) CI checks are stuck in pending state (likely due to fork contributor needing authorization). (5) The approach of spreading all thread metadata into vector embeddings (`...threadMetadata`) could be problematic - it may include unexpected/large metadata fields. Consider whitelisting specific fields or using a dedicated metadata namespace. (6) PR #14022 (optimize semantic recall latency) also touches the semantic recall code path and may conflict. The feature request (issue #8610) is valid and well-described, but this PR likely needs a substantial rebase and scope cleanup.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

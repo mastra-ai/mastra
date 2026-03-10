@@ -1,0 +1,60 @@
+{
+  "number": 13834,
+  "title": "feat(filesystem): add prefix scoping and STS session token support for S3/GCS mounts",
+  "url": "https://github.com/mastra-ai/mastra/pull/13834",
+  "author": {
+    "login": "okxiaoliang4",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-05T06:07:35Z",
+    "lastUpdated": "2026-03-05T06:14:59Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 5
+  },
+  "size": {
+    "additions": 198,
+    "deletions": 13,
+    "changedFiles": 7,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/filesystem-sts",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "unknown"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13247,
+        "title": "feat(s3): add STS sessionToken support for temporary credentials",
+        "state": "OPEN",
+        "relationship": "earlier-draft-by-same-author"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds two features to S3 and GCS FUSE mounts in E2B sandboxes: (1) a `prefix` option that scopes mounts to a subdirectory using s3fs `bucket:/prefix` syntax and gcsfuse `--only-dir` flag, and (2) `sessionToken` support for STS/AssumeRole temporary AWS credentials via AWS credentials INI file. Includes a `validatePrefix()` function to guard against shell injection, and exposes prefix from `getMountConfig()` in both S3Filesystem and GCSFilesystem. Changes span 7 files across workspaces/e2b, workspaces/s3, and workspaces/gcs.",
+  "maintainerNotes": "Well-structured community contribution with tests covering prefix inclusion, trailing-slash stripping, and omission. CodeRabbit and Copilot reviews flagged 3 actionable issues: (1) SAFE_PREFIX regex rejects single-char prefixes, (2) prefix='/' normalizes to empty string but still gets set on config, (3) same empty-string edge case in S3. These have NOT been addressed by the author yet. No changeset included — author needs to add one before merge. CI test suites (Core, E2E, MCP, Memory, RAG, Combined stores) are all pending — likely because external contributor PRs don't trigger secret-gated workflows. Author has an earlier draft PR #13247 covering just the STS session token part; this PR appears to supersede it — #13247 should be closed if this merges. Mergeable state is UNKNOWN (may need rebase).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

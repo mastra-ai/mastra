@@ -1,0 +1,65 @@
+{
+  "number": 12403,
+  "title": "Feat/studio cli auth headers",
+  "url": "https://github.com/mastra-ai/mastra/pull/12403",
+  "author": {
+    "login": "Rish-it",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-28T06:46:32Z",
+    "lastUpdated": "2026-03-03T12:40:02Z",
+    "ageInDays": 41,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 228,
+    "deletions": 7,
+    "changedFiles": 8,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/studio-cli-auth-headers",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13163,
+        "title": "feat: auth core, server RBAC, and adapter permission enforcement",
+        "state": "MERGED",
+        "relevance": "Related auth infrastructure that may affect how studio auth headers should integrate"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12371,
+        "title": "Referenced in PR description as the issue being fixed"
+      }
+    ]
+  },
+  "summary": "Adds --auth-header and --server-api-prefix CLI options to `mastra studio` for connecting to remote Mastra servers that require authentication or use custom API route prefixes. The implementation injects CLI-provided values into the Studio HTML via placeholder replacement, parses them in the playground UI, and applies them as default headers in the StudioConfigProvider. Includes tests for the studio server creation, a changeset, and documentation updates.",
+  "maintainerNotes": "Well-structured community contribution with tests, docs, and changeset. However: (1) Has merge conflicts that need resolution — likely due to 41 days of drift from main. (2) CI checks are stuck in PENDING state (test jobs never ran after setup). (3) Maintainer @graysonhicks requested the author address CodeRabbit review suggestions (XSS escaping, header merge order, double-slash normalization, changeset cleanup). The author responded on Jan 29 claiming to have addressed them, but several CodeRabbit concerns may still be outstanding. (4) The merged #13163 (auth RBAC) may have changed the auth landscape significantly since this PR was opened — needs assessment of whether this approach still aligns with the current auth architecture. (5) Review requested from @NikAiyer and @TylerBarnes but neither has reviewed yet. The `defaultHeaders` prop added to StudioConfigProvider could cause unnecessary re-renders if not memoized (object reference changes on each render in App.tsx).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

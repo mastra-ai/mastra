@@ -1,0 +1,55 @@
+{
+  "number": 13224,
+  "title": "[Feature] Adds data retention and cleanup capabilities for Tracing & Workflows",
+  "url": "https://github.com/mastra-ai/mastra/pull/13224",
+  "author": {
+    "login": "epinzur",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-18T21:34:10Z",
+    "lastUpdated": "2026-03-03T12:35:50Z",
+    "ageInDays": 20,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 1378,
+    "deletions": 1,
+    "changedFiles": 21,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "claude/database-cleanup-traces-nZFse",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "needs-work",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": false,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#7479"
+    ]
+  },
+  "summary": "Adds deleteTracesOlderThan and deleteWorkflowRunsOlderThan methods across all storage providers (pg, clickhouse, libsql, mongodb, mssql, dynamodb, upstash, in-memory) to enable data retention policies. Includes type definitions in @mastra/core and comprehensive test suites. AI-generated PR (branch prefix 'claude/') by maintainer epinzur.",
+  "maintainerNotes": "CI is failing (Build, Lint, and downstream test suites). CodeRabbit raised 15 actionable issues that remain unaddressed: (1) libsql workflows file has duplicate method definitions of deleteWorkflowRunsOlderThan, (2) mssql has duplicate imports and uses ANSI double-quote column identifiers instead of bracket notation, (3) clickhouse workflows implementation only counts matching rows but doesn't actually DELETE them (placeholder logic), (4) mssql should use explicit sql.DateTime2 type for beforeDate parameter, (5) DynamoDB does full table scans without warning logs and should use BatchWriteItem instead of individual deletes. The scope is reasonable (single feature across all storage backends) but code quality needs fixes before merge. Author has not responded to review feedback since Feb 18.",
+  "suggestedAction": "request-changes",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

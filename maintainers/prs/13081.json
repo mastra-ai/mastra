@@ -1,0 +1,57 @@
+{
+  "number": 13081,
+  "title": "feat(e2e): add client-js e2e tests for agents, memory, workflows, tools, and vectors",
+  "url": "https://github.com/mastra-ai/mastra/pull/13081",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-14T18:48:14Z",
+    "lastUpdated": "2026-03-06T22:33:17Z",
+    "ageInDays": 24,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 705,
+    "deletions": 9,
+    "changedFiles": 19,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/client-js-e2e-tests-11342",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      "#11721 - 'added new client-js e2e tests' (MERGED, added observability tests this PR builds on)"
+    ],
+    "relatedIssues": [
+      "#11342"
+    ]
+  },
+  "summary": "Adds comprehensive e2e test coverage for @mastra/client-js covering agents, memory, tools, vectors, and workflows. Uses the existing factory pattern (createXTests) matching the previously merged observability tests. Tests run against a Hono server with LibSQL storage, require no LLM calls, and support both Zod v3 and v4 variants. Extends server-setup.ts with Memory, Workflows, Tools, and Vector configurations. The author has addressed some initial CodeRabbit feedback (deduplicating ProvidedContext, deterministic run lookups, static imports) and recently merged main to resolve conflicts.",
+  "maintainerNotes": "Maintainer @epinzur left a thorough CHANGES_REQUESTED review with 6 actionable items: (1) vector test `any` casts mask real SDK type mismatches between server responses and client types — should be surfaced not hidden, (2) vector tests have implicit ordering dependencies across describe blocks, (3) memory beforeEach resets ALL storage which could interfere with observability tests sharing the same server, (4) tool validation error test makes fragile assumptions about error response shape, (5) missing count field assertion in vector details test, (6) merge conflicts (since resolved). Author made some commits addressing CodeRabbit feedback but hasn't responded to @epinzur's review. CI checks for Core, Memory, RAG, E2E, MCP, and Combined stores are pending (likely awaiting maintainer approval to run on fork PR). No changeset needed — internal test-only changes under @internal/* which is excluded from changeset requirements.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

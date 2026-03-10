@@ -1,0 +1,53 @@
+{
+  "number": 12366,
+  "title": "feat: adds cloudflare durable objects based storage adapter",
+  "url": "https://github.com/mastra-ai/mastra/pull/12366",
+  "author": {
+    "login": "clearlysid",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-27T15:58:48Z",
+    "lastUpdated": "2026-02-06T20:09:25Z",
+    "ageInDays": 42,
+    "daysSinceLastUpdate": 32
+  },
+  "size": {
+    "additions": 3032,
+    "deletions": 33,
+    "changedFiles": 23,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "sid/cloudflare-do-storage",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a Cloudflare Durable Objects SQL-backed storage adapter to the existing @mastra/cloudflare package. The DO storage uses the 10GB SQLite backing surface attached to Durable Objects. Includes a full storage implementation (DODB layer, SqlBuilder, domain stores for memory/scores/workflows), refactors existing KV exports to a kv/ subdirectory, and updates documentation. Author reports production use at @helmerapp. Maintainer abhiaiyer91 approved the approach of consolidating into @mastra/cloudflare (rather than a separate package) and the author addressed CodeRabbit review comments, but the PR has gone stale since Feb 6.",
+  "maintainerNotes": "External contributor from @helmerapp with real production usage. Maintainer abhiaiyer91 was engaged and supportive of the consolidation approach. Key issues: (1) merge conflicts need resolving, (2) no changeset added, (3) no new tests for DO storage adapter, (4) CI checks stuck in pending state, (5) only CodeRabbit bot reviews — needs human maintainer review. The author was responsive (27 commits addressing feedback) but hasn't updated in 32 days. Consider pinging the author to resolve conflicts and add changeset/tests, or take over completion internally given the production-validated implementation.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

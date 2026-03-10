@@ -1,0 +1,53 @@
+{
+  "number": 13876,
+  "title": "fix: add permission denied handling for dataset pages",
+  "url": "https://github.com/mastra-ai/mastra/pull/13876",
+  "author": {
+    "login": "YujohnNattrass",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-05T21:32:53Z",
+    "lastUpdated": "2026-03-10T16:23:51Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 165,
+    "deletions": 9,
+    "changedFiles": 11,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "yj/gate-datasets-behind-ee-auth",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds 403/permission-denied handling to all dataset pages in the playground, which were the only resource missing this pattern. Adds is403ForbiddenError checks and PermissionDenied component to 9 dataset pages (list, detail, item, experiment, versions, comparisons). Also updates the generated permissions file to include datasets:read/write/delete plus several other new resource permissions (embeddings, processor-providers, stored, tool-providers, vectors). Includes a changeset for @mastra/core, @mastra/playground-ui, and @mastra/playground as patch bumps.",
+  "maintainerNotes": "Approved by rphansen91. CI has 2 failures (Observability Package Tests, Validate peer dependencies) that appear unrelated to this PR's UI-only changes. 4 checks still pending (Combined store Tests, Memory Tests, Full Test Suite, E2E Tests). CodeRabbit flagged a potential duplicate 403 error check block in dataset/item/index.tsx — worth verifying before merge. The pattern is consistent with how other resources handle permission denied (agents, workflows, tools, etc.). No tests added, but this is a straightforward UI guard pattern already established elsewhere.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

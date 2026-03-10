@@ -1,0 +1,68 @@
+{
+  "number": 13102,
+  "title": "fix: forward requestContext to tools in createToolCallStep",
+  "url": "https://github.com/mastra-ai/mastra/pull/13102",
+  "author": {
+    "login": "naaa760",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-16T13:30:21Z",
+    "lastUpdated": "2026-03-03T12:36:34Z",
+    "ageInDays": 22,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 8,
+    "deletions": 1,
+    "changedFiles": 3,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/req-cont-tool-call",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13094,
+        "title": "fix: forward requestContext to tools in createToolCallStep",
+        "state": "MERGED",
+        "mergedAt": "2026-02-17T23:29:07Z",
+        "author": "intojhanurag",
+        "relationship": "duplicate-already-merged"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13088,
+        "title": "requestContext not forwarded to tools in createToolCallStep",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Adds requestContext forwarding to tool executions in createToolCallStep, fixing issue #13088 where tools received an empty RequestContext instead of the one set by the workflow step. Changes span 3 files: adds requestContext to MastraToolInvocationOptions type, passes it through in tool-call-step.ts, and updates CoreToolBuilder to prefer execution-time context. However, PR #13094 by intojhanurag made the exact same fix (with the same title), included tests and a changeset, and was already merged on 2026-02-17 — the day after this PR was opened.",
+  "maintainerNotes": "This PR is a direct duplicate of #13094 which was already merged. Both fix issue #13088 with nearly identical code changes. This PR lacks tests and a changeset that #13094 included. It also has merge conflicts (likely caused by #13094 being merged first). Safe to close with a thank-you note to the contributor.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

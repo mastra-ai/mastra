@@ -1,0 +1,60 @@
+{
+  "number": 13908,
+  "title": "chore(deps): update dependency @modelcontextprotocol/sdk to v1.25.2 [security]",
+  "url": "https://github.com/mastra-ai/mastra/pull/13908",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T12:20:06Z",
+    "lastUpdated": "2026-03-10T00:33:44Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 464,
+    "deletions": 393,
+    "changedFiles": 1,
+    "category": "XL"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/npm-modelcontextprotocol-sdk-vulnerability",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "high",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      "#11684 - dependabot bump to same version 1.25.2 (open)",
+      "#12684 - dependabot bump to newer version 1.26.0 (open)"
+    ],
+    "relatedIssues": [
+      "CVE-2026-0621 - ReDoS vulnerability in @modelcontextprotocol/sdk"
+    ]
+  },
+  "summary": "Renovate bot PR to update @modelcontextprotocol/sdk from 1.20.1 to 1.25.2 to address CVE-2026-0621 (ReDoS vulnerability). Only changes pnpm-lock.yaml (1 file). The lockfile also picks up transitive bumps for eslint (9.39.2→9.39.4) and hono (4.11.9→4.12.5). Approved only by github-actions bot, not by a human reviewer.",
+  "maintainerNotes": "This PR has merge conflicts and CI failures (build, changeset, and multiple test suites). There are also duplicate open PRs: #11684 (dependabot, same target version 1.25.2) and #12684 (dependabot, newer version 1.26.0). Consider closing this in favor of #12684 which targets the newer 1.26.0 version and would also include the security fix. If proceeding with this PR, it needs a rebase to resolve conflicts, a changeset, and CI fixes. The security fix is important (ReDoS) so one of these PRs should be merged soon.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

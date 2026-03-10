@@ -1,0 +1,63 @@
+{
+  "number": 13814,
+  "title": "chore(deps): bump @hono/node-server from 1.19.8 to 1.19.10 in /examples/inngest",
+  "url": "https://github.com/mastra-ai/mastra/pull/13814",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T21:09:50Z",
+    "lastUpdated": "2026-03-04T21:11:35Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 6
+  },
+  "size": {
+    "additions": 1,
+    "deletions": 1,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/examples/inngest/hono/node-server-1.19.10",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13816,
+        "title": "chore(deps): bump @hono/node-server from 1.19.9 to 1.19.10 in /scripts/gh-issue-triage",
+        "state": "MERGED",
+        "relevance": "Same dependency bump to 1.19.10 for a different directory, already merged"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot patch bump of @hono/node-server from 1.19.8 to 1.19.10 in examples/inngest. This includes a security fix (GHSA-wc8c-qw6v-h7f6) for an authorization bypass in Serve Static Middleware caused by inconsistent URL decoding (%2F handling), plus a bug fix to stop overwriting global.fetch. Only changes one line in examples/inngest/package.json.",
+  "maintainerNotes": "This is a security-related dependency bump. The 1.19.10 release fixes an authorization bypass vulnerability in Serve Static Middleware. A similar PR (#13816) bumping the same dependency in /scripts/gh-issue-triage was already merged. CI shows 'Full Test Suite' as failed but all individual checks passed or were skipped — the failure appears unrelated to this change (examples are outside the main test scope). The merge state is BLOCKED only because review approval is required. Safe to merge.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

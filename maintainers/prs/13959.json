@@ -1,0 +1,59 @@
+{
+  "number": 13959,
+  "title": "fix(mcp): forward stderr and cwd options in connectStdio()",
+  "url": "https://github.com/mastra-ai/mastra/pull/13959",
+  "author": {
+    "login": "iulspop",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-07T14:12:03Z",
+    "lastUpdated": "2026-03-10T14:12:39Z",
+    "ageInDays": 3,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 269,
+    "deletions": 0,
+    "changedFiles": 6,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/mcp-stdio-stderr-cwd",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13958,
+        "title": "[BUG] MCPClient connectStdio does not forward stderr option to StdioClientTransport",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Forwards the `stderr` and `cwd` options from `StdioServerDefinition` through to `StdioClientTransport` in `connectStdio()`. Previously these options from the underlying MCP SDK were silently ignored, meaning child process stderr always inherited to the parent terminal with no way to suppress or pipe it. Adds proper TypeScript types for both fields (with `never` on `HttpServerDefinition` for union safety), a 2-line production fix in `client.ts`, two test fixtures (noisy-server.ts, cwd-reporter.ts), and comprehensive tests verifying stderr piping and cwd forwarding work correctly. Includes a changeset with usage example.",
+  "maintainerNotes": "High-quality community contribution. Approved by abhiaiyer91. The 3 CI failures are all unrelated: Observability Package Tests fails on main too, and Vercel deploy checks fail because the external contributor lacks Vercel authorization (standard for non-org PRs). Core CI checks (build, lint, typecheck, Full Test Suite, Combined store Tests) all pass. The actual code change is just 2 lines in client.ts plus type additions — the rest is tests and fixtures. CodeRabbit suggestions were addressed in follow-up commits. E2E and Memory tests show as 'pending' but appear to be waiting on secret-gated workflows. Safe to merge.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

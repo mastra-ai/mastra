@@ -1,0 +1,53 @@
+{
+  "number": 13751,
+  "title": "feat(mastracode): allow custom config directory via configDir option",
+  "url": "https://github.com/mastra-ai/mastra/pull/13751",
+  "author": {
+    "login": "tulga-bytes",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T03:35:16Z",
+    "lastUpdated": "2026-03-05T10:39:46Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 5
+  },
+  "size": {
+    "additions": 160,
+    "deletions": 92,
+    "changedFiles": 14,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/mastracode-custom-config-dir",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a `configDir` option to `MastraCodeConfig` that allows users to replace the default `.mastracode` directory name with a custom name (e.g. `.my-tool`). The change threads a `configDirName` parameter through all config path lookups: MCP, hooks, slash commands, database, skills, and agent instructions. Backward compatible — all functions default to `.mastracode`. Introduces a `DEFAULT_CONFIG_DIR` constant and adds `configDir` to the Zod state schema. Also refactors `skillPaths` from a static export to a `buildSkillPaths()` function and fixes slash command deduplication to let higher-priority entries win. Existing test file updated to match new `buildSkillPaths` API. PR was authored with Augment Code assistance.",
+  "maintainerNotes": "PR has merge conflicts that need to be resolved before it can be merged. CI checks (Core, E2E, MCP, Memory, RAG tests) are stuck in PENDING state — likely blocked by the conflicts. CodeRabbit left actionable review comments requesting input validation/sanitization on the configDir value (path traversal prevention) and additional test coverage for default configDir fallback. The author responded to CodeRabbit comments but it's unclear if all feedback was addressed. No changeset file is included (CodeRabbit offered to generate one). The feature is well-scoped and the implementation pattern (threading an optional param with a default) is clean, but the security concern about validating configDir input is valid and should be addressed before merging.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

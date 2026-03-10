@@ -1,0 +1,78 @@
+{
+  "number": 12454,
+  "title": "fix: recover tool call args when split across messages (#12405)",
+  "url": "https://github.com/mastra-ai/mastra/pull/12454",
+  "author": {
+    "login": "Rish-it",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-29T05:57:14Z",
+    "lastUpdated": "2026-03-03T12:39:54Z",
+    "ageInDays": 40,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 235,
+    "deletions": 3,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/issue-12405-split-tool-call-args",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12416,
+        "title": "fix(core): handle split tool call args across messages",
+        "state": "CLOSED",
+        "note": "Previous attempt by same author, closed after feedback. This PR is the reworked version with changeset and tests."
+      },
+      {
+        "number": 11474,
+        "title": "fix: add input field to tool-result messages for Anthropic compatibility",
+        "state": "MERGED",
+        "note": "Introduced findToolCallArgs function that this PR fixes. Not a duplicate."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 12405,
+        "title": "[BUG] Tool call args lost when tool invocation split across messages (client tools)",
+        "state": "OPEN",
+        "labels": [
+          "bug",
+          "Tools",
+          "impact:high",
+          "effort:medium"
+        ]
+      }
+    ]
+  },
+  "summary": "Fixes findToolCallArgs in provider-compat.ts to skip matches with empty args and continue searching for the original tool call message that has the actual arguments. When client tools split a tool invocation across two messages (call with args, result with empty args), the function was returning the first match even if args were empty, causing Anthropic models to fail. The fix adds an Object.keys check before returning, so it keeps searching until it finds non-empty args. Includes 221 lines of new tests covering three scenarios: basic split recovery, multiple tool calls, and prioritization of non-empty args over empty matches.",
+  "maintainerNotes": "Well-structured community contribution fixing a real bug (impact:high issue #12405). This is the second attempt after PR #12416 was closed for lacking changeset and tests — author addressed all feedback. The code change is minimal (two small modifications to findToolCallArgs) and the logic is sound: instead of returning the first toolCallId match regardless of args content, it now skips empty-arg matches and continues searching. CI checks are stuck in PENDING state (likely need re-trigger since they've been pending since Feb 1). Reviews requested from NikAiyer and TylerBarnes but neither has reviewed yet. The fix is still needed — main branch still has the original buggy behavior. Consider whether the edge case of a tool call that legitimately has zero arguments could be affected (the function falls through to return {} at the end anyway, so it should be fine).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

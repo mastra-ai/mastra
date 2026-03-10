@@ -1,0 +1,57 @@
+{
+  "number": 14035,
+  "title": "fix(server): allow thread ownership transfer in trusted server contexts",
+  "url": "https://github.com/mastra-ai/mastra/pull/14035",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T20:36:09Z",
+    "lastUpdated": "2026-03-09T22:29:50Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 588,
+    "deletions": 5,
+    "changedFiles": 7,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/issue-13327",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13327"
+    ]
+  },
+  "summary": "Allows thread ownership transfer (resourceId reassignment) in trusted server contexts where no middleware sets MASTRA_RESOURCE_ID_KEY. The core change is a ~15-line modification in packages/server/src/server/handlers/memory.ts: the UPDATE_THREAD_ROUTE handler now reads contextResourceId directly from middleware context instead of using getEffectiveResourceId (which merged middleware and client values). When middleware is present, resourceId remains locked; without middleware, the client-provided resourceId is accepted for transfer. The bulk of the diff (570+ lines) is comprehensive tests covering ownership lock with middleware, transfer without middleware, working memory scoping (resource and thread scope), observational memory isolation, and message access/denial after transfer. Documentation updated across 4 files: middleware docs, client-js reference, server routes reference, and course material.",
+  "maintainerNotes": "Well-structured PR from a maintainer. The actual code change is minimal and surgical (~15 lines in memory.ts), while the test coverage is thorough with 10+ test cases covering edge cases like memory scoping isolation after transfer. CI failures (Agent Builder, Core, MCP, Observability) appear unrelated to this PR — those packages are untouched and the failures show 0 duration suggesting infrastructure/flaky issues. Build, lint, and validation checks all pass. E2E and Memory tests are still pending. The security model is sound: middleware-enforced resourceId prevents transfer from untrusted clients, while trusted server code without middleware can reassign. Closes issue #13327 which is labeled impact:high. No similar or duplicate PRs found.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

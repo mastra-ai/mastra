@@ -1,0 +1,68 @@
+{
+  "number": 12920,
+  "title": "chore(deps): update ai sdk",
+  "url": "https://github.com/mastra-ai/mastra/pull/12920",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": true,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-11T00:48:39Z",
+    "lastUpdated": "2026-03-06T18:19:45Z",
+    "ageInDays": 27,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 273,
+    "deletions": 350,
+    "changedFiles": 21,
+    "category": "L"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/ai-sdk",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12999,
+        "title": "chore(deps): update ai sdk (major)",
+        "state": "open",
+        "relationship": "related"
+      },
+      {
+        "number": 11404,
+        "title": "chore(deps): update dependency ai-v5 to ^5.0.117 [security]",
+        "state": "merged",
+        "relationship": "predecessor"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Automated Renovate PR that bumps multiple AI SDK packages across the monorepo: @ai-sdk/anthropic, @ai-sdk/google, @ai-sdk/groq, @ai-sdk/openai, @ai-sdk/xai, @ai-sdk/gateway, @ai-sdk/provider, @ai-sdk/provider-utils, @ai-sdk/togetherai, @ai-sdk/react, and the core 'ai' package. Updates span v5 and v6 lines across 21 files (mostly package.json + pnpm-lock.yaml). Includes auto-generated changesets for @mastra/agent-builder and @mastra/core.",
+  "maintainerNotes": "PR has merge conflicts (mergeableState: CONFLICTING) and several CI checks are failing (Agent Builder Tests, Core Package Tests, E2E Tests, Full Test Suite, Memory Tests). Reviews are all from github-actions bot (auto-approvals), not human reviewers. A related major version PR (#12999) is also open. The Renovate body notes versions are already pending further updates. Needs rebase to resolve conflicts, then CI failures should be investigated. Consider whether #12999 (major) supersedes this one.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

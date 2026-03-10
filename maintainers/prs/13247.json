@@ -1,0 +1,61 @@
+{
+  "number": 13247,
+  "title": "feat(s3): add STS sessionToken support for temporary credentials",
+  "url": "https://github.com/mastra-ai/mastra/pull/13247",
+  "author": {
+    "login": "okxiaoliang4",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-19T05:08:16Z",
+    "lastUpdated": "2026-02-21T16:02:51Z",
+    "ageInDays": 19,
+    "daysSinceLastUpdate": 17
+  },
+  "size": {
+    "additions": 31,
+    "deletions": 0,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "feat/s3-sts-session-token",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13707,
+        "title": "fix(s3): add sessionToken support for temporary AWS credentials",
+        "state": "MERGED",
+        "mergedAt": "2026-03-03T20:38:18Z",
+        "relationship": "duplicate-merged"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds an optional `sessionToken` field to S3FilesystemOptions, S3BlobStoreOptions, S3MountConfig, and provider config schemas to support AWS STS temporary credentials (IAM role assumption, federated access). The change is additive and non-breaking, touching 4 files in workspaces/s3/src/. Includes a changeset but no tests. Still in draft status.",
+  "maintainerNotes": "This PR has been superseded by #13707 (merged 2026-03-03) which implements the exact same sessionToken support for S3. PR #13707 was authored by a different contributor (intojhanurag) and was merged with a bug fix framing that also addressed issue #13685. This PR should be closed as duplicate. CI checks are stuck in pending state (likely due to draft status and external contributor needing authorization). The author never moved it out of draft.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

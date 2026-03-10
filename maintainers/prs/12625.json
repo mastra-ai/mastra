@@ -1,0 +1,53 @@
+{
+  "number": 12625,
+  "title": "fix(voice-google-gemini-live): add new models and mark deprecated",
+  "url": "https://github.com/mastra-ai/mastra/pull/12625",
+  "author": {
+    "login": "t-aburasoba",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-03T13:38:28Z",
+    "lastUpdated": "2026-02-03T14:26:43Z",
+    "ageInDays": 35,
+    "daysSinceLastUpdate": 35
+  },
+  "size": {
+    "additions": 29,
+    "deletions": 0,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/add-gemini-live-ga-model",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Community PR that updates the GeminiVoiceModel type union in @mastra/voice-google-gemini-live. Adds 4 new models (including the GA gemini-live-2.5-flash-native-audio) and annotates 6 existing models with @deprecated JSDoc tags referencing their shutdown dates, based on the official Gemini API changelog. Changes are type-only (no runtime impact) across 2 files: the types.ts source and a changeset.",
+  "maintainerNotes": "Clean, well-documented contribution. The PR is type-only so tests aren't strictly necessary. Description includes references to the Gemini API changelog. Changeset is present and well-written. CI checks are stuck in PENDING state (likely requires org secrets/approval for fork PRs — the Vercel checks show 'Authorization required'). No merge conflicts. The PR has been sitting without review for 35 days. The current main branch does NOT include these model changes, so this is not superseded. A quick review and merge would be appropriate — the changes are straightforward and factually verifiable against Google's API docs.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

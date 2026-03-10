@@ -1,0 +1,60 @@
+{
+  "number": 14049,
+  "title": "fix: emit tool-result/tool-error chunks incrementally as each tool completes",
+  "url": "https://github.com/mastra-ai/mastra/pull/14049",
+  "author": {
+    "login": "tulga-bytes",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-10T03:29:59Z",
+    "lastUpdated": "2026-03-10T04:56:15Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 471,
+    "deletions": 290,
+    "changedFiles": 4,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/incremental-tool-result-streaming",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13328,
+        "title": "feat: stream tool arguments incrementally across all tool renderers",
+        "state": "MERGED",
+        "relevance": "Related but different scope — that PR streamed tool *arguments* incrementally, this one streams tool *results* incrementally"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "When multiple tools run in parallel via the `foreach` handler, all tool-result/tool-error chunks are batched and emitted only after ALL tools finish (because `Promise.all` blocks). This PR moves chunk emission from `llmMappingStep` into `toolCallStep` so each tool emits its result/error chunk immediately upon completion. Changes span 4 files: (1) `tool-call-step.ts` accepts an optional `ToolChunkEmitter` callback and emits tool-result/tool-error chunks as each tool completes, (2) `llm-mapping-step.ts` accepts a `chunksAlreadyEmitted` flag to skip duplicate emission, (3) `index.ts` wires the chunkEmitter through ProcessorRunner + safeEnqueue, (4) `mastracode/src/index.ts` adds an unrelated `memory` config override (should be in a separate PR). Author addressed all 3 CodeRabbit review issues in a follow-up commit.",
+  "maintainerNotes": "Well-structured community contribution with clear problem description and a sound approach. Key concerns: (1) **Merge conflicts** — author needs to rebase onto latest main. (2) **No changeset** — changeset-bot flagged this; a changeset for `@mastra/core` is needed. (3) **No new tests** — author states existing 31 tests pass, but no new test verifying incremental emission behavior was added. (4) **Unrelated change** — the `mastracode/src/index.ts` change (adding a `memory` config override) is unrelated to the tool streaming fix and should be split into a separate PR. (5) **CI checks still pending** — core tests, memory tests, MCP tests, E2E tests, etc. are gated behind secrets and haven't run yet (external contributor). (6) CodeRabbit raised a valid nitpick about using `safeEnqueue` for `tool-call-approval`/`tool-call-suspended` chunks that wasn't addressed.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

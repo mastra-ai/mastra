@@ -1,0 +1,162 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PR Triage Report",
+  "type": "object",
+  "required": [
+    "number",
+    "title",
+    "url",
+    "author",
+    "dates",
+    "size",
+    "status",
+    "triage",
+    "summary",
+    "maintainerNotes"
+  ],
+  "properties": {
+    "number": { "type": "integer", "description": "PR number" },
+    "title": { "type": "string", "description": "PR title" },
+    "url": { "type": "string", "description": "GitHub PR URL" },
+    "author": {
+      "type": "object",
+      "properties": {
+        "login": { "type": "string" },
+        "isBot": { "type": "boolean" },
+        "isMaintainer": { "type": "boolean", "description": "Whether the author appears to be a repo maintainer/member" }
+      },
+      "required": ["login", "isBot", "isMaintainer"]
+    },
+    "dates": {
+      "type": "object",
+      "properties": {
+        "opened": { "type": "string", "format": "date-time" },
+        "lastUpdated": { "type": "string", "format": "date-time" },
+        "ageInDays": { "type": "integer" },
+        "daysSinceLastUpdate": { "type": "integer" }
+      },
+      "required": ["opened", "lastUpdated", "ageInDays", "daysSinceLastUpdate"]
+    },
+    "size": {
+      "type": "object",
+      "properties": {
+        "additions": { "type": "integer" },
+        "deletions": { "type": "integer" },
+        "changedFiles": { "type": "integer" },
+        "category": {
+          "type": "string",
+          "enum": ["XS", "S", "M", "L", "XL"],
+          "description": "XS: <10 lines, S: <50, M: <200, L: <500, XL: 500+"
+        }
+      },
+      "required": ["additions", "deletions", "changedFiles", "category"]
+    },
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "isDraft": { "type": "boolean" },
+    "branch": {
+      "type": "object",
+      "properties": {
+        "head": { "type": "string" },
+        "base": { "type": "string" }
+      }
+    },
+    "status": {
+      "type": "object",
+      "properties": {
+        "reviewDecision": {
+          "type": "string",
+          "enum": ["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"],
+          "description": "GitHub review status"
+        },
+        "ciStatus": {
+          "type": "string",
+          "enum": ["passing", "failing", "pending", "unknown"],
+          "description": "CI/checks status. Normalize: pass→passing, failure→failing, partial-failure→failing"
+        },
+        "mergeConflicts": {
+          "type": "boolean",
+          "description": "Whether the PR has merge conflicts"
+        },
+        "mergeableState": {
+          "type": "string",
+          "enum": ["mergeable", "conflicting", "blocked", "unknown"],
+          "description": "Always lowercase. CLEAN→mergeable, dirty→conflicting, BLOCKED→blocked"
+        }
+      },
+      "required": ["reviewDecision", "ciStatus", "mergeConflicts", "mergeableState"]
+    },
+    "triage": {
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "ready-to-merge",
+            "needs-maintainer-review",
+            "needs-author-action",
+            "stale",
+            "likely-superseded",
+            "draft-in-progress",
+            "blocked",
+            "auto-dependency-update",
+            "close-candidate"
+          ],
+          "description": "Primary triage category"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"],
+          "description": "Suggested priority for maintainer attention"
+        },
+        "quality": {
+          "type": "string",
+          "enum": ["high", "good", "fair", "needs-work", "poor"],
+          "description": "Overall quality assessment. high=excellent, fair=decent/acceptable"
+        },
+        "qualitySignals": {
+          "type": "object",
+          "properties": {
+            "hasTests": { "type": "boolean" },
+            "hasDescription": { "type": "boolean" },
+            "hasChangesets": { "type": "boolean" },
+            "followsConventions": { "type": "boolean" },
+            "scopeIsReasonable": { "type": "boolean" }
+          }
+        },
+        "isStale": { "type": "boolean", "description": "No meaningful activity in 30+ days" },
+        "similarOrDuplicatePRs": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "PR numbers that appear to address the same issue"
+        },
+        "relatedIssues": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Related issue numbers or URLs mentioned in the PR"
+        }
+      },
+      "required": ["category", "priority", "quality", "isStale"]
+    },
+    "summary": {
+      "type": "string",
+      "description": "2-3 sentence summary of what this PR does"
+    },
+    "maintainerNotes": {
+      "type": "string",
+      "description": "Specific actionable notes for maintainers (what to do with this PR)"
+    },
+    "suggestedAction": {
+      "type": "string",
+      "enum": ["merge", "review", "request-changes", "close", "wait", "rebase", "ping-author"],
+      "description": "Recommended next action. Use only these values, never free-form text."
+    },
+    "triageDate": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this triage was performed"
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "number": 12236,
+  "title": "feat: add temperature array support for LLM-based scorers",
+  "url": "https://github.com/mastra-ai/mastra/pull/12236",
+  "author": {
+    "login": "smthomas",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-01-23T08:55:19Z",
+    "lastUpdated": "2026-01-29T04:05:07Z",
+    "ageInDays": 46,
+    "daysSinceLastUpdate": 40
+  },
+  "size": {
+    "additions": 1038,
+    "deletions": 325,
+    "changedFiles": 22,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "smthomas/scorer-temp-array",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds support for running LLM-based scorers multiple times with different temperature values for varied LLM judge opinions. Users can specify a `temperatures` array on scorer config entries, and each temperature produces a separate database row keyed as `scorerId@temperature`. Also adds `modelSettings` passthrough (maxTokens, topP, etc.) to LLM judge calls. Changes span core evals types, the runScorer hook, the runEvals batch function, agent scorer resolution, CLI scorer templates (simplified to string model IDs), playground-ui score dialog (shows temperature), server schemas, and docs. Includes 19 new unit tests in hooks.test.ts and run/index.test.ts.",
+  "maintainerNotes": "Well-structured feature PR from a collaborator with good test coverage and documentation updates. However, it has been inactive for 40 days, has merge conflicts, 3 CI failures (Core, E2E, Memory tests), and is missing a changeset. The changeset CI check shows 'skipping'. CodeRabbit flagged that workflow/step scorers don't support the new temperature arrays (only agent scorers do), which is an inconsistency worth discussing. The CLI template changes simplify model references from SDK provider objects to string model IDs (e.g., 'openai/gpt-4o-mini'), which appears to be a separate concern bundled in. Author needs to rebase, resolve conflicts, add a changeset, and address CI failures before this can be reviewed.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

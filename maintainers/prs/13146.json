@@ -1,0 +1,53 @@
+{
+  "number": 13146,
+  "title": "fix(agent): preserve thread metadata when MASTRA_THREAD_ID_KEY is set",
+  "url": "https://github.com/mastra-ai/mastra/pull/13146",
+  "author": {
+    "login": "kosukeoya",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-17T16:36:15Z",
+    "lastUpdated": "2026-02-24T15:21:15Z",
+    "ageInDays": 21,
+    "daysSinceLastUpdate": 14
+  },
+  "size": {
+    "additions": 100,
+    "deletions": 16,
+    "changedFiles": 5,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/preserve-thread-metadata-with-context-key",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "When MASTRA_THREAD_ID_KEY is set in RequestContext, the existing code replaced the entire thread object with just { id: threadIdFromContext }, discarding user-provided metadata (title, metadata, etc.). This PR refactors resolveThreadIdFromArgs to accept an overrideId parameter that replaces only the id while preserving the rest of the thread properties. Changes apply to both agent.ts and agent-legacy.ts. Includes comprehensive unit tests for the new overrideId behavior.",
+  "maintainerNotes": "Clean, well-scoped bug fix. Maintainer abhiaiyer91 commented asking for a nicer approach; the author responded by refactoring the logic into resolveThreadIdFromArgs with an overrideId parameter, which is a cleaner pattern. No follow-up review from abhiaiyer91 after the refactor. CI checks are stuck in PENDING state (likely because external contributor PRs require approval to run workflows). The fix has not been superseded — overrideId is not present in main. Needs a maintainer to approve CI and do a final review of the refactored approach.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

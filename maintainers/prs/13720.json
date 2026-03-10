@@ -1,0 +1,66 @@
+{
+  "number": 13720,
+  "title": "Fix LangSmith exporter flush to drain pending trace batches",
+  "url": "https://github.com/mastra-ai/mastra/pull/13720",
+  "author": {
+    "login": "epinzur",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-03T15:21:44Z",
+    "lastUpdated": "2026-03-03T15:27:50Z",
+    "ageInDays": 7,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 17,
+    "deletions": 0,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "claude/cherry-pick-langfuse-changes-3EaZt",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12003,
+        "title": "Add flush method to observability instances",
+        "state": "MERGED",
+        "relevance": "Added the flush infrastructure that this PR completes for LangSmith"
+      },
+      {
+        "number": 12936,
+        "title": "fix: lost spans with default exporter",
+        "state": "MERGED",
+        "relevance": "Related fix for lost spans, similar problem domain"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds a `_flush()` override to the LangSmithExporter that calls `client.awaitPendingTraceBatches()` to drain the LangSmith SDK's internal batch queue. Without this, flushing was a no-op (inherited empty base class method), meaning queued trace data could be lost in serverless/durable execution environments. This follows the exact same pattern already implemented in the Langfuse and PostHog exporters.",
+  "maintainerNotes": "Minimal, well-scoped fix (12 lines of code + changeset). Approved by abhiaiyer91. The CI failures (Agent Builder, Core, MCP, Memory tests) appear to be pre-existing/flaky — they are unrelated to the observability/langsmith package, and the Observability Package Tests pass. No tests were added for the new method (CodeRabbit suggested one), but the implementation is trivial and mirrors the identical pattern in langfuse and posthog exporters. The commit is authored by 'claude' (AI-assisted), opened by epinzur who is an org member. Safe to merge.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

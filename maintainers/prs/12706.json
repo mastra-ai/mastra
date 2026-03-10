@@ -1,0 +1,53 @@
+{
+  "number": 12706,
+  "title": "feat(voice): add Camb AI TTS integration",
+  "url": "https://github.com/mastra-ai/mastra/pull/12706",
+  "author": {
+    "login": "neilruaro-camb",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-05T10:32:04Z",
+    "lastUpdated": "2026-02-09T05:44:58Z",
+    "ageInDays": 33,
+    "daysSinceLastUpdate": 29
+  },
+  "size": {
+    "additions": 558,
+    "deletions": 0,
+    "changedFiles": 11,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "add-camb-voice",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "New @mastra/voice-camb package adding Camb AI text-to-speech integration. Adds a complete voice/camb directory with CambVoice class extending MastraVoice, supporting mars-flash/mars-pro/mars-instruct models, 140+ languages, 100+ voices, configurable output formats (wav/flac/adts/pcm_s16le), and style control via userInstructions. Includes 10 unit tests, WAV header utility, changeset with code example, and standard build config (tsup/vitest/tsconfig). Author appears to be from Camb AI (vendor contribution). No documentation pages added for the new package.",
+  "maintainerNotes": "Well-structured community contribution from a Camb AI employee following existing voice package conventions (package.json, tsup config, tsconfig, vitest config all match patterns from other voice/ packages). CodeRabbit flagged two actionable items: (1) parseInt on speaker ID may produce NaN for non-numeric strings—needs validation/fallback, and (2) changeset entry could include a more complete code example (already addressed in latest version). CI checks are stuck in PENDING state since Feb 9—likely need a maintainer to authorize the workflow run for this external contributor's fork. No documentation pages were added (AGENTS.md requires doc updates with code changes). The tests require a real CAMB_API_KEY env var (integration tests, not mocked). Vercel deploys failed due to authorization requirements for external forks (expected). No merge conflicts.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,66 @@
+{
+  "number": 13914,
+  "title": "fix: Anthropic cache tokens missing from Langfuse traces in streaming mode",
+  "url": "https://github.com/mastra-ai/mastra/pull/13914",
+  "author": {
+    "login": "nancysangani",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-06T13:52:38Z",
+    "lastUpdated": "2026-03-06T14:13:11Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 2,
+    "deletions": 1,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/anthropic-cache-metrics-streaming",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11029,
+        "title": "updated token usage tracking in observability",
+        "state": "MERGED",
+        "relevance": "Related prior work on cache token tracking in observability, different scope"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13848,
+        "title": "Anthropic cache metrics not reaching Langfuse exporter in streaming mode",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes a bug where Anthropic cache token counts (cacheReadInputTokens, cacheCreationInputTokens) were not propagated to Langfuse traces during streaming. In streaming mode, the finish chunk places providerMetadata at the top level (chunk.payload.providerMetadata) but the code only read from chunk.payload.metadata.providerMetadata. The fix adds a fallback: metadata?.providerMetadata ?? chunk.payload.providerMetadata. Also adds the providerMetadata field to the FinishPayload type definition.",
+  "maintainerNotes": "Minimal, well-targeted fix with a clear root cause explanation. Two issues to address before merge: (1) No changeset — changeset-bot flagged this, author needs to add one for @mastra/core. (2) Author checked 'I have added tests' in the checklist but no test files were modified — either tests are missing or the checkbox was mistakenly checked. CI checks (Core, E2E, MCP, Memory, RAG, Combined stores) are stuck in pending since Mar 6, likely due to external contributor needing secrets authorization. The code change itself looks correct and safe — uses nullish coalescing to fall back gracefully. @graysonhicks was pinged for review by the author.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

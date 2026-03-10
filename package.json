@@ -53,6 +53,7 @@
     "build:observability": "pnpm turbo build --filter \"./observability/*\"",
     "build:workspaces": "pnpm turbo build --filter \"./workspaces/*\"",
     "dev:playground": "pnpm turbo run dev --filter ./packages/playground-ui --filter ./packages/playground --filter ./client-sdks/react",
+    "dashboard:prs": "npx serve maintainers/ -p 8787",
     "generate:integration": "pnpx tsx ./integration-generator/index.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

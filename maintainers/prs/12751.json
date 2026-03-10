@@ -1,0 +1,67 @@
+{
+  "number": 12751,
+  "title": "feat(server): add NestJS server adapter",
+  "url": "https://github.com/mastra-ai/mastra/pull/12751",
+  "author": {
+    "login": "saguirre",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-06T03:38:00Z",
+    "lastUpdated": "2026-03-03T12:39:09Z",
+    "ageInDays": 32,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 6194,
+    "deletions": 3,
+    "changedFiles": 63,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/nestjs-server-adapter",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12021,
+        "title": "feat: add NestJS server adapter with Express and Fastify support",
+        "state": "OPEN",
+        "author": "eduartua",
+        "note": "Older competing NestJS adapter PR from Jan 16, appears stale (last updated Jan 19). This PR (12751) is more comprehensive and actively maintained."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 5081,
+        "title": "NestJS server adapter",
+        "note": "Original feature request from maintainers for NestJS adapter support."
+      }
+    ]
+  },
+  "summary": "Adds @mastra/nestjs, a full NestJS server adapter package under server-adapters/nestjs/. Includes MastraModule with register/registerAsync, DI-based service injection, controllers (Mastra routes + system health/ready/info), guards (auth, route, throttle), interceptors (request tracking, streaming, tracing), middleware (body limit, JSON parsing), multipart upload support, MCP transport (HTTP + SSE), graceful shutdown, and stream redaction. Ships with 11 test suites (1325 tests claimed), comprehensive docs (getting-started guide + API reference), and a changeset. Also exports a helper from @mastra/server for adapters that manage routing independently. 63 files changed, 6194 additions.",
+  "maintainerNotes": "High-quality community contribution addressing maintainer-requested feature (#5081). LekoArts reviewed the docs portion and requested changes: rebase onto main and resolve merge conflicts. The code review feedback is only from CodeRabbit (automated). No human code review has been done yet—reviewers NikAiyer and TylerBarnes are still requested. CI checks are stuck in pending state (likely due to merge conflicts or needing authorization). Last commit was Feb 9; the last activity (a community member asking for progress) was Mar 3. Author needs to: (1) rebase onto main and resolve conflicts, (2) get CI green. Once that's done, needs thorough human code review of the adapter implementation. Note: competing PR #12021 exists but appears abandoned (no updates since Jan 19). Consider closing #12021 if this one progresses.",
+  "suggestedAction": "ping-author",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

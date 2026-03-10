@@ -1,0 +1,75 @@
+{
+  "number": 13812,
+  "title": "chore(deps): bump @hono/node-server from 1.19.6 to 1.19.10 in /examples/server-hono-adapter",
+  "url": "https://github.com/mastra-ai/mastra/pull/13812",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-04T20:59:40Z",
+    "lastUpdated": "2026-03-04T21:01:42Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 6
+  },
+  "size": {
+    "additions": 1,
+    "deletions": 1,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/examples/server-hono-adapter/hono/node-server-1.19.10",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 14072,
+        "title": "chore(deps): update dependency @hono/node-server to ^1.19.11",
+        "state": "OPEN",
+        "relevance": "Renovate PR bumps to newer version 1.19.11, supersedes this PR"
+      },
+      {
+        "number": 13817,
+        "title": "chore(deps): bump @hono/node-server from 1.19.9 to 1.19.10",
+        "state": "OPEN",
+        "relevance": "Same version bump for root workspace"
+      },
+      {
+        "number": 13814,
+        "title": "chore(deps): bump @hono/node-server from 1.19.8 to 1.19.10 in /examples/inngest",
+        "state": "OPEN",
+        "relevance": "Same version bump for different example"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR bumping @hono/node-server from 1.19.6 to 1.19.10 in examples/server-hono-adapter/package.json. The release notes mention a security fix for an authorization bypass in Serve Static Middleware caused by inconsistent URL decoding (%2F handling). This is an examples-only change (1 line in package.json).",
+  "maintainerNotes": "This PR is likely superseded by #14072 (renovate) which bumps to the even newer 1.19.11. The 'Full Test Suite' status check shows FAILURE, though individual test suites all passed or were skipped (the failure may be an aggregation issue or flaky test unrelated to this change). The PR is MERGEABLE with no conflicts. Since this only touches an example's package.json and a newer renovate PR (#14072) already targets a higher version, consider closing this in favor of #14072.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

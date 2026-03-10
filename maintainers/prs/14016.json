@@ -1,0 +1,65 @@
+{
+  "number": 14016,
+  "title": "fix(core): add AI gateway tool support",
+  "url": "https://github.com/mastra-ai/mastra/pull/14016",
+  "author": {
+    "login": "TheIsrael1",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T14:50:35Z",
+    "lastUpdated": "2026-03-10T15:41:27Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 537,
+    "deletions": 81,
+    "changedFiles": 11,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "pr-13192-review",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13192,
+        "title": "fix(core): add AI gateway tool support",
+        "state": "CLOSED",
+        "relationship": "superseded-by-this-pr"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13190,
+        "relationship": "fixes"
+      }
+    ]
+  },
+  "summary": "Adds support for AI Gateway tools (e.g. gateway.tools.perplexitySearch()) in Mastra's agentic loop. This supersedes the external contribution #13192 (by daavidrgz) with a maintainer-driven version. Key changes: (1) merges streamed provider tool-result chunks back onto matching tool calls in llm-execution-step, (2) infers providerExecuted flag for provider-defined tools when the stream omits it, (3) resolves provider tools by model-facing name in tool-call-step, (4) adds isProviderTool alias and getProviderToolName utility to toolchecks. Includes new unit tests for provider-tool-utils, toolchecks, and regression tests for the gateway streaming and tool-call-step paths.",
+  "maintainerNotes": "Well-structured PR from a maintainer (write access) that supersedes external PR #13192. All 11 changed files are in packages/core, focused on the agentic loop and tool infrastructure. Build, lint, and all relevant CI checks pass. The 'Full Test Suite' and 'Observability Package Tests' failures are pre-existing (same failures on recently merged PRs like #14086). CodeRabbit left minor nitpicks (edge case for getProviderToolName with no dot, test fixture key naming) but no blocking issues. The PR has a changeset, good description, and solid test coverage (3 new test files, expanded existing tests). Needs a human maintainer approval to merge.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

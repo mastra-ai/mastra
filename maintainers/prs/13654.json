@@ -1,0 +1,59 @@
+{
+  "number": 13654,
+  "title": "feat(cli): add dev session duration, package manager, and component tracking",
+  "url": "https://github.com/mastra-ai/mastra/pull/13654",
+  "author": {
+    "login": "calcsam",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-02T02:28:57Z",
+    "lastUpdated": "2026-03-02T02:33:59Z",
+    "ageInDays": 8,
+    "daysSinceLastUpdate": 8
+  },
+  "size": {
+    "additions": 48,
+    "deletions": 5,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/cli-analytics-improvements",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13417,
+        "title": "fix(cli): add analytics tracking to mastra studio command",
+        "relationship": "related-prior-work"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds three analytics improvements to the CLI: (1) tracks dev session duration by firing a `cli_dev_session_end` event on SIGINT/SIGTERM with duration in ms and minutes, (2) includes the detected package manager (npm/yarn/pnpm/bun) in all analytics events via `getSystemProperties()`, and (3) fires a `cli_components_selected` event during `mastra create` for both interactive and CLI-args paths. Changes span 3 files in the CLI package only.",
+  "maintainerNotes": "Small, well-scoped analytics enhancement from a maintainer. No automated tests (analytics tracking is hard to unit test), but includes a manual test plan in the description. Missing a changeset. CI shows Core Package Tests and Memory Tests failing, but those are unrelated to the CLI analytics changes (likely flaky or pre-existing failures). CodeRabbit flagged two valid issues: (1) `handleShutdown` is not idempotent — multiple signals could cause duplicate events, and (2) `analytics.shutdown()` is only called when `serverStartTime` exists, so queued events may not flush if the server never started. Both are minor but worth addressing before merge.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

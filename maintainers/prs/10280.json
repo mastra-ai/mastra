@@ -1,0 +1,67 @@
+{
+  "number": 10280,
+  "title": "fix(pg): prevent duplicate database object warning",
+  "url": "https://github.com/mastra-ai/mastra/pull/10280",
+  "author": {
+    "login": "blind05",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-11-19T19:16:29Z",
+    "lastUpdated": "2026-03-03T12:42:23Z",
+    "ageInDays": 111,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 172,
+    "deletions": 3,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "blind05/7534-duplicate-db-object-suspend-resume",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11450,
+        "title": "refactor(pg): remove pg-promise dependency and use pg.Pool directly",
+        "state": "MERGED",
+        "mergedAt": "2025-12-29T19:45:20Z",
+        "relationship": "supersedes"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 7534,
+        "title": "Duplicate database object when using suspend/resume",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Adds a module-level connection cache with reference counting to prevent pg-promise 'duplicate database object' warnings when multiple PostgresStore instances share the same connection config (e.g., Next.js HMR, suspend/resume). Includes a test that verifies no duplicate warning is emitted.",
+  "maintainerNotes": "This PR is fully superseded by #11450, which removed pg-promise entirely from @mastra/pg and replaced it with direct pg.Pool usage (merged 2025-12-29). The underlying issue #7534 is already closed. The PR has merge conflicts and the code it modifies no longer exists. Should be closed with a thank-you to the contributor for the well-written fix.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

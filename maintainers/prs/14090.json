@@ -1,0 +1,54 @@
+{
+  "number": 14090,
+  "title": "fix(qdrant): convert `ids` to integers inside the `upsert` method",
+  "url": "https://github.com/mastra-ai/mastra/pull/14090",
+  "author": {
+    "login": "danielynx",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-10T15:52:45Z",
+    "lastUpdated": "2026-03-10T16:17:31Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 43,
+    "deletions": 2,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "bug/qdrant-upsert-with-numeric-ids",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#14087"
+    ]
+  },
+  "summary": "Fixes a bug where the Qdrant `upsert` method failed when `ids` were provided as numeric strings (e.g. '1000'). The fix applies the existing `parsePointId` method (already used in other Qdrant methods like `query` and `deleteVector`) to convert numeric string IDs to integers before sending to Qdrant, and converts them back to strings on return. Adds a shared vector test case covering upsert with explicit IDs in numeric, UUID, and URN formats.",
+  "maintainerNotes": "Clean, well-scoped bug fix. The `parsePointId` method already existed and was used in other methods (`query`, `deleteVector`) but was missing from `upsert` — this is a consistency fix. CodeRabbit flagged a potential precision issue with uint64 IDs exceeding Number.MAX_SAFE_INTEGER (since `parsePointId` uses `parseInt`), which is worth considering but is a pre-existing concern in the shared method, not introduced by this PR. A misleading comment in the test was also flagged. CI checks are still pending (Combined store Tests, E2E Tests, Memory Tests). Vercel deploy failures are expected for external contributors (authorization required). The test is added to the shared test utils, so it will run for all vector store implementations.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

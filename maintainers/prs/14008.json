@@ -1,0 +1,55 @@
+{
+  "number": 14008,
+  "title": "feat(server): export route-inferred HTTP schemas via `@mastra/server/schemas`",
+  "url": "https://github.com/mastra-ai/mastra/pull/14008",
+  "author": {
+    "login": "mfrachet",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-09T10:13:56Z",
+    "lastUpdated": "2026-03-10T15:03:43Z",
+    "ageInDays": 1,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 605,
+    "deletions": 99,
+    "changedFiles": 36,
+    "category": "XL"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "careful-inspiration",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "ready-to-merge",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a new `@mastra/server/schemas` subpath export that provides utility types (RouteMap, RouteContract, InferPathParams, InferQueryParams, InferBody, InferResponse) for inferring HTTP contract types directly from route definitions. Routes created via `createRoute()` now preserve their Zod schema types through new `ServerRoute` generics with phantom type parameters. All route arrays across 20+ domain files are switched from `ServerRoute<any, any, any>[]` to `as const` tuples for type preservation. A `ServerRoutes` union type is built from these per-domain tuples. Includes a type-level test file that validates inference end-to-end. No runtime behavior changes — all changes are type-level only.",
+  "maintainerNotes": "Approved by wardpeet. CI shows 2 failures: 'Full Test Suite' and 'Observability Package Tests' — the observability route file change is trivial (just `as const` conversion), so these failures appear unrelated to this PR. Memory Tests and E2E Tests are still pending. The PR is well-structured: clean changeset, thorough description with code examples, type-level tests, zero `any` casts introduced, and the scope is focused entirely on the `@mastra/server` package. CodeRabbit suggested importing from the barrel file in the typetest instead of internal modules — minor nit. No merge conflicts. Ready to merge once pending CI checks complete and unrelated failures are confirmed.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

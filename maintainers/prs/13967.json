@@ -1,0 +1,67 @@
+{
+  "number": 13967,
+  "title": "fix(network): forward memory context in validation stream calls",
+  "url": "https://github.com/mastra-ai/mastra/pull/13967",
+  "author": {
+    "login": "Wert1go",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-07T22:53:57Z",
+    "lastUpdated": "2026-03-08T09:32:31Z",
+    "ageInDays": 3,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 137,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/network-validation-memory-context",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13651,
+        "title": "Network validation calls crash with ObservationalMemory when scope: 'thread'",
+        "state": "OPEN",
+        "labels": [
+          "bug",
+          "Agents",
+          "Memory",
+          "Workflows",
+          "impact:high",
+          "discord"
+        ]
+      }
+    ]
+  },
+  "summary": "Network validation stream calls (runDefaultCompletionCheck, generateFinalResult, generateStructuredFinalResult) were not forwarding memory context to agent.stream(), causing crashes when ObservationalMemory is configured with scope: 'thread'. This PR adds a getValidationMemoryOptions() helper that extracts thread/resource IDs from CompletionContext (with fallback to runId/networkName) and passes them to all three validation stream calls with readOnly: true and workingMemory disabled to avoid side effects during validation.",
+  "maintainerNotes": "Clean, well-scoped bug fix from an external contributor. The fix addresses issue #13651 (labeled impact:high, sourced from Discord). Changes are minimal and surgical: one new helper function and three call sites updated. Includes comprehensive tests covering explicit IDs, fallback behavior, and structured output paths. CodeRabbit review passed with only a minor nitpick suggesting one additional fallback test for generateStructuredFinalResult. CI checks are still pending (tests queued behind setup-actions-with-secrets gates, which is expected for external contributor PRs). Vercel deploy failures are expected (authorization required for external PRs). No merge conflicts. Changeset included.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

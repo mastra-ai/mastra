@@ -1,0 +1,55 @@
+{
+  "number": 14058,
+  "title": "chore(deps): update dependency @upstash/vector to ^1.2.3",
+  "url": "https://github.com/mastra-ai/mastra/pull/14058",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T10:02:55Z",
+    "lastUpdated": "2026-03-10T10:06:37Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 15,
+    "deletions": 10,
+    "changedFiles": 3,
+    "category": "XS"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/upstash-vector-1.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Automated Renovate patch bump of @upstash/vector from ^1.2.2 to ^1.2.3 in the stores/upstash package. Changes are minimal: package.json version specifier update, pnpm-lock.yaml resolution updates, and an auto-generated changeset. The branch name (renovate/upstash-vector-1.x) and 'automation' label indicate this is a Renovate-managed dependency update.",
+  "maintainerNotes": "PR has merge conflicts (CONFLICTING state) that need to be resolved before merging — likely a pnpm-lock.yaml conflict from concurrent changes to main. Two CI checks are failing ('Full Test Suite' and 'Observability Package Tests') but these appear unrelated to the @upstash/vector bump. Some test suites (Core, MCP, Memory, E2E) are still pending. The PR has 2 approvals. Once conflicts are rebased and CI re-runs cleanly, this is safe to merge.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,59 @@
+{
+  "number": 12802,
+  "title": "feat: support using client param in constructor elasticsearchvector",
+  "url": "https://github.com/mastra-ai/mastra/pull/12802",
+  "author": {
+    "login": "Shaik-Sirajuddin",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-07T06:18:26Z",
+    "lastUpdated": "2026-03-03T12:38:44Z",
+    "ageInDays": 31,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 51,
+    "deletions": 1,
+    "changedFiles": 2,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "elastic_search_constructor",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 11536,
+        "title": "[FEATURE] Support using ElasticSearchVector with a custom client",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Adds an optional `client` parameter to the ElasticSearchVector constructor so users can pass a pre-configured @elastic/elasticsearch Client instance instead of only a URL. If `client` is provided, it is used directly; if neither `client` nor `url` is provided, a MastraError is thrown. Includes 3 constructor tests (error case, URL init, client init). Addresses issue #11536 which requests this for Bun compatibility (HttpConnection workaround) and general client configurability.",
+  "maintainerNotes": "Good community contribution addressing a legitimate feature request. The PR has merge conflicts due to PR #13740 (merged 2026-03-03) which added user-agent tracking headers to the ES client constructor in the same area. Author needs to: (1) rebase onto main to resolve conflicts and incorporate the new `name`/`headers` fields from #13740 into the URL-based construction path, (2) add a changeset. The approach is sound — when a user passes their own client, they control its configuration, so the user-agent header from #13740 would not apply (acceptable tradeoff). No human reviews yet; CodeRabbit left automated comments. CI checks are stuck in pending state (likely needs rebase to retrigger).",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

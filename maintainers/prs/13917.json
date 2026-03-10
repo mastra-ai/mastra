@@ -1,0 +1,66 @@
+{
+  "number": 13917,
+  "title": "fix(harness): use type 'image' and mimeType for image parts in convertToHarnessMessage",
+  "url": "https://github.com/mastra-ai/mastra/pull/13917",
+  "author": {
+    "login": "nancysangani",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-06T14:41:03Z",
+    "lastUpdated": "2026-03-06T17:20:18Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 7,
+    "deletions": 2,
+    "changedFiles": 2,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/harness-image-part-type-v2",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13574,
+        "title": "feat(harness): file attachment support with filename preservation and text file handling",
+        "state": "MERGED",
+        "relevance": "This merged PR introduced the file attachment support that likely created the bug this PR fixes (used type 'file' instead of 'image' for image parts)"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13913,
+        "title": "[BUG] [Harness] Gemini failed to response to image part with type \"file\"",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes a bug in convertToHarnessMessage() where the 'image' case was incorrectly pushing content with type 'file' and property 'mediaType' instead of type 'image' and 'mimeType'. This caused Gemini (via AI SDK Google provider) to silently ignore image content sent via harness.sendMessage({ files }). The fix is a 2-line change in harness.ts plus a changeset.",
+  "maintainerNotes": "Clean, minimal fix that addresses a real bug reported in #13913. The root cause is clear: PR #13574 (file attachment support) introduced a case 'image' block that incorrectly used type 'file' and 'mediaType' instead of type 'image' and 'mimeType'. Approved by indiejoseph (non-maintainer, likely the issue reporter). CI checks are stuck in pending state (Core, E2E, MCP, Memory, RAG tests never ran — only setup jobs completed). Vercel deploy checks fail due to authorization (expected for external contributors). No tests added, but given the fix is a trivial 2-line property rename, the risk is low. A maintainer should verify CI can run and confirm the AI SDK ImagePart type uses 'mimeType' (not 'mediaType').",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

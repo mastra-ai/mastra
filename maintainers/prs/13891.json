@@ -1,0 +1,53 @@
+{
+  "number": 13891,
+  "title": "feat(mastracode): allow overriding memory instance via config",
+  "url": "https://github.com/mastra-ai/mastra/pull/13891",
+  "author": {
+    "login": "tulga-bytes",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-06T00:50:06Z",
+    "lastUpdated": "2026-03-06T00:54:44Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 11,
+    "deletions": 1,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/mastracode-custom-memory-override",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds an optional `memory` property to `MastraCodeConfig` interface that allows callers to supply their own memory instance or dynamic factory instead of using the built-in `getDynamicMemory`. When not provided, existing behavior is preserved via nullish coalescing (`config?.memory ?? getDynamicMemory(storage)`). The change is a single file, 11-line addition to `mastracode/src/index.ts`. Authored with assistance from Augment Code.",
+  "maintainerNotes": "Very small, backward-compatible change. The implementation is clean — adds a typed optional property to the config interface with good JSDoc and uses nullish coalescing for the fallback. No tests added, but the change is trivial and purely additive. Missing a changeset (flagged by changeset-bot). CI checks are stuck in PENDING state (Core, E2E, MCP, Memory, RAG tests never ran — likely needs secrets authorization from a maintainer). Vercel deploy also needs authorization. CodeRabbit review passed with no actionable comments. Should request the author add a changeset before merging.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

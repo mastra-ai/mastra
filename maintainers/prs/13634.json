@@ -1,0 +1,66 @@
+{
+  "number": 13634,
+  "title": "feat(core): show first user message as thread title in chat history",
+  "url": "https://github.com/mastra-ai/mastra/pull/13634",
+  "author": {
+    "login": "gourine",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-01T09:56:51Z",
+    "lastUpdated": "2026-03-06T10:21:40Z",
+    "ageInDays": 9,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 31,
+    "deletions": 1,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/thread-title-from-first-message",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13151,
+        "title": "fix(core): generate thread title for pre-created threads",
+        "state": "MERGED",
+        "relevance": "Related — fixed title generation for pre-created threads; this PR extends the fallback behavior when generateTitle is not configured"
+      },
+      {
+        "number": 13671,
+        "title": "fix(core): fix TypeError in generateTitleFromUserMessage for file parts",
+        "state": "MERGED",
+        "relevance": "Related — fixed edge case in title generation from user messages; this PR adds a new code path that also extracts text from user messages"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "When generateTitle is not configured (the default), thread history in the chat sidebar only shows timestamps, making conversations hard to identify. This PR adds a fallback that saves the user's first message (truncated to 100 chars) as the thread title. When generateTitle IS configured, existing LLM-based title generation takes priority. Also adds minor styling to make timestamps visually secondary when a title is present.",
+  "maintainerNotes": "Small, well-scoped community contribution touching 2 source files (agent.ts + chat-threads.tsx) plus 2 changesets. Code logic is clean — adds an `else if` branch in agent.ts that fires only when: no generateTitle configured, no existing title, and thread doesn't already exist. CodeRabbit flagged minor nits: (1) duplicate playground-ui entries across two changeset files, (2) potential empty title if user message is only whitespace (trim produces empty string but code doesn't guard against it). No tests added — the core agent title generation area has existing test patterns that could be extended. CI checks are pending (tests haven't run, likely needs secrets/approval). No merge conflicts. No human reviewer has looked at this yet — needs maintainer review to assess whether this fallback behavior is desired as a core default and whether the empty-whitespace edge case should be guarded.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

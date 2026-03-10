@@ -1,0 +1,69 @@
+{
+  "number": 11272,
+  "title": "chore(deps-dev): bump storybook from 9.1.13 to 9.1.17",
+  "url": "https://github.com/mastra-ai/mastra/pull/11272",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-18T19:00:59Z",
+    "lastUpdated": "2026-02-26T18:42:53Z",
+    "ageInDays": 82,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 1226,
+    "deletions": 548,
+    "changedFiles": 3,
+    "category": "XL"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/storybook-9.1.17",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 14059,
+        "title": "chore(deps): update storybook monorepo to ^9.1.20",
+        "state": "OPEN",
+        "relationship": "supersedes"
+      },
+      {
+        "number": 11952,
+        "title": "Update storybook",
+        "state": "OPEN",
+        "relationship": "similar"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR bumping storybook from 9.1.13 to 9.1.17. Changes are in package.json, pnpm-lock.yaml, and pnpm-workspace.yaml. The lockfile diff also includes unrelated resolution changes (zod version, jiti version, vitest peer deps).",
+  "maintainerNotes": "This PR is superseded by #14059 which bumps storybook to 9.1.20 (opened today by renovate). There is also #11952 (manual storybook update by alliehowe29). This PR has merge conflicts and multiple CI failures (E2E, Lint, Prebuild, MCP, Memory, test suite). Should be closed in favor of #14059.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

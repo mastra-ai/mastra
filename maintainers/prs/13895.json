@@ -1,0 +1,59 @@
+{
+  "number": 13895,
+  "title": "fix(core): remap provider tool types when routing to V3 models via gateway",
+  "url": "https://github.com/mastra-ai/mastra/pull/13895",
+  "author": {
+    "login": "roaminro",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-06T03:14:38Z",
+    "lastUpdated": "2026-03-09T18:59:00Z",
+    "ageInDays": 4,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 285,
+    "deletions": 2,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "low-street",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13667,
+        "title": "Provider tools broken when using custom gateway with AI SDK v6",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes #13667 where provider tools (e.g. openai.tools.webSearch()) are silently dropped when using a custom gateway that returns AI SDK v6 (V3) models. The root cause is that ModelRouterLanguageModel hardcodes specificationVersion='v2', so tools get prepared with type 'provider-defined' instead of 'provider'. AI SDK v6 rejects the unrecognized type and drops the tools. The fix adds a remapToolsToV3() function in AISDKV6LanguageModel that converts 'provider-defined' to 'provider' in both doGenerate and doStream calls. Includes 6 regression tests covering doStream, doGenerate, function tools, and mixed tool scenarios. Has a changeset for @mastra/core patch.",
+  "maintainerNotes": "Well-structured bug fix from an org member. The fix is placed in AISDKV6LanguageModel (the V2→V3 wrapper) rather than the router itself, which is the right abstraction level since all V3 model calls flow through this wrapper. CI shows 5 failing checks (Agent Builder, Core, Full Test Suite, Memory, Observability) but at least Observability failures also appear on main, suggesting these are pre-existing/flaky failures unrelated to this PR. Build, lint, and security checks all pass. Review is requested from TylerBarnes. CodeRabbit reviewed with only minor nitpicks (test cleanup pattern, additional doGenerate parity tests). The core logic change is minimal (24 lines of production code) and well-targeted.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

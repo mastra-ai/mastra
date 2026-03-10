@@ -1,0 +1,65 @@
+{
+  "number": 13963,
+  "title": "fix(server): support Zod v4 in query parameter type detection",
+  "url": "https://github.com/mastra-ai/mastra/pull/13963",
+  "author": {
+    "login": "intojhanurag",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-07T18:05:49Z",
+    "lastUpdated": "2026-03-09T17:13:47Z",
+    "ageInDays": 3,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 12,
+    "deletions": 32,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/zod4-query-param-type-detection",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12238,
+        "title": "feat: Add Standard Schema support with Zod v3/v4 compatibility",
+        "mergedAt": "2026-03-09T16:51:42Z",
+        "relationship": "supersedes — PR #12238 was merged on March 9 and already introduced the exact same getZodTypeName() and isComplexType() functions with Zod v3/v4 support in route-builder.ts. This PR's diff is now purely a cosmetic refactor (Set lookups, comment removal) of the code #12238 already landed."
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13962,
+        "title": "[BUG] Studio Observability Date Filter Invalid Parameters",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Refactors getZodTypeName() and isComplexType() in route-builder.ts to use Set-based lookups and removes verbose comments. Originally intended to fix Zod v4 query param detection, but PR #12238 (merged March 9, 257 files) already landed the same Zod v3/v4 compatibility fix in route-builder.ts. The code on main already has working v3/v4 support. This PR now only provides a minor style refactor (Set vs || chains, fewer comments). Notably, the PR removes the `.def` fallback in getZodTypeName(), which could reduce v4 compatibility if .def is used by some Zod v4 schemas.",
+  "maintainerNotes": "PR #12238 was merged 2 hours before this PR's last update and already contains the substantive Zod v4 fix for route-builder.ts. This PR is now a cosmetic refactor of that same code. CI has several failures (Build, Core tests, Agent Builder tests, Observability tests, Validate build outputs) — likely due to the branch needing a rebase after #12238's 257-file merge. The approval from abhiaiyer91 may have been given before #12238 landed. The removal of the `?? schemaAny?.def` fallback in getZodTypeName() is a potential regression worth noting. Consider closing in favor of #12238's already-merged fix, or requesting a rebase if the Set-based refactor is desired.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

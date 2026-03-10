@@ -1,0 +1,56 @@
+{
+  "number": 13565,
+  "title": "chore(deps-dev): bump koa from 3.1.1 to 3.1.2",
+  "url": "https://github.com/mastra-ai/mastra/pull/13565",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-27T00:27:59Z",
+    "lastUpdated": "2026-03-03T23:08:36Z",
+    "ageInDays": 11,
+    "daysSinceLastUpdate": 6
+  },
+  "size": {
+    "additions": 665,
+    "deletions": 230,
+    "changedFiles": 3,
+    "category": "XL"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/koa-3.1.2",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot patch bump of koa from 3.1.1 to 3.1.2. The koa 3.1.2 release includes a security fix for Host Header Injection via ctx.hostname (GHSA-7gcc-r8m5-44qm) plus minor dependency bumps and doc fixes. Changes span server-adapters/koa/package.json, workflows/inngest/package.json, and pnpm-lock.yaml. The large line count is due to lockfile churn including unrelated resolved-version updates (ast-grep, ai-sdk, zod references).",
+  "maintainerNotes": "PR has merge conflicts (mergeableState: CONFLICTING) and CI build is failing — multiple test suites failed (Agent Builder, Core, MCP, Memory, Observability, RAG) and build validation failed. The koa 3.1.2 release contains a security fix (Host Header Injection), so this should be prioritized. However, the conflicts and CI failures need to be resolved first — dependabot will likely need to rebase. Consider closing and letting dependabot recreate, or manually rebasing the branch.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

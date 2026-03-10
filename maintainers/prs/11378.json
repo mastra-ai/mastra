@@ -1,0 +1,70 @@
+{
+  "number": 11378,
+  "title": "fix(core): emit tool-error chunk in fullStream when tool throws",
+  "url": "https://github.com/mastra-ai/mastra/pull/11378",
+  "author": {
+    "login": "DanielSLew",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2025-12-23T16:46:52Z",
+    "lastUpdated": "2026-03-03T16:33:35Z",
+    "ageInDays": 77,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 215,
+    "deletions": 111,
+    "changedFiles": 9,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/core/tool-error-chunk",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13147,
+        "title": "fix(core): throw tool execution errors instead of returning them",
+        "state": "MERGED",
+        "mergedAt": "2026-02-17T17:46:08Z",
+        "relationship": "supersedes"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 11333,
+        "relationship": "fixes"
+      },
+      {
+        "number": 13123,
+        "relationship": "related-fixed-by-13147"
+      }
+    ]
+  },
+  "summary": "This PR fixes tool execution errors being emitted as tool-result chunks instead of tool-error chunks in fullStream. It modifies the tool builder to throw errors (for v2/v3 AI SDK models) instead of returning them, and refactors the llm-mapping-step to properly separate error results from success results. Includes tests and a changeset. However, PR #13147 was merged on Feb 17, 2026 with a more focused one-liner fix to the same root cause (return→throw in builder.ts), making this PR superseded.",
+  "maintainerNotes": "This PR is superseded by #13147 which was merged 2026-02-17. Both fix the same issue: tool errors appearing as tool-result instead of tool-error chunks. #13147 took a simpler approach (one-line change in builder.ts). This PR has merge conflicts and a failing E2E check. It also includes unrelated noise (examples/agent zod version bump, lockfile changes). Safe to close.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

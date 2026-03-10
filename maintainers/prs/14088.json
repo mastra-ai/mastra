@@ -1,0 +1,55 @@
+{
+  "number": 14088,
+  "title": "Suppress OTel tracing on internal polling fetch calls",
+  "url": "https://github.com/mastra-ai/mastra/pull/14088",
+  "author": {
+    "login": "epinzur",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T15:34:06Z",
+    "lastUpdated": "2026-03-10T15:47:17Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 218,
+    "deletions": 123,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "claude/fix-issue-13892-g2YKF",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "https://github.com/mastra-ai/mastra/issues/13892"
+    ]
+  },
+  "summary": "Wraps the internal polling fetch call in InngestRun.getRunOutput() with suppressTracing() from @opentelemetry/core to prevent auto-instrumented OTel spans from flooding APM tools (Sentry, Datadog) with hundreds of identical GET spans per workflow run. The actual code change is small (6 additions, 4 deletions in workflows/inngest/src/run.ts plus a new dependency). The bulk of the diff (218+/123-) is pnpm-lock.yaml churn from adding @opentelemetry/core.",
+  "maintainerNotes": "BUILD IS FAILING: The `suppressTracing()` function from `@opentelemetry/core` is being misused — it expects a `Context` argument, not a callback/lambda. The TypeScript compiler reports: 'Argument of type () => Promise<Response> is not assignable to parameter of type Context' (TS2345), plus cascading errors where .status, .headers, .ok, .text don't exist on Context. The author likely confused this with a different API pattern (e.g., `context.with(suppressTracing(context), fn)`). The approach is sound — suppressing OTel traces on internal polling is a valid fix — but the implementation needs to be corrected. Branch name prefix 'claude/' suggests this was AI-generated code. No tests added. Changeset incorrectly marked as 'minor' — this is a bug fix and should be 'patch'.",
+  "suggestedAction": "request-changes",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

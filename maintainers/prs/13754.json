@@ -1,0 +1,55 @@
+{
+  "number": 13754,
+  "title": "feat: add dedicated agent session page",
+  "url": "https://github.com/mastra-ai/mastra/pull/13754",
+  "author": {
+    "login": "smthomas",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-04T05:49:54Z",
+    "lastUpdated": "2026-03-08T02:36:34Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 2
+  },
+  "size": {
+    "additions": 354,
+    "deletions": 35,
+    "changedFiles": 9,
+    "category": "M"
+  },
+  "labels": [
+    "Documentation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "agent-chat-ui",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "passing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": []
+  },
+  "summary": "Adds a dedicated minimal agent session page at /agents/:agentId/session with a stripped-down layout (no sidebar, no info pane, no model picker). Includes a MinimalRootLayout, session header with optional request-context preset dropdown, a new hideModelSwitcher prop threaded through AgentChat/Thread/Composer, a 'Share' button on the agent entity header to copy the session URL, E2E tests, changeset, and docs update.",
+  "maintainerNotes": "Well-structured PR from a maintainer with excellent quality signals: thorough description, E2E tests, changeset, and docs. All CI checks pass. However, there are merge conflicts that need to be resolved before merging. CodeRabbit review flagged minor issues: duplicated RootLayout/MinimalRootLayout wiring in App.tsx, unreachable 'Agent not found' branch in session.tsx, and suggestion to move hideModelSwitcher to shared ChatProps type. No human reviews yet.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

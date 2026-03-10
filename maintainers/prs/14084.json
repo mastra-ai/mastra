@@ -1,0 +1,62 @@
+{
+  "number": 14084,
+  "title": "chore(deps): update dependency @rollup/plugin-commonjs to v29.0.2",
+  "url": "https://github.com/mastra-ai/mastra/pull/14084",
+  "author": {
+    "login": "daneatmastra",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-10T14:44:46Z",
+    "lastUpdated": "2026-03-10T14:47:58Z",
+    "ageInDays": 0,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 54,
+    "deletions": 49,
+    "changedFiles": 4,
+    "category": "M"
+  },
+  "labels": [
+    "automation"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "renovate/rollup-plugin-commonjs-29.x",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 9780,
+        "title": "chore(deps): update dependency @rollup/plugin-commonjs to v29",
+        "state": "MERGED",
+        "relevance": "Previous version bump of same package (v29.0.0)"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Renovate bot PR (submitted by daneatmastra) bumping @rollup/plugin-commonjs from 29.0.0 to 29.0.2 in packages/deployer (dependency) and packages/create-mastra (devDependency). The update includes two bugfixes: conditional exports handling and correct replacement of shorthand 'global' property in objects. Also includes incidental lockfile updates for @ast-grep/napi (0.41.0 -> 0.41.1). A changeset for @mastra/deployer is included.",
+  "maintainerNotes": "Automated Renovate patch bump. Approved by github-actions (auto-approve). CI has two failures: 'Full Test Suite' and 'Observability Package Tests' — these appear to be pre-existing/flaky failures unrelated to this dep bump since the build, lint, and package validation checks all pass. The PR is mergeable with no conflicts. The previous version bump for this package (PR #9780) was merged successfully. Safe to merge.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,74 @@
+{
+  "number": 6447,
+  "title": "Add runtime context features to Inngest workflows",
+  "url": "https://github.com/mastra-ai/mastra/pull/6447",
+  "author": {
+    "login": "aldebout",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-07-31T14:34:09Z",
+    "lastUpdated": "2026-03-03T12:43:24Z",
+    "ageInDays": 222,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 315,
+    "deletions": 15,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [
+    "trio-tnt"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/inngest-runtime-context",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "passing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "needs-author-action",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12568,
+        "title": "feat(workflows): shared test suite for workflow engines",
+        "state": "MERGED",
+        "relationship": "related - refactored Inngest workflow tests into shared suite; may affect test file structure this PR modifies"
+      },
+      {
+        "number": 9511,
+        "title": "Rename RuntimeContext to RequestContext",
+        "state": "MERGED",
+        "relationship": "related - renamed RuntimeContext which this PR uses extensively; likely source of merge conflicts"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 6371,
+        "title": "[BUG] Inngest workflows do not persist runtimeContext between steps",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Community PR fixing RuntimeContext persistence across Inngest workflow steps. When using Inngest workflows, runtimeContext was being reset between steps (new RuntimeContext() was hardcoded with a TODO comment). This PR serializes runtimeContext to/from workflow snapshots, overrides executeEntry to restore context from snapshots for multi-step execution, and updates persistStepUpdate to save context. Changes span 3 files in workflows/inngest/src: index.ts (core logic), index.test.ts (tests for context persistence across steps), and a changeset. Approved by abhiaiyer91 in Sept 2025.",
+  "maintainerNotes": "This PR has merge conflicts (CONFLICTING state). The codebase has evolved significantly since this was opened in July 2025 — notably PR #9511 renamed RuntimeContext to RequestContext and PR #12568 refactored Inngest tests into a shared test suite. The core fix is valid and addresses a real bug (#6371 is closed but the fix may not have been merged via another path). The author is an external contributor who asked for guidance on local testing. The approach of serializing context to snapshots is sound but uses multiple @ts-ignore comments and has a JSON-serialization limitation the author acknowledges. Needs conflict resolution and likely adaptation to the RequestContext rename before it can be merged. Review requests are pending from CalebBarnes, DanielSLew, and NikAiyer.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

@@ -1,0 +1,66 @@
+{
+  "number": 13882,
+  "title": "fix(studio): keep sub-agent badge expanded while streaming",
+  "url": "https://github.com/mastra-ai/mastra/pull/13882",
+  "author": {
+    "login": "gourine",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-05T22:47:51Z",
+    "lastUpdated": "2026-03-06T11:49:37Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 4
+  },
+  "size": {
+    "additions": 12,
+    "deletions": 2,
+    "changedFiles": 3,
+    "category": "XS"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/sub-agent-streaming-badge",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "high",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13558,
+        "title": "fix(playground-ui): auto-collapse sub-agent badge when processing completes",
+        "state": "MERGED",
+        "relationship": "predecessor — same author's earlier fix for badge auto-collapse; this PR fixes a regression/edge case from that work"
+      },
+      {
+        "number": 13881,
+        "title": "fix(core): prevent supervisor messages from leaking into sub-agent thread",
+        "state": "OPEN",
+        "relationship": "companion PR — fixes a related but separate sub-agent issue"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes sub-agent badges in the studio collapsing prematurely during streaming. When a supervisor delegates to a sub-agent, assistant-ui infers status='complete' as soon as any result field is present, causing the badge to collapse before the sub-agent finishes. The fix tags streaming results with a _mastraStreaming flag in toAssistantUIMessage.ts and gates the isComplete check in tool-fallback.tsx on the absence of that flag. Only 3 files changed (including changeset), very focused scope.",
+  "maintainerNotes": "Well-written PR from a repeat contributor (same author merged #13558 for the original badge auto-collapse feature). The approach uses a _mastraStreaming flag smuggled through the result object to work around assistant-ui's status inference — this is pragmatic but slightly hacky (spreads part.output with `as any` cast). No automated tests, but the test plan is manual and clearly documented. CodeRabbit review passed with no actionable comments. CI checks are stuck in PENDING state (likely needs a maintainer to trigger the workflow for external contributors). Vercel deploy previews need authorization. Companion PR #13881 is also open and should be reviewed together.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

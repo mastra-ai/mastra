@@ -1,0 +1,61 @@
+{
+  "number": 13854,
+  "title": "fix(mcp): forward AbortSignal to callTool",
+  "url": "https://github.com/mastra-ai/mastra/pull/13854",
+  "author": {
+    "login": "iamujjwalsinha",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-05T13:49:02Z",
+    "lastUpdated": "2026-03-10T04:55:14Z",
+    "ageInDays": 5,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 100,
+    "deletions": 2,
+    "changedFiles": 2,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/mcp-abort-signal-forwarding",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "CHANGES_REQUESTED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13647,
+        "title": "fix(mcp): forward AbortSignal from AI SDK context to callTool()",
+        "state": "MERGED",
+        "mergedAt": "2026-03-06T12:41:54Z",
+        "relationship": "duplicate"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Forwards the AI SDK's abortSignal into the MCP client's callTool options so tool calls can be cancelled. Changes the execute context type to include abortSignal and passes it as signal to Client.callTool. Adds two tests: one verifying the signal is forwarded, another verifying actual abort cancellation of a slow tool.",
+  "maintainerNotes": "This PR is superseded by #13647 (merged 2026-03-06) by Polyanova which makes the exact same fix — forwarding AbortSignal from AI SDK context to callTool() in packages/mcp/src/client/client.ts. This PR was opened on 2026-03-05, one day before #13647 was merged, so it's a duplicate. The PR now has merge conflicts (CONFLICTING state) because the merged PR already changed the same code. Maintainer abhiaiyer91 requested changes to address Copilot review comments, but given this is fully superseded, closing is the appropriate action. No changeset is included.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

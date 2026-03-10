@@ -1,0 +1,59 @@
+{
+  "number": 13084,
+  "title": "Add safeExecuteTool utility with tests",
+  "url": "https://github.com/mastra-ai/mastra/pull/13084",
+  "author": {
+    "login": "netbrah",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-15T06:32:07Z",
+    "lastUpdated": "2026-03-03T12:36:40Z",
+    "ageInDays": 23,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 521,
+    "deletions": 0,
+    "changedFiles": 4,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/safe-execute-tool",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13068,
+        "title": "[FEATURE] Support for tool-to-tool programmatic execution and discovery in tools API",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Adds a new `safeExecuteTool` utility function to `@mastra/core/tools` that enables safe nested tool execution from within another tool's execute function. The utility provides: graceful error handling (returns null instead of throwing), circular dependency protection via symbol-based depth tracking (default max depth: 10), full context propagation (requestContext, tracingContext, abortSignal, writer), automatic child tracing span creation, and AbortSignal respect. Includes 355 lines of comprehensive tests covering all features and a well-written changeset. 4 files changed: changeset, test file, implementation file, and index.ts export.",
+  "maintainerNotes": "Well-structured community contribution from external contributor netbrah, linked to issue #13068 which proposes tool-to-tool programmatic execution. The PR only adds the `safeExecuteTool` utility (the simpler part of the issue), not the `getToolById` registry access pattern also discussed in #13068. CI checks are stuck in PENDING state (core tests, memory tests, E2E tests, etc. never ran — likely needs workflow approval for external contributor). CodeRabbit review passed with minor nitpicks: (1) context propagation test could be more thorough, (2) depth tracking test doesn't fully exercise the guard, (3) custom span name test doesn't assert span creation. Review requested from NikAiyer. Key design decisions to evaluate: (1) Is returning null on failure the right API vs throwing or returning a Result type? (2) Should this be a standalone utility or integrated into ToolExecutionContext as the issue suggests? (3) The implementation uses Symbols on the context object for depth tracking which is clever but unconventional. No documentation updates included — AGENTS.md requires doc updates with code changes. Author created a standalone example repo demonstrating all features.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

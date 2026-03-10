@@ -1,0 +1,59 @@
+{
+  "number": 12460,
+  "title": "Feature/memory enabled flag",
+  "url": "https://github.com/mastra-ai/mastra/pull/12460",
+  "author": {
+    "login": "Rish-it",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-29T10:42:23Z",
+    "lastUpdated": "2026-03-03T12:39:47Z",
+    "ageInDays": 40,
+    "daysSinceLastUpdate": 7
+  },
+  "size": {
+    "additions": 474,
+    "deletions": 25,
+    "changedFiles": 7,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feature/memory-enabled-flag",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 12452,
+        "title": "Cannot Disable Memory with Runtime Context?",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Adds an `enabled` boolean flag to MemoryConfig that acts as a master switch to dynamically disable all memory functionality at runtime. When `enabled: false`, getInputProcessors/getOutputProcessors return empty arrays, thread creation is skipped in both legacy and v2 agent paths, and no data is stored or retrieved. Includes 4 new test cases covering generate, stream, and processor behavior. Also updates MockMemory to accept full MemoryConfig options for testing.",
+  "maintainerNotes": "Well-structured community PR that addresses issue #12452. Changes span 7 files across types, memory core, agent-legacy, prepare-memory-step, mock, and tests. The implementation checks `enabled` at multiple layers: processor resolution (memory.ts) and thread creation (agent-legacy.ts, prepare-memory-step.ts). Has a changeset marking @mastra/core as minor. CI mostly passes (lint, core tests, build all green) but E2E tests failed and Memory Tests are stuck pending — these may be flaky/infra issues unrelated to the PR. Copilot review found no blocking issues but noted a minor concern about MockMemory constructor precedence when both `options` and legacy params are provided. Merge state is BLOCKED (awaiting required human review). No similar PRs have been merged for this feature. Last meaningful activity was ~7 days ago via the changeset bot.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

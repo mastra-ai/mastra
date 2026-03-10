@@ -1,0 +1,60 @@
+{
+  "number": 11336,
+  "title": "fix(client-js): fix listMemoryThreads orderBy serialization and type",
+  "url": "https://github.com/mastra-ai/mastra/pull/11336",
+  "author": {
+    "login": "hanjeahwan",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-12-22T11:43:53Z",
+    "lastUpdated": "2025-12-22T12:42:36Z",
+    "ageInDays": 443,
+    "daysSinceLastUpdate": 443
+  },
+  "size": {
+    "additions": 34,
+    "deletions": 4,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/listMemoryThreads-orderBy-serialization",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "stale",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 11832,
+        "title": "feat(memory): add listThreads method with flexible filtering",
+        "state": "MERGED",
+        "relationship": "partially-overlapping"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Fixes a type mismatch and serialization bug in client-js where `listMemoryThreads` defines `orderBy` as a string ('createdAt' | 'updatedAt') with a separate `sortDirection` param, but the server expects a JSON object `{ field, direction }`. The PR updates the type to match the server schema and adds JSON.stringify() for proper query string serialization. The identified bug is real and still exists on current main.",
+  "maintainerNotes": "The underlying bug is valid — the server's `storageOrderBySchema` expects a JSON-parsed object with `field` and `direction`, but the client still sends `orderBy` as a plain string and `sortDirection` as a separate param. However, this PR has merge conflicts due to PR #11832 (merged 2026-01-19) which significantly rewrote the `listMemoryThreads` method (added metadata filtering, changed method signature to make params optional). The fix approach (JSON.stringify the orderBy object) is correct in principle, but the PR cannot be merged as-is and would need a full rebase. Note that other list methods in client.ts (e.g., listThreads at line 869) already use the correct `orderBy[field]`/`orderBy[direction]` bracket notation pattern, so the fix should follow that convention rather than JSON.stringify. No human maintainer review has been provided; only CodeRabbit bot reviews exist. Given the 443-day staleness and conflicts, it's likely easier for a maintainer to apply this small fix directly.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

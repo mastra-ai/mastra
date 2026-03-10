@@ -1,0 +1,68 @@
+{
+  "number": 12517,
+  "title": "fix(workflows): propagate logger to executionEngine",
+  "url": "https://github.com/mastra-ai/mastra/pull/12517",
+  "author": {
+    "login": "rares04",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-01-30T11:14:49Z",
+    "lastUpdated": "2026-01-30T16:37:07Z",
+    "ageInDays": 39,
+    "daysSinceLastUpdate": 39
+  },
+  "size": {
+    "additions": 131,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/workflow-logger-propagation",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12834,
+        "title": "fix: propagate workflow step errors to configured Mastra logger",
+        "state": "MERGED",
+        "mergedAt": "2026-02-09T16:00:06Z",
+        "overlap": "Fixes the same root cause: ExecutionEngine.__registerMastra now calls this.__setLogger(logger), propagating logger to the execution engine. Also fixes evented engine logger propagation."
+      },
+      {
+        "number": 12889,
+        "title": "fix(core): update workflow loggers in setLogger",
+        "state": "MERGED",
+        "mergedAt": "2026-02-10T17:12:46Z",
+        "overlap": "Fixes mastra.setLogger() to propagate logger to all workflows, calling __setLogger on each workflow."
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Community PR that overrides __setLogger() in the Workflow class to propagate the logger to executionEngine, and adds __registerPrimitives logger propagation. Includes 3 well-written tests. However, two subsequent PRs (#12834 merged 2026-02-09 and #12889 merged 2026-02-10) already fixed this same issue more comprehensively: #12834 made ExecutionEngine.__registerMastra() call __setLogger(logger) automatically, and #12889 ensured mastra.setLogger() propagates to all workflows. The current codebase already has these fixes in place.",
+  "maintainerNotes": "This PR is superseded by #12834 and #12889 which were merged 10-11 days after this PR was opened. The fix approach in #12834 is more robust — it propagates the logger in ExecutionEngine.__registerMastra() itself rather than requiring an override in Workflow.__setLogger(). Should be closed with a thank-you to the contributor for identifying the issue. The CI checks are stuck in PENDING and will likely conflict with the already-merged changes.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

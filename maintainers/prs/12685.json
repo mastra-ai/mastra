@@ -1,0 +1,75 @@
+{
+  "number": 12685,
+  "title": "chore(deps): bump @modelcontextprotocol/sdk from 1.25.2 to 1.26.0 in /scripts/gh-issue-triage",
+  "url": "https://github.com/mastra-ai/mastra/pull/12685",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-04T20:38:35Z",
+    "lastUpdated": "2026-03-09T15:07:59Z",
+    "ageInDays": 34,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 27,
+    "deletions": 14,
+    "changedFiles": 1,
+    "category": "S"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/scripts/gh-issue-triage/modelcontextprotocol/sdk-1.26.0",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12684,
+        "title": "chore(deps): bump @modelcontextprotocol/sdk from 1.20.1 to 1.26.0",
+        "state": "OPEN",
+        "relationship": "related"
+      },
+      {
+        "number": 11684,
+        "title": "chore(deps): bump @modelcontextprotocol/sdk from 1.20.1 to 1.25.2",
+        "state": "OPEN",
+        "relationship": "superseded-by-this"
+      },
+      {
+        "number": 13908,
+        "title": "chore(deps): update dependency @modelcontextprotocol/sdk to v1.25.2 [security]",
+        "state": "OPEN",
+        "relationship": "related"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR bumping @modelcontextprotocol/sdk from 1.25.2 to 1.26.0 in the standalone scripts/gh-issue-triage directory. Only changes package-lock.json. The v1.26.0 release includes a security fix for GHSA-345p-7cg4-v4c7 (cross-client response data leakage when sharing server/transport instances). Also pulls in transitive dependency updates (express-rate-limit 7->8, hono added, ip-address added).",
+  "maintainerNotes": "This PR has merge conflicts and automatic rebases have been disabled since it's been open >30 days. A maintainer needs to comment `@dependabot rebase` or `@dependabot recreate` to resolve conflicts. The scope is limited to scripts/gh-issue-triage (not a workspace package), so risk is minimal. Note PR #12684 bumps the same SDK version in the main workspace. The CI failures (Bird Checker evals, Vercel assistant-ui) appear unrelated to this change. The underlying SDK update addresses a security advisory, which adds urgency.",
+  "suggestedAction": "rebase",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

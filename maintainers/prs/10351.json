@@ -1,0 +1,67 @@
+{
+  "number": 10351,
+  "title": "Fix: normalize undefined input for all optional object schemas in validation (#10031)",
+  "url": "https://github.com/mastra-ai/mastra/pull/10351",
+  "author": {
+    "login": "owaismohammed79",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-11-20T12:16:57Z",
+    "lastUpdated": "2025-11-21T09:33:18Z",
+    "ageInDays": 475,
+    "daysSinceLastUpdate": 474
+  },
+  "size": {
+    "additions": 42,
+    "deletions": 0,
+    "changedFiles": 3,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "bugfix/normalize-undefined-input",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 10728,
+        "title": "fix(core): normalize undefined/null input for tools with optional parameters",
+        "state": "MERGED",
+        "mergedAt": "2025-12-01T21:46:38Z",
+        "relationship": "supersedes — fixes the same issue #10031 with a similar approach, merged 10 days after this PR was opened"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 10031,
+        "title": "[BUG] Tool validation fails with \"root: Required\" when LLM sends undefined for all-optional parameters",
+        "state": "CLOSED"
+      }
+    ]
+  },
+  "summary": "Normalizes undefined tool input to {} for Zod object schemas where all fields are optional, preventing 'root: Required' validation errors when LLMs (e.g., Claude Sonnet) send undefined instead of an empty object. Adds a test case and changeset. The PR is well-structured with a clear description, test coverage, and proper changeset.",
+  "maintainerNotes": "This PR is fully superseded by #10728, which was merged on 2025-12-01 and fixes the exact same issue (#10031) with the same approach (normalizing undefined/null input for tools with optional parameters). The fix from #10728 is already in the codebase (commit bff114556b). This PR also has merge conflicts and stale CI (tests stuck in PENDING for 474+ days). Should be closed with a thank-you to the contributor for their effort.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

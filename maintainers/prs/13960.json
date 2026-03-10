@@ -1,0 +1,72 @@
+{
+  "number": 13960,
+  "title": "fix(memory): eliminate redundant createIndex call on semantic recall read path",
+  "url": "https://github.com/mastra-ai/mastra/pull/13960",
+  "author": {
+    "login": "nancysangani",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-07T14:16:19Z",
+    "lastUpdated": "2026-03-07T14:25:18Z",
+    "ageInDays": 3,
+    "daysSinceLastUpdate": 3
+  },
+  "size": {
+    "additions": 35,
+    "deletions": 21,
+    "changedFiles": 2,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/semantic-recall-redundant-create-index-latency",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13059,
+        "title": "fix(memory): semantic recall search with non-default embedding dimensions",
+        "state": "MERGED",
+        "relevance": "Related fix to semantic recall vector dimensions, already merged"
+      },
+      {
+        "number": 11893,
+        "title": "fix(semantic-recall): validate vector index dimensions on embedder switch",
+        "state": "MERGED",
+        "relevance": "Related fix to semantic recall index validation, already merged"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 13952,
+        "title": "[BUG] 15s latency in semantic recall despite having just one or two chat messages",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Fixes a performance regression where every semantic recall request triggers a redundant `createIndex` HTTP round-trip to the vector store. Two changes: (1) promotes the per-instance `indexValidationCache` to a module-level `globalIndexValidationCache` so serverless environments that create a new SemanticRecall instance per request don't lose the cache, and (2) removes the `ensureVectorIndex` call from the read path (`performSemanticSearch`) — it's only needed on the write path (`processOutputResult`) since the index must already exist if there are messages to recall. Addresses a user-reported ~15s latency on Upstash Vector.",
+  "maintainerNotes": "Well-scoped community fix for a real user-reported latency issue (#13952). The logic is sound: read path doesn't need to create the index. CodeRabbit raised a valid concern about the global cache key only using `indexName` (not vector backend identity), which could cause cross-backend conflicts if multiple MastraVector instances share index names — worth evaluating whether this is a realistic scenario. No tests added, but the change is straightforward and low-risk. CI checks are still pending (tests haven't run yet, likely needs maintainer authorization). Vercel deploy also needs authorization. Changeset is included but uses internal phrasing rather than user-facing language per CodeRabbit's suggestion.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

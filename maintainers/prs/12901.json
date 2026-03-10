@@ -1,0 +1,68 @@
+{
+  "number": 12901,
+  "title": "[Aikido] Fix security issue in qs via minor version upgrade from 6.14.0 to 6.14.1",
+  "url": "https://github.com/mastra-ai/mastra/pull/12901",
+  "author": {
+    "login": "app/aikido-autofix",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-10T21:10:26Z",
+    "lastUpdated": "2026-02-10T22:03:25Z",
+    "ageInDays": 28,
+    "daysSinceLastUpdate": 28
+  },
+  "size": {
+    "additions": 18,
+    "deletions": 16,
+    "changedFiles": 2,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/aikido-security-update-packages-16000294-7f3e",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "APPROVED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12506,
+        "title": "Update qs",
+        "state": "MERGED",
+        "mergedAt": "2026-02-01T00:05:37Z",
+        "relationship": "supersedes - already updated qs to 6.14.1 before this PR was opened"
+      },
+      {
+        "number": 13063,
+        "title": "chore(deps): bump qs from 6.14.1 to 6.14.2 in /scripts/gh-issue-triage",
+        "state": "MERGED",
+        "mergedAt": "2026-02-16T20:40:47Z",
+        "relationship": "further update - qs already at 6.14.2"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Automated Aikido security bot PR to upgrade qs from 6.14.0 to 6.14.1 to fix CVE-2025-15284 (HIGH severity DoS via bracket notation bypass in array parsing). Changes package.json overrides and pnpm-lock.yaml. Also includes an unrelated downgrade of @upstash/redis from 1.36.2 to 1.36.0.",
+  "maintainerNotes": "This PR should be closed. The qs upgrade to 6.14.1 was already merged in PR #12506 on 2026-02-01, nine days before this PR was opened. The lockfile currently has qs at a newer version and @upstash/redis at 1.36.4. This PR has merge conflicts and would actually downgrade @upstash/redis to 1.36.0. CI is failing across the board. The security issue (CVE-2025-15284) has already been addressed.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

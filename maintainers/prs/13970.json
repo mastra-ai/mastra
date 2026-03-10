@@ -1,0 +1,55 @@
+{
+  "number": 13970,
+  "title": "fix(core): move llm-based output processors off stream chunks",
+  "url": "https://github.com/mastra-ai/mastra/pull/13970",
+  "author": {
+    "login": "Wert1go",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-03-07T23:10:16Z",
+    "lastUpdated": "2026-03-09T08:40:49Z",
+    "ageInDays": 3,
+    "daysSinceLastUpdate": 1
+  },
+  "size": {
+    "additions": 108,
+    "deletions": 385,
+    "changedFiles": 8,
+    "category": "L"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "fix/13644-output-processors",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "needs-maintainer-review",
+    "priority": "high",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": false,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      "#13644"
+    ]
+  },
+  "summary": "Fixes a critical performance issue (#13644) where LLM-based output processors (PIIDetector, SystemPromptScrubber, ModerationProcessor) were making a full LLM API call for every streamed text-delta chunk, causing ~50x slowdown (186 tokens = 186 sequential LLM calls). The fix converts processOutputStream to a simple passthrough (return args.part) and adds processOutputStep methods so the LLM-based detection runs once per agentic step on the assembled output, not per token. Also cleans up UnicodeNormalizer's availablePhases to only declare processInput. Net deletion of ~277 lines of per-chunk LLM logic with updated tests to verify streaming is a no-op and step-level processing works correctly.",
+  "maintainerNotes": "High-impact performance fix from an external contributor addressing a well-documented issue. The approach is sound: LLM-based processors should not run per-chunk. CodeRabbit flagged that the passthrough in processOutputStream could leak unredacted content to streaming clients before processOutputStep runs — this is a valid concern worth discussing, though the tradeoff is between security-during-stream and usability (150s vs 9s responses). PR description is empty (just the template) but the linked issue #13644 is extremely detailed with reproduction and benchmarks. CI checks are pending (stuck on secrets-gated jobs, which is normal for external forks). No merge conflicts. Has a changeset.",
+  "suggestedAction": "review",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

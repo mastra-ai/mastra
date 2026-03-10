@@ -1,0 +1,59 @@
+{
+  "number": 13798,
+  "title": "fix: suppress tool result JSON leak in text-delta stream during multi-step execution",
+  "url": "https://github.com/mastra-ai/mastra/pull/13798",
+  "author": {
+    "login": "NikAiyer",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-03-04T18:33:00Z",
+    "lastUpdated": "2026-03-10T15:04:27Z",
+    "ageInDays": 6,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 1097,
+    "deletions": 1,
+    "changedFiles": 5,
+    "category": "XL"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "fix-tool-result-leak",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "blocked"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": true,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [],
+    "relatedIssues": [
+      {
+        "number": 13268,
+        "title": "chatRoute: tool result JSON leaks into text-delta events during multi-step agent execution",
+        "state": "OPEN"
+      }
+    ]
+  },
+  "summary": "Addresses issue #13268 where some models (e.g. gpt-oss-120b via OpenRouter) echo previous tool-result JSON as text-delta content in intermediate agent steps during multi-step execution, causing raw JSON to appear in the chat UI. The PR originally contained production code changes to buffer and suppress leaked text in llm-execution-step.ts, output.ts, and transformers.ts, but the author reverted all production changes (commit d43c528: 'revert: undo text suppression implementation'). The current diff is test-only: 550+ lines of transformers.test.ts tests, 367 lines of stream.test.ts tests, and 166 lines of stream.e2e.test.ts tests that document the buggy behavior. Two changesets (core patch + ai-sdk patch) are included but no longer match actual code changes.",
+  "maintainerNotes": "This PR is still a draft and currently contains NO production code changes — only tests and changesets. The author reverted the actual fix implementation and rewrote tests to describe current (buggy) behavior. The description still references changes to 3 production files (llm-execution-step.ts, output.ts, transformers.ts) that no longer exist in the diff. CI has 2 failures (Full Test Suite, Observability Package Tests) which may be flaky/unrelated. The changesets reference a patch version bump that doesn't correspond to any code change. The comprehensive test suite is valuable and well-structured, but the PR needs the actual fix re-implemented before it can be reviewed. No other PRs are actively working on #13268.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

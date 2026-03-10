@@ -1,0 +1,78 @@
+{
+  "number": 9858,
+  "title": "feat: allow configuring API root path",
+  "url": "https://github.com/mastra-ai/mastra/pull/9858",
+  "author": {
+    "login": "naaa760",
+    "isBot": false,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2025-11-07T06:52:00Z",
+    "lastUpdated": "2025-12-05T10:49:40Z",
+    "ageInDays": 488,
+    "daysSinceLastUpdate": 95
+  },
+  "size": {
+    "additions": 63,
+    "deletions": 29,
+    "changedFiles": 4,
+    "category": "S"
+  },
+  "labels": [],
+  "isDraft": false,
+  "branch": {
+    "head": "feat/config-api-path",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "pending",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "likely-superseded",
+    "priority": "low",
+    "quality": "fair",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": true,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12295,
+        "title": "feat: add configurable route prefix support for Mastra Studio and Client",
+        "state": "MERGED",
+        "relationship": "supersedes — merged 2026-01-27, implements same feature as `apiPrefix` in ServerConfig"
+      },
+      {
+        "number": 10089,
+        "title": "feat: Support subpaths for studio",
+        "state": "CLOSED",
+        "relationship": "related — referenced by commenter ffMathy"
+      },
+      {
+        "number": 10441,
+        "title": "feat: Add studioBase for Mastra Studio",
+        "state": "MERGED",
+        "relationship": "related — maintainer LekoArts referenced this when asking author to rename apiRootPath to apiBase"
+      }
+    ],
+    "relatedIssues": [
+      {
+        "number": 9674,
+        "title": "Allow configuring API root path",
+        "relationship": "closes"
+      }
+    ]
+  },
+  "summary": "Adds an `apiRootPath` config option to ServerConfig to allow customizing the API root path (default `/api`). Modifies auth middleware functions (canAccessPublicly, isProtectedPath, checkRules) and the Hono server setup to use the configurable path instead of hardcoded `/api`. The PR references issue #9674.",
+  "maintainerNotes": "This PR has been fully superseded by PR #12295 (merged 2026-01-27) which added the `apiPrefix` option to ServerConfig, accomplishing the same goal. The codebase already has `apiPrefix` in `packages/core/src/server/types.ts` with full integration across the server, auth, playground, and deployer packages. Maintainer LekoArts commented on 2025-12-05 asking the author to rename `apiRootPath` to `apiBase`, but the author never responded and the feature was later implemented differently. The PR has merge conflicts and many CI checks stuck in PENDING state. Should be closed with a thank-you note pointing to the merged implementation.",
+  "suggestedAction": "close",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

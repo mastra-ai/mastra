@@ -1,0 +1,66 @@
+{
+  "number": 13513,
+  "title": "feat(datasets): add requestContext and defaultRequestContext support backend support",
+  "url": "https://github.com/mastra-ai/mastra/pull/13513",
+  "author": {
+    "login": "YujohnNattrass",
+    "isBot": false,
+    "isMaintainer": true
+  },
+  "dates": {
+    "opened": "2026-02-25T23:23:42Z",
+    "lastUpdated": "2026-02-25T23:32:30Z",
+    "ageInDays": 12,
+    "daysSinceLastUpdate": 12
+  },
+  "size": {
+    "additions": 360,
+    "deletions": 30,
+    "changedFiles": 17,
+    "category": "M"
+  },
+  "labels": [],
+  "isDraft": true,
+  "branch": {
+    "head": "yj/dataset-backend",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": true,
+    "mergeableState": "conflicting"
+  },
+  "triage": {
+    "category": "draft-in-progress",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": true,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 13938,
+        "title": "feat(playground): agent playground, traces tab, and dataset iteration workflow",
+        "state": "MERGED",
+        "relation": "related"
+      },
+      {
+        "number": 12909,
+        "title": "feat(datasets): public Dataset API, server migration, and field renames",
+        "state": "MERGED",
+        "relation": "related"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Adds `requestContext` field to dataset items and `defaultRequestContext`/`requestContextSchema` fields to datasets. This enables passing execution context (headers, auth tokens, etc.) when running experiments against agents and workflows. Changes span the full stack: client SDK types, core dataset/manager/validator, storage layer (types, constants, base, inmemory), server handlers/schemas, and both LibSQL and PG store implementations. All new fields are optional/nullable for backward compatibility, and DB migrations use `ALTER TABLE ... IF NOT EXISTS` for existing databases.",
+  "maintainerNotes": "This is a draft PR with merge conflicts and some CI failures (Core Package Tests, Full Test Suite, Memory Tests). No new tests were added despite touching 17 files across the dataset stack. The author (YujohnNattrass) is an active maintainer with recent merged PRs in the dataset area. The PR description mentions 116 core dataset tests and 51 inmemory store tests pass, but the CI results show failures in core and memory test suites. The Tool Builder Tests check is still pending. The PR needs: (1) conflict resolution against main, (2) investigation of CI failures, (3) possibly new tests covering requestContext validation paths. The scope is well-structured — consistent addition of a new field across all layers — but needs polish before review.",
+  "suggestedAction": "wait",
+  "triageDate": "2026-03-10T00:00:00Z"
+}

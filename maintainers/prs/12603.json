@@ -1,0 +1,75 @@
+{
+  "number": 12603,
+  "title": "chore(deps): bump fastify from 5.6.2 to 5.7.3 in /examples/server-fastify-adapter",
+  "url": "https://github.com/mastra-ai/mastra/pull/12603",
+  "author": {
+    "login": "dependabot[bot]",
+    "isBot": true,
+    "isMaintainer": false
+  },
+  "dates": {
+    "opened": "2026-02-03T00:16:02Z",
+    "lastUpdated": "2026-03-09T23:24:59Z",
+    "ageInDays": 35,
+    "daysSinceLastUpdate": 0
+  },
+  "size": {
+    "additions": 1,
+    "deletions": 1,
+    "changedFiles": 1,
+    "category": "XS"
+  },
+  "labels": [
+    "dependencies",
+    "javascript"
+  ],
+  "isDraft": false,
+  "branch": {
+    "head": "dependabot/npm_and_yarn/examples/server-fastify-adapter/fastify-5.7.3",
+    "base": "main"
+  },
+  "status": {
+    "reviewDecision": "REVIEW_REQUIRED",
+    "ciStatus": "failing",
+    "mergeConflicts": false,
+    "mergeableState": "mergeable"
+  },
+  "triage": {
+    "category": "auto-dependency-update",
+    "priority": "medium",
+    "quality": "good",
+    "qualitySignals": {
+      "hasTests": false,
+      "hasDescription": true,
+      "hasChangesets": false,
+      "followsConventions": true,
+      "scopeIsReasonable": true
+    },
+    "isStale": false,
+    "similarOrDuplicatePRs": [
+      {
+        "number": 12602,
+        "title": "chore(deps-dev): bump fastify from 5.6.2 to 5.7.3",
+        "state": "open",
+        "relationship": "related"
+      },
+      {
+        "number": 12604,
+        "title": "chore(deps): bump fastify from 5.6.0 to 5.7.3 in /observability/_examples/otel-bridge/agent-hub",
+        "state": "open",
+        "relationship": "related"
+      },
+      {
+        "number": 13424,
+        "title": "[Aikido] Fix 8 security issues in systeminformation, fastify, pino and 3 more",
+        "state": "open",
+        "relationship": "related"
+      }
+    ],
+    "relatedIssues": []
+  },
+  "summary": "Dependabot PR bumping fastify from 5.6.2 to 5.7.3 in the examples/server-fastify-adapter directory. The update includes a security fix (CVE-2026-25224, GHSA-mrq3-vjjr-p77c) and stricter content-type header parsing. Only changes a single version line in package.json. This is an examples-only change with no impact on library code.",
+  "maintainerNotes": "Security-relevant update (CVE-2026-25224). CI failures in 'Full Test Suite' and 'Observability Package Tests' appear unrelated to this examples-only change. Three related open PRs bump fastify to the same version in different locations (#12602, #12604), and #13424 (Aikido) also addresses fastify security. Consider merging all fastify 5.7.3 bumps together or consolidating into #13424. No changeset needed since this is examples-only.",
+  "suggestedAction": "merge",
+  "triageDate": "2026-03-10T00:00:00Z"
+}
