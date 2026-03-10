@@ -24,7 +24,7 @@ const isWindows = process.platform === 'win32';
  * Not exported — internal to this module.
  */
 class LocalProcessHandle extends ProcessHandle {
-  readonly pid: string | number;
+  readonly pid: number;
   exitCode: number | undefined;
 
   private subprocess: ResultPromise;
@@ -44,7 +44,7 @@ class LocalProcessHandle extends ProcessHandle {
           // Kill the entire process tree so child processes are also terminated.
           // We handle timeout ourselves rather than using execa's timeout option
           // because execa only kills the direct subprocess, not the process tree.
-          void killProcessTree(this.pid as number, subprocess, 'SIGTERM');
+          void killProcessTree(this.pid, subprocess, 'SIGTERM');
         }, options.timeout)
       : undefined;
 
@@ -101,7 +101,7 @@ class LocalProcessHandle extends ProcessHandle {
     // Kill the entire process tree to ensure child processes spawned by the
     // shell are also terminated. Without this, commands like
     // "echo foo; sleep 60" would leave orphaned children holding stdio open.
-    await killProcessTree(this.pid as number, this.subprocess, 'SIGKILL');
+    await killProcessTree(this.pid, this.subprocess, 'SIGKILL');
     return true;
   }
 

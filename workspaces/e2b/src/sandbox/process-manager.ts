@@ -22,7 +22,7 @@ import type { E2BSandbox } from './index';
  * methods wire E2B's constructor-time callbacks to handle.emitStdout/emitStderr.
  */
 class E2BProcessHandle extends ProcessHandle {
-  readonly pid: string | number;
+  readonly pid: number;
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
