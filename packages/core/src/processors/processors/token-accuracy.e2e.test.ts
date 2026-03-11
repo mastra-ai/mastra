@@ -30,7 +30,24 @@ describe('TokenLimiterProcessor', () => {
 
     const limiter = new TokenLimiterProcessor(200);
     const mockAbort = vi.fn() as any;
-    const result = await limiter.processInput({ messages: messagesV2, abort: mockAbort });
+    const messageList = new MessageList({ threadId: '1', resourceId: 'test-resource' });
+    for (const msg of messagesV2) {
+      messageList.add(msg, 'input');
+    }
+
+    await limiter.processInputStep({
+      messageList,
+      messages: messageList.get.all.db(),
+      abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
+    });
+
+    const result = messageList.get.all.db();
 
     // Should prioritize newest messages (higher ids)
     expect(result.length).toBe(2);
@@ -41,9 +58,21 @@ describe('TokenLimiterProcessor', () => {
   it('should throw TripWire for empty messages array', async () => {
     const limiter = new TokenLimiterProcessor(1000);
     const mockAbort = vi.fn() as any;
-    await expect(limiter.processInput({ messages: [], abort: mockAbort })).rejects.toThrow(
-      'TokenLimiterProcessor: No messages to process',
-    );
+    const emptyMessageList = new MessageList({ threadId: 'test-empty', resourceId: 'test' });
+
+    await expect(
+      limiter.processInputStep({
+        messageList: emptyMessageList,
+        messages: [],
+        abort: mockAbort,
+        stepNumber: 0,
+        steps: [],
+        state: {},
+        systemMessages: [],
+        model: { modelId: 'test-model' } as any,
+        retryCount: 0,
+      }),
+    ).rejects.toThrow('TokenLimiterProcessor: No messages to process');
   });
 
   it('should use different encodings based on configuration', async () => {
@@ -63,15 +92,49 @@ describe('TokenLimiterProcessor', () => {
 
     const mockAbort = vi.fn() as any;
     // All should process messagesV2 successfully but potentially with different token counts
-    const defaultResult = await defaultLimiter.processInput({ messages: messagesV2, abort: mockAbort });
-    const customResult = await customLimiter.processInput({ messages: messagesV2, abort: mockAbort });
+    const defaultMessageList = new MessageList({ threadId: '6', resourceId: 'test-resource' });
+    for (const msg of messagesV2) {
+      defaultMessageList.add(msg, 'input');
+    }
+
+    await defaultLimiter.processInputStep({
+      messageList: defaultMessageList,
+      messages: defaultMessageList.get.all.db(),
+      abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
+    });
+
+    const customMessageList = new MessageList({ threadId: '6', resourceId: 'test-resource' });
+    for (const msg of messagesV2) {
+      customMessageList.add(msg, 'input');
+    }
+
+    await customLimiter.processInputStep({
+      messageList: customMessageList,
+      messages: customMessageList.get.all.db(),
+      abort: mockAbort,
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      systemMessages: [],
+      model: { modelId: 'test-model' } as any,
+      retryCount: 0,
+    });
+
+    const defaultResult = defaultMessageList.get.all.db();
+    const customResult = customMessageList.get.all.db();
 
     // Each should return the same messagesV2 but with potentially different token counts
     expect(defaultResult.length).toBe(messagesV2.length);
     expect(customResult.length).toBe(messagesV2.length);
   });
 
-  function estimateTokens(messages: MastraDBMessage[]) {
+  async function estimateTokens(messages: MastraDBMessage[]) {
     // Create a TokenLimiterProcessor just for counting tokens
     const testLimiter = new TokenLimiterProcessor(Infinity);
 
@@ -80,7 +143,7 @@ describe('TokenLimiterProcessor', () => {
     // Count tokens for each message including all overheads
     for (const message of messages) {
       // Base token count from the countInputMessageTokens method
-      estimatedTokens += (testLimiter as any).countInputMessageTokens(message);
+      estimatedTokens += await (testLimiter as any).countInputMessageTokens(message);
     }
 
     return Number(estimatedTokens.toFixed(2));
@@ -99,7 +162,7 @@ describe('TokenLimiterProcessor', () => {
   ) {
     const { messagesV2, fakeCore } = generateConversationHistory(config);
 
-    const estimate = estimateTokens(messagesV2);
+    const estimate = await estimateTokens(messagesV2);
     const used = (await agent.generateLegacy(fakeCore)).usage.promptTokens;
 
     // Check if within accuracy margin
