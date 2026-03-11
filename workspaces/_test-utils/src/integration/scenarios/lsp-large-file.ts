@@ -46,11 +46,11 @@ export function createLspLargeFileTests(getContext: () => TestContext): void {
 
         const diagnostics = await lsp.getDiagnostics(filePath, content);
 
-        expect(diagnostics.length).toBeGreaterThan(0);
-        expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
-        expect(diagnostics.some(d => d.message.includes('not assignable'))).toBe(true);
+        expect(diagnostics?.length).toBeGreaterThan(0);
+        expect(diagnostics?.some(d => d.severity === 'error')).toBe(true);
+        expect(diagnostics?.some(d => d.message.includes('not assignable'))).toBe(true);
         // The error should be reported near the expected line
-        const typeError = diagnostics.find(d => d.message.includes('not assignable'));
+        const typeError = diagnostics?.find(d => d.message.includes('not assignable'));
         expect(typeError).toBeDefined();
         expect(typeError!.line).toBe(errorLine);
       },
