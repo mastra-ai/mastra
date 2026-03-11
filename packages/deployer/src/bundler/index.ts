@@ -370,6 +370,34 @@ export abstract class Bundler extends MastraBundler {
       }
     }
 
+    // Include user-specified externals in the output package.json even if they weren't
+    // detected by static analysis. This handles dynamically imported packages like
+    // pino-opentelemetry-transport that are referenced as strings at runtime.
+    // See: https://github.com/mastra-ai/mastra/issues/10893
+    if (Array.isArray(bundlerOptions.externals)) {
+      for (const ext of bundlerOptions.externals) {
+        if (dependenciesToInstall.has(ext)) {
+          continue;
+        }
+
+        let version = 'latest';
+        try {
+          let rootPath = await getPackageRootPath(ext, projectRoot);
+          if (!rootPath) {
+            rootPath = await getPackageRootPath(ext, import.meta.dirname);
+          }
+          if (rootPath) {
+            const pkg = await readJSON(`${rootPath}/package.json`);
+            version = pkg.version || 'latest';
+          }
+        } catch {
+          // Resolution failed, use 'latest'
+        }
+
+        dependenciesToInstall.set(ext, version);
+      }
+    }
+
     try {
       await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
 

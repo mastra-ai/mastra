@@ -481,7 +481,7 @@ Here's an overview of what the different values mean:
 
 - `true`: All dependencies listed in your project's `package.json` are marked as external
 - `false`: No dependencies are marked as external; everything is bundled together
-- `string[]`: An array of package names to mark as external, the rest will be bundled together
+- `string[]`: An array of package names to mark as external, the rest will be bundled together. These packages are always included in the output `package.json`, even if they are not directly imported in your code. This is useful for packages that are dynamically loaded at runtime (for example, pino transports)
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
