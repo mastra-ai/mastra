@@ -711,7 +711,7 @@ export class Agent<
         ? await this.#inputProcessors({ requestContext: requestContext || new RequestContext() })
         : this.#inputProcessors;
 
-    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-input-processor`);
+    return configuredProcessors;
   }
 
   /**
@@ -729,7 +729,7 @@ export class Agent<
         ? await this.#outputProcessors({ requestContext: requestContext || new RequestContext() })
         : this.#outputProcessors;
 
-    return this.combineProcessorsIntoWorkflow(configuredProcessors, `${this.id}-configured-output-processor`);
+    return configuredProcessors;
   }
 
   /**
