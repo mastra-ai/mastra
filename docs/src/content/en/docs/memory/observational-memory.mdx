@@ -1,18 +1,18 @@
 ---
-title: "Observational Memory | Memory"
+title: "Observational memory | Memory"
 description: "Learn how Observational Memory keeps your agent's context window small while preserving long-term memory across conversations."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
 ---
 
-# Observational Memory
+# Observational memory
 
 **Added in:** `@mastra/memory@1.1.0`
 
 Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** and a **Reflector** — watch your agent's conversations and maintain a dense observation log that replaces raw message history as it grows.
 
-## Quick Start
+## Quick start
 
 Enable `observationalMemory` in the memory options when creating your agent:
 
@@ -60,7 +60,7 @@ It uses background agents for managing memory. When using `observationalMemory: 
 - **Compression**: Raw message history and tool results get compressed into a dense observation log. Smaller context means faster responses and longer coherent conversations.
 - **Zero context rot**: The agent sees relevant information instead of noisy tool calls and irrelevant tokens, so the agent stays on task over long sessions.
 
-## How It Works
+## How it works
 
 You don't remember every word of every conversation you've ever had. You observe what happened subconsciously, then your brain reflects — reorganizing, combining, and condensing into long-term memory. OM works the same way.
 
@@ -74,6 +74,10 @@ OM solves both problems by compressing old context into dense observations.
 ### Observations
 
 When message history tokens exceed a threshold (default: 30,000), the Observer creates observations — concise notes about what happened:
+
+Image parts contribute to this threshold with model-aware estimates, so multimodal conversations trigger observation at the right time. The same applies to image-like `file` parts when a transport normalizes an uploaded image as a file instead of an image part. For example, OpenAI image detail settings can materially change when OM decides to observe.
+
+The Observer can also see attachments in the history it reviews. OM keeps readable placeholders like `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript for readability, and forwards the actual attachment parts alongside the text. Image-like `file` parts are upgraded to image inputs for the Observer when possible, while non-image attachments are forwarded as file parts with normalized token counting. This applies to both normal thread observation and batched resource-scope observation.
 
 ```
 Date: 2026-01-15
@@ -164,7 +168,7 @@ In resource scope, unobserved messages across _all_ threads are processed togeth
 
 :::
 
-## Token Budgets
+## Token budgets
 
 OM uses token thresholds to decide when to observe and reflect. See [token budget configuration](/reference/memory/observational-memory#shared-token-budget) for details.
 
@@ -196,9 +200,9 @@ OM caches tiktoken part estimates in message metadata to reduce repeat counting 
 - Per-part estimates are stored on `part.providerMetadata.mastra` and reused on subsequent passes when the cache version/tokenizer source matches.
 - For string-only message content (without parts), OM uses a message-level metadata fallback cache.
 - Message and conversation overhead are still recalculated on every pass. The cache only stores payload estimates, so counting semantics stay the same.
-- `data-*` and `reasoning` parts are still skipped and are not cached.
+- `data-*` and `reasoning` parts are still skipped and aren't cached.
 
-## Async Buffering
+## Async buffering
 
 Without async buffering, the Observer runs synchronously when the message threshold is reached — the agent pauses mid-conversation while the Observer LLM call completes. With async buffering (enabled by default), observations are pre-computed in the background as the conversation grows. When the threshold is hit, buffered observations activate instantly with no pause.
 
@@ -245,7 +249,7 @@ Setting `bufferTokens: false` disables both observation and reflection async buf
 
 :::note
 
-Async buffering is not supported with `scope: 'resource'`. It is automatically disabled in resource scope.
+Async buffering isn't supported with `scope: 'resource'`. It's automatically disabled in resource scope.
 
 :::
 

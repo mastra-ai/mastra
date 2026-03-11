@@ -617,6 +617,26 @@ export class MemoryStorageCloudflare extends MemoryStorage {
    * @param include - Array of message IDs to include, optionally with context windows
    * @param messageIds - Set to accumulate the message IDs that should be fetched
    */
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aVal = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bVal = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (aVal == null && bVal == null) return a.id.localeCompare(b.id);
+      if (aVal == null) return 1;
+      if (bVal == null) return -1;
+
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        const cmp = direction === 'ASC' ? aVal - bVal : bVal - aVal;
+        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+      }
+      const cmp =
+        direction === 'ASC' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+      return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
+    });
+  }
+
   private async getIncludedMessagesWithContext(
     include: { id: string; threadId?: string; withPreviousMessages?: number; withNextMessages?: number }[],
     messageIds: Set<string>,
@@ -820,6 +840,31 @@ export class MemoryStorageCloudflare extends MemoryStorage {
       // Determine sort field and direction
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
+      // When perPage is 0, we only need included messages — skip full thread load
+      if (perPage === 0 && include && include.length > 0) {
+        const includedMessageIds = new Set<string>();
+        await this.getIncludedMessagesWithContext(include, includedMessageIds);
+        const includedMessages = await this.fetchAndParseMessagesFromMultipleThreads(
+          Array.from(includedMessageIds),
+          include,
+          undefined,
+        );
+
+        const list = new MessageList().add(includedMessages as MastraMessageV1[], 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
       // Step 1: Get thread messages from all specified threads (for pagination)
       const threadMessageIds = new Set<string>();
       for (const tid of threadIds) {
@@ -854,17 +899,6 @@ export class MemoryStorageCloudflare extends MemoryStorage {
 
       // Get total count for pagination
       const total = filteredThreadMessages.length;
-
-      // If perPage is 0 AND there are no include messages, return empty array immediately
-      if (perPage === 0 && (!include || include.length === 0)) {
-        return {
-          messages: [],
-          total,
-          page,
-          perPage: perPageForResponse,
-          hasMore: offset < total,
-        };
-      }
 
       // Sort thread messages by createdAt BEFORE pagination
       filteredThreadMessages.sort((a, b) => {
@@ -964,27 +998,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
         prepared as MastraMessageV1[],
         'memory',
       );
-      let finalMessages = list.get.all.db();
-
-      // Sort final messages with type-aware comparator and stable tiebreaker
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aVal = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bVal = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        // Handle undefined/null values (sort to end)
-        if (aVal == null && bVal == null) return a.id.localeCompare(b.id);
-        if (aVal == null) return 1;
-        if (bVal == null) return -1;
-
-        if (typeof aVal === 'number' && typeof bVal === 'number') {
-          const cmp = direction === 'ASC' ? aVal - bVal : bVal - aVal;
-          return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
-        }
-        const cmp =
-          direction === 'ASC' ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
-        return cmp !== 0 ? cmp : a.id.localeCompare(b.id);
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false

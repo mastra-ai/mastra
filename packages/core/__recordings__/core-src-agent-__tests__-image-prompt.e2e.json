@@ -1,0 +1,240 @@
+{
+  "meta": {
+    "name": "core-src-agent-__tests__-image-prompt.e2e",
+    "testFile": "packages/core/src/agent/__tests__/image-prompt.e2e.test.ts",
+    "model": "gpt-4o",
+    "createdAt": "2026-03-09T19:12:47.438Z"
+  },
+  "recordings": [
+    {
+      "hash": "e64e6c75deae9d92",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "test agent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is the photo?"
+                },
+                {
+                  "type": "image_url",
+                  "image_url": {
+                    "url": "https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1773083563263
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c648efe7dba7b-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:45 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1579",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-input-images": "50000",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-input-images": "49999",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "1999225",
+          "x-ratelimit-reset-input-images": "1ms",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "23ms",
+          "x-request-id": "req_41f77e967c394a5cadd20b84dd8be83d"
+        },
+        "body": {
+          "id": "chatcmpl-DHaJwdGs44eBegVmj30ivGe5OFdcG",
+          "object": "chat.completion",
+          "created": 1773083564,
+          "model": "gpt-4o-2024-08-06",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "This is the logo of Google.",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 273,
+            "completion_tokens": 7,
+            "total_tokens": 280,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_c7a156cce7"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "08b6eab728497942",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "test agent"
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_image",
+                  "image_url": "https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png"
+                },
+                {
+                  "type": "input_text",
+                  "text": "What is the photo?"
+                }
+              ]
+            }
+          ],
+          "temperature": 0
+        },
+        "timestamp": 1773083565437
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9d9c649c3824ba7b-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 09 Mar 2026 19:12:47 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1821",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "2000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "1999235",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "22ms",
+          "x-request-id": "req_56acf88943da4716b146c42dd3d219f2"
+        },
+        "body": {
+          "id": "resp_070d53963c19685a0069af1bad8f6081969c9a81343c9124c2",
+          "object": "response",
+          "created_at": 1773083565,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1773083567,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "output": [
+            {
+              "id": "msg_070d53963c19685a0069af1baef77c8196bb0da9ddc8bf3005",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The image is the logo of Google."
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 273,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 9,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 282
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

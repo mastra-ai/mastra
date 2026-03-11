@@ -9,7 +9,7 @@ packages:
 
 The OpenAIVoice class in Mastra provides text-to-speech and speech-to-text capabilities using OpenAI's models.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
@@ -44,7 +44,7 @@ const text = await voice.listen(audioStream, {
 
 ## Configuration
 
-### Constructor Options
+### Constructor options
 
 <PropertiesTable
   content={[
@@ -112,7 +112,7 @@ const text = await voice.listen(audioStream, {
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using OpenAI's text-to-speech models.
 
@@ -125,25 +125,38 @@ Converts text to speech using OpenAI's text-to-speech models.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'OpenAIVoiceId',
-    description: 'Voice ID to use for speech synthesis.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
-  },
-  {
-    name: 'options.speed',
-    type: 'number',
-    description: 'Speech speed multiplier.',
-    isOptional: true,
-    defaultValue: '1.0',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'OpenAIVoiceId',
+            description: 'Voice ID to use for speech synthesis.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+          {
+            name: 'speed',
+            type: 'number',
+            description: 'Speech speed multiplier.',
+            isOptional: true,
+            defaultValue: '1.0',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+### `listen()`
 
 Transcribes audio using OpenAI's Whisper model.
 
@@ -156,18 +169,31 @@ Transcribes audio using OpenAI's Whisper model.
     isOptional: false,
   },
   {
-    name: 'options.filetype',
-    type: 'string',
-    description: 'Audio format of the input stream.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "'mp3'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'filetype',
+            type: 'string',
+            description: 'Audio format of the input stream.',
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 Returns: `Promise<string>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 

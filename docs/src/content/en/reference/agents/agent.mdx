@@ -1,11 +1,11 @@
 ---
-title: "Reference: Agent Class | Agents"
+title: "Reference: Agent class | Agents"
 description: "Documentation for the `Agent` class in Mastra, which provides the foundation for creating AI agents with various capabilities."
 packages:
   - "@mastra/core"
 ---
 
-# Agent Class
+# Agent class
 
 The `Agent` class is the foundation for creating AI agents in Mastra. It provides methods for generating responses, streaming interactions, and handling voice capabilities.
 
@@ -47,7 +47,7 @@ export const agent3 = new Agent({
 })
 ```
 
-### Single CoreSystemMessage
+### Single `CoreSystemMessage`
 
 Use CoreSystemMessage format to access additional properties like `providerOptions` for provider-specific configurations:
 
@@ -70,7 +70,7 @@ export const agent = new Agent({
 })
 ```
 
-### Multiple CoreSystemMessages
+### Multiple `CoreSystemMessages`
 
 ```typescript title="src/mastra/agents/multi-message-agent.ts"
 import { Agent } from '@mastra/core/agent'

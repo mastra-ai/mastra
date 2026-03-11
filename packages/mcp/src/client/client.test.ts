@@ -3,13 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 import { InternalMastraMCPClient } from './client.js';
 
@@ -408,6 +407,81 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
 
     // Should return the full result, not {}
     expect(result).toEqual(fullResult);
+  });
+});
+
+describe('MastraMCPClient - AbortSignal forwarding', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+
+    // Add a slow tool that takes 60s
+    testServer.mcpServer.tool('slow_tool', 'A slow tool', { input: z.string() }, async () => {
+      await new Promise(resolve => setTimeout(resolve, 60_000));
+      return { content: [{ type: 'text' as const, text: 'done' }] };
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'abort-signal-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should forward abortSignal to callTool and reject when aborted', async () => {
+    const tools = await client.tools();
+    const slowTool = tools['slow_tool'];
+    expect(slowTool).toBeDefined();
+
+    const abortController = new AbortController();
+
+    // Abort after 100ms
+    const timeoutId = setTimeout(() => abortController.abort(), 100);
+
+    const start = Date.now();
+    try {
+      await expect(slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal })).rejects.toThrow();
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    const elapsed = Date.now() - start;
+
+    // Should abort quickly (< 5s), not wait the full 60s tool duration
+    expect(elapsed).toBeLessThan(5_000);
+  });
+
+  it('should pass abortSignal through to the MCP SDK client', async () => {
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const slowTool = tools['slow_tool'];
+
+    const abortController = new AbortController();
+    await slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal });
+
+    expect(callToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'slow_tool' }),
+      expect.anything(),
+      expect.objectContaining({ signal: abortController.signal }),
+    );
   });
 });
 
@@ -1502,46 +1576,6 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     await serverTransport.close().catch(() => {});
     httpServer.close();
   });
-
-  it('should reconnect and retry when streamable SSE stream is terminated', async () => {
-    const testServer = await setupTestServer(true);
-    const client = new InternalMastraMCPClient({
-      name: 'sse-terminated-retry-test',
-      server: { url: testServer.baseUrl },
-    });
-
-    await client.connect();
-
-    const tools = await client.tools();
-    const greetTool = tools['greet'];
-    expect(greetTool).toBeDefined();
-
-    const sdkClient = (client as any).client as Client;
-    const originalCallTool = sdkClient.callTool.bind(sdkClient);
-
-    const callToolSpy = vi
-      .spyOn(sdkClient, 'callTool')
-      .mockImplementationOnce(async () => {
-        throw new Error('SSE stream disconnected: TypeError: terminated');
-      })
-      .mockImplementation(originalCallTool);
-
-    const forceReconnectSpy = vi.spyOn(client as any, 'forceReconnect').mockResolvedValue(undefined);
-
-    try {
-      const result = await greetTool.execute?.({ name: 'Recovered' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Recovered!' }] });
-      expect(forceReconnectSpy).toHaveBeenCalledTimes(1);
-      expect(callToolSpy).toHaveBeenCalledTimes(2);
-    } finally {
-      forceReconnectSpy.mockRestore();
-      callToolSpy.mockRestore();
-      await client.disconnect().catch(() => {});
-      await testServer.mcpServer.close().catch(() => {});
-      await testServer.serverTransport.close().catch(() => {});
-      testServer.httpServer.close();
-    }
-  });
 });
 
 describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => {
@@ -1761,7 +1795,7 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
   }, 30000);
 });
 
-describe('MastraMCPClient fetch with requestContext', () => {
+describe('MastraMCPClient - mcpMetadata on tools', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -1770,6 +1804,17 @@ describe('MastraMCPClient fetch with requestContext', () => {
   };
   let client: InternalMastraMCPClient;
 
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'metadata-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+  });
+
   afterEach(async () => {
     await client?.disconnect().catch(() => {});
     await testServer?.mcpServer.close().catch(() => {});
@@ -1777,126 +1822,18 @@ describe('MastraMCPClient fetch with requestContext', () => {
     testServer?.httpServer.close();
   });
 
-  it('should pass requestContext to the custom fetch function during tool execution', async () => {
-    testServer = await setupTestServer(false);
-    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
-      return fetch(url, init);
-    });
-
-    client = new InternalMastraMCPClient({
-      name: 'fetch-context-test',
-      server: {
-        url: testServer.baseUrl,
-        fetch: fetchSpy,
-      },
-    });
-
-    await client.connect();
+  it('should set mcpMetadata.serverName on created tools', async () => {
     const tools = await client.tools();
-    const greetTool = tools['greet'];
+    const greetTool = tools.greet;
     expect(greetTool).toBeDefined();
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverName).toBe('metadata-test-client');
+  });
 
-    type TestContext = { userId: string; authToken: string };
-    const requestContext = new RequestContext<TestContext>();
-    requestContext.set('userId', 'user-123');
-    requestContext.set('authToken', 'bearer-abc');
-
-    await greetTool.execute({ name: 'Test' }, { requestContext });
-
-    // Find a fetch call that was made with the requestContext (during tool execution)
-    const callsWithContext = fetchSpy.mock.calls.filter(call => {
-      const ctx = call[2];
-      return ctx && typeof ctx.get === 'function' && ctx.get('userId') === 'user-123';
-    });
-
-    expect(callsWithContext.length).toBeGreaterThan(0);
-    const capturedContext = callsWithContext[0]![2]!;
-    expect(capturedContext.get('userId')).toBe('user-123');
-    expect(capturedContext.get('authToken')).toBe('bearer-abc');
-  }, 15000);
-
-  it('should pass different requestContexts for sequential tool calls', async () => {
-    testServer = await setupTestServer(false);
-    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
-      return fetch(url, init);
-    });
-
-    client = new InternalMastraMCPClient({
-      name: 'fetch-seq-context-test',
-      server: {
-        url: testServer.baseUrl,
-        fetch: fetchSpy,
-      },
-    });
-
-    await client.connect();
+  it('should set mcpMetadata.serverVersion after connection', async () => {
     const tools = await client.tools();
-    const greetTool = tools['greet'];
-
-    // First call with context A
-    type ContextA = { sessionId: string };
-    const contextA = new RequestContext<ContextA>();
-    contextA.set('sessionId', 'session-A');
-    await greetTool.execute({ name: 'Alice' }, { requestContext: contextA });
-
-    const callsWithA = fetchSpy.mock.calls.filter(call => {
-      const ctx = call[2];
-      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-A';
-    });
-    expect(callsWithA.length).toBeGreaterThan(0);
-
-    fetchSpy.mockClear();
-
-    // Second call with context B
-    type ContextB = { sessionId: string };
-    const contextB = new RequestContext<ContextB>();
-    contextB.set('sessionId', 'session-B');
-    await greetTool.execute({ name: 'Bob' }, { requestContext: contextB });
-
-    const callsWithB = fetchSpy.mock.calls.filter(call => {
-      const ctx = call[2];
-      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-B';
-    });
-    expect(callsWithB.length).toBeGreaterThan(0);
-
-    // Ensure context A didn't leak into context B's calls
-    const contextALeak = fetchSpy.mock.calls.some(call => {
-      const ctx = call[2];
-      return ctx && typeof ctx.get === 'function' && ctx.get('sessionId') === 'session-A';
-    });
-    expect(contextALeak).toBe(false);
-  }, 15000);
-
-  it('should pass requestContext to fetch even when an empty context is auto-created', async () => {
-    testServer = await setupTestServer(false);
-    const fetchSpy = vi.fn((url: string | URL, init?: RequestInit, _requestContext?: RequestContext | null) => {
-      return fetch(url, init);
-    });
-
-    client = new InternalMastraMCPClient({
-      name: 'fetch-no-context-test',
-      server: {
-        url: testServer.baseUrl,
-        fetch: fetchSpy,
-      },
-    });
-
-    await client.connect();
-
-    // Clear fetch calls from the connection phase
-    fetchSpy.mockClear();
-
-    const tools = await client.tools();
-    const greetTool = tools['greet'];
-
-    // Call without explicit requestContext — the tool framework auto-creates an empty one
-    await greetTool.execute({ name: 'NoContext' });
-
-    // Fetch should still have been called with the third argument (requestContext)
-    const callsDuringToolExec = fetchSpy.mock.calls;
-    expect(callsDuringToolExec.length).toBeGreaterThan(0);
-    // The third argument should be defined (either null or an empty RequestContext)
-    const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
-    expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
-  }, 15000);
+    const greetTool = tools.greet;
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
+  });
 });

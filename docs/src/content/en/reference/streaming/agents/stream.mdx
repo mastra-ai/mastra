@@ -912,7 +912,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-### Advanced Example with Options
+### Advanced example with Options
 
 ```ts title="index.ts"
 import { z } from 'zod'
@@ -945,7 +945,7 @@ await agent.stream('message for agent', {
 })
 ```
 
-## OpenAI WebSocket Transport
+## OpenAI WebSocket transport
 
 Opt into OpenAI Responses WebSocket streaming via `providerOptions.openai.transport`. This only applies to streaming calls and is currently supported for direct OpenAI models (for example, `openai/gpt-4o`). If WebSocket streaming is unavailable, Mastra falls back to HTTP streaming. By default, Mastra closes the WebSocket when the stream finishes.
 

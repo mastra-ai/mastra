@@ -1,11 +1,11 @@
 ---
-title: "Using Tools | Agents"
+title: "Using tools | Agents"
 description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 packages:
   - "@mastra/core"
 ---
 
-# Using Tools
+# Using tools
 
 Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
 
@@ -15,7 +15,7 @@ Use tools when an agent needs additional context or information from remote reso
 
 ## Creating a tool
 
-When creating tools, keep descriptions simple and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
+When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
@@ -222,7 +222,7 @@ This lets you specify how tools are identified in the stream. If you want the `t
 
 ### Subagents and workflows as tools
 
-Subagents and workflows follow the same pattern. They are converted to tools with a prefix followed by your object key:
+Subagents and workflows follow the same pattern. They're converted to tools with a prefix followed by your object key:
 
 | Property | Prefix | Example key | `toolName` |
 | - | - | - | - |

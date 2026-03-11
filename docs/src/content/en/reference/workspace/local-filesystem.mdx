@@ -200,11 +200,24 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
     description: 'File path relative to basePath',
   },
   {
-    name: 'options.encoding',
-    type: "'utf-8' | 'binary'",
-    description: 'Text or binary encoding',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "'utf-8'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'encoding',
+            type: "'utf-8' | 'binary'",
+            description: 'Text or binary encoding',
+            isOptional: true,
+            defaultValue: "'utf-8'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -233,18 +246,31 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
     description: 'File content',
   },
   {
-    name: 'options.recursive',
-    type: 'boolean',
-    description: "Create parent directories if they don't exist",
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'options.overwrite',
-    type: 'boolean',
-    description: 'Overwrite existing file',
-    isOptional: true,
-    defaultValue: 'true',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: "Create parent directories if they don't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite existing file',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -293,11 +319,24 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
     description: 'File path',
   },
   {
-    name: 'options.force',
-    type: 'boolean',
-    description: "Don't throw error if file doesn't exist",
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw error if file doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -326,11 +365,24 @@ await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite
     description: 'Destination file path',
   },
   {
-    name: 'options.overwrite',
-    type: 'boolean',
-    description: 'Overwrite destination if it exists',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'true',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -359,11 +411,24 @@ await filesystem.moveFile('/temp/upload.txt', '/files/document.txt')
     description: 'Destination file path',
   },
   {
-    name: 'options.overwrite',
-    type: 'boolean',
-    description: 'Overwrite destination if it exists',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'true',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -387,11 +452,24 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
     description: 'Directory path',
   },
   {
-    name: 'options.recursive',
-    type: 'boolean',
-    description: 'Create parent directories',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Create parent directories',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -415,18 +493,31 @@ await filesystem.rmdir('/docs/nested', { recursive: true })
     description: 'Directory path',
   },
   {
-    name: 'options.recursive',
-    type: 'boolean',
-    description: 'Remove contents recursively',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'options.force',
-    type: 'boolean',
-    description: "Don't throw if directory doesn't exist",
-    isOptional: true,
-    defaultValue: 'false',
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Remove contents recursively',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw if directory doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -500,7 +591,7 @@ To override the default output, pass an `instructions` option to the constructor
 
 ## Path resolution
 
-### How basePath works
+### How `basePath` works
 
 The `basePath` option sets the root directory for all file operations. File paths passed to methods like `readFile()` are resolved relative to this base:
 

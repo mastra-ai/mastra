@@ -9,7 +9,7 @@ packages:
 
 The Deepgram voice implementation in Mastra provides text-to-speech (TTS) and speech-to-text (STT) capabilities using Deepgram's API. It supports multiple voice models and languages, with configurable options for both speech synthesis and transcription.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { DeepgramVoice } from '@mastra/voice-deepgram'
@@ -37,7 +37,7 @@ const audioStream = await voice.speak('Hello, world!')
 const transcript = await voice.listen(audioStream)
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -129,7 +129,7 @@ const transcript = await voice.listen(audioStream)
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using the configured speech model and voice.
 
@@ -146,19 +146,26 @@ Converts text to speech using the configured speech model and voice.
     type: 'object',
     description: 'Additional options for speech synthesis',
     isOptional: true,
-  },
-  {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Override the default speaker for this request',
-    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Override the default speaker for this request',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### listen()
+### `listen()`
 
 Converts speech to text using the configured listening model.
 
@@ -181,7 +188,7 @@ Converts speech to text using the configured listening model.
 
 Returns: `Promise<string>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns a list of available voice options.
 

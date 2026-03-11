@@ -9,7 +9,7 @@ packages:
 
 The PlayAI voice implementation in Mastra provides text-to-speech capabilities using PlayAI's API.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { PlayAIVoice } from '@mastra/voice-playai'
@@ -34,7 +34,7 @@ const audioStream = await voice.speak('Hello, world!', {
 })
 ```
 
-## Constructor Parameters
+## Constructor parameters
 
 <PropertiesTable
   content={[
@@ -83,7 +83,7 @@ const audioStream = await voice.speak('Hello, world!', {
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using the configured speech model and voice.
 
@@ -96,18 +96,31 @@ Converts text to speech using the configured speech model and voice.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Override the default speaker for this request',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Override the default speaker for this request',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`.
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 
@@ -152,9 +165,9 @@ Returns an array of available voice options, where each node contains:
 ]}
 />
 
-### listen()
+### `listen()`
 
-This method is not supported by PlayAI and will throw an error. PlayAI does not provide speech-to-text functionality.
+This method isn't supported by PlayAI and will throw an error. PlayAI doesn't provide speech-to-text functionality.
 
 ## Notes
 
