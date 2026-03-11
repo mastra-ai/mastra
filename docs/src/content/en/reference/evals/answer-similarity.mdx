@@ -1,12 +1,12 @@
 ---
-title: "Reference: Answer Similarity Scorer | Evals"
+title: "Reference: Answer similarity scorer | Evals"
 description: Documentation for the Answer Similarity Scorer in Mastra, which compares agent outputs against ground truth answers for CI/CD testing.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Answer Similarity Scorer
+# Answer similarity scorer
 
 The `createAnswerSimilarityScorer()` function creates a scorer that evaluates how similar an agent's output is to a ground truth answer. This scorer is specifically designed for CI/CD testing scenarios where you have expected answers and want to ensure consistency over time.
 
@@ -88,7 +88,7 @@ The `createAnswerSimilarityScorer()` function creates a scorer that evaluates ho
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but **requires ground truth** to be provided in the run object.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -136,7 +136,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ]}
 />
 
-## Scoring Details
+## Scoring details
 
 The scorer uses a multi-step process:
 
