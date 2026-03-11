@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-Fixed `allowedPaths` resolving against `process.cwd()` instead of `basePath`, causing permission errors when the workspace root differed from the working directory. Also fixed access to non-existent `allowedPaths` directories (e.g., during skills discovery) being incorrectly rejected.
+Fixed `allowedPaths` resolving against the working directory instead of `basePath`, causing unexpected permission errors when `basePath` differed from `cwd`. Also fixed permission errors when accessing paths under `allowedPaths` directories that don't exist yet (e.g., during skills discovery).
 
 - Relative `allowedPaths` now resolve from `basePath`
-- Non-existent `allowedPaths` roots no longer cause permission errors
+- Non-existent `allowedPaths` directories no longer trigger false permission errors

@@ -1071,11 +1071,13 @@ Instructions for the new skill.`;
           return content;
         }),
         exists: vi.fn(async (path: string) => {
-          return fileSystem.has(path) || directories.has(path);
+          const p = path === '.' ? '' : path;
+          return fileSystem.has(p) || directories.has(p);
         }),
         readdir: vi.fn(async (path: string): Promise<Array<{ name: string; type: 'file' | 'directory' }>> => {
           const entries: Array<{ name: string; type: 'file' | 'directory' }> = [];
-          const prefix = path === '' ? '' : `${path}/`;
+          const normalized = path === '.' ? '' : path;
+          const prefix = normalized === '' ? '' : `${normalized}/`;
 
           for (const [filePath] of fileSystem) {
             if (filePath.startsWith(prefix)) {
@@ -1111,8 +1113,9 @@ Instructions for the new skill.`;
           return entries;
         }),
         stat: vi.fn(async (path: string): Promise<SkillSourceStat> => {
-          const name = path.split('/').pop() || path;
-          const content = fileSystem.get(path);
+          const normalized = path === '.' ? '' : path;
+          const name = normalized.split('/').pop() || normalized;
+          const content = fileSystem.get(normalized);
           if (content) {
             return {
               name,
@@ -1122,7 +1125,7 @@ Instructions for the new skill.`;
               modifiedAt: new Date(),
             };
           }
-          if (directories.has(path)) {
+          if (directories.has(normalized)) {
             return {
               name,
               type: 'directory',
