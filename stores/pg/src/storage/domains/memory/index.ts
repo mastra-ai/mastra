@@ -425,9 +425,10 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      // Sort by timezone-aware *Z column (TIMESTAMPTZ) to ensure correct ordering across timezones
-      const orderByField = field === 'createdAt' || field === 'updatedAt' ? `${field}Z` : field;
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${orderByField}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      // Sort by timezone-aware *Z column (TIMESTAMPTZ) with fallback for legacy rows missing *Z values
+      const orderByExpr =
+        field === 'createdAt' || field === 'updatedAt' ? `COALESCE("${field}Z", "${field}")` : `"${field}"`;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY ${orderByExpr} ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -857,8 +858,9 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByField = field === 'createdAt' || field === 'updatedAt' ? `${field}Z` : field;
-      const orderByStatement = `ORDER BY "${orderByField}" ${direction}`;
+      const orderByExpr =
+        field === 'createdAt' || field === 'updatedAt' ? `COALESCE("${field}Z", "${field}")` : `"${field}"`;
+      const orderByStatement = `ORDER BY ${orderByExpr} ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1025,8 +1027,9 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByField = field === 'createdAt' || field === 'updatedAt' ? `${field}Z` : field;
-      const orderByStatement = `ORDER BY "${orderByField}" ${direction}`;
+      const orderByExpr =
+        field === 'createdAt' || field === 'updatedAt' ? `COALESCE("${field}Z", "${field}")` : `"${field}"`;
+      const orderByStatement = `ORDER BY ${orderByExpr} ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1042,13 +1045,13 @@ export class MemoryPG extends MemoryStorage {
 
       if (filter?.dateRange?.start) {
         const startOp = filter.dateRange.startExclusive ? '>' : '>=';
-        conditions.push(`"createdAt" ${startOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt") ${startOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.start);
       }
 
       if (filter?.dateRange?.end) {
         const endOp = filter.dateRange.endExclusive ? '<' : '<=';
-        conditions.push(`"createdAt" ${endOp} $${paramIndex++}`);
+        conditions.push(`COALESCE("createdAtZ", "createdAt") ${endOp} $${paramIndex++}`);
         queryParams.push(filter.dateRange.end);
       }
 
@@ -1197,6 +1200,7 @@ export class MemoryPG extends MemoryStorage {
               `Expected to find a resourceId for message, but couldn't find one. An unexpected error has occurred.`,
             );
           }
+          const fallbackCreatedAt = message.createdAt || new Date();
           return t.none(
             `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1210,8 +1214,8 @@ export class MemoryPG extends MemoryStorage {
               message.id,
               message.threadId,
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-              message.createdAt || new Date(),
-              message.createdAt || new Date(),
+              fallbackCreatedAt,
+              fallbackCreatedAt,
               message.role,
               message.type || 'v2',
               message.resourceId,
