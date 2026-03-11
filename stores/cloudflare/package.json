@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "cloudflare": "^4.5.0"
+    "cloudflare": "^5.2.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251111.0",
