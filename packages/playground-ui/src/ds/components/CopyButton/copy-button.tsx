@@ -12,10 +12,15 @@ export type CopyButtonProps = {
   tooltip?: string;
   className?: string;
   size?: ButtonProps['size'];
-  
 };
 
-export function CopyButton({ content, copyMessage, tooltip = 'Copy to clipboard', size = 'sm', className }: CopyButtonProps) {
+export function CopyButton({
+  content,
+  copyMessage,
+  tooltip = 'Copy to clipboard',
+  size = 'sm',
+  className,
+}: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const { handleCopy: originalHandleCopy } = useCopyToClipboard({
     text: content,
@@ -31,7 +36,13 @@ export function CopyButton({ content, copyMessage, tooltip = 'Copy to clipboard'
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button onClick={handleCopy} type="button" size={size} className={className} aria-label={copied ? 'Copied!' : tooltip}>
+        <Button
+          onClick={handleCopy}
+          type="button"
+          size={size}
+          className={className}
+          aria-label={copied ? 'Copied!' : tooltip}
+        >
           {copied ? <CheckIcon /> : <CopyIcon />}
         </Button>
       </TooltipTrigger>
