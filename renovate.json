@@ -1,5 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "gitAuthor": "Dane - AI (Mastra) <199639756+daneatmastra@users.noreply.github.com>",
   "rangeStrategy": "bump",
   "extends": [
     ":dependencyDashboard",

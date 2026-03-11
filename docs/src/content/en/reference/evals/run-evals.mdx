@@ -9,7 +9,7 @@ packages:
 
 The `runEvals` function enables batch evaluation of agents and workflows by running multiple test cases against scorers concurrently. This is essential for systematic testing, performance analysis, and validation of AI systems.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { runEvals } from '@mastra/core/evals'
@@ -83,7 +83,7 @@ console.log(`Processed ${result.summary.totalItems} items`)
 ]}
 />
 
-## Data Item Structure
+## Data item structure
 
 <PropertiesTable
   content={[
@@ -121,7 +121,7 @@ console.log(`Processed ${result.summary.totalItems} items`)
 ]}
 />
 
-## Workflow Scorer Configuration
+## Workflow scorer configuration
 
 For workflows, you can specify scorers at different levels using `WorkflowScorerConfig`:
 
@@ -198,7 +198,7 @@ const result = await runEvals({
 })
 ```
 
-### Agent with targetOptions
+### Agent with `targetOptions`
 
 Pass execution options like `maxSteps` or `modelSettings` to customize agent behavior during evaluation:
 
@@ -242,7 +242,7 @@ const workflowResult = await runEvals({
 })
 ```
 
-### Workflow with per-item startOptions
+### Workflow with per-item `startOptions`
 
 Use `startOptions` on individual data items to customize each workflow run. Per-item values take precedence over `targetOptions`:
 
