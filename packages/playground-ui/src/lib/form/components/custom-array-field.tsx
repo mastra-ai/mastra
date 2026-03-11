@@ -29,7 +29,9 @@ export const CustomArrayField: React.FC<{
 
   if (!subField) {
     return (
-      <uiComponents.ErrorMessage error={`[AutoForm] Unable to determine array element schema for "${getLabel(field)}"`} />
+      <uiComponents.ErrorMessage
+        error={`[AutoForm] Unable to determine array element schema for "${getLabel(field)}"`}
+      />
     );
   }
 
