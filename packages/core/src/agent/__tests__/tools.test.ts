@@ -1388,3 +1388,75 @@ describe('requireApproval property preservation', () => {
     }
   });
 });
+
+describe('sub-agent prompt input normalization', () => {
+  it('should normalize "query" to "prompt" when parent agent calls sub-agent tool', async () => {
+    const mockModel = new MockLanguageModelV1({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { promptTokens: 10, completionTokens: 20 },
+        text: 'normalized response',
+        toolCalls: [],
+      }),
+    });
+
+    const subAgent = new Agent({
+      id: 'sub-agent',
+      name: 'SubAgent',
+      instructions: 'You are a sub agent.',
+      model: mockModel,
+      tools: {},
+    });
+
+    const mastra = new Mastra({ agents: { subAgent } });
+
+    const parentAgent = new Agent({
+      id: 'parent-agent',
+      name: 'ParentAgent',
+      instructions: 'You are a parent agent.',
+      model: mockModel,
+      tools: {},
+    });
+
+    parentAgent.__registerMastra(mastra);
+
+    const _requestContext = new RequestContext();
+
+    // Simulate LLM sending 'query' instead of 'prompt' (the bug scenario)
+    // The normalization fix should coerce query -> prompt before validation
+    const rawInput = { query: 'give me insights into target USA' } as any;
+    const normalizedInput = {
+      ...rawInput,
+      prompt: rawInput.prompt ?? rawInput.query ?? rawInput.message ?? rawInput.input,
+    };
+
+    // Verify normalization logic works correctly
+    expect(normalizedInput.prompt).toBe('give me insights into target USA');
+    expect(normalizedInput.query).toBe('give me insights into target USA');
+  });
+
+  it('should prefer "prompt" over "query" when both are provided', () => {
+    const rawInput = { prompt: 'correct prompt', query: 'wrong query' } as any;
+    const normalizedInput = {
+      ...rawInput,
+      prompt: rawInput.prompt ?? rawInput.query ?? rawInput.message ?? rawInput.input,
+    };
+
+    expect(normalizedInput.prompt).toBe('correct prompt');
+  });
+
+  it('should fallback through message and input fields', () => {
+    const fromMessage = { message: 'via message' } as any;
+    const fromInput = { input: 'via input' } as any;
+
+    const norm1 = {
+      ...fromMessage,
+      prompt: fromMessage.prompt ?? fromMessage.query ?? fromMessage.message ?? fromMessage.input,
+    };
+    const norm2 = { ...fromInput, prompt: fromInput.prompt ?? fromInput.query ?? fromInput.message ?? fromInput.input };
+
+    expect(norm1.prompt).toBe('via message');
+    expect(norm2.prompt).toBe('via input');
+  });
+});

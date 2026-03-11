@@ -2688,7 +2688,11 @@ export class Agent<
     if (Object.keys(agents).length > 0) {
       for (const [agentName, agent] of Object.entries(agents)) {
         const agentInputSchema = z.object({
-          prompt: z.string().describe('The prompt to send to the agent'),
+          prompt: z
+            .string()
+            .describe(
+              'The prompt or query to send to the agent. IMPORTANT: This parameter must always be named "prompt". Do not use "query", "message", or "input".',
+            ),
           // Using .nullish() instead of .optional() because OpenAI sends null for unfilled optional fields
           threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
           resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
@@ -2732,6 +2736,12 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            // Normalize input: some LLMs (via custom gateways) drift from 'prompt'
+            // to 'query'/'message'/'input' after repeated calls. Coerce to 'prompt'.
+            const rawInput = inputData as any;
+            if (!rawInput.prompt && (rawInput.query || rawInput.message || rawInput.input)) {
+              inputData = { ...inputData, prompt: rawInput.query ?? rawInput.message ?? rawInput.input };
+            }
             const startTime = Date.now();
             const toolCallId = context?.agent?.toolCallId || randomUUID();
 

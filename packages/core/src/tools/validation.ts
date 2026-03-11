@@ -483,6 +483,23 @@ export function validateToolInput<T = unknown>(
     return { data: retryValidation.value };
   }
 
+  // Step 6: Retry with alternative prompt field names coerced to 'prompt' (GitHub #14154)
+  // LLMs (e.g. Claude Sonnet via custom gateways) drift from 'prompt' to 'query'/
+  // 'message'/'input' after repeated calls in multi-agent pipelines.
+  if (typeof normalizedInput === 'object' && normalizedInput !== null) {
+    const raw = normalizedInput as Record<string, unknown>;
+    if (raw['prompt'] === undefined || raw['prompt'] === null) {
+      const alternative = raw['query'] ?? raw['message'] ?? raw['input'];
+      if (alternative !== undefined) {
+        const coercedPromptInput = { ...raw, prompt: alternative };
+        const promptCoercedValidation = schema.safeParse(coercedPromptInput);
+        if (promptCoercedValidation.success) {
+          return { data: promptCoercedValidation.data };
+        }
+      }
+    }
+  }
+
   // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
   const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
