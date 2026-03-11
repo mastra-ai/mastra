@@ -37,38 +37,23 @@ export function showFormattedError(
 
   state.chatContainer.addChild(new Spacer(1));
 
-  // Check if this is a tool validation error
-  const errorMessage = error.message || String(error);
-  const isValidationError =
-    errorMessage.toLowerCase().includes('validation failed') ||
-    errorMessage.toLowerCase().includes('required parameter') ||
-    errorMessage.includes('Required');
+  // Show the main error message
+  let errorText = `Error: ${parsed.message}`;
 
-  if (isValidationError) {
-    // Show a simplified message for validation errors
-    state.chatContainer.addChild(new Text(theme.fg('error', 'Tool validation error - see details above'), 1, 0));
-    state.chatContainer.addChild(
-      new Text(theme.fg('muted', '  Check the tool execution box for specific parameter requirements'), 1, 0),
-    );
-  } else {
-    // Show the main error message
-    let errorText = `Error: ${parsed.message}`;
+  // Add retry info if applicable
+  const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
+  const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
+  if (retryable && retryDelay) {
+    const seconds = Math.ceil(retryDelay / 1000);
+    errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
+  }
 
-    // Add retry info if applicable
-    const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
-    const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
-    if (retryable && retryDelay) {
-      const seconds = Math.ceil(retryDelay / 1000);
-      errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
-    }
+  state.chatContainer.addChild(new Text(theme.fg('error', errorText), 1, 0));
 
-    state.chatContainer.addChild(new Text(theme.fg('error', errorText), 1, 0));
-
-    // Add helpful hints based on error type
-    const hint = getErrorHint(parsed.type);
-    if (hint) {
-      state.chatContainer.addChild(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
-    }
+  // Add helpful hints based on error type
+  const hint = getErrorHint(parsed.type);
+  if (hint) {
+    state.chatContainer.addChild(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
   }
 
   state.ui.requestRender();

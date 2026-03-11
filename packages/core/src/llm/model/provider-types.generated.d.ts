@@ -205,7 +205,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3-next-80b-a3b-thinking',
     'qwen/qwen3.5-397b-a17b',
     'qwen/qwq-32b',
-    'stepfun-ai/step-3-5-flash',
+    'stepfun-ai/step-3.5-flash',
     'z-ai/glm4.7',
     'z-ai/glm5',
   ];
@@ -385,6 +385,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.5',
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.7-FP8',
+    'zai-org/GLM-5',
   ];
   readonly 'qiniu-ai': readonly [
     'MiniMax-M1',
@@ -664,6 +665,7 @@ export type ProviderModelsMap = {
     'minimax-m2.1',
     'minimax-m2.5',
     'minimax-m2.5-free',
+    'nemotron-3-super-free',
   ];
   readonly poe: readonly [
     'anthropic/claude-haiku-3',

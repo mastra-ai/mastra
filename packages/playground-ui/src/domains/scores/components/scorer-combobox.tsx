@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { useScorers } from '../hooks/use-scorers';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -12,7 +12,7 @@ export interface ScorerComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
 }
 
 export function ScorerCombobox({
@@ -23,7 +23,7 @@ export function ScorerCombobox({
   emptyText = 'No scorers found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
 }: ScorerComboboxProps) {
   const { data: scorers = {}, isLoading, isError, error } = useScorers();
   const { navigate, paths } = useLinkComponent();
