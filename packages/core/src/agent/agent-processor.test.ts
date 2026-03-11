@@ -3269,9 +3269,7 @@ describe('Workflow as Processor', () => {
       const configuredProcessors = await agent.listConfiguredInputProcessors();
       expect(configuredProcessors).toHaveLength(1);
 
-      const found = configuredProcessors.find(
-        p => !isProcessorWorkflow(p) && isProcessor(p) && p.id === 'findable-processor',
-      );
+      const found = await agent.resolveProcessorById('findable-processor');
       expect(found).toBeDefined();
       expect(found).toHaveProperty('id', 'findable-processor');
     });
