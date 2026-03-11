@@ -195,7 +195,7 @@ const memory = new Memory({
 
 ### Token counting cache
 
-OM caches tiktoken part estimates in message metadata to reduce repeat counting work during threshold checks and buffering decisions.
+OM caches token estimates in message metadata to reduce repeat counting work during threshold checks and buffering decisions.
 
 - Per-part estimates are stored on `part.providerMetadata.mastra` and reused on subsequent passes when the cache version/tokenizer source matches.
 - For string-only message content (without parts), OM uses a message-level metadata fallback cache.
