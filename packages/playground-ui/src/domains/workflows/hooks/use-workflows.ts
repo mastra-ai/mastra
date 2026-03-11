@@ -6,12 +6,17 @@ export const useWorkflows = () => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
+  console.log('Fetching workflows with request context:', requestContext);
+
   return useQuery({
     queryKey: ['workflows', requestContext],
     queryFn: async () => {
       const workflows = await client.listWorkflows(requestContext);
       // Filter out processor workflows - they're shown on the Processors tab instead
-      return Object.fromEntries(Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow));
+      const filtered = Object.entries(workflows).filter(([_, workflow]) => !workflow.isProcessorWorkflow);
+      // Sort alphabetically by workflow name
+      filtered.sort(([, a], [, b]) => a.name.localeCompare(b.name));
+      return Object.fromEntries(filtered);
     },
   });
 };
