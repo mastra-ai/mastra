@@ -235,6 +235,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   mcpServer: string;
   /** MCP server version */
   serverVersion?: string;
+  /** Tool description */
+  toolDescription?: string;
   /** Whether tool execution was successful */
   success?: boolean;
 }

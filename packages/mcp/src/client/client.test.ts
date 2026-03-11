@@ -1826,14 +1826,14 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
     const tools = await client.tools();
     const greetTool = tools.greet;
     expect(greetTool).toBeDefined();
-    expect((greetTool as any).mcpMetadata).toBeDefined();
-    expect((greetTool as any).mcpMetadata.serverName).toBe('metadata-test-client');
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverName).toBe('metadata-test-client');
   });
 
   it('should set mcpMetadata.serverVersion after connection', async () => {
     const tools = await client.tools();
     const greetTool = tools.greet;
-    expect((greetTool as any).mcpMetadata).toBeDefined();
-    expect((greetTool as any).mcpMetadata.serverVersion).toBe('1.0.0');
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
   });
 });

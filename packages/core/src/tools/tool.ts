@@ -3,7 +3,7 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
+import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -210,10 +210,7 @@ export class Tool<
    * Metadata identifying this tool as originating from an MCP server.
    * Set automatically by the MCP client when creating tools.
    */
-  mcpMetadata?: {
-    serverName: string;
-    serverVersion?: string;
-  };
+  mcpMetadata?: McpMetadata;
 
   /**
    * Creates a new Tool instance with input validation wrapper.
