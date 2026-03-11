@@ -1,19 +1,19 @@
 {
   "__structure__": [
     "agent_run: \"agent run: 'test-agent'\"",
-    "\u251c\u2500\u2500 processor_run: \"input processor: validator\"",
-    "\u2502   \u2514\u2500\u2500 agent_run: \"agent run: 'validator-agent'\"",
-    "\u2502       \u2514\u2500\u2500 model_generation: \"llm: 'mock-model-id'\"",
-    "\u2502           \u2514\u2500\u2500 model_step: \"step: 0\"",
-    "\u2502               \u2514\u2500\u2500 model_chunk: \"chunk: 'text'\"",
-    "\u251c\u2500\u2500 model_generation: \"llm: 'mock-model-id'\"",
-    "\u2502   \u2514\u2500\u2500 model_step: \"step: 0\"",
-    "\u2502       \u2514\u2500\u2500 model_chunk: \"chunk: 'text'\"",
-    "\u2514\u2500\u2500 processor_run: \"output processor: summarizer\"",
-    "    \u2514\u2500\u2500 agent_run: \"agent run: 'summarizer-agent'\"",
-    "        \u2514\u2500\u2500 model_generation: \"llm: 'mock-model-id'\"",
-    "            \u2514\u2500\u2500 model_step: \"step: 0\"",
-    "                \u2514\u2500\u2500 model_chunk: \"chunk: 'text'\""
+    "├── processor_run: \"input processor: validator\"",
+    "│   └── agent_run: \"agent run: 'validator-agent'\"",
+    "│       └── model_generation: \"llm: 'mock-model-id'\"",
+    "│           └── model_step: \"step: 0\"",
+    "│               └── model_chunk: \"chunk: 'text'\"",
+    "├── model_generation: \"llm: 'mock-model-id'\"",
+    "│   └── model_step: \"step: 0\"",
+    "│       └── model_chunk: \"chunk: 'text'\"",
+    "└── processor_run: \"output processor: summarizer\"",
+    "    └── agent_run: \"agent run: 'summarizer-agent'\"",
+    "        └── model_generation: \"llm: 'mock-model-id'\"",
+    "            └── model_step: \"step: 0\"",
+    "                └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
