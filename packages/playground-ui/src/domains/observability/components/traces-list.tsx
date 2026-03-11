@@ -2,7 +2,6 @@ import { EntryList } from '@/ds/components/EntryList';
 import { getShortId } from '@/ds/components/Text';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
 import { cn } from '@/lib/utils';
-import { SpanRecord } from '@mastra/core/storage';
 import { format, isToday } from 'date-fns';
 import { ChevronRightIcon } from 'lucide-react';
 import { groupTracesByThread } from '../utils/group-traces-by-thread';
@@ -18,7 +17,12 @@ export const tracesListColumns = [
   { name: 'status', label: 'Status', size: '3rem' },
 ];
 
-type Trace = Pick<SpanRecord, 'traceId' | 'name' | 'entityType' | 'entityId' | 'entityName'> & {
+type Trace = {
+  traceId: string;
+  name: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  entityName?: string | null;
   attributes?: Record<string, any> | null;
   input?: unknown;
   createdAt: Date | string;
@@ -110,7 +114,7 @@ function GroupedTracesList({
   threadTitles?: Record<string, string>;
   columns?: typeof tracesListColumns;
 }) {
-  const { groups, ungrouped } = groupTracesByThread(traces as SpanRecord[]);
+  const { groups, ungrouped } = groupTracesByThread(traces);
 
   if (groups.length === 0 && ungrouped.length === 0) {
     return (
@@ -144,7 +148,7 @@ function GroupedTracesList({
             <CollapsibleContent>
               <EntryList.Header columns={columns} />
               <TraceEntries
-                traces={group.traces as Trace[]}
+                traces={group.traces}
                 selectedTraceId={selectedTraceId}
                 onTraceClick={onTraceClick}
                 columns={columns}
@@ -168,7 +172,7 @@ function GroupedTracesList({
             <CollapsibleContent>
               <EntryList.Header columns={columns} />
               <TraceEntries
-                traces={ungrouped as Trace[]}
+                traces={ungrouped}
                 selectedTraceId={selectedTraceId}
                 onTraceClick={onTraceClick}
                 columns={columns}
