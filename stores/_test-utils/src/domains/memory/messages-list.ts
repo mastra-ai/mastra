@@ -88,9 +88,9 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       let countStringCalls = 0;
 
       try {
-        counter.countString = (...args: any[]) => {
+        counter.countString = (text: string) => {
           countStringCalls += 1;
-          return originalCountString(...args);
+          return originalCountString(text);
         };
 
         const cachedMessage = createSampleMessageV2({
