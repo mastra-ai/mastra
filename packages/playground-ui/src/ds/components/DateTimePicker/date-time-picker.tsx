@@ -9,7 +9,6 @@ import { DatePicker } from './date-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { cn } from '@/lib/utils';
 import { TimePicker } from './time-picker';
-import { InputField } from '@/ds/components/FormFields';
 import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {

@@ -1,6 +1,6 @@
 import { format } from 'date-fns';
 import { Column } from '@/ds/components/Columns';
-import { SelectField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { useDatasetVersions } from '../../hooks/use-dataset-versions';
 
 export interface DatasetCompareVersionToolbarProps {
@@ -13,7 +13,7 @@ export interface DatasetCompareVersionToolbarProps {
 function formatVersionLabel(version: number, createdAt?: Date | string): string {
   if (createdAt) {
     const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-    return `v${version} — ${format(d, "MMM dd, yyyy 'at' H:mm:ss a")}`;
+    return `v${version}  ${format(d, "MMM dd 'at' H:mm:ss a")}`;
   }
   return `v${version}`;
 }
@@ -34,20 +34,22 @@ export function DatasetCompareVersionToolbar({
   return (
     <Column.Toolbar className="grid grid-cols-[1fr_1fr_1fr_10rem] gap-4 w-full">
       <div />
-      <SelectField
+      <SelectFieldBlock
         label="Version A"
         labelIsHidden={true}
+        name="version-a"
         placeholder="Select version"
         options={options}
         value={versionA ?? ''}
-        onValueChange={val => onVersionChange?.(val, versionB ?? '')}
+        onValueChange={(val: string) => onVersionChange?.(val, versionB ?? '')}
       />
-      <SelectField
+      <SelectFieldBlock
         label="Version B"
         labelIsHidden={true}
+        name="version-b"
         options={options}
         value={versionB ?? ''}
-        onValueChange={val => onVersionChange?.(versionA ?? '', val)}
+        onValueChange={(val: string) => onVersionChange?.(versionA ?? '', val)}
       />
       <div />
     </Column.Toolbar>

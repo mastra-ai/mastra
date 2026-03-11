@@ -54,7 +54,7 @@ export function SelectFieldBlock({
       <FieldBlock.Column>
         {layout === 'vertical' && label && !labelIsHidden ? (
           <FieldBlock.Label name={name} required={required}>
-            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
+            {label}
           </FieldBlock.Label>
         ) : null}
         <Select

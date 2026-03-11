@@ -19,7 +19,7 @@ import {
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 
 import { Column } from '@/ds/components/Columns/column';
-import { SearchField } from '@/ds/components/FormFields/search-field';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { Chip } from '@/ds/components/Chip';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
@@ -137,13 +137,13 @@ export function DatasetItemsToolbar({
   if (isSelectionActive) {
     return (
       <Column.Toolbar className="">
-        <SearchField
+        <SearchFieldBlock
+          name="search-items"
           label="Search"
+          labelIsHidden
           placeholder="Search items..."
           value={searchQuery ?? ''}
           onChange={e => onSearchChange?.(e.target.value)}
-          variant="experimental"
-          size="default"
           onReset={() => onSearchChange?.('')}
           disabled={!hasItems && !searchQuery}
         />
@@ -198,13 +198,13 @@ export function DatasetItemsToolbar({
 
   return (
     <div className="flex items-center justify-between gap-4 w-full">
-      <SearchField
+      <SearchFieldBlock
+        name="search-items"
         label="Search"
+        labelIsHidden
         placeholder="Search items..."
         value={searchQuery ?? ''}
         onChange={e => onSearchChange?.(e.target.value)}
-        variant="experimental"
-        size="default"
         onReset={() => onSearchChange?.('')}
         disabled={!hasItems && !searchQuery}
       />

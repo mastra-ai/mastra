@@ -3,7 +3,7 @@
 import { Button } from '@/ds/components/Button';
 import { Chip } from '@/ds/components/Chip';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { SelectField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 
@@ -74,7 +74,7 @@ export function DatasetExperimentsToolbar({
   return (
     <div className="flex items-center justify-between gap-4 w-full">
       <ButtonsGroup>
-        <SelectField
+        <SelectFieldBlock
           label="Status"
           labelIsHidden={true}
           name="filter-status"
@@ -83,7 +83,7 @@ export function DatasetExperimentsToolbar({
           onValueChange={v => onFiltersChange({ ...filters, status: v === 'all' ? undefined : v })}
         />
 
-        <SelectField
+        <SelectFieldBlock
           label="Type"
           labelIsHidden={true}
           name="filter-target-type"
@@ -93,7 +93,7 @@ export function DatasetExperimentsToolbar({
         />
 
         {targetIds.length > 0 && (
-          <SelectField
+          <SelectFieldBlock
             label="Target"
             labelIsHidden={true}
             name="filter-target-id"

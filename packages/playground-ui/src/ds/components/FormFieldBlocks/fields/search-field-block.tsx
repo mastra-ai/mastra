@@ -49,9 +49,9 @@ export function SearchFieldBlock({
         </FieldBlock.Column>
       ) : null}
       <FieldBlock.Column>
-        {layout === 'vertical' ? (
+        {layout === 'vertical' && label && !labelIsHidden ? (
           <FieldBlock.Label name={name} required={required}>
-            {labelIsHidden ? <VisuallyHidden>{label}</VisuallyHidden> : label}
+            {label}
           </FieldBlock.Label>
         ) : null}
         <div className="relative group">

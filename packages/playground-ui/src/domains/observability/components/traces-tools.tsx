@@ -1,9 +1,10 @@
 import { SelectField } from '@/ds/components/FormFields';
 import { DateTimePicker } from '@/ds/components/DateTimePicker';
 import { Button } from '@/ds/components/Button/Button';
+import { cn } from '@/lib/utils';
 import { XIcon } from 'lucide-react';
 import { EntityType } from '@mastra/core/observability';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Icon } from '@/ds/icons/Icon';
 
 // UI-specific entity options that map to API EntityType values
 // Using the enum values (lowercase strings) for the type field
@@ -34,10 +35,9 @@ export function TracesTools({
   isLoading,
 }: TracesToolsProps) {
   return (
-    <ButtonsGroup>
+    <div className={cn('flex flex-wrap gap-x-8 gap-y-4')}>
       <SelectField
         label="Filter by Entity"
-        labelIsHidden={true}
         name={'select-entity'}
         placeholder="Select..."
         options={entityOptions || []}
@@ -48,35 +48,37 @@ export function TracesTools({
           }
         }}
         value={selectedEntity?.value || ''}
-        className="min-w-56"
+        className="min-w-[20rem]"
         disabled={isLoading}
       />
+      <div className={cn('flex gap-4 items-center flex-wrap')}>
+        <span className={cn('shrink-0 text-ui-md text-neutral3')}>Filter by Date & time range</span>
+        <DateTimePicker
+          placeholder="From"
+          value={selectedDateFrom}
+          maxValue={selectedDateTo}
+          onValueChange={date => onDateChange?.(date, 'from')}
+          className="min-w-32"
+          defaultTimeStrValue="12:00 AM"
+          disabled={isLoading}
+        />
+        <DateTimePicker
+          placeholder="To"
+          value={selectedDateTo}
+          minValue={selectedDateFrom}
+          onValueChange={date => onDateChange?.(date, 'to')}
+          className="min-w-32"
+          defaultTimeStrValue="11:59 PM"
+          disabled={isLoading}
+        />
 
-      <DateTimePicker
-        placeholder="Start date: Any"
-        value={selectedDateFrom}
-        maxValue={selectedDateTo}
-        onValueChange={date => onDateChange?.(date, 'from')}
-        className="min-w-48"
-        defaultTimeStrValue="12:00 AM"
-        disabled={isLoading}
-      />
-      <DateTimePicker
-        placeholder="End date: Any"
-        value={selectedDateTo}
-        minValue={selectedDateFrom}
-        onValueChange={date => onDateChange?.(date, 'to')}
-        className="min-w-48"
-        defaultTimeStrValue="11:59 PM"
-        disabled={isLoading}
-      />
-
-      {(selectedDateFrom || selectedDateTo || (selectedEntity && selectedEntity.type !== 'all')) && (
-        <Button onClick={onReset} disabled={isLoading}>
-          <XIcon />
+        <Button variant="light" size="lg" className="min-w-32" onClick={onReset} disabled={isLoading}>
+          <Icon>
+            <XIcon />
+          </Icon>
           Reset
         </Button>
-      )}
-    </ButtonsGroup>
+      </div>
+    </div>
   );
 }

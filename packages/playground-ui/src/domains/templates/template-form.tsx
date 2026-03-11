@@ -1,4 +1,4 @@
-import { SelectField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { cn } from '@/lib/utils';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
@@ -50,12 +50,14 @@ export function TemplateForm({
         >
           Install Template <PackageOpenIcon />
         </h2>
-        <SelectField
+        <SelectFieldBlock
+          name="template-provider"
           options={providerOptions}
           label="Template AI Model Provider"
           onValueChange={onProviderChange}
           value={selectedProvider}
           placeholder="Select"
+          layout="horizontal"
         />
 
         {selectedProvider && Object.entries(variables || {}).length > 0 && (

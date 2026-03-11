@@ -1,4 +1,4 @@
-import { SelectField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { Button } from '@/ds/components/Button/Button';
 import { XIcon } from 'lucide-react';
 import { Icon } from '@/ds/icons/Icon';
@@ -17,13 +17,13 @@ type ScoresToolsProps = {
 export function ScoresTools({ onEntityChange, onReset, selectedEntity, entityOptions, isLoading }: ScoresToolsProps) {
   return (
     <ButtonsGroup>
-      <SelectField
+      <SelectFieldBlock
         label="Filter by Entity"
         labelIsHidden={true}
-        name={'select-entity'}
+        name="select-entity"
         placeholder="Select..."
         options={entityOptions || []}
-        onValueChange={val => {
+        onValueChange={(val: string) => {
           const entity = entityOptions?.find(entity => entity.value === val);
           if (entity) {
             onEntityChange(entity);
