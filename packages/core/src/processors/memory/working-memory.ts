@@ -152,28 +152,6 @@ export class WorkingMemory implements Processor {
     return messageList;
   }
 
-  private generateEmptyFromSchema(schema: any): Record<string, any> | null {
-    try {
-      if (typeof schema === 'object' && schema !== null) {
-        const empty: Record<string, any> = {};
-        for (const key in schema) {
-          if (schema[key]?.type === 'object') {
-            empty[key] = this.generateEmptyFromSchema(schema[key].properties);
-          } else if (schema[key]?.type === 'array') {
-            empty[key] = [];
-          } else {
-            empty[key] = '';
-          }
-        }
-        return empty;
-      }
-
-      return generateEmptyFromSchema(schema);
-    } catch {
-      return null;
-    }
-  }
-
   private getWorkingMemoryToolInstruction({
     template,
     data,
@@ -181,8 +159,14 @@ export class WorkingMemory implements Processor {
     template: WorkingMemoryTemplate;
     data: string | null;
   }): string {
-    const emptyWorkingMemoryTemplateObject =
-      template.format === 'json' ? this.generateEmptyFromSchema(template.content) : null;
+    let emptyWorkingMemoryTemplateObject: Record<string, any> | null = null;
+    if (template.format === 'json') {
+      try {
+        emptyWorkingMemoryTemplateObject = generateEmptyFromSchema(template.content as string | Record<string, any>);
+      } catch {
+        emptyWorkingMemoryTemplateObject = null;
+      }
+    }
     const hasEmptyWorkingMemoryTemplateObject =
       emptyWorkingMemoryTemplateObject && Object.keys(emptyWorkingMemoryTemplateObject).length > 0;
 

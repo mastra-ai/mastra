@@ -224,6 +224,29 @@ describe('generateEmptyFromSchema', () => {
       metadata: { source: 'system' },
     });
   });
+
+  it('should clone object and array defaults', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        metadata: {
+          type: 'object',
+          default: { source: 'system' },
+        },
+        tags: {
+          type: 'array',
+          default: ['memory'],
+        },
+      },
+    };
+
+    const generated = generateEmptyFromSchema(schema);
+    generated.metadata.source = 'user';
+    generated.tags.push('custom');
+
+    expect(schema.properties.metadata.default).toEqual({ source: 'system' });
+    expect(schema.properties.tags.default).toEqual(['memory']);
+  });
 });
 
 describe('makeCoreTool', () => {

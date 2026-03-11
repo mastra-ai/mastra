@@ -99,9 +99,25 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
+/**
+ * Clones schema defaults so generated templates can be mutated safely.
+ */
+function cloneSchemaDefault<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value);
+  }
+
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * Generates an empty value for a single JSON schema property definition.
+ */
 function generateEmptyValueFromSchemaProperty(prop: any): any {
   if (!prop || typeof prop !== 'object') return null;
-  if (Object.prototype.hasOwnProperty.call(prop, 'default')) return prop.default;
+  if (Object.prototype.hasOwnProperty.call(prop, 'default')) return cloneSchemaDefault(prop.default);
 
   if (Array.isArray(prop.type)) {
     const firstConcreteType = prop.type.find((type: unknown) => type !== 'null');
@@ -127,6 +143,9 @@ function generateEmptyValueFromSchemaProperty(prop: any): any {
   }
 }
 
+/**
+ * Builds an empty object for a parsed JSON schema object definition.
+ */
 function generateEmptyFromParsedSchema(parsedSchema: any): Record<string, any> {
   if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
 
@@ -139,6 +158,9 @@ function generateEmptyFromParsedSchema(parsedSchema: any): Record<string, any> {
   return obj;
 }
 
+/**
+ * Generates an empty object from a JSON schema string or parsed schema object.
+ */
 export function generateEmptyFromSchema(schema: string | Record<string, any>) {
   try {
     const parsedSchema = typeof schema === 'string' ? JSON.parse(schema) : schema;
