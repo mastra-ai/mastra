@@ -84,14 +84,13 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
     it('should persist and reload token estimates written by token counting', async () => {
       const counter = new TokenCounter();
-      const encoder = (counter as any).encoder;
-      const originalEncode = encoder.encode.bind(encoder);
-      let encodeCalls = 0;
+      const originalCountString = counter.countString.bind(counter);
+      let countStringCalls = 0;
 
       try {
-        encoder.encode = (...args: any[]) => {
-          encodeCalls += 1;
-          return originalEncode(...args);
+        counter.countString = (...args: any[]) => {
+          countStringCalls += 1;
+          return originalCountString(...args);
         };
 
         const cachedMessage = createSampleMessageV2({
@@ -109,7 +108,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         });
 
         const firstCount = counter.countMessage(cachedMessage);
-        const callsAfterFirst = encodeCalls;
+        const callsAfterFirst = countStringCalls;
         const firstEstimate = (cachedMessage.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
 
         expect(firstCount).toBeGreaterThan(0);
@@ -127,11 +126,11 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect((reloaded!.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate).toEqual(firstEstimate);
 
         const secondCount = counter.countMessage(reloaded!);
-        const callsAfterSecond = encodeCalls;
+        const callsAfterSecond = countStringCalls;
         expect(secondCount).toBe(firstCount);
         expect(callsAfterSecond - callsAfterFirst).toBe(1);
       } finally {
-        encoder.encode = originalEncode;
+        counter.countString = originalCountString;
       }
     });
 
