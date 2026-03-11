@@ -26,21 +26,6 @@ const config: StorybookConfig = {
       'process.env.NODE_ENV': '"production"',
     };
 
-    // Exclude node-only packages that have version mismatches (unicorn-magic@0.3.0 vs 0.4.0+)
-    config.optimizeDeps = {
-      ...config.optimizeDeps,
-      exclude: [...(config.optimizeDeps?.exclude ?? []), 'execa', 'npm-run-path', 'unicorn-magic'],
-    };
-
-    // Stub Node.js built-in modules for browser compatibility
-    config.resolve = {
-      ...config.resolve,
-      alias: {
-        ...config.resolve?.alias,
-        stream: 'stream-browserify',
-      },
-    };
-
     // Ensure proper base URL for production builds
     config.base = './';
 
