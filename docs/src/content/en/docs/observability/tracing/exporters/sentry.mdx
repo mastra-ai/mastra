@@ -1,12 +1,12 @@
 ---
-title: "Sentry Exporter | Tracing | Observability"
+title: "Sentry exporter | Tracing | Observability"
 description: "Send traces to Sentry for AI tracing and monitoring"
 packages:
   - "@mastra/sentry"
   - "@mastra/observability"
 ---
 
-# Sentry Exporter
+# Sentry exporter
 
 [Sentry](https://sentry.io/) is an application monitoring platform with AI-specific tracing capabilities. The Sentry exporter sends your traces to Sentry using OpenTelemetry semantic conventions, providing insights into model performance, token usage, and tool executions.
 
@@ -80,7 +80,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Configuration Options
+## Configuration options
 
 ### Complete Configuration
 
@@ -122,7 +122,7 @@ new SentryExporter({
 Set to `1.0` (100%) for development and `0.1` to `0.2` (10-20%) for production high-load applications. To disable tracing entirely, don't set `tracesSampleRate` at all rather than setting it to `0`.
 :::
 
-## Span Type Mapping
+## Span type mapping
 
 Mastra span types are automatically mapped to Sentry operations:
 
@@ -145,7 +145,7 @@ Mastra span types are automatically mapped to Sentry operations:
 | `PROCESSOR_RUN` | `ai.processor` | |
 | `GENERIC` | `ai.span` | |
 
-## OpenTelemetry Semantic Conventions
+## OpenTelemetry semantic conventions
 
 The exporter uses standard GenAI semantic conventions with Sentry-specific attributes:
 

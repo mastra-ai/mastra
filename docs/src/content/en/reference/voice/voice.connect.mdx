@@ -11,7 +11,7 @@ packages:
 
 The `connect()` method establishes a WebSocket or WebRTC connection for real-time speech-to-speech communication. This method must be called before using other real-time features like `send()` or `answer()`.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
@@ -66,11 +66,11 @@ await voice.connect({
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns a `Promise<void>` that resolves when the connection is successfully established.
 
-## Provider-Specific Options
+## Provider-specific options
 
 Each real-time voice provider may support different options for the `connect()` method:
 
@@ -108,7 +108,7 @@ Each real-time voice provider may support different options for the `connect()` 
 ]}
 />
 
-## Using with CompositeVoice
+## Using with `CompositeVoice`
 
 When using `CompositeVoice`, the `connect()` method delegates to the configured real-time provider:
 
@@ -132,7 +132,7 @@ await voice.connect()
 - Some providers may automatically reconnect on connection loss, depending on their implementation
 - Connection errors will typically be thrown as exceptions that should be caught and handled
 
-## Related Methods
+## Related methods
 
 - [voice.send()](./voice.send) - Sends audio data to the voice provider
 - [voice.answer()](./voice.answer) - Triggers the voice provider to respond

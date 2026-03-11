@@ -4,6 +4,7 @@ import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig } from './base.js';
+import { MASTRA_USER_AGENT } from './constants.js';
 
 interface AzureTokenResponse {
   token_type: 'Bearer';
@@ -299,10 +300,12 @@ export class AzureOpenAIGateway extends MastraModelGateway {
   async resolveLanguageModel({
     modelId,
     apiKey,
+    headers,
   }: {
     modelId: string;
     providerId: string;
     apiKey: string;
+    headers?: Record<string, string>;
   }): Promise<LanguageModelV2> {
     const apiVersion = this.config.apiVersion || '2024-04-01-preview';
 
@@ -311,6 +314,7 @@ export class AzureOpenAIGateway extends MastraModelGateway {
       apiKey,
       apiVersion,
       useDeploymentBasedUrls: true,
+      headers: { 'User-Agent': MASTRA_USER_AGENT, ...headers },
     })(modelId);
   }
 }
