@@ -174,7 +174,7 @@ export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
       });
 
       handle.streamControl = streamControl;
-      this._tracked.set(String(pid), handle);
+      this._tracked.set(pid, handle);
       return handle;
     });
   }
@@ -190,9 +190,5 @@ export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
       });
     }
     return result;
-  }
-
-  async get(pid: string): Promise<ProcessHandle | undefined> {
-    return this._tracked.get(String(pid));
   }
 }

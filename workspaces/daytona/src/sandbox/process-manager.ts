@@ -225,7 +225,7 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
 
       handle.streamingPromise = streamingPromise;
 
-      this._tracked.set(String(handle.pid), handle);
+      this._tracked.set(handle.pid, handle);
       return handle;
     });
   }
@@ -241,10 +241,6 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
       });
     }
     return result;
-  }
-
-  async get(pid: string): Promise<ProcessHandle | undefined> {
-    return this._tracked.get(String(pid));
   }
 }
 

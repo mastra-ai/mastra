@@ -2,7 +2,7 @@
 '@mastra/e2b': patch
 ---
 
-E2B process handles now expose string PIDs. You can still pass numeric-string PIDs to `get()` when reconnecting to an existing process.
+`ProcessHandle.pid` is now a string. Numeric PIDs from the E2B SDK are stringified automatically.
 
 ```typescript
 const handle = await sandbox.processes.spawn('node server.js');
