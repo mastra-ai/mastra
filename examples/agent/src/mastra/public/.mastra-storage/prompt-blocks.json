@@ -1,17 +1,8 @@
 {
   "test": {
-    "name": "My Firsts Prompt Block",
+    "name": "test",
     "description": "testest",
     "content": "testest",
-    "requestContextSchema": {
-      "type": "object",
-      "properties": {}
-    }
-  },
-  "third-prompt": {
-    "name": "Third Prompt",
-    "description": "This is my third promont",
-    "content": "  YOua re",
     "requestContextSchema": {
       "type": "object",
       "properties": {}
