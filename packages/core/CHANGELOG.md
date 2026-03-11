@@ -1,5 +1,45 @@
 # @mastra/core
 
+## 1.11.0-alpha.2
+
+### Patch Changes
+
+- Fixed OpenAI reasoning models (e.g. gpt-5-mini) failing with "function*call was provided without its required reasoning item" when the agent loops back after a tool call. The issue was that `callProviderMetadata.openai` carrying `fc*\*`item IDs was not being stripped alongside reasoning parts, causing the AI SDK to send`item_reference`instead of inline`function_call` content. ([#14144](https://github.com/mastra-ai/mastra/pull/14144))
+
+## 1.11.0-alpha.1
+
+### Minor Changes
+
+- Enabled tracing for tool executions through mcp server ([#12804](https://github.com/mastra-ai/mastra/pull/12804))
+
+  Traces now appear in the Observability UI for MCP server tool calls
+
+### Patch Changes
+
+- Fixed `writer` being undefined in `processOutputStream` for all output processors. The root cause was that `processPart` in `ProcessorRunner` did not pass the `writer` to `executeWorkflowAsProcessor` in the outputStream phase. Since all user processors are wrapped into workflows via `combineProcessorsIntoWorkflow`, this meant no processor ever received a `writer`. Custom output processors (like guardrail processors) can now reliably use `writer.custom()` to emit stream events. ([#14111](https://github.com/mastra-ai/mastra/pull/14111))
+
+- Fixed agent tool calls not being surfaced in evented workflow streams. Added StreamChunkWriter abstraction and stream format configuration ('legacy' | 'vnext') to forward agent stream chunks through the workflow output stream. ([#12692](https://github.com/mastra-ai/mastra/pull/12692))
+
+- Experiments now fail immediately with a clear error when triggered on a dataset with zero items, instead of getting stuck in "pending" status forever. The experiment trigger API returns HTTP 400 for empty datasets. Unexpected errors during async experiment setup are now logged and mark the experiment as failed. ([#14031](https://github.com/mastra-ai/mastra/pull/14031))
+
+- `@mastra/core`: patch ([#14103](https://github.com/mastra-ai/mastra/pull/14103))
+
+  Fixed reasoning content being lost in multi-turn conversations with thinking models (kimi-k2.5, DeepSeek-R1) when using OpenAI-compatible providers (e.g., OpenRouter).
+
+  Previously, reasoning content could be discarded during streaming, causing 400 errors when the model tried to continue the conversation. Multi-turn conversations now preserve reasoning content correctly across all turns.
+
+- fix(workflows): propagate logger to executionEngine ([#12517](https://github.com/mastra-ai/mastra/pull/12517))
+
+  When a custom logger is set on a Workflow via `__registerPrimitives` or `__setLogger`, it is now correctly propagated to the internal `executionEngine`. This ensures workflow step execution errors are logged through the custom logger instead of the default ConsoleLogger, enabling proper observability integration.
+
+- Added permission denied handling for dataset pages. Datasets now show a "Permission Denied" screen when the user lacks access, matching the behavior of agents, workflows, and other resources. ([#13876](https://github.com/mastra-ai/mastra/pull/13876))
+
+- Reasoning content from OpenAI models is now stripped from conversation history before replaying it to the LLM, preventing API errors on follow-up messages while preserving reasoning data in the database. Fixes #12980. ([#13418](https://github.com/mastra-ai/mastra/pull/13418))
+
+- **Fixed** ([#14133](https://github.com/mastra-ai/mastra/pull/14133))
+  - Prevented provider-executed tools from triggering extra loop iterations and duplicate requests.
+  - Preserved tool-call metadata during streaming so multi-turn conversations continue to work correctly with provider-executed tools.
+
 ## 1.11.0-alpha.0
 
 ### Minor Changes

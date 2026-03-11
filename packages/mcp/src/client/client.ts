@@ -725,6 +725,10 @@ export class InternalMastraMCPClient extends MastraBase {
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
           outputSchema: await this.convertOutputSchema(tool.outputSchema),
+          mcpMetadata: {
+            serverName: this.name,
+            serverVersion: this.client.getServerVersion()?.version,
+          },
           execute: async (
             input: any,
             context?: { requestContext?: RequestContext | null; runId?: string; abortSignal?: AbortSignal },
