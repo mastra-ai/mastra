@@ -80,9 +80,7 @@ function parseTokenInput(input: string): number | null {
   return num;
 }
 
-const KITTY_CSI_U_REGEX = new RegExp(
-  '^\\x1b\\[(\\d+)(?::(\\d*))?(?::(\\d+))?(?:;(\\d+))?(?::(\\d+))?u$',
-);
+const KITTY_CSI_U_REGEX = new RegExp('^\\x1b\\[(\\d+)(?::(\\d*))?(?::(\\d+))?(?:;(\\d+))?(?::(\\d+))?u$');
 const KITTY_MOD_SHIFT = 1;
 const KITTY_MOD_ALT = 2;
 const KITTY_MOD_CTRL = 4;
