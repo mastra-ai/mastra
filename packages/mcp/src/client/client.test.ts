@@ -1794,3 +1794,46 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
     await client.disconnect();
   }, 30000);
 });
+
+describe('MastraMCPClient - mcpMetadata on tools', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'metadata-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should set mcpMetadata.serverName on created tools', async () => {
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverName).toBe('metadata-test-client');
+  });
+
+  it('should set mcpMetadata.serverVersion after connection', async () => {
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
+  });
+});

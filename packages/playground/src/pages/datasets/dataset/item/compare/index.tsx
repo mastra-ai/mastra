@@ -21,6 +21,8 @@ import {
   Columns,
   Column,
   ButtonsGroup,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { Database, ArrowLeft, GitCompareIcon, History, ArrowLeftIcon, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -43,12 +45,22 @@ function DatasetItemsComparePage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const itemIds = searchParams.get('items')?.split(',').filter(Boolean) ?? [];
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
   const { Link: FrameworkLink } = useLinkComponent();
   const [isDiffView, setIsDiffView] = useState<boolean>(false);
 
   const { data: itemA } = useDatasetItem(datasetId ?? '', itemIds[0] ?? '');
   const { data: itemB } = useDatasetItem(datasetId ?? '', itemIds[1] ?? '');
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (!datasetId || itemIds.length < 2) {
     return (

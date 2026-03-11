@@ -17,7 +17,7 @@ Sends Tracing data to Laminar via OTLP/HTTP (protobuf).
 new LaminarExporter(config?: LaminarExporterConfig)
 ```
 
-## LaminarExporterConfig
+## `LaminarExporterConfig`
 
 ```typescript
 interface LaminarExporterConfig extends BaseExporterConfig {
@@ -94,7 +94,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>

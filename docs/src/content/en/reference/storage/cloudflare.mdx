@@ -5,7 +5,7 @@ packages:
   - "@mastra/cloudflare"
 ---
 
-# Cloudflare Storage
+# Cloudflare storage
 
 Mastra provides two Cloudflare storage implementations:
 
@@ -93,6 +93,16 @@ const storageRest = new CloudflareKVStorage({
   },
 ]}
 />
+
+### Additional notes
+
+### Schema Management
+
+The storage implementation handles schema creation and updates automatically. It creates the following tables:
+
+- `threads`: Stores conversation threads
+- `messages`: Stores individual messages
+- `metadata`: Stores additional metadata for threads and messages
 
 ### Consistency & Propagation
 
