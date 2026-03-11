@@ -1,12 +1,12 @@
 ---
-title: "Reference: Hallucination Scorer | Evals"
+title: "Reference: Hallucination scorer | Evals"
 description: Documentation for the Hallucination Scorer in Mastra, which evaluates the factual correctness of LLM outputs by identifying contradictions with provided context.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Hallucination Scorer
+# Hallucination scorer
 
 The `createHallucinationScorer()` function evaluates whether an LLM generates factually correct information by comparing its output against the provided context. This scorer measures hallucination by identifying direct contradictions between the context and the output.
 
@@ -23,48 +23,30 @@ The `createHallucinationScorer()` function accepts a single options object with 
     description: 'Configuration for the model used to evaluate hallucination.',
   },
   {
-    name: 'options.scale',
-    type: 'number',
-    required: false,
-    defaultValue: '1',
-    description: 'Maximum score value.',
-  },
-  {
-    name: 'options.context',
-    type: 'string[]',
-    required: false,
-    description: 'Static context strings to use as ground truth for hallucination detection.',
-  },
-  {
-    name: 'options.getContext',
-    type: '(params: GetContextParams) => string[] | Promise<string[]>',
-    required: false,
-    description:
-      'A hook to dynamically resolve context at runtime. Takes priority over static context. Useful for live scoring where context (like tool results) is only available when the scorer runs.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
     properties: [
       {
-        type: 'GetContextParams',
+        type: 'Options',
         parameters: [
           {
-            name: 'run',
-            type: 'GetContextRun',
-            description: 'The scorer run containing input, output, runId, requestContext, and tracingContext.',
-          },
-          {
-            name: 'results',
-            type: 'Record<string, any>',
-            description: 'Accumulated results from previous steps (e.g., preprocessStepResult with extracted claims).',
-          },
-          {
-            name: 'score',
+            name: 'scale',
             type: 'number',
-            required: false,
-            description: 'The computed score. Only present when called from the generateReason step.',
+            description: 'Maximum score value.',
+            defaultValue: '1',
           },
           {
-            name: 'step',
-            type: "'analyze' | 'generateReason'",
-            description: 'Which step is calling the hook. Useful for caching context between calls.',
+            name: 'context',
+            type: 'string[]',
+            description: 'Static context strings to use as ground truth for hallucination detection.',
+          },
+          {
+            name: 'getContext',
+            type: '(params: GetContextParams) => string[] | Promise<string[]>',
+            description:
+              'A hook to dynamically resolve context at runtime. Takes priority over static context. Useful for live scoring where context (like tool results) is only available when the scorer runs.',
           },
         ],
       },
@@ -75,7 +57,7 @@ The `createHallucinationScorer()` function accepts a single options object with 
 
 This function returns an instance of the MastraScorer class. The `.run()` method accepts the same input as other scorers (see the [MastraScorer reference](./mastra-scorer)), but the return value includes LLM-specific fields as documented below.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -123,7 +105,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 ]}
 />
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates hallucination through contradiction detection and unsupported claim analysis.
 
@@ -191,7 +173,7 @@ const scorer = createHallucinationScorer({
 })
 ```
 
-### Dynamic Context with getContext
+### Dynamic Context with `getContext`
 
 Use `getContext` for live scoring scenarios where context comes from tool results:
 
@@ -240,7 +222,7 @@ const agent = new Agent({
 })
 ```
 
-### Batch Evaluation with runEvals
+### Batch Evaluation with `runEvals`
 
 ```typescript title="src/example-batch-evals.ts"
 import { runEvals } from '@mastra/core/evals'

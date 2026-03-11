@@ -9,7 +9,7 @@ packages:
 
 The CloudflareVoice class in Mastra provides text-to-speech capabilities using Cloudflare Workers AI. This provider specializes in efficient, low-latency speech synthesis suitable for edge computing environments.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { CloudflareVoice } from '@mastra/voice-cloudflare'
@@ -36,7 +36,7 @@ console.log(speakers)
 
 ## Configuration
 
-### Constructor Options
+### Constructor options
 
 <PropertiesTable
   content={[
@@ -85,7 +85,7 @@ console.log(speakers)
 
 ## Methods
 
-### speak()
+### `speak()`
 
 Converts text to speech using Cloudflare's text-to-speech service.
 
@@ -98,25 +98,38 @@ Converts text to speech using Cloudflare's text-to-speech service.
     isOptional: false,
   },
   {
-    name: 'options.speaker',
-    type: 'string',
-    description: 'Voice ID to use for speech synthesis.',
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
     isOptional: true,
-    defaultValue: "Constructor's speaker value",
-  },
-  {
-    name: 'options.format',
-    type: 'string',
-    description: 'Output audio format.',
-    isOptional: true,
-    defaultValue: "'mp3'",
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Voice ID to use for speech synthesis.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+          {
+            name: 'format',
+            type: 'string',
+            description: 'Output audio format.',
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### getSpeakers()
+### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 
@@ -146,7 +159,7 @@ Returns an array of available voice options, where each node contains:
 - For production use, ensure your Cloudflare account has the appropriate Workers AI subscription
 - Voice options are more limited compared to some other providers, but performance at the edge is excellent
 
-## Related Providers
+## Related providers
 
 If you need speech-to-text capabilities in addition to text-to-speech, consider using one of these providers:
 

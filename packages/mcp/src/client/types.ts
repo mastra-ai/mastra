@@ -1,3 +1,4 @@
+import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
 import type { SSEClientTransportOptions } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StreamableHTTPClientTransportOptions } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -158,6 +159,20 @@ export type StdioServerDefinition = BaseServerOptions & {
   args?: string[];
   /** Optional environment variables for the subprocess */
   env?: Record<string, string>;
+  /**
+   * How to handle stderr of the child process. Matches the semantics of Node's `child_process.spawn`.
+   *
+   * - `"inherit"` (default): stderr is printed to the parent process's stderr
+   * - `"pipe"`: stderr is captured and available via `StdioClientTransport.stderr`
+   * - `"ignore"`: stderr is discarded
+   */
+  stderr?: IOType;
+  /**
+   * The working directory to use when spawning the subprocess.
+   *
+   * If not specified, the current working directory will be inherited.
+   */
+  cwd?: string;
 
   url?: never;
   requestInit?: never;
@@ -185,6 +200,8 @@ export type HttpServerDefinition = BaseServerOptions & {
   command?: never;
   args?: never;
   env?: never;
+  stderr?: never;
+  cwd?: never;
 
   /**
    * Custom fetch implementation used for all network requests.

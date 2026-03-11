@@ -32,7 +32,9 @@
         },
         "input": "Calculate 5 + 3",
         "output": {
-          "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+          "text": {
+            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+          },
           "files": []
         }
       },
@@ -90,7 +92,9 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+              "text": {
+                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+              },
               "warnings": []
             }
           },
@@ -118,6 +122,8 @@
                   "finishReason": "tool-calls"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "resourceId": "test-resource-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -157,6 +163,10 @@
                       "chunkType": "tool-call",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id"
+                    },
                     "output": {
                       "toolName": "calculator",
                       "toolCallId": "call-calc-1",
@@ -185,6 +195,10 @@
                       "toolType": "tool",
                       "success": true
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id"
+                    },
                     "input": {
                       "operation": "add",
                       "a": 5,
@@ -212,6 +226,8 @@
                       "sequenceNumber": 1
                     },
                     "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id",
                       "toolCallId": "call-calc-1",
                       "toolName": "calculator"
                     },
@@ -245,6 +261,8 @@
                   "finishReason": "stop"
                 },
                 "metadata": {
+                  "runId": "<runId-1>",
+                  "resourceId": "test-resource-id",
                   "modelMetadata": {
                     "modelId": "mock-model-id",
                     "modelVersion": "v2",
@@ -253,7 +271,9 @@
                 },
                 "input": {},
                 "output": {
-                  "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] },
+                  "text": {
+                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                  },
                   "toolCalls": []
                 }
               },
@@ -274,8 +294,14 @@
                       "chunkType": "text",
                       "sequenceNumber": 0
                     },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id"
+                    },
                     "output": {
-                      "text": { "__or__": ["Mock V2 generate response", "Mock V2 stream response"] }
+                      "text": {
+                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
+                      }
                     }
                   }
                 }

@@ -80,6 +80,46 @@ function parseTokenInput(input: string): number | null {
   return num;
 }
 
+const KITTY_CSI_U_REGEX = new RegExp('^\\x1b\\[(\\d+)(?::(\\d*))?(?::(\\d+))?(?:;(\\d+))?(?::(\\d+))?u$');
+const KITTY_MOD_SHIFT = 1;
+const KITTY_MOD_ALT = 2;
+const KITTY_MOD_CTRL = 4;
+const KITTY_LOCK_MASK = 64 + 128; // Caps Lock + Num Lock
+const KITTY_ALLOWED_MODIFIERS = KITTY_MOD_SHIFT | KITTY_LOCK_MASK;
+
+function decodeKittyPrintable(data: string): string | undefined {
+  const match = data.match(KITTY_CSI_U_REGEX);
+  if (!match) return undefined;
+
+  const codepoint = Number.parseInt(match[1] ?? '', 10);
+  if (!Number.isFinite(codepoint)) return undefined;
+
+  const shiftedKey = match[2] && match[2].length > 0 ? Number.parseInt(match[2], 10) : undefined;
+  const modValue = match[4] ? Number.parseInt(match[4], 10) : 1;
+  const modifier = Number.isFinite(modValue) ? modValue - 1 : 0;
+
+  if ((modifier & ~KITTY_ALLOWED_MODIFIERS) !== 0) return undefined;
+  if (modifier & (KITTY_MOD_ALT | KITTY_MOD_CTRL)) return undefined;
+
+  let effectiveCodepoint = codepoint;
+  if (modifier & KITTY_MOD_SHIFT && typeof shiftedKey === 'number') {
+    effectiveCodepoint = shiftedKey;
+  }
+
+  if (!Number.isFinite(effectiveCodepoint) || effectiveCodepoint < 32) return undefined;
+
+  try {
+    return String.fromCodePoint(effectiveCodepoint);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizeSearchInput(data: string): string {
+  const kittyPrintable = decodeKittyPrintable(data);
+  return kittyPrintable ?? data;
+}
+
 // =============================================================================
 // Threshold Input Submenu
 // =============================================================================
@@ -174,7 +214,7 @@ class ThresholdSubmenu extends Container {
 // Model Select Submenu
 // =============================================================================
 
-class ModelSelectSubmenu extends Container {
+export class ModelSelectSubmenu extends Container {
   private searchInput: Input;
   private listContainer: Container;
   private allModels: ModelOption[];
@@ -277,7 +317,8 @@ class ModelSelectSubmenu extends Container {
     } else if (kb.matches(data, 'selectCancel')) {
       this.onCancel();
     } else {
-      this.searchInput.handleInput(data);
+      const normalized = normalizeSearchInput(data);
+      this.searchInput.handleInput(normalized);
       this.filterModels(this.searchInput.getValue());
       this.tui.requestRender();
     }
