@@ -197,7 +197,7 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
       timeout: options.timeout ?? this._defaultTimeout,
     };
     return this.sandbox.retryOnDead(async () => {
-      const sandbox = this.sandbox.instance;
+      const sandbox = this.sandbox.daytona;
       const pid = this._nextPid++;
 
       // Merge default env with per-spawn env
