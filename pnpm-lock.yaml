@@ -279,7 +279,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.4.0
-        version: 13.5.0
+        version: 13.5.0(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4934,14 +4934,14 @@ importers:
   stores/dynamodb:
     dependencies:
       '@aws-sdk/client-dynamodb':
-        specifier: ^3.1004.0
-        version: 3.1005.0
+        specifier: ^3.1006.0
+        version: 3.1006.0
       '@aws-sdk/lib-dynamodb':
-        specifier: ^3.1004.0
-        version: 3.1005.0(@aws-sdk/client-dynamodb@3.1005.0)
+        specifier: ^3.1006.0
+        version: 3.1006.0(@aws-sdk/client-dynamodb@3.1006.0)
       electrodb:
         specifier: ^3.5.3
-        version: 3.5.3(@aws-sdk/client-dynamodb@3.1005.0)
+        version: 3.5.3(@aws-sdk/client-dynamodb@3.1006.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -5367,8 +5367,8 @@ importers:
   stores/s3vectors:
     dependencies:
       '@aws-sdk/client-s3vectors':
-        specifier: ^3.1004.0
-        version: 3.1005.0
+        specifier: ^3.1006.0
+        version: 3.1006.0
       uuid:
         specifier: ^13.0.0
         version: 13.0.0
@@ -6453,8 +6453,8 @@ importers:
   workspaces/s3:
     dependencies:
       '@aws-sdk/client-s3':
-        specifier: ^3.1004.0
-        version: 3.1005.0
+        specifier: ^3.1006.0
+        version: 3.1006.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -7201,16 +7201,16 @@ packages:
   '@aws-crypto/util@5.2.0':
     resolution: {integrity: sha512-4RkU9EsI6ZpBve5fseQlGNUWKMa1RLPQ1dnjnQoe07ldfIzcsGb5hC5W0Dm7u423KWzawlrpbjXBrXCEv9zazQ==}
 
-  '@aws-sdk/client-dynamodb@3.1005.0':
-    resolution: {integrity: sha512-lPkeRwkXhXEjyO3YENmxseFMfAQQAjecT9BjohoZqurvceLrqTml94Dt84OYtJpAvAVQua5SK7rOrjk2vEeU5A==}
+  '@aws-sdk/client-dynamodb@3.1006.0':
+    resolution: {integrity: sha512-PTGnTtTdOezfg7UsICBeS8BtxAxYfWI2/JNLflWjjryiJdHIl7aAprsHrIzlsD6qwQOloxhmwqp7C9JFY5BT2Q==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-s3@3.1005.0':
-    resolution: {integrity: sha512-EVl5IElgh7l9M242JYZGBt2AtdylpSKEFiEHBfB2OKuh2es19IQkDNfLFGfzThXWbapfBjXuB0zs9nplNviOSQ==}
+  '@aws-sdk/client-s3@3.1006.0':
+    resolution: {integrity: sha512-tm8R/LgWDC3zWPMCdD990owvBrmuIM2A39+OWKW/HyAomWi6ancPz/H1K/hmxf0bqdXAaRUHBQMAmzwb1aR33Q==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-s3vectors@3.1005.0':
-    resolution: {integrity: sha512-AAVG6gi0Rzw/ho+I/bPLeel2yFhY70RxbRRTFXaWet2atyXSwdH0iKa24CVnqiTJCK0/ljtjnY+mdMyPEaID8A==}
+  '@aws-sdk/client-s3vectors@3.1006.0':
+    resolution: {integrity: sha512-yfbsMtixFFP6McwanWpJgGt06lER+DZCciaABsJnKv70x7Nj6aiGmHE+1DMVXndmhCqDOpxca3AYmL+pVDB68g==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/core@3.973.19':
@@ -7261,11 +7261,11 @@ packages:
     resolution: {integrity: sha512-GdASDnWanLnHxKK0hqV97xz23QmfA/C8yGe0PiuEmWiHSe+x+x+mFEj4sXqx9IbfyPncWz8f4EhNwBSG9cgYCg==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/lib-dynamodb@3.1005.0':
-    resolution: {integrity: sha512-XNZyBXA2cUAU4Crg9uUMhFDs6IYi5RsMavlIxQIax9UJ4Ra379IIMG2dlVpbLcHBTGjV6mCRxxje6Pb3hTVjvA==}
+  '@aws-sdk/lib-dynamodb@3.1006.0':
+    resolution: {integrity: sha512-fn/OeYKdf0Z+4+0zHLllm1q/O4O8dYbt/sE3tHj1YBaCmZqVi8ydvnjJkAZEbejM/BBMaxKJH7VJdFKSoc0mOA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@aws-sdk/client-dynamodb': ^3.1005.0
+      '@aws-sdk/client-dynamodb': ^3.1006.0
 
   '@aws-sdk/lib-storage@3.997.0':
     resolution: {integrity: sha512-G5z1CBZVCRStYjgCg3Qu9LjtWAGCUa0JouPU3o8nplSIzpBE4CCJBiWZj7q1/qiIyEBxChf9apqHYJMNN1LDOQ==}
@@ -13359,8 +13359,8 @@ packages:
     resolution: {integrity: sha512-75MeYpjdWRe8M5E3AW0O4Cx3UadweS+cwdXjwYGBW5h/gxxnbeZ877sLPX/ZJA9GVTlL/qG0dXP29JWFCD1Ayw==}
     engines: {node: '>=18.0.0'}
 
-  '@smithy/util-waiter@4.2.11':
-    resolution: {integrity: sha512-x7Rh2azQPs3XxbvCzcttRErKKvLnbZfqRf/gOjw2pb+ZscX88e5UkRPCB67bVnsFHxayvMvmePfKTqsRb+is1A==}
+  '@smithy/util-waiter@4.2.12':
+    resolution: {integrity: sha512-ek5hyDrzS6mBFsNCEX8LpM+EWSLq6b9FdmPRlkpXXhiJE6aIZehKT9clC6+nFpZAA+i/Yg0xlaPeWGNbf5rzQA==}
     engines: {node: '>=18.0.0'}
 
   '@smithy/uuid@1.1.2':
@@ -24927,7 +24927,7 @@ snapshots:
       '@smithy/util-utf8': 2.3.0
       tslib: 2.8.1
 
-  '@aws-sdk/client-dynamodb@3.1005.0':
+  '@aws-sdk/client-dynamodb@3.1006.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
@@ -24969,12 +24969,12 @@ snapshots:
       '@smithy/util-middleware': 4.2.11
       '@smithy/util-retry': 4.2.11
       '@smithy/util-utf8': 4.2.2
-      '@smithy/util-waiter': 4.2.11
+      '@smithy/util-waiter': 4.2.12
       tslib: 2.8.1
     transitivePeerDependencies:
       - aws-crt
 
-  '@aws-sdk/client-s3@3.1005.0':
+  '@aws-sdk/client-s3@3.1006.0':
     dependencies:
       '@aws-crypto/sha1-browser': 5.2.0
       '@aws-crypto/sha256-browser': 5.2.0
@@ -25029,12 +25029,12 @@ snapshots:
       '@smithy/util-retry': 4.2.11
       '@smithy/util-stream': 4.5.17
       '@smithy/util-utf8': 4.2.2
-      '@smithy/util-waiter': 4.2.11
+      '@smithy/util-waiter': 4.2.12
       tslib: 2.8.1
     transitivePeerDependencies:
       - aws-crt
 
-  '@aws-sdk/client-s3vectors@3.1005.0':
+  '@aws-sdk/client-s3vectors@3.1006.0':
     dependencies:
       '@aws-crypto/sha256-browser': 5.2.0
       '@aws-crypto/sha256-js': 5.2.0
@@ -25217,19 +25217,19 @@ snapshots:
       mnemonist: 0.38.3
       tslib: 2.8.1
 
-  '@aws-sdk/lib-dynamodb@3.1005.0(@aws-sdk/client-dynamodb@3.1005.0)':
+  '@aws-sdk/lib-dynamodb@3.1006.0(@aws-sdk/client-dynamodb@3.1006.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.1005.0
+      '@aws-sdk/client-dynamodb': 3.1006.0
       '@aws-sdk/core': 3.973.19
-      '@aws-sdk/util-dynamodb': 3.996.2(@aws-sdk/client-dynamodb@3.1005.0)
+      '@aws-sdk/util-dynamodb': 3.996.2(@aws-sdk/client-dynamodb@3.1006.0)
       '@smithy/core': 3.23.9
       '@smithy/smithy-client': 4.12.3
       '@smithy/types': 4.13.0
       tslib: 2.8.1
 
-  '@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1005.0)':
+  '@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1006.0)':
     dependencies:
-      '@aws-sdk/client-s3': 3.1005.0
+      '@aws-sdk/client-s3': 3.1006.0
       '@smithy/abort-controller': 4.2.11
       '@smithy/middleware-endpoint': 4.4.23
       '@smithy/smithy-client': 4.12.3
@@ -25423,9 +25423,9 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@aws-sdk/util-dynamodb@3.996.2(@aws-sdk/client-dynamodb@3.1005.0)':
+  '@aws-sdk/util-dynamodb@3.996.2(@aws-sdk/client-dynamodb@3.1006.0)':
     dependencies:
-      '@aws-sdk/client-dynamodb': 3.1005.0
+      '@aws-sdk/client-dynamodb': 3.1006.0
       tslib: 2.8.1
 
   '@aws-sdk/util-endpoints@3.996.4':
@@ -27475,8 +27475,8 @@ snapshots:
 
   '@daytonaio/sdk@0.143.0(ws@8.19.0)':
     dependencies:
-      '@aws-sdk/client-s3': 3.1005.0
-      '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1005.0)
+      '@aws-sdk/client-s3': 3.1006.0
+      '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1006.0)
       '@daytonaio/api-client': 0.143.0
       '@daytonaio/toolbox-api-client': 0.143.0
       '@iarna/toml': 2.2.5
@@ -28959,7 +28959,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/firestore@7.11.6':
+  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       fast-deep-equal: 3.1.3
@@ -33520,7 +33520,7 @@ snapshots:
       '@smithy/util-buffer-from': 4.2.2
       tslib: 2.8.1
 
-  '@smithy/util-waiter@4.2.11':
+  '@smithy/util-waiter@4.2.12':
     dependencies:
       '@smithy/abort-controller': 4.2.11
       '@smithy/types': 4.13.0
@@ -37321,10 +37321,10 @@ snapshots:
 
   efrt@2.7.0: {}
 
-  electrodb@3.5.3(@aws-sdk/client-dynamodb@3.1005.0):
+  electrodb@3.5.3(@aws-sdk/client-dynamodb@3.1006.0):
     dependencies:
-      '@aws-sdk/lib-dynamodb': 3.1005.0(@aws-sdk/client-dynamodb@3.1005.0)
-      '@aws-sdk/util-dynamodb': 3.996.2(@aws-sdk/client-dynamodb@3.1005.0)
+      '@aws-sdk/lib-dynamodb': 3.1006.0(@aws-sdk/client-dynamodb@3.1006.0)
+      '@aws-sdk/util-dynamodb': 3.996.2(@aws-sdk/client-dynamodb@3.1006.0)
       jsonschema: 1.2.7
     transitivePeerDependencies:
       - '@aws-sdk/client-dynamodb'
@@ -38309,7 +38309,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.8.1
 
-  firebase-admin@13.5.0:
+  firebase-admin@13.5.0(encoding@0.1.13):
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -38323,7 +38323,7 @@ snapshots:
       node-forge: 1.3.3
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
