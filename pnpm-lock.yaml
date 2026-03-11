@@ -3907,7 +3907,7 @@ importers:
         specifier: ^10.0.6
         version: 10.0.6(react@19.2.4)
       zustand:
-        specifier: ^5.0.9
+        specifier: ^5.0.11
         version: 5.0.11(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
     devDependencies:
       '@mastra/ai-sdk':
