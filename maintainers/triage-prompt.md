@@ -34,9 +34,10 @@ You are triaging a single open PR for the mastra-ai/mastra repository. Your goal
    - Does it have tests, description, changesets?
    - Is the scope reasonable or is it too large/unfocused?
 
-3. Calculate dates (today is 2026-03-10):
-   - ageInDays: days between opened date and today
+3. Calculate dates — **today's date is $(date +%Y-%m-%d)**:
+   - ageInDays: days between opened date and today. Double-check your arithmetic.
    - daysSinceLastUpdate: days between last updated and today
+   - Use these same values consistently in `maintainerNotes` text (don't recalculate separately)
    - size category: XS (<10 total lines), S (<50), M (<200), L (<500), XL (500+)
 
 4. Determine triage category:
@@ -110,7 +111,7 @@ You are triaging a single open PR for the mastra-ai/mastra repository. Your goal
   "summary": "",
   "maintainerNotes": "",
   "suggestedAction": "review | merge | request-changes | close | wait | rebase | ping-author",
-  "triageDate": "2026-03-10T00:00:00Z"
+  "triageDate": "$(date +%Y-%m-%dT00:00:00Z)"
 }
 ```
 

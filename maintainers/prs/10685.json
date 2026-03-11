@@ -10,8 +10,8 @@
   "dates": {
     "opened": "2025-12-01T05:25:55Z",
     "lastUpdated": "2025-12-08T06:02:21Z",
-    "ageInDays": 465,
-    "daysSinceLastUpdate": 457
+    "ageInDays": 98,
+    "daysSinceLastUpdate": 91
   },
   "size": {
     "additions": 6888,
@@ -66,7 +66,7 @@
     "relatedIssues": []
   },
   "summary": "Major Couchbase 8.0 update from an external Couchbase contributor. Introduces two new store implementations: CouchbaseSearchStore (using Search Vector Index for Couchbase 7.6.4+) and CouchbaseQueryStore (using Hyperscale/Composite Vector Indexes for Couchbase 8.0+). Adds a comprehensive metadata filter system with operators for both store types, RAG prompts, extensive unit/integration tests, and documentation updates. Also updates metadata filter support tables to mark Couchbase as supporting all standard operators.",
-  "maintainerNotes": "This PR has been stale for over 450 days with merge conflicts. The author (a Couchbase employee, first-time contributor) pinged maintainers twice (Dec 2, Dec 8 2025) with no response. Since then, significant changes have been merged to the couchbase store and the broader vector store infrastructure (shared test suite in #11912, couchbase dep update to ^4.6.1 in #13837, test optimizations in #13965). The PR is very large (6888 additions across 29 files) and lacks a changeset. CI tests never ran (stuck PENDING, likely due to fork permissions). If the Couchbase 8.0 features are still desired, it would be better to either (1) ask the author to rebase and conform to the current shared test suite patterns, or (2) take the implementation ideas and re-implement against the current codebase. The PR also pre-dates the shared vector store test suite, so tests will need significant rework.",
+  "maintainerNotes": "This PR has been stale for about 98 days with merge conflicts. The author (a Couchbase employee, first-time contributor) pinged maintainers twice (Dec 2, Dec 8 2025) with no response. Since then, significant changes have been merged to the couchbase store and the broader vector store infrastructure (shared test suite in #11912, couchbase dep update to ^4.6.1 in #13837, test optimizations in #13965). The PR is very large (6888 additions across 29 files) and lacks a changeset. CI tests never ran (stuck PENDING, likely due to fork permissions). If the Couchbase 8.0 features are still desired, it would be better to either (1) ask the author to rebase and conform to the current shared test suite patterns, or (2) take the implementation ideas and re-implement against the current codebase. The PR also pre-dates the shared vector store test suite, so tests will need significant rework.",
   "suggestedAction": "close",
   "triageDate": "2026-03-10T00:00:00Z"
 }

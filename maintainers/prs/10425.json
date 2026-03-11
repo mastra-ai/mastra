@@ -10,8 +10,8 @@
   "dates": {
     "opened": "2025-11-24T00:55:47Z",
     "lastUpdated": "2026-03-03T12:42:12Z",
-    "ageInDays": 472,
-    "daysSinceLastUpdate": 7
+    "ageInDays": 105,
+    "daysSinceLastUpdate": 6
   },
   "size": {
     "additions": 520,
@@ -42,12 +42,12 @@
       "followsConventions": true,
       "scopeIsReasonable": true
     },
-    "isStale": true,
+    "isStale": false,
     "similarOrDuplicatePRs": [],
     "relatedIssues": []
   },
   "summary": "Adds support for dynamic tool descriptions that can be functions receiving requestContext and Mastra instance, matching the existing DynamicArgument pattern used for agent instructions and models. Enables multi-tenancy, localization, and feature flags for tool descriptions. Changes span Tool class (private #description field, getDescription() method), Agent (resolveToolDescription helper), tool-builder, workflows (static fallback for build-time), MCP server, and network loop. Includes comprehensive tests and a changeset.",
-  "maintainerNotes": "Well-structured community PR with good code quality, tests, changeset, and detailed description. However, it has merge conflicts (maintainer abhiaiyer91 asked author to resolve conflicts back in Nov 2025, no author follow-up). CI checks are stuck in PENDING state and Vercel deploys need authorization. The feature itself (dynamic tool descriptions via requestContext) has not been implemented elsewhere and is still relevant. The PR is 472 days old with no meaningful author activity since initial submission. Consider: (1) asking the author if they're still interested, (2) cherry-picking the approach into a maintainer branch if the feature is desired, or (3) closing as stale.",
+  "maintainerNotes": "Well-structured community PR with good code quality, tests, changeset, and detailed description. However, it has merge conflicts (maintainer abhiaiyer91 asked author to resolve conflicts back in Nov 2025, no author follow-up). CI checks are stuck in PENDING state and Vercel deploys need authorization. The feature itself (dynamic tool descriptions via requestContext) has not been implemented elsewhere and is still relevant. The PR is 105 days old with no meaningful author activity since initial submission. Consider: (1) asking the author if they're still interested, (2) cherry-picking the approach into a maintainer branch if the feature is desired, or (3) closing as stale.",
   "suggestedAction": "ping-author",
   "triageDate": "2026-03-10T00:00:00Z"
 }

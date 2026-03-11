@@ -10,8 +10,8 @@
   "dates": {
     "opened": "2025-10-15T06:40:26Z",
     "lastUpdated": "2025-10-16T06:37:11Z",
-    "ageInDays": 512,
-    "daysSinceLastUpdate": 510
+    "ageInDays": 145,
+    "daysSinceLastUpdate": 144
   },
   "size": {
     "additions": 457,
@@ -60,7 +60,7 @@
     ]
   },
   "summary": "Adds compile-time type checking on `.commit()` to enforce that a workflow's `outputSchema` matches the last step's output schema. Introduces `IsAny` and `OutputMatches` type helpers in workflow types. Uses a conditional `this` parameter on `commit()` that resolves to `never` when schemas don't match, with `z.any()` as an escape hatch. Updates ~800 lines of test code to align output schemas. However, several places use `(wf as any).commit()` to bypass the new checking (cloneWorkflow, scorer dynamic workflows, inngest adapter), and workflow-builder.ts has a FIXME with mismatched schemas.",
-  "maintainerNotes": "Maintainer wardpeet reviewed and asked the author to keep the commit method but fix the `as any` workarounds. Author has not responded in ~510 days. The PR has merge conflicts and lint failures. Issue #6428 remains open and this is the only PR addressing it. The core approach (conditional `this` parameter on `commit()`) is sound but needs the escape hatches resolved. PR #12778 (merged) fixed a related but distinct workflow type issue. If the feature is still desired, it would likely be easier to reimplement from scratch against the current codebase rather than rebasing this stale branch.",
+  "maintainerNotes": "Maintainer wardpeet reviewed and asked the author to keep the commit method but fix the `as any` workarounds. Author has not responded in ~145 days. The PR has merge conflicts and lint failures. Issue #6428 remains open and this is the only PR addressing it. The core approach (conditional `this` parameter on `commit()`) is sound but needs the escape hatches resolved. PR #12778 (merged) fixed a related but distinct workflow type issue. If the feature is still desired, it would likely be easier to reimplement from scratch against the current codebase rather than rebasing this stale branch.",
   "suggestedAction": "close",
   "triageDate": "2026-03-10T00:00:00Z"
 }

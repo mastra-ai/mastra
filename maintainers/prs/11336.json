@@ -10,8 +10,8 @@
   "dates": {
     "opened": "2025-12-22T11:43:53Z",
     "lastUpdated": "2025-12-22T12:42:36Z",
-    "ageInDays": 443,
-    "daysSinceLastUpdate": 443
+    "ageInDays": 77,
+    "daysSinceLastUpdate": 77
   },
   "size": {
     "additions": 34,
@@ -42,7 +42,7 @@
       "followsConventions": true,
       "scopeIsReasonable": true
     },
-    "isStale": true,
+    "isStale": false,
     "similarOrDuplicatePRs": [
       {
         "number": 11832,
