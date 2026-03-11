@@ -13,6 +13,10 @@ import type {
 } from '../types';
 import { isWorkspaceV1Supported, shouldRetryWorkspaceQuery, isWorkspaceNotSupportedError } from '../compatibility';
 
+function getParentPath(path: string): string {
+  return path.split('/').slice(0, -1).join('/') || (path.startsWith('/') ? '/' : '.');
+}
+
 // Re-export for other hooks to use
 export { isWorkspaceV1Supported, isWorkspaceNotSupportedError };
 
@@ -145,7 +149,7 @@ export const useWriteWorkspaceFile = () => {
       });
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
+      const parentPath = getParentPath(variables.path);
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
@@ -172,7 +176,7 @@ export const useWriteWorkspaceFileFromFile = () => {
       });
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
+      const parentPath = getParentPath(variables.path);
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
@@ -195,7 +199,7 @@ export const useDeleteWorkspaceFile = () => {
       });
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
+      const parentPath = getParentPath(variables.path);
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
       queryClient.invalidateQueries({ queryKey: ['workspace', 'file', variables.path] });
     },
@@ -215,7 +219,7 @@ export const useCreateWorkspaceDirectory = () => {
       return workspace.mkdir(params.path, params.recursive);
     },
     onSuccess: (_, variables) => {
-      const parentPath = variables.path.split('/').slice(0, -1).join('/') || '.';
+      const parentPath = getParentPath(variables.path);
       queryClient.invalidateQueries({ queryKey: ['workspace', 'files', parentPath] });
     },
   });
