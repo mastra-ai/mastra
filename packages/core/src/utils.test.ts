@@ -6,11 +6,7 @@ import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-<<<<<<< fix/issue-14152
 import { generateEmptyFromSchema, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
-=======
-import { fetchWithRetry, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
->>>>>>> main
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
