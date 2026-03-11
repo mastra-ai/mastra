@@ -51,7 +51,9 @@ export type ExecuteFunctionParams<
     ? (suspendPayload?: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>
     : (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
   bail(result: TStepOutput): InnerOutput;
-  bail(result?: unknown): InnerOutput;
+  bail<T>(
+    result: T extends Workflow<any, any, any, any, any, infer TWorkflowOutput, any, any> ? TWorkflowOutput : T,
+  ): InnerOutput;
   abort(): void;
   resume?: {
     steps: string[];
