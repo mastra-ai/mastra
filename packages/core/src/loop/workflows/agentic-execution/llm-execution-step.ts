@@ -1275,8 +1275,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
+      // - OR there are tool calls to process (some LLMs return finishReason 'stop' even with tool calls)
       // - OR finishReason indicates more work (e.g., tool-use)
-      const shouldContinue = shouldRetry || (!tripwireTriggered && !['stop', 'error', 'length'].includes(finishReason));
+      const hasPendingToolCalls = toolCalls && toolCalls.length > 0;
+      const shouldContinue =
+        shouldRetry ||
+        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
 
       // Increment processor retry count if we're retrying
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : currentProcessorRetryCount;

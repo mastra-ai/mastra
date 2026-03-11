@@ -15,16 +15,22 @@ export const RESOURCES = [
   'a2a',
   'agent-builder',
   'agents',
+  'datasets',
+  'embedders',
   'logs',
   'mcp',
   'memory',
   'observability',
+  'processor-providers',
   'processors',
   'scores',
+  'stored',
   'stored-agents',
   'system',
+  'tool-providers',
   'tools',
   'vector',
+  'vectors',
   'workflows',
   'workspaces',
 ] as const;
@@ -71,6 +77,10 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
+  /** Full access to datasets */
+  'datasets:*': 'datasets:*',
+  /** Full access to embedders */
+  'embedders:*': 'embedders:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -79,18 +89,26 @@ export const PERMISSION_PATTERNS = {
   'memory:*': 'memory:*',
   /** Full access to traces and spans */
   'observability:*': 'observability:*',
+  /** Full access to processor-providers */
+  'processor-providers:*': 'processor-providers:*',
   /** Full access to processors */
   'processors:*': 'processors:*',
   /** Full access to evaluation scores */
   'scores:*': 'scores:*',
+  /** Full access to stored */
+  'stored:*': 'stored:*',
   /** Full access to stored agents */
   'stored-agents:*': 'stored-agents:*',
   /** Full access to system info */
   'system:*': 'system:*',
+  /** Full access to tool-providers */
+  'tool-providers:*': 'tool-providers:*',
   /** Full access to tools */
   'tools:*': 'tools:*',
   /** Full access to vector stores */
   'vector:*': 'vector:*',
+  /** Full access to vectors */
+  'vectors:*': 'vectors:*',
   /** Full access to workflows */
   'workflows:*': 'workflows:*',
   /** Full access to workspaces */
@@ -111,6 +129,14 @@ export const PERMISSION_PATTERNS = {
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
+  /** Delete datasets */
+  'datasets:delete': 'datasets:delete',
+  /** View datasets */
+  'datasets:read': 'datasets:read',
+  /** Create and modify datasets */
+  'datasets:write': 'datasets:write',
+  /** View embedders */
+  'embedders:read': 'embedders:read',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -131,6 +157,8 @@ export const PERMISSION_PATTERNS = {
   'observability:read': 'observability:read',
   /** Create and modify traces and spans */
   'observability:write': 'observability:write',
+  /** View processor-providers */
+  'processor-providers:read': 'processor-providers:read',
   /** Execute processors */
   'processors:execute': 'processors:execute',
   /** View processors */
@@ -145,8 +173,16 @@ export const PERMISSION_PATTERNS = {
   'stored-agents:read': 'stored-agents:read',
   /** Create and modify stored agents */
   'stored-agents:write': 'stored-agents:write',
+  /** Delete stored */
+  'stored:delete': 'stored:delete',
+  /** View stored */
+  'stored:read': 'stored:read',
+  /** Create and modify stored */
+  'stored:write': 'stored:write',
   /** View system info */
   'system:read': 'system:read',
+  /** View tool-providers */
+  'tool-providers:read': 'tool-providers:read',
   /** Execute tools */
   'tools:execute': 'tools:execute',
   /** View tools */
@@ -159,6 +195,8 @@ export const PERMISSION_PATTERNS = {
   'vector:read': 'vector:read',
   /** Create and modify vector stores */
   'vector:write': 'vector:write',
+  /** View vectors */
+  'vectors:read': 'vectors:read',
   /** Delete workflows */
   'workflows:delete': 'workflows:delete',
   /** Execute workflows */
@@ -197,6 +235,10 @@ export const PERMISSIONS = [
   'agents:execute',
   'agents:read',
   'agents:write',
+  'datasets:delete',
+  'datasets:read',
+  'datasets:write',
+  'embedders:read',
   'logs:read',
   'mcp:execute',
   'mcp:read',
@@ -207,6 +249,7 @@ export const PERMISSIONS = [
   'memory:write',
   'observability:read',
   'observability:write',
+  'processor-providers:read',
   'processors:execute',
   'processors:read',
   'scores:read',
@@ -214,13 +257,18 @@ export const PERMISSIONS = [
   'stored-agents:delete',
   'stored-agents:read',
   'stored-agents:write',
+  'stored:delete',
+  'stored:read',
+  'stored:write',
   'system:read',
+  'tool-providers:read',
   'tools:execute',
   'tools:read',
   'vector:delete',
   'vector:execute',
   'vector:read',
   'vector:write',
+  'vectors:read',
   'workflows:delete',
   'workflows:execute',
   'workflows:read',
