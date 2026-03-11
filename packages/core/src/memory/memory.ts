@@ -12,7 +12,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '../processors';
 import { isProcessorWorkflow } from '../processors';
-import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import { MessageHistory, WorkingMemory, SemanticRecall, MemoryTokenLimiter } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
@@ -732,6 +732,21 @@ https://mastra.ai/en/docs/memory/overview`,
             embedderOptions: this.embedderOptions,
             indexName,
             ...semanticConfig,
+          }),
+        );
+      }
+    }
+
+    // Add memory token limiter AFTER semantic recall so it caps the final context
+    if (effectiveConfig.maxTokens !== undefined) {
+      const hasTokenLimiter = configuredProcessors.some(
+        p => !isProcessorWorkflow(p) && p.id === 'memory-token-limiter',
+      );
+
+      if (!hasTokenLimiter) {
+        processors.push(
+          new MemoryTokenLimiter({
+            maxTokens: effectiveConfig.maxTokens,
           }),
         );
       }
