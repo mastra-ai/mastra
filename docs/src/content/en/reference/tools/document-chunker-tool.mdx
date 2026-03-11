@@ -9,7 +9,7 @@ packages:
 
 The `createDocumentChunkerTool()` function creates a tool for splitting documents into smaller chunks for efficient processing and retrieval. It supports different chunking strategies and configurable parameters.
 
-## Basic Usage
+## Basic usage
 
 ```typescript
 import { createDocumentChunkerTool, MDocument } from '@mastra/rag'
@@ -52,7 +52,7 @@ const { chunks } = await chunker.execute()
 ]}
 />
 
-### ChunkParams
+### `ChunkParams`
 
 <PropertiesTable
   content={[
@@ -99,7 +99,7 @@ const { chunks } = await chunker.execute()
 ]}
 />
 
-## Example with Custom Parameters
+## Example with custom parameters
 
 ```typescript
 const technicalDoc = new MDocument({
@@ -128,7 +128,7 @@ chunks.forEach((chunk, index) => {
 })
 ```
 
-## Tool Details
+## Tool details
 
 The chunker is created as a Mastra tool with the following properties:
 

@@ -1,5 +1,5 @@
 ---
-title: "Reference: PostgreSQL Storage | Storage"
+title: "Reference: PostgreSQL storage | Storage"
 description: Documentation for the PostgreSQL storage implementation in Mastra.
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/pg"
 ---
 
-# PostgreSQL Storage
+# PostgreSQL storage
 
 The PostgreSQL storage implementation provides a production-ready storage solution using PostgreSQL databases.
 
@@ -130,7 +130,7 @@ const storage = new PostgresStore({
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 You can instantiate `PostgresStore` in the following ways:
 
@@ -178,7 +178,7 @@ const store4 = new PostgresStore({
 })
 ```
 
-## Additional Notes
+## Additional notes
 
 ### Schema Management
 
@@ -379,7 +379,7 @@ This pattern ensures only one `PostgresStore` instance is created regardless of 
 This singleton pattern is only necessary during local development with HMR. In production builds, modules are only loaded once.
 :::
 
-## Usage Example
+## Usage example
 
 ### Adding memory to an agent
 
@@ -450,7 +450,7 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-## Index Management
+## Index management
 
 PostgreSQL storage provides index management to optimize query performance.
 
