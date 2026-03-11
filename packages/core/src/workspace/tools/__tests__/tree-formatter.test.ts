@@ -3,8 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { LocalFilesystem } from '../filesystem';
-import { formatAsTree, formatEntriesAsTree } from './tree-formatter';
+import { LocalFilesystem } from '../../filesystem';
+import { formatAsTree, formatEntriesAsTree } from '../tree-formatter';
 
 describe('tree-formatter', () => {
   let tempDir: string;
