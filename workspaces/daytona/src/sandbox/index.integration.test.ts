@@ -12,6 +12,7 @@
  */
 
 import { createSandboxTestSuite } from '@internal/workspace-test-utils';
+import { Daytona } from '@daytonaio/sdk';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { DaytonaSandbox } from './index';
@@ -861,6 +862,10 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
             getMountConfig: () => getS3TestConfig(),
           }) as any
       : undefined,
+    killSandboxExternally: async sb => {
+      const daytona = new Daytona();
+      await daytona.stop((sb as DaytonaSandbox).instance);
+    },
     capabilities: {
       supportsMounting: true,
       supportsReconnection: true,

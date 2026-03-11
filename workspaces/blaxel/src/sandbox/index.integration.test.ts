@@ -489,6 +489,9 @@ if (hasBlaxelCredentials) {
         // Ignore cleanup errors
       }
     },
+    killSandboxExternally: async sb => {
+      await (sb as BlaxelSandbox).instance.delete();
+    },
     capabilities: {
       supportsMounting: true,
       supportsReconnection: true,
