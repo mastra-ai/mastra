@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.6.0",
+  "version": "0.8.0-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -78,10 +78,8 @@
     "tree-kill": "latest",
     "vscode-jsonrpc": "latest",
     "vscode-languageserver-protocol": "latest",
-    "@mastra/pg": "workspace:*"
-  },
-  "peerDependencies": {
-    "zod": "^3.25.0 || ^4.0.0"
+    "@mastra/pg": "workspace:*",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -90,7 +88,7 @@
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "catalog:",

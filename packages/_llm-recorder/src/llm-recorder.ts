@@ -484,14 +484,35 @@ function findRecording(recordings: LLMRecording[], hash: string, url: string, bo
     return undefined;
   }
 
-  // 2. Fuzzy match via string similarity on serialized request content
+  // 2. Fuzzy match via string similarity on serialized request content.
+  //    Prefer recordings that match the request URL to avoid cross-API mismatches
+  //    (e.g. /v1/chat/completions vs /v1/responses).
   const incoming = serializeRequestContent(url, body);
-  const candidates = recordings.map(r => serializeRequestContent(r.request.url, r.request.body));
+  let bestRating = -1;
+  let bestIndex = -1;
+  let bestUrlMatchRating = -1;
+  let bestUrlMatchIndex = -1;
 
-  const { bestMatch, bestMatchIndex } = stringSimilarity.findBestMatch(incoming, candidates);
+  for (let i = 0; i < recordings.length; i++) {
+    const candidate = serializeRequestContent(recordings[i]!.request.url, recordings[i]!.request.body);
+    const rating = stringSimilarity.compareTwoStrings(incoming, candidate);
+    if (rating > bestRating) {
+      bestRating = rating;
+      bestIndex = i;
+    }
+    if (recordings[i]!.request.url === url && rating > bestUrlMatchRating) {
+      bestUrlMatchRating = rating;
+      bestUrlMatchIndex = i;
+    }
+  }
 
-  if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
-    return recordings[bestMatchIndex]!;
+  // Prefer URL-matching recording when available and above threshold
+  if (bestUrlMatchRating >= SIMILARITY_THRESHOLD && bestUrlMatchIndex >= 0) {
+    return recordings[bestUrlMatchIndex]!;
+  }
+
+  if (bestRating >= SIMILARITY_THRESHOLD && bestIndex >= 0) {
+    return recordings[bestIndex]!;
   }
 
   return undefined;
