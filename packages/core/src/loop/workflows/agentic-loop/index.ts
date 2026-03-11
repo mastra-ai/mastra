@@ -167,8 +167,6 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         try {
           const iterationResult = await rest.onIterationComplete(iterationContext);
 
-          // console.dir({ iterationResult }, { depth: null });
-
           if (iterationResult) {
             if (iterationResult.feedback && typedInputData.stepResult?.isContinued) {
               messageList.add(
