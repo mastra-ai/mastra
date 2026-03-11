@@ -500,7 +500,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       return {
         experimentId: result.experimentId,
         status: result.status,
-        totalItems: result.totalItems,
+        totalItems: result.totalItems ?? 0,
         succeededCount: 0,
         failedCount: 0,
         startedAt: new Date(),
