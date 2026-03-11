@@ -1,5 +1,33 @@
 # @mastra/mcp
 
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- MCP client now attaches `mcpMetadata` (server name and version) to every tool it creates, enabling automatic `MCP_TOOL_CALL` span tracing without user code changes. ([#13274](https://github.com/mastra-ai/mastra/pull/13274))
+
+### Patch Changes
+
+- Added `stderr` and `cwd` options to stdio server configuration so you can control child process error output and set the server working directory. ([#13959](https://github.com/mastra-ai/mastra/pull/13959))
+
+  ```ts
+  import { MCPClient } from '@mastra/mcp';
+
+  const mcp = new MCPClient({
+    servers: {
+      myServer: {
+        command: 'node',
+        args: ['server.js'],
+        stderr: 'pipe',
+        cwd: '/path/to/server',
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`cddf895`](https://github.com/mastra-ai/mastra/commit/cddf895532b8ee7f9fa814136ec672f53d37a9ba), [`aede3cc`](https://github.com/mastra-ai/mastra/commit/aede3cc2a83b54bbd9e9a54c8aedcd1708b2ef87), [`c4c7dad`](https://github.com/mastra-ai/mastra/commit/c4c7dadfe2e4584f079f6c24bfabdb8c4981827f), [`45c3112`](https://github.com/mastra-ai/mastra/commit/45c31122666a0cc56b94727099fcb1871ed1b3f6), [`5e7c287`](https://github.com/mastra-ai/mastra/commit/5e7c28701f2bce795dd5c811e4c3060bf2ea2242), [`7e17d3f`](https://github.com/mastra-ai/mastra/commit/7e17d3f656fdda2aad47c4beb8c491636d70820c)]:
+  - @mastra/core@1.12.0-alpha.0
+
 ## 1.1.0
 
 ### Minor Changes

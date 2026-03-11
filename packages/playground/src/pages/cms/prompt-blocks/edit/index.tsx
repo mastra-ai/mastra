@@ -256,7 +256,6 @@ function CmsPromptBlocksEditPage() {
             blockId={blockId}
             value={selectedVersionId ?? ''}
             onValueChange={handleVersionSelect}
-            variant="outline"
             activeVersionId={activeVersionId}
           />
         </HeaderAction>
