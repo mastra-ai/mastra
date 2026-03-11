@@ -92,7 +92,8 @@ export function ProcessorList({ processors, isLoading, error }: ProcessorListPro
                         )}
                         <div className="flex items-center gap-x-2 flex-wrap text-neutral2 text-ui-sm">
                           <span className="uppercase font-normal text-neutral1 flex items-baseline gap-x-2">
-                            <b className="font-bold text-neutral2">{processor.phases.length || 0}</b> {processor.phases.length === 1 ? 'Phase' : 'Phases'}:
+                            <b className="font-bold text-neutral2">{processor.phases.length || 0}</b>{' '}
+                            {processor.phases.length === 1 ? 'Phase' : 'Phases'}:
                           </span>
                           {processor.phases.map(phase => (
                             <>

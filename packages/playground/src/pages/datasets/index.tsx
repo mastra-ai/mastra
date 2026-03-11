@@ -25,7 +25,13 @@ function Datasets() {
   return (
     <PageContent>
       <PageContent.TopBar>
-        <Button as={Link} to="https://mastra.ai/docs/observability/datasets/overview" target="_blank" variant="ghost" size="md">
+        <Button
+          as={Link}
+          to="https://mastra.ai/docs/observability/datasets/overview"
+          target="_blank"
+          variant="ghost"
+          size="md"
+        >
           Datasets documentation
           <ExternalLinkIcon />
         </Button>

@@ -26,12 +26,7 @@ export default function Templates() {
             </MainHeader.Column>
           </MainHeader>
 
-          <TemplatesList
-            templates={templates}
-            tags={tags ?? []}
-            providers={providers ?? []}
-            isLoading={isLoading}
-          />
+          <TemplatesList templates={templates} tags={tags ?? []} providers={providers ?? []} isLoading={isLoading} />
         </div>
       </PageContent.Main>
     </PageContent>

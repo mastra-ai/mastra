@@ -1,11 +1,4 @@
-import {
-  Button,
-  MCPServerList,
-  McpServerIcon,
-  useMCPServers,
-  PageContent,
-  MainHeader,
-} from '@mastra/playground-ui';
+import { Button, MCPServerList, McpServerIcon, useMCPServers, PageContent, MainHeader } from '@mastra/playground-ui';
 import { ExternalLinkIcon } from 'lucide-react';
 import { Link } from 'react-router';
 
@@ -15,7 +8,13 @@ const MCPs = () => {
   return (
     <PageContent>
       <PageContent.TopBar>
-        <Button as={Link} to="https://mastra.ai/en/docs/tools-mcp/mcp-overview" target="_blank" variant="ghost" size="md">
+        <Button
+          as={Link}
+          to="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
+          target="_blank"
+          variant="ghost"
+          size="md"
+        >
           MCP documentation
           <ExternalLinkIcon />
         </Button>

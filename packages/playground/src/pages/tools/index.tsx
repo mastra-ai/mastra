@@ -1,13 +1,4 @@
-import {
-  Button,
-
-  ToolsIcon,
-  ToolList,
-  useAgents,
-  useTools,
-  PageContent,
-  MainHeader,
-} from '@mastra/playground-ui';
+import { Button, ToolsIcon, ToolList, useAgents, useTools, PageContent, MainHeader } from '@mastra/playground-ui';
 
 import { ExternalLinkIcon } from 'lucide-react';
 import { Link } from 'react-router';
@@ -21,8 +12,13 @@ export default function Tools() {
   return (
     <PageContent>
       <PageContent.TopBar>
-        <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank" variant="ghost" size="md">
-          
+        <Button
+          as={Link}
+          to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+          target="_blank"
+          variant="ghost"
+          size="md"
+        >
           Tools documentation
           <ExternalLinkIcon />
         </Button>

@@ -1,11 +1,4 @@
-import {
-  WorkflowList,
-  Button,
-  WorkflowIcon,
-  useWorkflows,
-  PageContent,
-  MainHeader,
-} from '@mastra/playground-ui';
+import { WorkflowList, Button, WorkflowIcon, useWorkflows, PageContent, MainHeader } from '@mastra/playground-ui';
 import { ExternalLinkIcon } from 'lucide-react';
 import { Link } from 'react-router';
 

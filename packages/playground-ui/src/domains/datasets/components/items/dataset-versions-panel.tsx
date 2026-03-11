@@ -10,7 +10,6 @@ import { useDatasetVersions, type DatasetVersion } from '../../hooks/use-dataset
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Column } from '@/ds/components/Columns';
 
-
 export interface DatasetVersionsPanelProps {
   datasetId: string;
   onClose: () => void;
