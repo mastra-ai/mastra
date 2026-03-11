@@ -37,7 +37,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "^20.19.35",
+    "@types/node": "^20.19.37",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
