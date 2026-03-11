@@ -36,7 +36,7 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
 
 Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. Non-image files appear as placeholders only.
 
-OM performs thresholding with fast local token estimation. Text uses `tokenx`, and image-like inputs use provider-aware heuristics plus deterministic fallbacks when metadata is incomplete.
+OM performs thresholding with fast local token estimation by default. Text uses `tokenx`, and image-like inputs use provider-aware heuristics plus deterministic fallbacks when metadata is incomplete. Exact grouped provider token counting is available as an opt-in low-level `TokenCounter` path, so OM does not add provider token-count network requests unless you explicitly enable that behavior.
 
 <PropertiesTable
   content={[

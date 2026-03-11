@@ -1,5 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
+import { createAnthropic } from '@ai-sdk/anthropic-v5';
+import { createGoogleGenerativeAI } from '@ai-sdk/google-v5';
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
+import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import imageSize from 'image-size';
 import { estimateTokenCount } from 'tokenx';
@@ -18,6 +23,7 @@ export type TokenCounterModelContext = {
 
 type TokenCounterOptions = {
   model?: string | TokenCounterModelContext;
+  enableProviderTokenCounting?: boolean;
 };
 
 type ImageTokenDetail = 'low' | 'high' | 'auto';
@@ -84,6 +90,19 @@ const PROVIDER_API_KEY_ENV_VARS: Record<string, string[]> = {
   google: ['GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
   anthropic: ['ANTHROPIC_API_KEY'],
 };
+
+class CapturedProviderRequestError extends Error {
+  constructor(
+    readonly request: {
+      url: string;
+      method: string;
+      headers: Record<string, string>;
+      body: unknown;
+    },
+  ) {
+    super('Captured provider request');
+  }
+}
 
 type CacheablePart = any;
 
@@ -890,6 +909,138 @@ function createTimeoutSignal(timeoutMs: number): { signal: AbortSignal; cleanup:
   return { signal: controller.signal, cleanup };
 }
 
+async function readCapturedRequestBody(request: Request): Promise<unknown> {
+  const contentType = request.headers.get('content-type') ?? '';
+  const bodyText = await request.text();
+
+  if (!bodyText) {
+    return undefined;
+  }
+
+  if (contentType.includes('application/json')) {
+    try {
+      return JSON.parse(bodyText);
+    } catch {
+      return bodyText;
+    }
+  }
+
+  return bodyText;
+}
+
+function stripUndefinedFields<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined)) as Partial<T>;
+}
+
+function sanitizeCapturedCountRequest(providerId: string, body: unknown): unknown {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return body;
+  }
+
+  const record = { ...(body as Record<string, unknown>) };
+  delete record.stream;
+
+  if (providerId === 'anthropic') {
+    return stripUndefinedFields({
+      model: record.model,
+      system: record.system,
+      messages: record.messages,
+      tools: record.tools,
+      tool_choice: record.tool_choice,
+      thinking: record.thinking,
+      service_tier: record.service_tier,
+      metadata: record.metadata,
+      betas: record.betas,
+    });
+  }
+
+  return record;
+}
+
+function createProviderRequestCaptureFetch(timeoutMs: number): {
+  fetch: typeof globalThis.fetch;
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const { signal, cleanup } = createTimeoutSignal(timeoutMs);
+
+  const captureFetch: typeof globalThis.fetch = async (input, init) => {
+    const request = input instanceof Request ? input.clone() : new Request(input, init);
+    const body = await readCapturedRequestBody(request);
+
+    throw new CapturedProviderRequestError({
+      url: request.url,
+      method: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      body,
+    });
+  };
+
+  return { fetch: captureFetch, signal, cleanup };
+}
+
+function createProviderCountModel(
+  modelContext: TokenCounterModelContext,
+  fetch: typeof globalThis.fetch,
+): LanguageModelV2 | null {
+  if (!modelContext.provider || !modelContext.modelId) {
+    return null;
+  }
+
+  const apiKey = getProviderApiKey(modelContext.provider);
+  if (!apiKey) {
+    return null;
+  }
+
+  switch (modelContext.provider) {
+    case 'openai':
+      return createOpenAI({ apiKey, fetch }).responses(modelContext.modelId as any);
+    case 'anthropic':
+      return createAnthropic({ apiKey, fetch }).messages(modelContext.modelId as any);
+    case 'google':
+      return createGoogleGenerativeAI({ apiKey, fetch }).languageModel(modelContext.modelId as any);
+    default:
+      return null;
+  }
+}
+
+function getPromptForProviderCount(messages: MastraDBMessage[]): LanguageModelV2CallOptions['prompt'] {
+  const messageList = new MessageList();
+  messageList.add(messages, 'input');
+  return messageList.get.all.aiV5.prompt() as LanguageModelV2CallOptions['prompt'];
+}
+
+async function captureProviderPromptBody(
+  modelContext: TokenCounterModelContext,
+  messages: MastraDBMessage[],
+  timeoutMs: number,
+): Promise<CapturedProviderRequestError['request'] | undefined> {
+  const { fetch, signal, cleanup } = createProviderRequestCaptureFetch(timeoutMs);
+
+  try {
+    const model = createProviderCountModel(modelContext, fetch);
+    if (!model) {
+      return undefined;
+    }
+
+    await model.doGenerate({
+      prompt: getPromptForProviderCount(messages),
+      maxOutputTokens: 1,
+      temperature: 0,
+      abortSignal: signal,
+    });
+    return undefined;
+  } catch (error) {
+    if (error instanceof CapturedProviderRequestError) {
+      return error.request;
+    }
+
+    throw error;
+  } finally {
+    cleanup();
+  }
+}
+
 function getNumericResponseField(value: unknown, paths: string[][]): number | undefined {
   for (const path of paths) {
     let current: unknown = value;
@@ -1088,6 +1239,80 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
   }
 }
 
+async function fetchProviderGroupedTokenEstimate(
+  modelContext: TokenCounterModelContext,
+  request: CapturedProviderRequestError['request'],
+): Promise<number | undefined> {
+  if (!modelContext.provider || !modelContext.modelId) {
+    return undefined;
+  }
+
+  const body = sanitizeCapturedCountRequest(modelContext.provider, request.body);
+  const { signal, cleanup } = createTimeoutSignal(ATTACHMENT_COUNT_TIMEOUT_MS);
+
+  try {
+    if (modelContext.provider === 'openai') {
+      const response = await fetch('https://api.openai.com/v1/responses/input_tokens', {
+        method: 'POST',
+        headers: new Headers(
+          stripUndefinedFields({
+            authorization: request.headers.authorization,
+            'content-type': request.headers['content-type'] ?? 'application/json',
+          }) as Record<string, string>,
+        ),
+        body: JSON.stringify(body),
+        signal,
+      });
+
+      if (!response.ok) return undefined;
+      return getNumericResponseField(await response.json(), [['input_tokens']]);
+    }
+
+    if (modelContext.provider === 'anthropic') {
+      const response = await fetch('https://api.anthropic.com/v1/messages/count_tokens', {
+        method: 'POST',
+        headers: new Headers(
+          stripUndefinedFields({
+            'x-api-key': request.headers['x-api-key'],
+            'anthropic-version': request.headers['anthropic-version'],
+            'anthropic-beta': request.headers['anthropic-beta'],
+            'content-type': request.headers['content-type'] ?? 'application/json',
+          }) as Record<string, string>,
+        ),
+        body: JSON.stringify(body),
+        signal,
+      });
+
+      if (!response.ok) return undefined;
+      return getNumericResponseField(await response.json(), [['input_tokens']]);
+    }
+
+    if (modelContext.provider === 'google') {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelContext.modelId}:countTokens`,
+        {
+          method: 'POST',
+          headers: new Headers(
+            stripUndefinedFields({
+              'x-goog-api-key': request.headers['x-goog-api-key'],
+              'content-type': request.headers['content-type'] ?? 'application/json',
+            }) as Record<string, string>,
+          ),
+          body: JSON.stringify(body),
+          signal,
+        },
+      );
+
+      if (!response.ok) return undefined;
+      return getNumericResponseField(await response.json(), [['totalTokens'], ['total_tokens']]);
+    }
+
+    return undefined;
+  } finally {
+    cleanup();
+  }
+}
+
 /**
  * Token counting utility using tokenx for rough local estimation and
  * provider-aware heuristics for image parts so multimodal prompts are not
@@ -1096,8 +1321,11 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
 export class TokenCounter {
   private readonly cacheSource: string;
   private readonly defaultModelContext?: TokenCounterModelContext;
+  private readonly enableProviderTokenCounting: boolean;
   private readonly modelContextStorage = new AsyncLocalStorage<TokenCounterModelContext | undefined>();
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
+  private readonly groupedCountCache = new Map<string, number>();
+  private readonly inFlightGroupedCounts = new Map<string, Promise<number | undefined>>();
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
   // 3.8 remains a practical average across providers for OM thresholding.
@@ -1108,6 +1336,7 @@ export class TokenCounter {
   constructor(options?: TokenCounterOptions) {
     this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
     this.defaultModelContext = parseModelContext(options?.model);
+    this.enableProviderTokenCounting = options?.enableProviderTokenCounting ?? false;
   }
 
   runWithModelContext<T>(model: string | TokenCounterModelContext | undefined, fn: () => T): T {
@@ -1433,6 +1662,94 @@ export class TokenCounter {
     return localTokens;
   }
 
+  private buildGroupedMessageCachePayload(messages: MastraDBMessage[]): string | undefined {
+    const modelContext = this.getModelContext();
+    const provider = resolveProviderId(modelContext);
+    const modelId = modelContext?.modelId ?? null;
+    if (!provider || !modelId || !['openai', 'google', 'anthropic'].includes(provider)) {
+      return undefined;
+    }
+
+    return JSON.stringify({
+      provider,
+      modelId,
+      messages: messages.map(message => {
+        if (typeof message.content === 'string') {
+          return { role: message.role, content: message.content };
+        }
+
+        if (message.content && typeof message.content === 'object') {
+          if (message.content.content && !Array.isArray(message.content.parts)) {
+            return { role: message.role, content: message.content.content };
+          }
+
+          if (Array.isArray(message.content.parts)) {
+            return {
+              role: message.role,
+              parts: message.content.parts.map(part => JSON.parse(serializePartForTokenCounting(part))),
+            };
+          }
+        }
+
+        return { role: message.role, content: null };
+      }),
+    });
+  }
+
+  private async countMessagesViaProvider(messages: MastraDBMessage[]): Promise<number | undefined> {
+    if (!this.enableProviderTokenCounting) {
+      return undefined;
+    }
+
+    const payload = this.buildGroupedMessageCachePayload(messages);
+    const modelContext = this.getModelContext();
+    const provider = resolveProviderId(modelContext);
+    const modelId = modelContext?.modelId ?? null;
+
+    if (!payload || !provider || !modelId) {
+      return undefined;
+    }
+
+    const cacheKey = buildEstimateKey('grouped-provider-messages', payload);
+    const cached = this.groupedCountCache.get(cacheKey);
+    if (typeof cached === 'number' && Number.isFinite(cached) && cached > 0) {
+      return cached;
+    }
+
+    const existingRequest = this.inFlightGroupedCounts.get(cacheKey);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const request = (async () => {
+      try {
+        const capturedRequest = await captureProviderPromptBody(
+          { provider, modelId },
+          messages,
+          ATTACHMENT_COUNT_TIMEOUT_MS,
+        );
+        if (!capturedRequest) {
+          return undefined;
+        }
+
+        const exactTokens = await fetchProviderGroupedTokenEstimate({ provider, modelId }, capturedRequest);
+        if (typeof exactTokens === 'number' && Number.isFinite(exactTokens) && exactTokens > 0) {
+          this.groupedCountCache.set(cacheKey, exactTokens);
+          return exactTokens;
+        }
+
+        return undefined;
+      } catch {
+        return undefined;
+      } finally {
+        this.inFlightGroupedCounts.delete(cacheKey);
+      }
+    })();
+
+    this.inFlightGroupedCounts.set(cacheKey, request);
+    return request;
+  }
+
   private countNonAttachmentPart(part: CacheablePart): {
     tokens: number;
     overheadDelta: number;
@@ -1601,7 +1918,10 @@ export class TokenCounter {
     if (!messages || messages.length === 0) return 0;
 
     const messageTotals = await Promise.all(messages.map(message => this.countMessageAsync(message)));
-    return TokenCounter.TOKENS_PER_CONVERSATION + messageTotals.reduce((sum, count) => sum + count, 0);
+    const localTotal = TokenCounter.TOKENS_PER_CONVERSATION + messageTotals.reduce((sum, count) => sum + count, 0);
+    const providerTotal = await this.countMessagesViaProvider(messages);
+
+    return providerTotal ?? localTotal;
   }
 
   /**

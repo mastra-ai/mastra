@@ -47,6 +47,106 @@ async function createToolResultPartFromExecutedTool({
   } as const;
 }
 
+const runOpenAILiveTests = process.env.RUN_OPENAI_LIVE_TESTS === 'true' && Boolean(process.env.OPENAI_API_KEY);
+const itIfOpenAILive = runOpenAILiveTests ? it : it.skip;
+
+function createOpenAILiveFixtureMessages() {
+  return [
+    {
+      id: '2c2cdffc-407a-4728-acbf-a94c1f7cf2cc',
+      role: 'user',
+      createdAt: new Date('2026-03-11T16:33:01.186Z'),
+      threadId: '1773246781149-fwme7c8zv',
+      resourceId: 'mastra-c597b1a88f39',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'text',
+            text: "Hello! please get familiar with how observational memory works, especially it's usage of tiktoken",
+          },
+        ],
+        content: "Hello! please get familiar with how observational memory works, especially it's usage of tiktoken",
+      },
+    },
+    {
+      id: '812ab8b6-9783-44d6-add2-c3237d9f5345',
+      role: 'assistant',
+      createdAt: new Date('2026-03-11T16:33:02.532Z'),
+      threadId: '1773246781149-fwme7c8zv',
+      resourceId: 'mastra-c597b1a88f39',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'data-om-status',
+            data: {
+              windows: {
+                active: {
+                  messages: { tokens: 47, threshold: 30000 },
+                  observations: { tokens: 0, threshold: 40000 },
+                },
+                buffered: {
+                  observations: {
+                    chunks: 0,
+                    messageTokens: 0,
+                    projectedMessageRemoval: 0,
+                    observationTokens: 0,
+                    status: 'idle',
+                  },
+                  reflection: {
+                    inputObservationTokens: 0,
+                    observationTokens: 0,
+                    status: 'idle',
+                  },
+                },
+              },
+              recordId: '43afcfd1-5122-4550-9d97-330a0b3b93b4',
+              threadId: '1773246781149-fwme7c8zv',
+              stepNumber: 0,
+              generationCount: 0,
+            },
+          },
+          {
+            type: 'text',
+            text: "I'll explore the codebase to understand how observational memory works and its tiktoken usage.",
+          },
+        ],
+      },
+    },
+    {
+      id: 'assistant-step-2',
+      role: 'assistant',
+      createdAt: new Date('2026-03-11T16:33:19.351Z'),
+      threadId: '1773246781149-fwme7c8zv',
+      resourceId: 'mastra-c597b1a88f39',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: '12c83108f',
+              toolName: 'search_content',
+              args: {
+                pattern: 'observational.?memory',
+                caseSensitive: false,
+              },
+              result:
+                "1000 matches across 72 files (truncated at 1000)\n---\n./client-sdks/ai-sdk/src/middleware.test.ts:13:10: import { ObservationalMemory } from '@mastra/memory/processors';\n./packages/memory/src/processors/observational-memory/token-counter.ts:1317:1: export class TokenCounter {",
+            },
+          },
+          {
+            type: 'text',
+            text: 'I found the main observational memory implementation and the token counter. Next I will inspect how message thresholds and cached token estimates are applied during observation and reflection.',
+          },
+        ],
+      },
+    },
+  ] as any;
+}
+
 describe('TokenCounter', () => {
   const originalFetch = globalThis.fetch;
 
@@ -764,6 +864,141 @@ describe('TokenCounter', () => {
 
       expect(second).toBeGreaterThan(first);
       expect(secondEstimate.key).not.toBe(firstEstimate.key);
+    });
+  });
+
+  describe('grouped provider counting', () => {
+    it('stays on local tokenx estimation unless provider counting is explicitly enabled', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const messages = [
+        {
+          ...createMessage({ format: 2, parts: [{ type: 'text', text: 'Keep counting local by default' }] }),
+          role: 'user',
+        },
+      ];
+
+      const counter = new TokenCounter({ model: 'openai/gpt-4o' });
+      const localTotal = counter.countMessages(messages as any);
+      const asyncTotal = await counter.countMessagesAsync(messages as any);
+
+      expect(asyncTotal).toBe(localTotal);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('captures the provider-native request body for async grouped message counting when enabled', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ input_tokens: 4321 }),
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter({ model: 'openai/gpt-4o', enableProviderTokenCounting: true });
+      const messages = [
+        {
+          ...createMessage({ format: 2, parts: [{ type: 'text', text: 'Summarize this thread' }] }),
+          role: 'user',
+        },
+      ];
+
+      const total = await counter.countMessagesAsync(messages as any);
+
+      expect(total).toBe(4321);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/responses/input_tokens',
+        expect.objectContaining({ method: 'POST' }),
+      );
+
+      const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+      expect(requestBody.model).toBe('gpt-4o');
+      expect(Array.isArray(requestBody.input)).toBe(true);
+      expect(requestBody.input.length).toBeGreaterThan(0);
+    });
+
+    it('dedupes in-flight grouped async message counts for identical payloads', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      let resolveFetch: ((value: any) => void) | undefined;
+      const fetchMock = vi.fn(
+        () =>
+          new Promise(resolve => {
+            resolveFetch = resolve;
+          }),
+      );
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter({ model: 'openai/gpt-4o', enableProviderTokenCounting: true });
+      const messages = [
+        {
+          ...createMessage({ format: 2, parts: [{ type: 'text', text: 'Count me once' }] }),
+          role: 'user',
+        },
+      ];
+
+      const first = counter.countMessagesAsync(messages as any);
+      const second = counter.countMessagesAsync(messages as any);
+
+      await vi.waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
+
+      resolveFetch?.({
+        ok: true,
+        json: async () => ({ input_tokens: 987 }),
+      });
+
+      await expect(Promise.all([first, second])).resolves.toEqual([987, 987]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to local async estimation when provider grouped counting fails', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'rate_limited' }),
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter({ model: 'openai/gpt-4o', enableProviderTokenCounting: true });
+      const messages = [
+        {
+          ...createMessage({ format: 2, parts: [{ type: 'text', text: 'Fallback to rough count' }] }),
+          role: 'user',
+        },
+      ];
+
+      const localTotal = new TokenCounter({ model: 'openai/gpt-4o' }).countMessages(messages as any);
+      const total = await counter.countMessagesAsync(messages as any);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(total).toBe(localTotal);
+    });
+  });
+
+  describe('live OpenAI grouped provider counting', () => {
+    itIfOpenAILive('counts a realistic Mastra message batch via the OpenAI input_tokens endpoint', async () => {
+      const messages = createOpenAILiveFixtureMessages();
+      const localCounter = new TokenCounter({ model: 'openai/gpt-4o' });
+      const providerCounter = new TokenCounter({ model: 'openai/gpt-4o', enableProviderTokenCounting: true });
+
+      const localTotal = localCounter.countMessages(messages);
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+      try {
+        const providerTotal = await providerCounter.countMessagesAsync(messages);
+
+        expect(providerTotal).toBeGreaterThan(0);
+        expect(providerTotal).toBeGreaterThan(Math.floor(localTotal * 0.5));
+        expect(fetchSpy).toHaveBeenCalledWith(
+          'https://api.openai.com/v1/responses/input_tokens',
+          expect.objectContaining({ method: 'POST' }),
+        );
+      } finally {
+        fetchSpy.mockRestore();
+      }
     });
   });
 
