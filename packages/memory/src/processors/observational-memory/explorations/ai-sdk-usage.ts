@@ -5,6 +5,17 @@
  *
  * Key insight: Memory handles threads and messages. OM handles observation.
  * Memory.getContext() assembles everything for the LLM call.
+ *
+ * Public API primitives on ObservationalMemory:
+ *   getStatus({ threadId, resourceId? })  → status snapshot (shouldObserve, shouldBuffer, shouldReflect, canActivate)
+ *   observe({ threadId, ... })            → synchronous observation (threshold-gated)
+ *   buffer({ threadId, ... })             → create a buffered observation chunk (for async pre-computation)
+ *   activate({ threadId, ... })           → merge buffered chunks into active observations
+ *   reflect(threadId, resourceId?, ...)   → condense observations into a new generation
+ *   getRecord(threadId, resourceId?)      → current OM record
+ *   getObservations(threadId, ...)        → current observation text
+ *   getHistory(threadId, ...)             → previous generations
+ *   clear(threadId, ...)                  → delete all OM data
  */
 
 // NOTE: This file is excluded from build via tsconfig.build.json.
@@ -29,7 +40,7 @@ declare const om: any; // ObservationalMemory engine — handles observations
 
 const threadId = 'thread-123';
 
-// ─── The ideal 3-step loop ──────────────────────────────────────────────────
+// ─── Simple usage: observe after each turn ──────────────────────────────────
 
 async function chat(userMessage: string) {
   // 1. Get everything needed for the LLM call in one shot
@@ -73,12 +84,36 @@ async function chat(userMessage: string) {
   return result.text;
 }
 
-// ─── Streaming version ──────────────────────────────────────────────────────
+// ─── Advanced usage: explicit buffering + activation ────────────────────────
+//
+// For long conversations where you want to pre-compute observations in the
+// background (between steps or turns) rather than blocking the response.
 
-async function streamChat(userMessage: string) {
+async function chatWithBuffering(userMessage: string) {
+  // 1. Get context
   const ctx = await memory.getContext({ threadId });
 
-  const result = streamText({
+  // 1b. Activate any previously buffered observations
+  const status = await om.getStatus({ threadId });
+  // Returns:
+  // {
+  //   record, pendingTokens, threshold,
+  //   shouldObserve, shouldBuffer, shouldReflect,
+  //   bufferedChunkCount, bufferedChunkTokens, canActivate,
+  // }
+
+  if (status.canActivate) {
+    const actResult = await om.activate({ threadId });
+    // Returns: { activated: boolean, record, activatedMessageIds? }
+    if (actResult.activated) {
+      // Context has changed — re-fetch
+      const freshCtx = await memory.getContext({ threadId });
+      Object.assign(ctx, freshCtx);
+    }
+  }
+
+  // 2. Call the LLM
+  const result = await generateText({
     model: 'openai/gpt-4o',
     system: ctx.systemMessage,
     messages: [
@@ -87,47 +122,66 @@ async function streamChat(userMessage: string) {
     ],
   });
 
-  let fullText = '';
-  for await (const chunk of result.textStream) {
-    process.stdout.write(chunk);
-    fullText += chunk;
-  }
-
-  // Save and observe after streaming completes
+  // 3. Save messages
   await memory.saveMessages({
     messages: [
       { id: crypto.randomUUID(), role: 'user', content: userMessage, threadId, createdAt: new Date() },
-      { id: crypto.randomUUID(), role: 'assistant', content: fullText, threadId, createdAt: new Date() },
+      { id: crypto.randomUUID(), role: 'assistant', content: result.text, threadId, createdAt: new Date() },
     ],
   });
 
-  await om.observe({ threadId });
+  // 4. Check status and decide what to do
+  const postStatus = await om.getStatus({ threadId });
+
+  if (postStatus.shouldObserve) {
+    // Threshold reached — full synchronous observation
+    await om.observe({ threadId });
+  } else if (postStatus.shouldBuffer) {
+    // Below threshold but enough new content — buffer for later activation
+    om.buffer({ threadId }); // fire-and-forget or await
+  }
+
+  // 5. Check if reflection is needed
+  if (postStatus.shouldReflect) {
+    await om.reflect(threadId);
+    // Returns: { reflected: boolean, record }
+  }
+
+  return result.text;
 }
 
-// ─── What getContext() does internally ───────────────────────────────────────
+// ─── AI SDK hooks integration ───────────────────────────────────────────────
 //
-// Memory.getContext():
-//   1. Gets OM engine (lazy, cached)
-//   2. If OM is configured:
-//      a. Gets OM record
-//      b. Gets other-threads context (resource scope only)
-//      c. Calls om.buildContextSystemMessage() → observations + cross-thread context
-//      d. Loads messages from storage after lastObservedAt (unobserved only)
-//      e. Builds continuation message for the OM prompt
-//   3. If no OM:
-//      a. Loads last N messages from storage
-//   4. Gets working memory system message
-//   5. Combines everything and returns
+// With AI SDK v5 / v6, these primitives map cleanly to lifecycle hooks:
+//
+//   prepareStep (step 0):  getContext() + activate()
+//   onStepFinish:          saveMessages() + getStatus() → buffer() if shouldBuffer
+//   onFinish:              observe() + reflect()
 //
 
-// ─── What observe() does ────────────────────────────────────────────────────
+// ─── What each primitive does ───────────────────────────────────────────────
 //
-// om.observe({ threadId }):
-//   1. Loads messages from storage (since lastObservedAt)
-//   2. Counts tokens → checks against threshold
-//   3. If threshold met → calls observer LLM to extract observations
-//   4. If observation tokens exceed reflect threshold → calls reflector LLM
-//   5. Returns { observed: boolean, record: OMRecord }
+// getStatus({ threadId }):
+//   Pure read. Loads unobserved messages from DB, counts tokens, checks thresholds.
+//   Returns shouldObserve, shouldBuffer, shouldReflect, canActivate.
+//
+// observe({ threadId }):
+//   Acquires lock, loads messages from DB, checks threshold, calls observer LLM.
+//   Returns { observed, reflected, record }.
+//
+// buffer({ threadId }):
+//   Loads unobserved messages from DB, calls observer LLM, stores result as
+//   a "buffered chunk" (not yet merged into active observations).
+//   Returns { buffered, record }.
+//
+// activate({ threadId }):
+//   Reads buffered chunks from DB, merges into active observations via
+//   storage.swapBufferedToActive(). No LLM call.
+//   Returns { activated, record, activatedMessageIds }.
+//
+// reflect(threadId):
+//   Calls reflector LLM on current observations, creates new generation.
+//   Returns { reflected, record }.
 //
 
 // ─── Helper ─────────────────────────────────────────────────────────────────

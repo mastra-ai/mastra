@@ -24,6 +24,7 @@ export {
 
 // Processor adapter
 export { ObservationalMemoryProcessor } from './processor';
+export type { MemoryContextProvider } from './processor';
 
 // Types
 export type {

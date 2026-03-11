@@ -147,6 +147,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             requestContext,
           });
         }
+
       }
 
       // ════════════════════════════════════════════════════════════════════════
@@ -322,25 +323,27 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // ════════════════════════════════════════════════════════════════════════
       // STEP 4: EMIT PROGRESS & PERSIST TOKENS
       // ════════════════════════════════════════════════════════════════════════
-      const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
-      const contextMessages = messageList.get.all.db().filter(m => m.id !== 'om-continuation' && m.role !== 'system');
-      const freshUnobservedTokens = await this.engine.countMessageTokensAsync(contextMessages);
-      const finalOtherThreadTokens = otherThreadsContext
-        ? this.engine.countStringTokens(otherThreadsContext)
-        : 0;
-      const finalTotalPending = freshUnobservedTokens + finalOtherThreadTokens;
 
       await this.engine.emitProgress({
-        record: freshRecord,
-        pendingTokens: finalTotalPending,
+        record,
+        stepNumber,
+        pendingTokens: totalPendingTokens,
         threshold,
         effectiveObservationTokensThreshold,
-        currentObservationTokens: freshRecord.observationTokenCount ?? 0,
+        currentObservationTokens: record.observationTokenCount ?? 0,
         writer,
-        stepNumber,
         threadId,
         resourceId,
       });
+
+      // Count remaining context tokens and persist
+      const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
+      const allDbMsgs = messageList.get.all.db();
+      const contextTokens = await this.engine.countMessageTokensAsync(allDbMsgs);
+      const otherThreadTokens = otherThreadsContext
+        ? this.engine.countStringTokens(otherThreadsContext)
+        : 0;
+      const finalTotalPending = contextTokens + otherThreadTokens;
 
       await this.engine.savePendingTokens(freshRecord.id, finalTotalPending);
 
