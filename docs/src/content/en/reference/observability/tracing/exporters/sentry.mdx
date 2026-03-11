@@ -18,7 +18,7 @@ Sends Tracing data to Sentry for AI tracing and monitoring using OpenTelemetry s
 new SentryExporter(config: SentryExporterConfig)
 ```
 
-## SentryExporterConfig
+## `SentryExporterConfig`
 
 ```typescript
 interface SentryExporterConfig extends BaseExporterConfig {
@@ -76,7 +76,7 @@ Extends `BaseExporterConfig`, which includes:
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -152,7 +152,7 @@ const exporter = new SentryExporter({
 })
 ```
 
-## Span Mapping
+## Span mapping
 
 Mastra span types are mapped to Sentry operations:
 
@@ -177,7 +177,7 @@ Mastra span types are mapped to Sentry operations:
 
 MODEL\_STEP and MODEL\_CHUNK spans are skipped to simplify trace hierarchy. Their data is aggregated into MODEL\_GENERATION spans.
 
-## Environment Variables
+## Environment variables
 
 The exporter reads configuration from these environment variables:
 
@@ -187,7 +187,7 @@ The exporter reads configuration from these environment variables:
 | `SENTRY_ENVIRONMENT` | Deployment environment name |
 | `SENTRY_RELEASE` | Version of your code deployed |
 
-## OpenTelemetry Attributes
+## `OpenTelemetry` attributes
 
 The exporter sets these standard OpenTelemetry attributes:
 

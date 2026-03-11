@@ -77,7 +77,7 @@ if (storedConfig) {
 ]}
 />
 
-## Primitive Resolution
+## Primitive resolution
 
 When creating an `Agent` instance from stored configuration, the method resolves references to registered primitives:
 
@@ -87,9 +87,9 @@ When creating an `Agent` instance from stored configuration, the method resolves
 - **Memory**: Resolved from `memory` registered in Mastra config
 - **Scorers**: Resolved from `scorers` registered in Mastra config, including sampling configuration
 
-If a referenced primitive is not found in the registry, a warning is logged but the agent is still created.
+If a referenced primitive isn't found in the registry, a warning is logged but the agent is still created.
 
-## StorageAgentType
+## `StorageAgentType`
 
 When using `raw: true`, the returned object has the following structure:
 

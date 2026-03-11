@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -43,7 +43,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.3.1",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "miniflare": "^4.20251109.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

@@ -7,7 +7,7 @@ const packages = {
   '@mastra/core': {
     packageJson: {
       name: '@mastra/core',
-      version: '0.20.1',
+      version: '1.2.1',
     },
     dir: '/packages/core',
     relativeDir: 'packages/core',
@@ -15,9 +15,9 @@ const packages = {
   '@mastra/server': {
     packageJson: {
       name: '@mastra/server',
-      version: '0.20.1',
+      version: '1.2.1',
       peerDependencies: {
-        '@mastra/core': '>=0.20.0-0 <0.21.0-0',
+        '@mastra/core': '>=1.0.0-0 <2.0.0-0',
       },
     },
     dir: '/packages/server',
@@ -26,9 +26,9 @@ const packages = {
   '@mastra/memory': {
     packageJson: {
       name: '@mastra/memory',
-      version: '0.10.0',
+      version: '1.0.0',
       peerDependencies: {
-        '@mastra/core': '>=0.20.0-0 <0.21.0-0',
+        '@mastra/core': '>=1.0.0-0 <2.0.0-0',
       },
     },
     dir: '/packages/memory',
@@ -37,7 +37,7 @@ const packages = {
   '@mastra/standalone': {
     packageJson: {
       name: '@mastra/standalone',
-      version: '0.1.0',
+      version: '1.1.0',
     },
     dir: '/packages/standalone',
     relativeDir: 'packages/standalone',
@@ -110,17 +110,17 @@ vi.mock('node:fs');
 vi.mock('@changesets/write');
 
 describe('updatePeerDependencies', () => {
-  it('should update all packages when core got bumped to minor', async () => {
+  it('should update nothing when core got bumped to minor', async () => {
     const versionBumps: VersionBumps = {
       '@mastra/core': 'minor',
     };
     const updatedPeerDeps = await updatePeerDependencies(versionBumps);
 
     expect(updatedPeerDeps.directUpdatedPackages).toEqual([]);
-    expect(updatedPeerDeps.indirectUpdatedPackages).toEqual(['@mastra/server', '@mastra/memory']);
+    expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
   });
 
-  it('should update only direct packages when core got bumped to patch', async () => {
+  it('should update nothing when core got bumped to patch', async () => {
     const versionBumps: VersionBumps = {
       '@mastra/core': 'patch',
     };
@@ -130,17 +130,17 @@ describe('updatePeerDependencies', () => {
     expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
   });
 
-  it('should update "@mastra/memory" when "@mastra/server" got bumped to minor', async () => {
+  it('should update nothing when "@mastra/server" got bumped to minor', async () => {
     const versionBumps: VersionBumps = {
       '@mastra/server': 'minor',
     };
     const updatedPeerDeps = await updatePeerDependencies(versionBumps);
 
     expect(updatedPeerDeps.directUpdatedPackages).toEqual([]);
-    expect(updatedPeerDeps.indirectUpdatedPackages).toEqual(['@mastra/server', '@mastra/memory']);
+    expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
   });
 
-  it('should update nothing when "@mastra/server" version got bumped to patch', async () => {
+  it('should update nothing when "@mastra/server" got bumped to patch', async () => {
     const versionBumps: VersionBumps = {
       '@mastra/server': 'patch',
     };
@@ -150,7 +150,7 @@ describe('updatePeerDependencies', () => {
     expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
   });
 
-  it('should update nothing when "@mastra/memory" version got bumped to minor', async () => {
+  it('should update nothing when "@mastra/memory" got bumped to minor', async () => {
     const versionBumps: VersionBumps = {
       '@mastra/memory': 'minor',
     };
@@ -160,7 +160,7 @@ describe('updatePeerDependencies', () => {
     expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
   });
 
-  it('should update nothing when "@mastra/memory" version got bumped to patch', async () => {
+  it('should update nothing when "@mastra/memory" got bumped to patch', async () => {
     const versionBumps: VersionBumps = {
       '@mastra/memory': 'patch',
     };
@@ -170,10 +170,20 @@ describe('updatePeerDependencies', () => {
     expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
   });
 
-  it('should update all packages when core & server got bumped to minor', async () => {
+  it('should update all packages when core got bumped to major', async () => {
     const versionBumps: VersionBumps = {
-      '@mastra/core': 'minor',
-      '@mastra/server': 'minor',
+      '@mastra/core': 'major',
+    };
+    const updatedPeerDeps = await updatePeerDependencies(versionBumps);
+
+    expect(updatedPeerDeps.directUpdatedPackages).toEqual([]);
+    expect(updatedPeerDeps.indirectUpdatedPackages).toEqual(['@mastra/server', '@mastra/memory']);
+  });
+
+  it('should update all packages when core & server got bumped to major', async () => {
+    const versionBumps: VersionBumps = {
+      '@mastra/core': 'major',
+      '@mastra/server': 'major',
     };
     const updatedPeerDeps = await updatePeerDependencies(versionBumps);
 
@@ -181,14 +191,25 @@ describe('updatePeerDependencies', () => {
     expect(updatedPeerDeps.indirectUpdatedPackages).toEqual(['@mastra/memory']);
   });
 
-  it('should update only direct packages when core & server got bumped to patch', async () => {
+  it('should update nothing when core & server got bumped to minor', async () => {
+    const versionBumps: VersionBumps = {
+      '@mastra/core': 'minor',
+      '@mastra/server': 'minor',
+    };
+    const updatedPeerDeps = await updatePeerDependencies(versionBumps);
+
+    expect(updatedPeerDeps.directUpdatedPackages).toEqual([]);
+    expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
+  });
+
+  it('should update nothing when core & server got bumped to patch', async () => {
     const versionBumps: VersionBumps = {
       '@mastra/core': 'patch',
       '@mastra/server': 'patch',
     };
     const updatedPeerDeps = await updatePeerDependencies(versionBumps);
 
-    expect(updatedPeerDeps.directUpdatedPackages).toEqual(['@mastra/server']);
+    expect(updatedPeerDeps.directUpdatedPackages).toEqual([]);
     expect(updatedPeerDeps.indirectUpdatedPackages).toEqual([]);
   });
 });

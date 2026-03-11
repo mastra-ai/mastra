@@ -56,6 +56,12 @@ Before submitting a PR, make sure to:
 
 4. **Verify code examples** - If you've added code examples, test them if possible to ensure they work.
 
+5. **Run linters** to check for style issues:
+
+   ```shell
+   pnpm run lint:prose
+   ```
+
 ## Documentation structure
 
 The Mastra documentation is organized into several sections:

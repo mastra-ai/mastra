@@ -235,6 +235,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   mcpServer: string;
   /** MCP server version */
   serverVersion?: string;
+  /** Tool description */
+  toolDescription?: string;
   /** Whether tool execution was successful */
   success?: boolean;
 }
@@ -420,6 +422,8 @@ interface BaseSpan<TType extends SpanType> {
   output?: any;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
+  /** Snapshot of the RequestContext */
+  requestContext?: Record<string, any>;
   /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
 }

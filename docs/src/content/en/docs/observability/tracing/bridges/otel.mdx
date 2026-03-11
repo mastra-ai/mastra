@@ -1,5 +1,5 @@
 ---
-title: "OpenTelemetry Bridge | Tracing | Observability"
+title: "OpenTelemetry bridge | Tracing | Observability"
 description: "Integrate Mastra tracing with existing OpenTelemetry infrastructure"
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/otel-bridge"
 ---
 
-# OpenTelemetry Bridge
+# OpenTelemetry bridge
 
 :::warning
 
@@ -23,7 +23,7 @@ If you don't have existing OpenTelemetry instrumentation, the [OpenTelemetry Exp
 
 :::
 
-## When to Use the Bridge
+## When to use the bridge
 
 Use the OtelBridge when you:
 
@@ -32,7 +32,7 @@ Use the OtelBridge when you:
 - Need OTEL-instrumented code inside Mastra tools to maintain proper parent-child relationships
 - Are building a distributed system where trace context must propagate across services
 
-## How It Works
+## How it works
 
 The OtelBridge provides two-way integration:
 
@@ -40,7 +40,7 @@ The OtelBridge provides two-way integration:
 
 - Reads from OTEL ambient context (AsyncLocalStorage) automatically
 - Inherits trace ID and parent span ID from active OTEL spans
-- Respects OTEL sampling decisions — if a trace is not sampled, Mastra won't create spans for it
+- Respects OTEL sampling decisions — if a trace isn't sampled, Mastra won't create spans for it
 - No manual trace ID passing required when OTEL auto-instrumentation is active
 
 **From Mastra to OTEL:**
@@ -135,13 +135,13 @@ Use the `--import` flag to ensure instrumentation loads before your application:
 tsx --import ./instrumentation.ts ./src/index.ts
 ```
 
-## Semantic Conventions
+## Semantic conventions
 
 The OtelBridge exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
 
 For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](/docs/observability/tracing/exporters/otel#opentelemetry-semantic-conventions).
 
-## Trace Hierarchy
+## Trace hierarchy
 
 With the OtelBridge, your traces maintain proper hierarchy across OTEL and Mastra boundaries:
 
@@ -154,7 +154,7 @@ HTTP POST /api/chat (from Hono middleware)
     └── chat gpt-4o (follow-up LLM call)
 ```
 
-## Multi-Service Distributed Tracing
+## Multi-service distributed tracing
 
 The OtelBridge enables trace propagation across service boundaries. When Service A calls Service B via HTTP, trace context propagates automatically:
 
@@ -173,7 +173,7 @@ Both services must have:
 1. W3C Trace Context propagator enabled
 1. Mastra with OtelBridge configured
 
-## Using Tags
+## Using tags
 
 Tags help you categorize and filter traces in your OTEL backend. Add tags when executing agents or workflows:
 
@@ -193,7 +193,7 @@ Tags are exported as a JSON string in the `mastra.tags` span attribute for broad
 
 ## Troubleshooting
 
-If traces aren't appearing or connecting as expected:
+If traces aren't displaying or connecting as expected:
 
 - Verify OTEL SDK is initialized before Mastra (use `--import` flag or import at top of entry point)
 - Ensure the OtelBridge is added to your observability config

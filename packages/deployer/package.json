@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "description": "",
   "type": "module",
   "files": [
@@ -96,7 +96,6 @@
   "dependencies": {
     "@babel/core": "^7.29.0",
     "@babel/preset-typescript": "^7.28.5",
-    "@mastra/server": "workspace:*",
     "@optimize-lodash/rollup-plugin": "^5.0.2",
     "@rollup/plugin-alias": "6.0.0",
     "@rollup/plugin-commonjs": "29.0.0",
@@ -108,7 +107,7 @@
     "empathic": "^2.0.0",
     "esbuild": "^0.25.10",
     "find-workspaces": "^0.3.1",
-    "fs-extra": "^11.3.3",
+    "fs-extra": "^11.3.4",
     "hono": "^4.11.9",
     "local-pkg": "^1.1.2",
     "resolve-from": "^5.0.0",
@@ -128,12 +127,13 @@
     "@mastra/core": "workspace:*",
     "@mastra/hono": "workspace:*",
     "@mastra/mcp": "workspace:^",
+    "@mastra/server": "workspace:*",
     "@types/babel__core": "^7.20.5",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "fetch-to-node": "^2.1.0",
     "hono-openapi": "^1.1.1",
     "stacktrace-parser": "^0.1.11",
@@ -141,7 +141,7 @@
     "type-fest": "^5.2.0",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
