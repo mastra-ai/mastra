@@ -12,7 +12,7 @@ export function getSummary(updatedPackagesList: string[], updatedPeerDeps: Updat
   }
 
   if (updatedPeerDeps.directUpdatedPackages.length > 0) {
-    const directUpdatedPackagesList = updatedPeerDeps.directUpdatedPackages.map(pkg => `${pkg}: minor`);
+    const directUpdatedPackagesList = updatedPeerDeps.directUpdatedPackages.map(pkg => `${pkg}: major`);
     summaryOutput += `${[''].concat(directUpdatedPackagesList).join('\n  - ')}`;
   }
   if (updatedPeerDeps.indirectUpdatedPackages.length > 0) {

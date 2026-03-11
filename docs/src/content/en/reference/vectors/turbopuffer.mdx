@@ -1,15 +1,15 @@
 ---
-title: "Reference: Turbopuffer Vector Store | Vectors"
+title: "Reference: Turbopuffer vector store | Vectors"
 description: Documentation for integrating Turbopuffer with Mastra, a high-performance vector database for efficient similarity search.
 packages:
   - "@mastra/turbopuffer"
 ---
 
-# Turbopuffer Vector Store
+# Turbopuffer vector store
 
 The TurbopufferVector class provides vector search using [Turbopuffer](https://turbopuffer.com/), a high-performance vector database optimized for RAG applications. Turbopuffer offers fast vector similarity search with advanced filtering capabilities and efficient storage management.
 
-## Constructor Options
+## Constructor options
 
 <PropertiesTable
   content={[
@@ -65,7 +65,7 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 
 ## Methods
 
-### createIndex()
+### `createIndex()`
 
 <PropertiesTable
   content={[
@@ -89,7 +89,7 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ]}
 />
 
-### upsert()
+### `upsert()`
 
 <PropertiesTable
   content={[
@@ -113,7 +113,7 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ]}
 />
 
-### query()
+### `query()`
 
 <PropertiesTable
   content={[
@@ -150,11 +150,11 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 ]}
 />
 
-### listIndexes()
+### `listIndexes()`
 
 Returns an array of index names as strings.
 
-### describeIndex()
+### `describeIndex()`
 
 <PropertiesTable
   content={[
@@ -176,7 +176,7 @@ interface IndexStats {
 }
 ```
 
-### deleteIndex()
+### `deleteIndex()`
 
 <PropertiesTable
   content={[
@@ -188,7 +188,7 @@ interface IndexStats {
 ]}
 />
 
-### updateVector()
+### `updateVector()`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
@@ -219,7 +219,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVector()
+### `deleteVector()`
 
 <PropertiesTable
   content={[
@@ -236,7 +236,7 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 ]}
 />
 
-### deleteVectors()
+### `deleteVectors()`
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both.
 
@@ -262,7 +262,7 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 ]}
 />
 
-## Response Types
+## Response types
 
 Query results are returned in this format:
 
@@ -275,7 +275,7 @@ interface QueryResult {
 }
 ```
 
-## Schema Configuration
+## Schema configuration
 
 The `schemaConfigForIndex` option allows you to define explicit schemas for different indexes:
 
@@ -298,7 +298,7 @@ schemaConfigForIndex: (indexName: string) => {
 }
 ```
 
-## Error Handling
+## Error handling
 
 The store throws typed errors that can be caught:
 

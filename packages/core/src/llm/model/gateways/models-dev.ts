@@ -213,7 +213,9 @@ export class ModelsDevGateway extends MastraModelGateway {
       case 'groq':
         return createGroq({ apiKey })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey, headers })(modelId);
+        // Cast needed: @openrouter/ai-sdk-provider@1.2.3 resolves against a newer @ai-sdk/provider
+        // version than @ai-sdk/provider-v5, causing structural type incompatibility
+        return createOpenRouter({ apiKey, headers })(modelId) as unknown as GatewayLanguageModel;
       case 'xai':
         return createXai({
           apiKey,
