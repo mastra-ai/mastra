@@ -11,6 +11,7 @@ describe('MASTRA_USER_AGENT', () => {
   });
 
   it('should match the expected format', () => {
-    expect(MASTRA_USER_AGENT).toMatch(/^mastra\/\d+\.\d+/);
+    // With __MASTRA_VERSION__ defined: "mastra/X.Y.Z", without: "mastra"
+    expect(MASTRA_USER_AGENT).toMatch(/^mastra(\/\d+\.\d+.*)?$/);
   });
 });
