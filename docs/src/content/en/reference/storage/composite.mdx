@@ -114,59 +114,66 @@ export const mastra = new Mastra({
     isOptional: true,
   },
   {
+    name: 'disableInit',
+    type: 'boolean',
+    description: 'When true, automatic initialization is disabled. You must call init() explicitly.',
+    isOptional: true,
+  },
+  {
     name: 'domains',
     type: 'object',
     description:
       'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage.',
     isOptional: true,
-  },
-  {
-    name: 'domains.memory',
-    type: 'MemoryStorage',
-    description: 'Storage for threads, messages, and resources.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.workflows',
-    type: 'WorkflowsStorage',
-    description: 'Storage for workflow snapshots.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.scores',
-    type: 'ScoresStorage',
-    description: 'Storage for evaluation scores.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.observability',
-    type: 'ObservabilityStorage',
-    description: 'Storage for traces and spans.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.agents',
-    type: 'AgentsStorage',
-    description: 'Storage for stored agent configurations.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.datasets',
-    type: 'DatasetsStorage',
-    description: 'Storage for dataset metadata, dataset items, and dataset versions.',
-    isOptional: true,
-  },
-  {
-    name: 'domains.experiments',
-    type: 'ExperimentsStorage',
-    description: 'Storage for experiment runs and per-item experiment results.',
-    isOptional: true,
-  },
-  {
-    name: 'disableInit',
-    type: 'boolean',
-    description: 'When true, automatic initialization is disabled. You must call init() explicitly.',
-    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'memory',
+            type: 'MemoryStorage',
+            description: 'Storage for threads, messages, and resources.',
+            isOptional: true,
+          },
+          {
+            name: 'workflows',
+            type: 'WorkflowsStorage',
+            description: 'Storage for workflow snapshots.',
+            isOptional: true,
+          },
+          {
+            name: 'scores',
+            type: 'ScoresStorage',
+            description: 'Storage for evaluation scores.',
+            isOptional: true,
+          },
+          {
+            name: 'observability',
+            type: 'ObservabilityStorage',
+            description: 'Storage for traces and spans.',
+            isOptional: true,
+          },
+          {
+            name: 'agents',
+            type: 'AgentsStorage',
+            description: 'Storage for stored agent configurations.',
+            isOptional: true,
+          },
+          {
+            name: 'datasets',
+            type: 'DatasetsStorage',
+            description: 'Storage for dataset metadata, dataset items, and dataset versions.',
+            isOptional: true,
+          },
+          {
+            name: 'experiments',
+            type: 'ExperimentsStorage',
+            description: 'Storage for experiment runs and per-item experiment results.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
