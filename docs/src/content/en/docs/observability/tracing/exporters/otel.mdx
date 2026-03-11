@@ -1,5 +1,5 @@
 ---
-title: "OpenTelemetry Exporter | Tracing | Observability"
+title: "OpenTelemetry exporter | Tracing | Observability"
 description: "Send traces to any OpenTelemetry-compatible observability platform"
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
   - "@mastra/otel-exporter"
 ---
 
-# OpenTelemetry Exporter
+# OpenTelemetry exporter
 
 The OpenTelemetry (OTEL) exporter sends your traces to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
 
@@ -27,7 +27,7 @@ Each provider requires specific protocol packages. Install the base exporter plu
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
 ```
 
-### For gRPC Providers (Dash0, Datadog)
+### For `gRPC` Providers (Dash0, Datadog)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
@@ -39,7 +39,7 @@ npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
 ```
 
-## Environment Variables
+## Environment variables
 
 All providers support zero-config setup via environment variables. Set the appropriate variables and the exporter will automatically use them:
 
@@ -51,7 +51,7 @@ All providers support zero-config setup via environment variables. Set the appro
 | Traceloop | `TRACELOOP_API_KEY` (required), `TRACELOOP_DESTINATION_ID`, `TRACELOOP_ENDPOINT` (optional) |
 | Laminar | `LMNR_PROJECT_API_KEY` (required), `LAMINAR_ENDPOINT` (optional) |
 
-## Provider Configurations
+## Provider configurations
 
 ### MLflow
 
@@ -144,7 +144,7 @@ Get your Dash0 endpoint from your dashboard. It should be in the format `ingress
 
 :::
 
-### SigNoz
+### `SigNoz`
 
 [SigNoz](https://signoz.io/) is an open-source APM alternative with built-in Tracing support.
 
@@ -362,7 +362,7 @@ new OtelExporter({
 })
 ```
 
-## Configuration Options
+## Configuration options
 
 ### Complete Configuration
 
@@ -382,7 +382,7 @@ new OtelExporter({
 })
 ```
 
-## OpenTelemetry Semantic Conventions
+## `OpenTelemetry` semantic conventions
 
 The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai), ensuring compatibility with observability platforms:
 
@@ -405,7 +405,7 @@ The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](http
 - `gen_ai.request.temperature` - Sampling temperature
 - `gen_ai.response.finish_reasons` - Completion reasons
 
-## Protocol Selection Guide
+## Protocol selection guide
 
 Choose the right protocol package based on your provider:
 

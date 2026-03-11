@@ -486,7 +486,6 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
             value={selectedDatasetId}
             onValueChange={setSelectedDatasetId}
             placeholder="Select a dataset..."
-            variant="outline"
             disabled={isRunning}
           />
         </div>

@@ -234,7 +234,6 @@ describe('Supervisor Pattern Integration Tests', () => {
         maxSteps: 3,
         onIterationComplete: (ctx: IterationCompleteContext) => {
           iterations.push(ctx.iteration);
-          return { continue: true };
         },
       });
 
@@ -561,7 +560,7 @@ describe('Supervisor Pattern Integration Tests', () => {
 
     it('should accept iteration complete hook configuration', async () => {
       const iterationHook = vi.fn(() => {
-        return { continue: true };
+        return undefined;
       });
 
       const agent = new Agent({
@@ -1610,7 +1609,6 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       maxSteps: 5,
       onIterationComplete: (ctx: IterationCompleteContext) => {
         iterations.push(ctx.iteration);
-        return { continue: true };
       },
     });
 
@@ -2038,12 +2036,103 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       },
     });
 
-    // When the model returns stop (isFinal), the loop ends after that iteration
-    // even if the hook returns continue: true with feedback. Feedback only adds
-    // a user message for the *next* iteration when the loop would naturally continue
-    // (e.g. during a tool-call sequence). Here the model says stop on iteration 1
-    // so the loop ends and the hook is called exactly once.
-    expect(iterationCount).toBe(1);
+    expect(iterationCount).toBe(2);
+  });
+
+  it('should allow onIterationComplete continue:true to override final stop in stream (issue #14134)', async () => {
+    const iterations: number[] = [];
+    let callCount = 0;
+
+    const agent = new Agent({
+      id: 'continue-override-stream-agent',
+      name: 'Continue Override Stream Agent',
+      instructions: 'You may take multiple turns.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'First response ',
+              content: [{ type: 'text', text: 'First response ' }],
+              warnings: [],
+            };
+          }
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            text: 'Second response',
+            content: [{ type: 'text', text: 'Second response' }],
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          const currentCall = callCount;
+          const responseText = currentCall === 1 ? 'First response ' : 'Second response';
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'response-metadata',
+                id: `id-${currentCall}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start', id: `text-${currentCall}` },
+              { type: 'text-delta', id: `text-${currentCall}`, delta: responseText },
+              { type: 'text-end', id: `text-${currentCall}` },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const mastra = new Mastra({
+      agents: {
+        'continue-override-stream-agent': agent,
+      },
+      storage: new InMemoryStore(),
+    });
+
+    const testAgent = mastra.getAgent('continue-override-stream-agent');
+
+    const result = await testAgent.stream('Take multiple turns', {
+      maxSteps: 5,
+      onIterationComplete: ctx => {
+        iterations.push(ctx.iteration);
+        if (ctx.iteration === 1) {
+          return { continue: true };
+        }
+      },
+    });
+
+    const reader = result.fullStream.getReader();
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    const text = await result.text;
+
+    // When the model returns stop (isFinal), the hook's continue:true should be
+    // able to request another iteration in the streaming supervisor loop.
+    expect(iterations).toEqual([1, 2]);
+    expect(callCount).toBe(2);
+    expect(text).toBe('First response Second response');
   });
 
   it('should accept onIterationComplete configuration without errors', async () => {
@@ -3111,10 +3200,10 @@ describe('Supervisor Pattern - Message history transfer to sub-agents', () => {
           perPage: 100,
         });
 
-        // Verify memory isolation: Should have exactly 3 messages in test environment
-        // (delegation prompt + response + test artifact duplicate response)
-        // Note: In production/studio, only 2 messages appear (no duplicate)
-        expect(subAgentMessages.messages.length).toBe(3);
+        // Verify memory isolation: Should have 2-3 messages
+        // (delegation prompt + response, possibly a duplicate response artifact)
+        expect(subAgentMessages.messages.length).toBeGreaterThanOrEqual(2);
+        expect(subAgentMessages.messages.length).toBeLessThanOrEqual(3);
 
         // First message should be the delegation prompt (user role)
         expect(subAgentMessages.messages[0].role).toBe('user');

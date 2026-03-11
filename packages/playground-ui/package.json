@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "15.2.0",
+  "version": "16.0.1-alpha.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -127,7 +127,7 @@
     "superjson": "^2.2.6",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.6",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.11"
   },
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
