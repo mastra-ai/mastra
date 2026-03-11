@@ -27,13 +27,6 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `observability` | Traces and spans used by observability exporters and Studio. |
 | `datasets` | Dataset records, versioned items, and dataset versions used by experiments. |
 | `experiments` | Experiment runs and per-item experiment results. |
-| `promptBlocks` | Versioned prompt block entities. |
-| `scorerDefinitions` | Versioned scorer definition entities. |
-| `mcpClients` | Versioned MCP client entities. |
-| `mcpServers` | Versioned MCP server entities. |
-| `workspaces` | Versioned workspace entities. |
-| `skills` | Versioned skill entities. |
-| `blobs` | Content-addressable blob storage used by published skills and other versioned editor artifacts. |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
 
