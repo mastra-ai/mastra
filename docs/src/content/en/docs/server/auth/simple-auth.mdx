@@ -1,15 +1,15 @@
 ---
-title: "SimpleAuth Class | Auth"
+title: "SimpleAuth class | Auth"
 description: "Documentation for the SimpleAuth class, which provides token-to-user mapping authentication for development and basic API key scenarios."
 packages:
   - "@mastra/core"
 ---
 
-# SimpleAuth Class
+# SimpleAuth class
 
 The `SimpleAuth` class provides token-based authentication using a basic token-to-user mapping. It's included in `@mastra/core/server` and is useful for development, testing, and basic API key authentication scenarios.
 
-## Use Cases
+## Use cases
 
 - Local development and testing
 - Simple API key authentication
@@ -24,7 +24,7 @@ SimpleAuth is included in `@mastra/core`, no additional packages required.
 import { SimpleAuth } from '@mastra/core/server'
 ```
 
-## Usage Example
+## Usage example
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -57,7 +57,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Configuration Options
+## Configuration options
 
 | Option | Type | Required | Description |
 | - | - | - | - |
@@ -86,7 +86,7 @@ new SimpleAuth({
 })
 ```
 
-## Making Authenticated Requests
+## Making authenticated requests
 
 Include your token in the `Authorization` header:
 
@@ -106,7 +106,7 @@ curl -X POST http://localhost:4111/api/agents/myAgent/generate \
   -d '{"messages": "Hello"}'
 ```
 
-## Custom Authorization
+## Custom authorization
 
 Add role-based or custom authorization logic:
 
@@ -126,7 +126,7 @@ new SimpleAuth<User>({
 })
 ```
 
-## Environment Variables
+## Environment variables
 
 For production-like setups, load tokens from environment variables:
 
@@ -151,7 +151,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## With MastraClient
+## With `MastraClient`
 
 Configure the client with your token:
 

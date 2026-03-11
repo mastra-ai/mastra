@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Combobox, ComboboxOption } from '@/ds/components/Combobox';
+import { Combobox, ComboboxOption, type ComboboxProps } from '@/ds/components/Combobox';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
 import { Skeleton } from '@/ds/components/Skeleton';
@@ -8,7 +8,8 @@ export interface LLMModelsProps {
   value: string;
   onValueChange: (value: string) => void;
   llmId: string; // Provider ID to filter models
-  variant?: 'default' | 'light';
+  variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
   className?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -19,7 +20,8 @@ export const LLMModels = ({
   value,
   onValueChange,
   llmId,
-  variant = 'default',
+  variant = 'inputLike',
+  size = 'default',
   className,
   open,
   onOpenChange,
@@ -59,6 +61,7 @@ export const LLMModels = ({
       open={open}
       onOpenChange={onOpenChange}
       container={container}
+      size={size}
     />
   );
 };

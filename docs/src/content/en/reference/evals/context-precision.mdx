@@ -1,5 +1,5 @@
 ---
-title: "Reference: Context Precision Scorer | Evals"
+title: "Reference: Context precision scorer | Evals"
 description: Documentation for the Context Precision Scorer in Mastra. Evaluates the relevance and precision of retrieved context for generating expected outputs using Mean Average Precision.
 packages:
   - "@mastra/core"
@@ -8,13 +8,13 @@ packages:
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
 
-# Context Precision Scorer
+# Context precision scorer
 
 The `createContextPrecisionScorer()` function creates a scorer that evaluates how relevant and well-positioned retrieved context pieces are for generating expected outputs. It uses **Mean Average Precision (MAP)** to reward systems that place relevant context earlier in the sequence.
 
 It's especially useful for these use cases:
 
-## RAG System Evaluation
+## RAG system evaluation
 
 Ideal for evaluating retrieved context in RAG pipelines where:
 
@@ -22,7 +22,7 @@ Ideal for evaluating retrieved context in RAG pipelines where:
 - You need to measure retrieval quality beyond basic relevance
 - Early relevant context is more valuable than later relevant context
 
-## Context Window Optimization
+## Context window optimization
 
 Use when optimizing context selection for:
 
@@ -71,7 +71,7 @@ Use when optimizing context selection for:
 
 **Note**: Either `context` or `contextExtractor` must be provided. If both are provided, `contextExtractor` takes precedence.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -88,7 +88,7 @@ Use when optimizing context selection for:
 ]}
 />
 
-## Scoring Details
+## Scoring details
 
 ### Mean Average Precision (MAP)
 
@@ -231,7 +231,7 @@ For more details on `runEvals`, see the [runEvals reference](/reference/evals/ru
 
 To add this scorer to an agent, see the [Scorers overview](/docs/evals/overview#adding-scorers-to-agents) guide.
 
-## Comparison with Context Relevance
+## Comparison with context relevance
 
 Choose the right scorer for your needs:
 

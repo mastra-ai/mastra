@@ -609,6 +609,8 @@ describe('Tool Tracing Context Injection', () => {
       entityType: 'tool',
       requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify tracingContext was injected with the tool span
@@ -623,7 +625,7 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-  it('should not inject tracingContext when agentSpan is not available', async () => {
+  it('should not inject tracingContext when agentSpan is not available and no observability configured', async () => {
     let receivedTracingContext: any = undefined;
 
     const testTool = createTool({
@@ -655,7 +657,7 @@ describe('Tool Tracing Context Injection', () => {
     const builtTool = builder.build();
     const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
-    // Verify tracingContext was injected but currentSpan is undefined
+    // Verify tracingContext was injected but currentSpan is undefined (no observability configured)
     expect(receivedTracingContext).toEqual({ currentSpan: undefined });
     expect(result).toEqual({ result: 'processed: test' });
   });
@@ -716,6 +718,8 @@ describe('Tool Tracing Context Injection', () => {
       entityType: 'tool',
       requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
@@ -837,6 +841,8 @@ describe('Tool Tracing Context Injection', () => {
       entityType: 'tool',
       requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
   });
 });

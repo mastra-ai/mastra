@@ -306,6 +306,28 @@ describe('GCSFilesystem', () => {
       // Now the Storage client should have been created
       expect(MockStorage).toHaveBeenCalled();
     });
+
+    it('exposes storage via public getter', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        projectId: 'my-project',
+      });
+
+      const storage1 = fs.storage;
+      const storage2 = fs.storage;
+      expect(storage1).toBe(storage2);
+    });
+
+    it('exposes bucket via public getter', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        projectId: 'my-project',
+      });
+
+      const bucket1 = fs.bucket;
+      const bucket2 = fs.bucket;
+      expect(bucket1).toBe(bucket2);
+    });
   });
 
   describe('Prefix Handling', () => {

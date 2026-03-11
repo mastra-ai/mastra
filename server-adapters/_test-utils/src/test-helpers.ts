@@ -963,6 +963,8 @@ function schemaExpectsDate(schema: any, path: string[] = []): boolean {
     } else if (typeName === 'ZodDefault') {
       schema = def.innerType;
     }
+    typeName = getZodTypeName(schema);
+    def = getZodDef(schema);
   }
 
   typeName = getZodTypeName(schema);
@@ -971,13 +973,12 @@ function schemaExpectsDate(schema: any, path: string[] = []): boolean {
   // If we have a path, navigate to that field
   if (path.length > 0) {
     if (typeName === 'ZodObject') {
-      console.log('def', def);
       const shape = typeof def.shape === 'function' ? def.shape() : def.shape;
       const fieldSchema = shape[path[0]];
       return schemaExpectsDate(fieldSchema, path.slice(1));
     } else if (typeName === 'ZodArray') {
       // For arrays, check the element type (ignore the array index in path)
-      return schemaExpectsDate(typeName, path.slice(1));
+      return schemaExpectsDate(def.element, path.slice(1));
     }
     return false;
   }
