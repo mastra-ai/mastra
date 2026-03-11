@@ -8,6 +8,7 @@ import { ProcessorRunner } from '../../../processors/runner';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows';
+import type { ToolError } from '../../../tools/validation';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
 
@@ -161,7 +162,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     toolCallId: toolCallErrorResult.toolCallId,
                     toolName: sanitizeToolName(toolCallErrorResult.toolName),
                     args: toolCallErrorResult.args,
-                    result: toolCallErrorResult.error?.message ?? toolCallErrorResult.error,
+                    result: { error: true, message: toolCallErrorResult.error?.message ?? String(toolCallErrorResult.error) } satisfies ToolError,
                   },
                   ...(toolCallErrorResult.providerMetadata
                     ? { providerMetadata: toolCallErrorResult.providerMetadata as ProviderMetadata }

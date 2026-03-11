@@ -44,9 +44,12 @@ export type FormattedValidationErrors<T = unknown> = {
   fields: T extends object ? { [K in keyof T]?: FormattedValidationErrors<T[K]> } : unknown;
 };
 
-export interface ValidationError<T = unknown> {
+export interface ToolError {
   error: true;
   message: string;
+}
+
+export interface ValidationError<T = unknown> extends ToolError {
   validationErrors: FormattedValidationErrors<T>;
 }
 /**

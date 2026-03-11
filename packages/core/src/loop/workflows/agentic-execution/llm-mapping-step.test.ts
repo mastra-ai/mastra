@@ -608,6 +608,36 @@ describe('createLLMMappingStep tool execution error self-recovery (issue #9815)'
     expect(result.stepResult.isContinued).toBe(true);
   });
 
+  it('should store thrown errors as ToolError-shaped objects in the persisted message', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'myTool',
+        args: {},
+        result: undefined,
+        error: new Error('something went wrong'),
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.objectContaining({
+          parts: [
+            expect.objectContaining({
+              type: 'tool-invocation',
+              toolInvocation: expect.objectContaining({
+                result: { error: true, message: 'something went wrong' },
+              }),
+            }),
+          ],
+        }),
+      }),
+      'response',
+    );
+  });
+
   it('should continue the loop when a tool execution error occurs alongside successful tool results', async () => {
     // Mixed scenario: one tool succeeds, one throws at runtime.
     // The model should see both the success and the error, and be allowed to retry.
