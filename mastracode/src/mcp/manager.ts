@@ -49,11 +49,16 @@ function getTransport(cfg: McpServerConfig): 'stdio' | 'http' {
 
 function openBrowser(url: string): void {
   if (process.platform === 'darwin') {
-    exec(`open "${url}"`);
+    exec(`open '${url.replace(/'/g, "'\\''")}'`);
   } else if (process.platform === 'win32') {
-    exec(`start "${url}"`);
+    exec(`start "" "${url}"`);
   } else {
-    exec(`wslview "${url}" 2>/dev/null || xdg-open "${url}" 2>/dev/null || cmd.exe /c start "${url}"`);
+    // On WSL, wslview and cmd.exe break URLs with & query params.
+    // PowerShell handles them correctly via Start-Process.
+    const psEscaped = url.replace(/'/g, "''");
+    exec(
+      `powershell.exe -NoProfile -Command "Start-Process '${psEscaped}'" 2>/dev/null || xdg-open '${url.replace(/'/g, "'\\''")}'`,
+    );
   }
 }
 
