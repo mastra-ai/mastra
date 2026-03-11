@@ -89,7 +89,6 @@ export function SkillFolder({
             onValueChange={setWorkspaceId}
             placeholder="Select a workspace..."
             disabled={readOnly}
-            variant="default"
           />
         </div>
 

@@ -29,7 +29,7 @@ export const Default: Story = {
           <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
         </MainHeader.Column>
         <MainHeader.Column>
-          <Button variant="cta" size="default">
+          <Button>
             <Edit2Icon />
             Edit
           </Button>
@@ -121,7 +121,7 @@ export const WithSecondColumn: Story = {
         <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
-        <Button variant="cta" size="default">
+        <Button>
           <Edit2Icon />
           Edit
         </Button>

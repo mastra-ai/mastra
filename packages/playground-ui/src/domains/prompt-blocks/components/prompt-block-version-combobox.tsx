@@ -1,4 +1,4 @@
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, ComboboxProps } from '@/ds/components/Combobox';
 import { Badge } from '@/ds/components/Badge';
 import { usePromptBlockVersions } from '../hooks/use-prompt-block-versions';
 
@@ -19,7 +19,7 @@ export interface PromptBlockVersionComboboxProps {
   onValueChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
   activeVersionId?: string;
 }
 
@@ -29,7 +29,7 @@ export function PromptBlockVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
   activeVersionId,
 }: PromptBlockVersionComboboxProps) {
   const { data, isLoading } = usePromptBlockVersions({

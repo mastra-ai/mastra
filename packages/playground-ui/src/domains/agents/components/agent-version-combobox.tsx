@@ -1,4 +1,4 @@
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { Badge } from '@/ds/components/Badge';
 import { useAgentVersions } from '../hooks/use-agent-versions';
 
@@ -19,7 +19,7 @@ export interface AgentVersionComboboxProps {
   onValueChange?: (value: string) => void;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
   activeVersionId?: string;
 }
 
@@ -29,7 +29,7 @@ export function AgentVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
   activeVersionId,
 }: AgentVersionComboboxProps) {
   const { data, isLoading } = useAgentVersions({

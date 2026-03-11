@@ -192,26 +192,24 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
         titleSlot="No items yet"
         descriptionSlot="Add items to this dataset to use them in experiment runs."
         actionSlot={
-          <div className="flex flex-col gap-2">
-            <ButtonsGroup spacing="close">
-              <Button size="default" variant="standard" onClick={onAddClick}>
-                <Plus />
-                Add Single Item
+          <ButtonsGroup>
+            <Button onClick={onAddClick} size="md">
+              <Plus />
+              Add Single Item
+            </Button>
+            {onImportClick && (
+              <Button onClick={onImportClick} size="md">
+                <Upload />
+                Import CSV
               </Button>
-              {onImportClick && (
-                <Button size="default" variant="standard" onClick={onImportClick}>
-                  <Upload />
-                  Import CSV
-                </Button>
-              )}
-              {onImportJsonClick && (
-                <Button size="default" variant="standard" onClick={onImportJsonClick}>
-                  <FileJson />
-                  Import JSON
-                </Button>
-              )}
-            </ButtonsGroup>
-          </div>
+            )}
+            {onImportJsonClick && (
+              <Button onClick={onImportJsonClick} size="md">
+                <FileJson />
+                Import JSON
+              </Button>
+            )}
+          </ButtonsGroup>
         }
       />
     </div>
