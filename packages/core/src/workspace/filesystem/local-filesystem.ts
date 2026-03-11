@@ -50,11 +50,11 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * When true, all file operations are restricted to stay within basePath.
    * Prevents path traversal attacks and symlink escapes.
    *
-   * - `contained: true` (default) — Relative paths are resolved against
-   *   basePath. Any resolved path that escapes basePath (and allowedPaths)
-   *   throws a PermissionError.
-   * - `contained: false` — Absolute paths are treated as real filesystem
-   *   paths. No containment check is applied.
+   * - `contained: true` (default) — File access is restricted to basePath
+   *   (and any allowedPaths). Paths that escape these boundaries throw a
+   *   PermissionError.
+   * - `contained: false` — No access restrictions. Any path on the host
+   *   filesystem is accessible.
    *
    * Set to `false` when the filesystem needs to access paths outside basePath,
    * such as global skills directories or user home directories.
@@ -77,9 +77,9 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * @example
    * ```typescript
    * new LocalFilesystem({
-   *   basePath: '/project/workspace',
+   *   basePath: './workspace',
    *   contained: true,
-   *   allowedPaths: ['../skills', '/home/user/.config'],
+   *   allowedPaths: ['../skills', '~/.claude/skills'],
    * })
    * ```
    */
@@ -103,10 +103,9 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
  * the sandbox creates a symlink from `<workingDir>/<mountPath>` → `basePath`.
  * No FUSE tools are needed for local mounts.
  *
- * **`contained: false` caveat:** `CompositeFilesystem` strips mount prefixes
- * before passing paths to mounted filesystems. A non-contained `LocalFilesystem`
- * may interpret these paths as real host paths instead of paths relative to
- * `basePath`. Workspace warns at construction time if this combination is detected.
+ * **Note:** When mounted with `contained: false`, the agent can access any
+ * path on the host filesystem through this mount. Workspace logs a warning
+ * at construction time if this combination is detected.
  */
 export interface LocalMountConfig extends FilesystemMountConfig {
   type: 'local';
@@ -160,10 +159,8 @@ export class LocalFilesystem extends MastraFilesystem {
    * basePath (and allowedPaths) throws a PermissionError. When `false`,
    * no containment check is applied.
    *
-   * **Important:** `contained: false` is incompatible with CompositeFilesystem
-   * mounts because CompositeFilesystem strips mount prefixes and passes
-   * paths like `file.txt`, which a non-contained filesystem may resolve
-   * incorrectly.
+   * **Note:** When used as a CompositeFilesystem mount with `contained: false`,
+   * the agent can access any path on the host filesystem through this mount.
    */
   get contained(): boolean {
     return this._contained;
@@ -184,10 +181,10 @@ export class LocalFilesystem extends MastraFilesystem {
    * @example
    * ```typescript
    * // Set directly
-   * fs.setAllowedPaths(['/home/user/.config']);
+   * fs.setAllowedPaths(['../shared-data']);
    *
    * // Update with callback
-   * fs.setAllowedPaths(prev => [...prev, '/home/user/.ssh']);
+   * fs.setAllowedPaths(prev => [...prev, '~/.claude/skills']);
    * ```
    */
   setAllowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
