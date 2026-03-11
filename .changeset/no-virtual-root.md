@@ -23,3 +23,7 @@ await filesystem.readFile('/src/index.ts');
 await filesystem.readFile('src/index.ts');
 ```
 
+Also fixed:
+- `allowedPaths` resolving against the working directory instead of `basePath`, causing unexpected permission errors when `basePath` differed from `cwd`
+- Permission errors when accessing paths under `allowedPaths` directories that don't exist yet (e.g., during skills discovery)
+
