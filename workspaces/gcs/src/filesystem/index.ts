@@ -217,6 +217,41 @@ export class GCSFilesystem extends MastraFilesystem {
   }
 
   /**
+   * Get the underlying Google Cloud Storage instance for direct access to GCS APIs.
+   *
+   * Use this when you need to access GCS features not exposed through the
+   * WorkspaceFilesystem interface (e.g., signed URLs, IAM, custom metadata, etc.).
+   *
+   * @example Access other buckets
+   * ```typescript
+   * const storage = fs.storage;
+   * const [buckets] = await storage.getBuckets();
+   * ```
+   */
+  get storage(): Storage {
+    return this.getStorage();
+  }
+
+  /**
+   * Get the underlying GCS Bucket instance for direct access to bucket operations.
+   *
+   * Use this when you need to access bucket features not exposed through the
+   * WorkspaceFilesystem interface (e.g., signed URLs, lifecycle rules, etc.).
+   *
+   * @example Generate a signed URL
+   * ```typescript
+   * const bucket = fs.bucket;
+   * const [url] = await bucket.file('my-file.txt').getSignedUrl({
+   *   action: 'read',
+   *   expires: Date.now() + 15 * 60 * 1000,
+   * });
+   * ```
+   */
+  get bucket(): Bucket {
+    return this.getBucket();
+  }
+
+  /**
    * Get mount configuration for E2B sandbox.
    * Returns GCS-compatible config that works with gcsfuse.
    */
