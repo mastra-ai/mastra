@@ -687,21 +687,6 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    // Add memory token limiter if maxTokens is configured
-    if (effectiveConfig.maxTokens !== undefined) {
-      const hasTokenLimiter = configuredProcessors.some(
-        p => !isProcessorWorkflow(p) && p.id === 'memory-token-limiter',
-      );
-
-      if (!hasTokenLimiter) {
-        processors.push(
-          new MemoryTokenLimiter({
-            maxTokens: effectiveConfig.maxTokens,
-          }),
-        );
-      }
-    }
-
     // Add semantic recall input processor if configured
     if (effectiveConfig.semanticRecall) {
       if (!memoryStore)
@@ -747,6 +732,21 @@ https://mastra.ai/en/docs/memory/overview`,
             embedderOptions: this.embedderOptions,
             indexName,
             ...semanticConfig,
+          }),
+        );
+      }
+    }
+
+    // Add memory token limiter AFTER semantic recall so it caps the final context
+    if (effectiveConfig.maxTokens !== undefined) {
+      const hasTokenLimiter = configuredProcessors.some(
+        p => !isProcessorWorkflow(p) && p.id === 'memory-token-limiter',
+      );
+
+      if (!hasTokenLimiter) {
+        processors.push(
+          new MemoryTokenLimiter({
+            maxTokens: effectiveConfig.maxTokens,
           }),
         );
       }

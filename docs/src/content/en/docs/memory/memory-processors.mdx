@@ -191,7 +191,7 @@ memory: new Memory({
 
 **What it does:**
 
-- **Input**: Counts the total tokens of all messages (memory history + new input) using tiktoken (o200k\_base encoding). If the total exceeds `maxTokens`, removes the oldest memory history messages until the total is within budget. Input messages are never removed.
+- **Input**: Counts the total tokens of all messages (system messages + memory history + new input) using tiktoken (o200k\_base encoding). If the total exceeds `maxTokens`, removes the oldest memory history messages until the total is within budget. Input and system messages are never removed.
 
 **Example:**
 

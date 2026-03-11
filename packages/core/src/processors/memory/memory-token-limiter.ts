@@ -71,21 +71,29 @@ export class MemoryTokenLimiter implements Processor {
       }
     }
 
+    const memoryMessages = messageList.get.remembered.db();
+    const memoryMessageIds = new Set(memoryMessages.map(m => m.id));
+    const rememberedTokenCounts = new Map<string, number>();
+
     const allMessages = messageList.get.all.db();
     for (const message of allMessages) {
-      totalTokens += countMessageTokens(encoder, message);
+      const tokens = countMessageTokens(encoder, message);
+      totalTokens += tokens;
+
+      if (memoryMessageIds.has(message.id)) {
+        rememberedTokenCounts.set(message.id, tokens);
+      }
     }
 
     if (totalTokens <= this.maxTokens) {
       return messageList;
     }
 
-    const memoryMessages = messageList.get.remembered.db();
     const idsToRemove: string[] = [];
 
     // Remove oldest memory messages first until we're within the token budget
     for (const message of memoryMessages) {
-      const messageTokens = countMessageTokens(encoder, message);
+      const messageTokens = rememberedTokenCounts.get(message.id) ?? 0;
       idsToRemove.push(message.id);
       totalTokens -= messageTokens;
       if (totalTokens <= this.maxTokens) {

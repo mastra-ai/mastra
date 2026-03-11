@@ -5,7 +5,13 @@ import { MockMemory } from '../../memory/mock';
 
 import { MemoryTokenLimiter } from './memory-token-limiter';
 
-function createMessage(id: string, role: 'user' | 'assistant', text: string, threadId = 'thread-1'): MastraDBMessage {
+function createMessage(
+  id: string,
+  role: 'user' | 'assistant',
+  text: string,
+  threadId = 'thread-1',
+  createdAt = new Date(),
+): MastraDBMessage {
   return {
     id,
     threadId,
@@ -14,7 +20,7 @@ function createMessage(id: string, role: 'user' | 'assistant', text: string, thr
       format: 2 as const,
       parts: [{ type: 'text' as const, text }],
     },
-    createdAt: new Date(),
+    createdAt,
   };
 }
 
@@ -122,18 +128,25 @@ describe('MemoryTokenLimiter', () => {
   });
 
   it('should remove memory messages in chronological order (oldest first)', async () => {
-    // Each short message ≈ 4-6 tiktoken tokens, 3 memory + 1 input ≈ 16-20 tokens total.
-    // Set maxTokens to 10 so that some (but not all) memory messages must be removed.
-    const limiter = new MemoryTokenLimiter({ maxTokens: 10 });
+    // Use long varied text to avoid BPE compression of repeated characters.
+    // Each message with ~200 words ≈ 200+ tiktoken tokens.
+    // Set maxTokens to 5 so only the smallest messages can remain after trimming.
+    const limiter = new MemoryTokenLimiter({ maxTokens: 5 });
     const messageList = new MessageList();
 
-    // Add memory messages oldest first
-    messageList.add(createMessage('mem-1', 'user', 'First message - oldest'), 'memory');
-    messageList.add(createMessage('mem-2', 'assistant', 'Second message'), 'memory');
-    messageList.add(createMessage('mem-3', 'user', 'Third message - newest'), 'memory');
+    const baseTime = new Date('2025-01-01T00:00:00Z');
+    const longText = Array.from({ length: 200 }, (_, i) => `word${i}`).join(' ');
+
+    // Add memory messages with explicit timestamps (oldest to newest)
+    messageList.add(createMessage('mem-1', 'user', longText, 'thread-1', new Date(baseTime.getTime())), 'memory');
+    messageList.add(
+      createMessage('mem-2', 'assistant', longText, 'thread-1', new Date(baseTime.getTime() + 1000)),
+      'memory',
+    );
+    messageList.add(createMessage('mem-3', 'user', 'Hi', 'thread-1', new Date(baseTime.getTime() + 2000)), 'memory');
 
     // Add input
-    messageList.add(createMessage('input-1', 'user', 'Current input'), 'input');
+    messageList.add(createMessage('input-1', 'user', 'Hi', 'thread-1', new Date(baseTime.getTime() + 3000)), 'input');
 
     await limiter.processInput({
       messages: messageList.get.all.db(),
@@ -147,11 +160,10 @@ describe('MemoryTokenLimiter', () => {
     const remainingMemory = messageList.get.remembered.db();
     const remainingIds = remainingMemory.map(m => m.id);
 
-    // Some memory messages should have been removed
-    expect(remainingMemory.length).toBeLessThan(3);
-
-    // mem-1 (oldest) should be removed first
+    // mem-1 and mem-2 (oldest, large) should be removed; mem-3 (newest, small) should remain
     expect(remainingIds).not.toContain('mem-1');
+    expect(remainingIds).not.toContain('mem-2');
+    expect(remainingIds).toContain('mem-3');
 
     // Input is always preserved
     expect(messageList.get.input.db()).toHaveLength(1);
