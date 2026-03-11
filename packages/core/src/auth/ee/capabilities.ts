@@ -5,6 +5,7 @@
 import type { MastraAuthProvider } from '../../server';
 import type { IUserProvider, ISSOProvider, ISessionProvider, ICredentialsProvider } from '../interfaces';
 import type { IACLProvider } from './interfaces/acl';
+import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
 import { isLicenseValid, isDevEnvironment } from './license';
@@ -64,6 +65,8 @@ export interface CapabilityFlags {
   rbac: boolean;
   /** IACLProvider is implemented and licensed */
   acl: boolean;
+  /** IFGAProvider is implemented and licensed */
+  fga: boolean;
 }
 
 /**
@@ -142,6 +145,12 @@ export interface BuildCapabilitiesOptions {
    * ```
    */
   rbac?: IRBACProvider<EEUser>;
+
+  /**
+   * FGA provider for fine-grained authorization (EE feature).
+   * Separate from the auth provider to allow mixing different providers.
+   */
+  fga?: IFGAProvider<EEUser>;
 }
 
 /**
@@ -235,6 +244,10 @@ export async function buildCapabilities(
   const rbacProvider = options?.rbac;
   const hasRBAC = !!rbacProvider && isLicensedOrCloud;
 
+  // Get FGA provider from options (if configured)
+  const fgaProvider = options?.fga;
+  const hasFGA = !!fgaProvider && isLicensedOrCloud;
+
   // Build capability flags
   const capabilities: CapabilityFlags = {
     user: implementsInterface<IUserProvider>(auth, 'getCurrentUser') && isLicensedOrCloud,
@@ -242,6 +255,7 @@ export async function buildCapabilities(
     sso: implementsInterface<ISSOProvider>(auth, 'getLoginUrl') && isLicensedOrCloud,
     rbac: hasRBAC,
     acl: implementsInterface<IACLProvider>(auth, 'canAccess') && isLicensedOrCloud,
+    fga: hasFGA,
   };
 
   // Get roles/permissions from RBAC provider (if available)
