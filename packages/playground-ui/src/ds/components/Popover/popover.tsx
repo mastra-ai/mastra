@@ -29,24 +29,24 @@ PopoverContent.displayName = PopoverPrimitive.Content.displayName;
 
 function HoverPopover({ children, ...props }: PopoverPrimitive.PopoverProps) {
   const [open, setOpen] = React.useState(false);
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const handleOpen = () => {
+  const handleOpen = React.useCallback(() => {
     clearTimeout(timeoutRef.current);
     setOpen(true);
-  };
+  }, []);
 
-  const handleClose = () => {
+  const handleClose = React.useCallback(() => {
     timeoutRef.current = setTimeout(() => setOpen(false), 150);
-  };
+  }, []);
 
   React.useEffect(() => () => clearTimeout(timeoutRef.current), []);
 
   return (
     <Popover open={open} onOpenChange={setOpen} {...props}>
-      <div onMouseEnter={handleOpen} onMouseLeave={handleClose}>
+      <span onMouseEnter={handleOpen} onMouseLeave={handleClose} style={{ display: 'contents' }}>
         {children}
-      </div>
+      </span>
     </Popover>
   );
 }

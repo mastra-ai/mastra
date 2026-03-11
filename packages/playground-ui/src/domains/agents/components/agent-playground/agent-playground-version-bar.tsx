@@ -99,11 +99,12 @@ export function AgentPlaygroundVersionBar({
   const saveDisabled = readOnly || !isDirty || isSavingDraft || isPublishing;
 
   const handleSaveWithMessage = useCallback(async () => {
+    if (isSavingDraft) return;
     const msg = changeMessage.trim();
     await onSaveDraft(msg || undefined);
     setShowMessageDialog(false);
     setChangeMessage('');
-  }, [changeMessage, onSaveDraft]);
+  }, [changeMessage, onSaveDraft, isSavingDraft]);
 
   return {
     versionSelector: (
@@ -129,7 +130,7 @@ export function AgentPlaygroundVersionBar({
 
         <HoverPopover>
           <PopoverTrigger asChild>
-            <button type="button" className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-0">
+            <button type="button" aria-label="Version information" className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-0">
               <Icon size="sm">
                 <Info />
               </Icon>
@@ -239,6 +240,7 @@ export function AgentPlaygroundVersionBar({
                       handleSaveWithMessage();
                     }
                   }}
+                  disabled={isSavingDraft}
                   autoFocus
                 />
               </div>
@@ -247,7 +249,7 @@ export function AgentPlaygroundVersionBar({
               <Button variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" size="sm" onClick={handleSaveWithMessage}>
+              <Button variant="primary" size="sm" onClick={handleSaveWithMessage} disabled={isSavingDraft}>
                 <Icon size="sm">
                   <Save />
                 </Icon>

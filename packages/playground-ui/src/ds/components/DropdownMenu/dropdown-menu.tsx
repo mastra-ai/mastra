@@ -17,7 +17,7 @@ const DropdownMenuTrigger = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
-  <DropdownMenuPrimitive.Trigger ref={ref} className={cn('cursor-pointer focus-visible:outline-none focus-visible:ring-0', className)} {...props}>
+  <DropdownMenuPrimitive.Trigger ref={ref} className={cn('cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:rounded-sm', className)} {...props}>
     {children}
   </DropdownMenuPrimitive.Trigger>
 ));

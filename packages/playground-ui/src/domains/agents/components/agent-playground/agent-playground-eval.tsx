@@ -403,6 +403,9 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
 
   const { form } = useAgentEditFormContext();
   const isDirty = form.formState.isDirty;
+
+  const [experimentProvider, setExperimentProvider] = useState(() => form.getValues('model.provider') || '');
+  const [experimentModel, setExperimentModel] = useState(() => form.getValues('model.name') || '');
   const mergedRequestContext = useMergedRequestContext();
 
   const queryClient = useQueryClient();
@@ -420,6 +423,12 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
     isStartingExperimentRef.current = true;
     setIsRunning(true);
     try {
+      // Apply experiment model override to form before saving
+      if (experimentProvider) {
+        form.setValue('model.provider', experimentProvider);
+        form.setValue('model.name', experimentModel);
+      }
+
       // Save draft first to persist current config
       await onSaveDraft();
 
@@ -441,7 +450,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
       isStartingExperimentRef.current = false;
       setIsRunning(false);
     }
-  }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext, queryClient]);
+  }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext, queryClient, experimentProvider, experimentModel, form]);
 
   const selectedExperiment = selectedExperimentId ? experiments?.find(e => e.id === selectedExperimentId) : null;
 
@@ -478,24 +487,24 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
           disabled={isRunning}
         />
 
-        {/* Provider + Model selector */}
+        {/* Provider + Model selector (local state, not persisted to agent form) */}
         <div className="grid grid-cols-2 gap-2">
           <div className="grid gap-1">
             <Label>Provider</Label>
             <LLMProviders
-              value={form.watch('model.provider') || ''}
+              value={experimentProvider}
               onValueChange={value => {
-                form.setValue('model.provider', value, { shouldDirty: true });
-                form.setValue('model.name', '', { shouldDirty: true });
+                setExperimentProvider(value);
+                setExperimentModel('');
               }}
             />
           </div>
           <div className="grid gap-1">
             <Label>Model</Label>
             <LLMModels
-              llmId={form.watch('model.provider') || ''}
-              value={form.watch('model.name') || ''}
-              onValueChange={value => form.setValue('model.name', value, { shouldDirty: true })}
+              llmId={experimentProvider}
+              value={experimentModel}
+              onValueChange={setExperimentModel}
             />
           </div>
         </div>

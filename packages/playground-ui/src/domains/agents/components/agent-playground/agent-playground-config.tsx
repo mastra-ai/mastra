@@ -529,18 +529,32 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
 
   const handleRemoveVariable = (name: string) => {
     const props = { ...(variables?.properties ?? {}) };
+    const required = Array.isArray(variables?.required)
+      ? variables.required.filter((r: string) => r !== name)
+      : undefined;
     delete props[name];
-    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
+    form.setValue(
+      'variables',
+      { ...variables, type: 'object', properties: props, ...(required?.length ? { required } : {}) },
+      { shouldDirty: true },
+    );
   };
 
   const handleRenameVariable = (oldName: string, newName: string) => {
     if (!newName || newName === oldName) return;
     const props = { ...(variables?.properties ?? {}) };
     if (props[newName]) return; // don't overwrite existing
+    const required = Array.isArray(variables?.required)
+      ? variables.required.map((r: string) => (r === oldName ? newName : r))
+      : undefined;
     const value = props[oldName];
     delete props[oldName];
     props[newName] = value;
-    form.setValue('variables', { ...variables, type: 'object', properties: props }, { shouldDirty: true });
+    form.setValue(
+      'variables',
+      { ...variables, type: 'object', properties: props, ...(required?.length ? { required } : {}) },
+      { shouldDirty: true },
+    );
   };
 
   const handleVariableValueChange = (name: string, value: string) => {

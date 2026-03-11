@@ -34,8 +34,8 @@ export function ToolsPage() {
       for (const [id, tool] of Object.entries(tools)) {
         opts.push({
           value: id,
-          label: (tool as { name?: string }).name || id,
-          description: (tool as { description?: string }).description || '',
+          label: id,
+          description: tool.description || '',
         });
       }
     }
