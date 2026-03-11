@@ -448,4 +448,174 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(executeAction.mock.calls[0]![0].inputData).toEqual({ taskId: 'test-task-123' });
     });
   });
+
+  describe('Logger propagation', () => {
+    it('should propagate logger to executionEngine when set via __setLogger', () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+      };
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => ({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-propagation',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      // Set logger on the workflow
+      workflow.__setLogger(mockLogger as any);
+
+      // Verify logger was propagated to execution engine
+      expect((workflow as any).executionEngine.logger).toBe(mockLogger);
+    });
+
+    it('should propagate logger to executionEngine when set via __registerPrimitives', () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+      };
+
+      const step1 = createStep({
+        id: 'step1',
+        execute: async () => ({ result: 'success' }),
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-primitives-propagation',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [step1],
+      });
+      workflow.then(step1).commit();
+
+      // Set logger via __registerPrimitives
+      workflow.__registerPrimitives({ logger: mockLogger as any });
+
+      // Verify logger was propagated to execution engine
+      expect((workflow as any).executionEngine.logger).toBe(mockLogger);
+    });
+
+    it('should use custom logger for step execution errors instead of console.error', async () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+      };
+
+      const failingStep = createStep({
+        id: 'failing-step',
+        execute: async () => {
+          throw new Error('Test error from step');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-error-capture',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [failingStep],
+      });
+      workflow.then(failingStep).commit();
+
+      // Set logger on the workflow
+      workflow.__setLogger(mockLogger as any);
+
+      // Spy on console.error to verify it's NOT called
+      const consoleErrorSpy = vi.spyOn(console, 'error');
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      // Verify workflow failed
+      expect(result.status).toBe('failed');
+
+      // Verify custom logger's error method was called for step error
+      expect(mockLogger.error).toHaveBeenCalled();
+      const errorCall = mockLogger.error.mock.calls.find((call: any[]) => call[0]?.includes('Error executing step'));
+      expect(errorCall).toBeDefined();
+      expect(errorCall[0]).toContain('failing-step');
+
+      // Verify trackException was called
+      expect(mockLogger.trackException).toHaveBeenCalled();
+
+      // Verify console.error was NOT called (errors go through custom logger instead)
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+      // Clean up spy
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('Tracing Context Persistence', () => {
+    it('should persist tracing context when workflow suspends', async () => {
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+      });
+
+      const suspendStep = createStep({
+        id: 'tracing-suspend-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ confirm: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData?.confirm) {
+            await suspend({ message: 'Please confirm' });
+          }
+          return { result: `processed: ${inputData.value}` };
+        },
+      });
+
+      const workflow = createWorkflow({
+        id: 'tracing-context-persistence-test',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [suspendStep],
+      })
+        .then(suspendStep)
+        .commit();
+
+      workflow.__registerMastra(mastra);
+
+      const run = await workflow.createRun({ runId: 'tracing-persistence-test-run' });
+      const result = await run.start({ inputData: { value: 'test' } });
+
+      expect(result.status).toBe('suspended');
+
+      // Verify that the snapshot has the tracingContext field structure
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'tracing-context-persistence-test',
+        runId: 'tracing-persistence-test-run',
+      });
+
+      expect(snapshot).toBeDefined();
+      expect(snapshot?.status).toBe('suspended');
+      // The tracingContext should exist in the snapshot (may be undefined if no observability was configured)
+      // The key is that the field structure is preserved in the snapshot
+      expect('tracingContext' in (snapshot ?? {})).toBe(true);
+    });
+  });
 });

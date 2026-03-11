@@ -143,7 +143,7 @@ export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
 
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     return this.sandbox.retryOnDead(async () => {
-      const blaxel = this.sandbox.instance;
+      const blaxel = this.sandbox.blaxel;
 
       // Merge default env with per-spawn env
       const mergedEnv = { ...this.env, ...options.env };

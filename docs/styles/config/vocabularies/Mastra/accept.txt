@@ -1,7 +1,12 @@
 (?i)AI
 (?i)API
 (?i)APIs
+Amazon
 Apache
+Apache License
+App Services
+Assistant UI
+Astra
 Astro
 (?i)Auth0
 AWS
@@ -12,18 +17,24 @@ CI
 CLI
 ClickHouse
 Cloudflare
+Cloudflare Workers
 Convex
 CopilotKit
+Couchbase
 CSP
 D1
 Dash0
 Datadog
+Digital Ocean
+DigitalOcean
 Docker
 Dockerfile
+DuckDB
 DynamoDB
 E2B
 EC2
 (?i)Electron
+Elasticsearch
 ElevenLabs
 (?i)Express
 (?i)Fastify
@@ -35,6 +46,8 @@ GCS
 (?i)GET
 (?i)GitHub
 Google
+Google Gemini
+Google Gemini Live
 GraphRAG
 gRPC
 (?i)Hono
@@ -50,17 +63,20 @@ JSONB
 JWKS
 (?i)Lambda
 (?i)Laminar
+LanceDB
 (?i)LangSmith
 (?i)LibSQL
 LLM
 (?i)MAP
 (?i)Mastra
+Mastra Cloud
 (?i)MCP
 MinIO
 MLflow
 MongoDB
 (?i)MSSQL
 Netlify
+New Relic
 Next\.js
 Node\.js
 (?i)NPM
@@ -68,6 +84,8 @@ Nuxt
 OAuth
 (?i)OpenAI
 (?i)OpenAPI
+OpenAI Realtime
+OpenSearch
 OpenTelemetry
 OS
 (?i)OTEL
@@ -81,6 +99,7 @@ Prisma
 Qdrant
 R2
 (?i)RAG
+Retrieval-Augmented Generation
 (?i)React
 Redis
 Remix
@@ -101,6 +120,7 @@ Swagger
 Traceloop
 (?i)TTS
 TTL
+Turbopuffer
 Turso
 (?i)TypeScript
 (?i)UI
@@ -108,6 +128,8 @@ Upstash
 VAD
 Vercel
 (?i)Vite
+Visual Studio Code
+Vectorize
 (?i)Vitest
 VNext
 WebSocket
