@@ -110,7 +110,7 @@ export default function Workspace() {
   };
 
   const setCurrentPath = (path: string) => {
-    updateSearchParams({ path, file: null });
+    updateSearchParams({ path: path === '.' || path === '' ? null : path, file: null });
   };
 
   const setSelectedFile = (file: string | null) => {
