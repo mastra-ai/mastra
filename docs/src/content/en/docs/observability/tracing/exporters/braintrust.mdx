@@ -94,20 +94,6 @@ new BraintrustExporter({
 })
 ```
 
-## Querying traces by root span ID
-
-When querying Braintrust data after an `agent.stream()` or `agent.generate()` call, you can use the `spanId` property on the result to query by the Braintrust root span ID. This is more efficient than querying by trace ID:
-
-```typescript
-const stream = await agent.stream('Hello')
-await stream.consumeStream()
-
-// Use spanId for efficient Braintrust API queries
-const braintrustRootSpanId = stream.spanId
-```
-
-The `spanId` corresponds directly to the Braintrust root span ID, which benefits from Braintrust's query optimizations for root span lookups.
-
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)

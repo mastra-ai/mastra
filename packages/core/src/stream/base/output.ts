@@ -127,11 +127,7 @@ export type FullOutput<OUTPUT = undefined> = {
   };
   /** Trace ID for observability */
   traceId: string | undefined;
-  /**
-   * Span ID of the root agent run span.
-   * When using the Braintrust exporter, this corresponds to the Braintrust root span ID
-   * which can be used for efficient queries against the Braintrust API.
-   */
+  /** Span ID of the root agent run span */
   spanId: string | undefined;
   /** Run ID for this execution */
   runId: string | undefined;
@@ -256,9 +252,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    */
   public traceId?: string;
   /**
-   * Span ID of the root agent run span.
-   * When using the Braintrust exporter, this corresponds to the Braintrust root span ID
-   * which can be used for efficient queries against the Braintrust API.
+   * Span ID of the root agent run span (if the execution was traced).
    */
   public spanId?: string;
   public messageId: string;

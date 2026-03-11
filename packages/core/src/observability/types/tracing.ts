@@ -952,11 +952,7 @@ export interface TracingContext {
 export type TracingProperties = {
   /** Trace ID used on the execution (if the execution was traced). */
   traceId?: string;
-  /**
-   * Span ID of the root span for this execution.
-   * When using the Braintrust exporter, this corresponds to the Braintrust root span ID
-   * which can be used for efficient queries against the Braintrust API.
-   */
+  /** Span ID of the root span for this execution (if the execution was traced). */
   spanId?: string;
 };
 

@@ -836,7 +836,7 @@ const stream = await agent.stream('message for agent')
     type: 'string',
     isOptional: true,
     description:
-      'The span ID of the root agent run span. When using the Braintrust exporter, this corresponds to the Braintrust root span ID which can be used for efficient queries against the Braintrust API.',
+      'The span ID of the root agent run span when Tracing is enabled. This is the internal Mastra span identifier for the root execution span.',
   },
 ]}
 />
