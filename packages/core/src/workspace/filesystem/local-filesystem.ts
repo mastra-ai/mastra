@@ -157,10 +157,10 @@ export class LocalFilesystem extends MastraFilesystem {
   /**
    * Whether file operations are restricted to stay within basePath.
    *
-   * When `true` (default), all paths are resolved relative to basePath.
-   * Any resolved path that escapes basePath (and allowedPaths) throws a
-   * PermissionError. When `false`, absolute paths are treated as real
-   * filesystem paths with no containment check.
+   * When `true` (default), relative paths resolve against basePath and
+   * absolute paths are kept as-is. Any resolved path that falls outside
+   * basePath (and allowedPaths) throws a PermissionError. When `false`,
+   * no containment check is applied.
    *
    * **Important:** `contained: false` is incompatible with CompositeFilesystem
    * mounts because CompositeFilesystem strips mount prefixes and passes

@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Update default file tree path from `/` to `.` to match workspace filesystem convention changes.
+Change file browser root path from `/` to `.` so workspace navigation starts from the workspace directory instead of the host filesystem root.
