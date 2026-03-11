@@ -6,11 +6,21 @@
  * Available Gemini Live API models
  */
 export type GeminiVoiceModel =
+  /** @deprecated Shut down on 2025-12-09. */
   | 'gemini-2.0-flash-exp'
+  /** @deprecated Shut down on 2025-11-14. */
   | 'gemini-2.0-flash-exp-image-generation'
+  /** @deprecated Shut down on 2025-12-09. */
   | 'gemini-2.0-flash-live-001'
+  /** @deprecated Use 'gemini-live-2.5-flash-preview-native-audio-09-2025' instead. */
   | 'gemini-live-2.5-flash-preview-native-audio'
+  | 'gemini-live-2.5-flash-preview-native-audio-09-2025'
+  | 'gemini-live-2.5-flash-native-audio'
+  | 'gemini-2.5-flash-native-audio-preview-12-2025'
+  | 'gemini-2.5-flash-native-audio-preview-09-2025'
+  /** @deprecated Shut down on 2025-10-20. */
   | 'gemini-2.5-flash-exp-native-audio-thinking-dialog'
+  /** @deprecated Shut down on 2025-12-09. */
   | 'gemini-live-2.5-flash-preview'
   | 'gemini-2.6.flash-preview-tts';
 

@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "cloudferro-sherlock/ MiniMaxAI/MiniMax-M2.5"
+  model: "cloudferro-sherlock/MiniMaxAI/MiniMax-M2.5"
 });
 
 // Generate a response
@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "cloudferro-sherlock/ MiniMaxAI/MiniMax-M2.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 196000,
-    "maxOutput": 196000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
     "model": "cloudferro-sherlock/meta-llama/Llama-3.3-70B-Instruct",
     "imageInput": false,
     "audioInput": false,
@@ -68,6 +56,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 70000,
     "inputCost": 2.92,
     "outputCost": 2.92
+  },
+  {
+    "model": "cloudferro-sherlock/MiniMaxAI/MiniMax-M2.5",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 196000,
+    "maxOutput": 196000,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "cloudferro-sherlock/openai/gpt-oss-120b",
@@ -118,7 +118,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api-sherlock.cloudferro.com/openai/v1/",
-    id: "cloudferro-sherlock/ MiniMaxAI/MiniMax-M2.5",
+    id: "cloudferro-sherlock/MiniMaxAI/MiniMax-M2.5",
     apiKey: process.env.CLOUDFERRO_SHERLOCK_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -137,7 +137,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "cloudferro-sherlock/speakleash/Bielik-11B-v3.0-Instruct"
-      : "cloudferro-sherlock/ MiniMaxAI/MiniMax-M2.5";
+      : "cloudferro-sherlock/MiniMaxAI/MiniMax-M2.5";
   }
 });
 ```
