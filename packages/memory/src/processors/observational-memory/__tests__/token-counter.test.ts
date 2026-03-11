@@ -919,6 +919,31 @@ describe('TokenCounter', () => {
       expect(requestBody.input.length).toBeGreaterThan(0);
     });
 
+    it('prefers the runtime actor model context over the constructor fallback for grouped provider counting', async () => {
+      vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ input_tokens: 222 }),
+      });
+      globalThis.fetch = fetchMock as typeof fetch;
+
+      const counter = new TokenCounter({ model: 'openai/gpt-4o-mini', enableProviderTokenCounting: true });
+      const messages = [
+        {
+          ...createMessage({ format: 2, parts: [{ type: 'text', text: 'Use the actor model context' }] }),
+          role: 'user',
+        },
+      ];
+
+      const total = await counter.runWithModelContext({ provider: 'openai', modelId: 'gpt-4o' }, async () => {
+        return counter.countMessagesAsync(messages as any);
+      });
+
+      expect(total).toBe(222);
+      const requestBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+      expect(requestBody.model).toBe('gpt-4o');
+    });
+
     it('dedupes in-flight grouped async message counts for identical payloads', async () => {
       vi.stubEnv('OPENAI_API_KEY', 'test-openai-key');
       let resolveFetch: ((value: any) => void) | undefined;

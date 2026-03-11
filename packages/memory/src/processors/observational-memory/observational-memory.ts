@@ -922,9 +922,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       instruction: config.reflection?.instruction,
     };
 
-    this.tokenCounter = new TokenCounter({
-      model: typeof observationModel === 'string' ? observationModel : undefined,
-    });
+    this.tokenCounter = new TokenCounter();
     this.onDebugEvent = config.onDebugEvent;
 
     // Create internal MessageHistory for message persistence
@@ -2905,6 +2903,8 @@ ${suggestedResponse}
     const actorModelContext = this.getRuntimeModelContext(model);
     state.__omActorModelContext = actorModelContext;
 
+    // OM thresholding/counting should follow the actor model for the current step,
+    // matching attachment counting and any opt-in grouped provider counting.
     return this.runWithTokenCounterModelContext(actorModelContext, async () => {
       // Fetch fresh record
       let record = await this.getOrCreateRecord(threadId, resourceId);
