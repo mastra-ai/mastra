@@ -3,8 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { LocalFilesystem } from '../filesystem';
-import { formatAsTree, formatEntriesAsTree } from './tree-formatter';
+import { LocalFilesystem } from '../../filesystem';
+import { formatAsTree, formatEntriesAsTree } from '../tree-formatter';
 
 describe('tree-formatter', () => {
   let tempDir: string;
@@ -28,7 +28,7 @@ describe('tree-formatter', () => {
   // ===========================================================================
   describe('formatAsTree', () => {
     it('should format empty directory', async () => {
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe('.');
       expect(result.summary).toBe('0 directories, 0 files');
@@ -40,7 +40,7 @@ describe('tree-formatter', () => {
     it('should format single file', async () => {
       await fs.writeFile(path.join(tempDir, 'file.txt'), 'content');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe('.\nfile.txt');
       expect(result.summary).toBe('0 directories, 1 file');
@@ -50,7 +50,7 @@ describe('tree-formatter', () => {
     it('should format single directory', async () => {
       await fs.mkdir(path.join(tempDir, 'dir'));
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe('.\ndir');
       expect(result.summary).toBe('1 directory, 0 files');
@@ -63,7 +63,7 @@ describe('tree-formatter', () => {
       await fs.writeFile(path.join(tempDir, 'package.json'), '{}');
       await fs.writeFile(path.join(tempDir, 'README.md'), '# README');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       // Directories first, then files, all ASCII alphabetical
       expect(result.tree).toBe(
@@ -84,7 +84,7 @@ package.json`,
       await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), '');
       await fs.writeFile(path.join(tempDir, 'package.json'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe(
         `.
@@ -102,7 +102,7 @@ package.json`,
       await fs.writeFile(path.join(tempDir, 'aaa.txt'), '');
       await fs.mkdir(path.join(tempDir, 'zzz'));
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       // Directory 'zzz' should come before file 'aaa.txt'
       expect(result.tree).toBe(
@@ -117,7 +117,7 @@ aaa.txt`,
       await fs.writeFile(path.join(tempDir, 'alpha.txt'), '');
       await fs.writeFile(path.join(tempDir, 'beta.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe(
         `.
@@ -138,7 +138,7 @@ zebra.txt`,
       await fs.mkdir(path.join(tempDir, 'level1', 'level2', 'level3'));
       await fs.writeFile(path.join(tempDir, 'level1', 'level2', 'level3', 'deep.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/', { maxDepth: 1 });
+      const result = await formatAsTree(filesystem, '.', { maxDepth: 1 });
 
       expect(result.tree).toBe(
         `.
@@ -156,7 +156,7 @@ level1`,
       await fs.writeFile(path.join(tempDir, 'level1', 'file1.txt'), '');
       await fs.writeFile(path.join(tempDir, 'level1', 'level2', 'file2.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/', { maxDepth: 2 });
+      const result = await formatAsTree(filesystem, '.', { maxDepth: 2 });
 
       expect(result.tree).toBe(
         `.
@@ -173,7 +173,7 @@ level1
       await fs.mkdir(path.join(tempDir, 'dir'));
       await fs.writeFile(path.join(tempDir, 'dir', 'file.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/', { maxDepth: 10 });
+      const result = await formatAsTree(filesystem, '.', { maxDepth: 10 });
 
       expect(result.truncated).toBe(false);
       expect(result.summary).not.toContain('truncated');
@@ -183,7 +183,7 @@ level1
       await fs.mkdir(path.join(tempDir, 'dir'));
       await fs.writeFile(path.join(tempDir, 'file.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/', { maxDepth: 0 });
+      const result = await formatAsTree(filesystem, '.', { maxDepth: 0 });
 
       expect(result.tree).toBe('.');
       expect(result.truncated).toBe(true);
@@ -201,7 +201,7 @@ level1
       await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
       await fs.mkdir(path.join(tempDir, '.git'));
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe(
         `.
@@ -215,7 +215,7 @@ visible.txt`,
       await fs.writeFile(path.join(tempDir, '.gitignore'), '');
       await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/', { showHidden: true });
+      const result = await formatAsTree(filesystem, '.', { showHidden: true });
 
       expect(result.tree).toBe(
         `.
@@ -232,7 +232,7 @@ visible.txt`,
       await fs.writeFile(path.join(tempDir, 'debug.log'), '');
       await fs.writeFile(path.join(tempDir, 'visible.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe(
         `.
@@ -249,7 +249,7 @@ visible.txt`,
       await fs.writeFile(path.join(tempDir, 'apps', 'web', 'dist', 'bundle.js'), '');
       await fs.writeFile(path.join(tempDir, 'apps', 'web', 'src', 'index.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/apps/web');
+      const result = await formatAsTree(filesystem, 'apps/web');
 
       expect(result.tree).toContain('src');
       expect(result.tree).toContain('index.ts');
@@ -268,7 +268,7 @@ visible.txt`,
       await fs.writeFile(path.join(tempDir, 'style.css'), '');
       await fs.writeFile(path.join(tempDir, 'utils.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', { extension: '.ts' });
+      const result = await formatAsTree(filesystem, '.', { extension: '.ts' });
 
       expect(result.tree).toBe(
         `.
@@ -282,7 +282,7 @@ utils.ts`,
       await fs.writeFile(path.join(tempDir, 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'style.css'), '');
 
-      const result = await formatAsTree(filesystem, '/', { extension: 'ts' });
+      const result = await formatAsTree(filesystem, '.', { extension: 'ts' });
 
       expect(result.tree).toBe(
         `.
@@ -295,7 +295,7 @@ index.ts`,
       await fs.writeFile(path.join(tempDir, 'test.tsx'), '');
       await fs.writeFile(path.join(tempDir, 'style.css'), '');
 
-      const result = await formatAsTree(filesystem, '/', { extension: ['.ts', '.tsx'] });
+      const result = await formatAsTree(filesystem, '.', { extension: ['.ts', '.tsx'] });
 
       expect(result.tree).toBe(
         `.
@@ -310,7 +310,7 @@ test.tsx`,
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'README.md'), '');
 
-      const result = await formatAsTree(filesystem, '/', { extension: '.ts' });
+      const result = await formatAsTree(filesystem, '.', { extension: '.ts' });
 
       // Directory 'src' should be included because it contains .ts files
       expect(result.tree).toBe(
@@ -326,7 +326,7 @@ src
       await fs.mkdir(path.join(tempDir, 'empty-dir'));
       await fs.writeFile(path.join(tempDir, 'README.md'), '');
 
-      const result = await formatAsTree(filesystem, '/', { extension: '.ts' });
+      const result = await formatAsTree(filesystem, '.', { extension: '.ts' });
 
       // Directory is shown (no files inside match, but directory itself isn't filtered)
       expect(result.tree).toBe(
@@ -346,7 +346,7 @@ empty-dir`,
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/src');
+      const result = await formatAsTree(filesystem, 'src');
 
       expect(result.tree).toBe(
         `.
@@ -364,7 +364,7 @@ index.ts`,
     it('should use singular for 1 directory', async () => {
       await fs.mkdir(path.join(tempDir, 'dir'));
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.summary).toBe('1 directory, 0 files');
     });
@@ -372,7 +372,7 @@ index.ts`,
     it('should use singular for 1 file', async () => {
       await fs.writeFile(path.join(tempDir, 'file.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.summary).toBe('0 directories, 1 file');
     });
@@ -383,7 +383,7 @@ index.ts`,
       await fs.writeFile(path.join(tempDir, 'file1.txt'), '');
       await fs.writeFile(path.join(tempDir, 'file2.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.summary).toBe('2 directories, 2 files');
     });
@@ -401,7 +401,7 @@ index.ts`,
       }
       await fs.writeFile(path.join(currentPath, 'deep.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe(
         `.
@@ -421,7 +421,7 @@ level1
       await fs.writeFile(path.join(tempDir, 'file-with-dashes.txt'), '');
       await fs.writeFile(path.join(tempDir, 'file_with_underscores.txt'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toContain('file with spaces.txt');
       expect(result.tree).toContain('file-with-dashes.txt');
@@ -443,7 +443,7 @@ level1
       await fs.mkdir(path.join(tempDir, 'tests'));
       await fs.writeFile(path.join(tempDir, 'tests', 'test.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toBe(
         `.
@@ -467,7 +467,7 @@ tests
       await fs.writeFile(path.join(tempDir, 'package.json'), '');
       await fs.writeFile(path.join(tempDir, 'README.md'), '');
 
-      const result = await formatAsTree(filesystem, '/', { dirsOnly: true });
+      const result = await formatAsTree(filesystem, '.', { dirsOnly: true });
 
       expect(result.tree).toContain('src');
       expect(result.tree).toContain('tests');
@@ -483,7 +483,7 @@ tests
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', { dirsOnly: true });
+      const result = await formatAsTree(filesystem, '.', { dirsOnly: true });
 
       expect(result.tree).toBe(
         `.
@@ -505,7 +505,7 @@ src
       await fs.mkdir(path.join(tempDir, 'node_modules', 'lodash'));
       await fs.writeFile(path.join(tempDir, 'package.json'), '');
 
-      const result = await formatAsTree(filesystem, '/', { exclude: 'node_modules' });
+      const result = await formatAsTree(filesystem, '.', { exclude: 'node_modules' });
 
       expect(result.tree).toContain('src');
       expect(result.tree).toContain('package.json');
@@ -520,7 +520,7 @@ src
       await fs.mkdir(path.join(tempDir, '.git'));
       await fs.writeFile(path.join(tempDir, 'index.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', {
+      const result = await formatAsTree(filesystem, '.', {
         exclude: ['node_modules', 'dist'],
         showHidden: true, // Show .git to verify it's not excluded
       });
@@ -537,7 +537,7 @@ src
       await fs.writeFile(path.join(tempDir, 'test.spec.ts'), '');
       await fs.writeFile(path.join(tempDir, 'index.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', { exclude: 'spec' });
+      const result = await formatAsTree(filesystem, '.', { exclude: 'spec' });
 
       expect(result.tree).toContain('test.ts');
       expect(result.tree).toContain('index.ts');
@@ -554,7 +554,7 @@ src
       await fs.writeFile(path.join(tempDir, 'style.css'), '');
       await fs.writeFile(path.join(tempDir, 'utils.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+      const result = await formatAsTree(filesystem, '.', { pattern: '**/*.ts' });
 
       expect(result.tree).toContain('index.ts');
       expect(result.tree).toContain('utils.ts');
@@ -570,7 +570,7 @@ src
       await fs.writeFile(path.join(tempDir, 'src', 'utils', 'helpers.ts'), '');
       await fs.writeFile(path.join(tempDir, 'src', 'style.css'), '');
 
-      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+      const result = await formatAsTree(filesystem, '.', { pattern: '**/*.ts' });
 
       expect(result.tree).toContain('index.ts');
       expect(result.tree).toContain('app.ts');
@@ -584,7 +584,7 @@ src
       await fs.writeFile(path.join(tempDir, 'eslint.config.js'), '');
       await fs.writeFile(path.join(tempDir, 'README.md'), '');
 
-      const result = await formatAsTree(filesystem, '/', { pattern: '*.config.{js,ts}' });
+      const result = await formatAsTree(filesystem, '.', { pattern: '*.config.{js,ts}' });
 
       expect(result.tree).toContain('vitest.config.ts');
       expect(result.tree).toContain('eslint.config.js');
@@ -597,7 +597,7 @@ src
       await fs.writeFile(path.join(tempDir, 'App.tsx'), '');
       await fs.writeFile(path.join(tempDir, 'style.css'), '');
 
-      const result = await formatAsTree(filesystem, '/', { pattern: ['**/*.ts', '**/*.tsx'] });
+      const result = await formatAsTree(filesystem, '.', { pattern: ['**/*.ts', '**/*.tsx'] });
 
       expect(result.tree).toContain('index.ts');
       expect(result.tree).toContain('App.tsx');
@@ -610,7 +610,7 @@ src
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'README.md'), '');
 
-      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+      const result = await formatAsTree(filesystem, '.', { pattern: '**/*.ts' });
 
       // Directory 'src' should still be present because it contains matching files
       expect(result.tree).toContain('src');
@@ -626,7 +626,7 @@ src
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'node_modules', 'lib.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', {
+      const result = await formatAsTree(filesystem, '.', {
         pattern: '**/*.ts',
         exclude: 'node_modules',
       });
@@ -642,7 +642,7 @@ src
       await fs.writeFile(path.join(tempDir, 'a', 'shallow.ts'), '');
       await fs.writeFile(path.join(tempDir, 'a', 'b', 'deep.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', {
+      const result = await formatAsTree(filesystem, '.', {
         pattern: '**/*.ts',
         maxDepth: 2,
       });
@@ -657,7 +657,7 @@ src
       await fs.writeFile(path.join(tempDir, 'style.css'), '');
       await fs.writeFile(path.join(tempDir, 'README.md'), '');
 
-      const result = await formatAsTree(filesystem, '/', { pattern: '**/*.ts' });
+      const result = await formatAsTree(filesystem, '.', { pattern: '**/*.ts' });
 
       expect(result.tree).toBe('.');
       expect(result.fileCount).toBe(0);
@@ -668,7 +668,7 @@ src
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'src', 'style.css'), '');
 
-      const result = await formatAsTree(filesystem, '/src', { pattern: '**/*.ts' });
+      const result = await formatAsTree(filesystem, 'src', { pattern: '**/*.ts' });
 
       expect(result.tree).toContain('index.ts');
       expect(result.tree).not.toContain('style.css');
@@ -741,7 +741,7 @@ file.txt`,
       await fs.writeFile(path.join(tempDir, 'real-file.txt'), 'content');
       await fs.symlink(path.join(tempDir, 'real-file.txt'), path.join(tempDir, 'link-to-file.txt'));
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toContain('link-to-file.txt -> ');
       expect(result.tree).toContain('real-file.txt');
@@ -754,7 +754,7 @@ file.txt`,
       await fs.writeFile(path.join(tempDir, 'real-dir', 'file.txt'), 'content');
       await fs.symlink(path.join(tempDir, 'real-dir'), path.join(tempDir, 'link-to-dir'));
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toContain('link-to-dir -> ');
       expect(result.tree).toContain('real-dir');
@@ -769,7 +769,7 @@ file.txt`,
       // Create a symlink to the directory
       await fs.symlink(path.join(tempDir, 'source'), path.join(tempDir, 'linked'));
 
-      const result = await formatAsTree(filesystem, '/', { maxDepth: 3 });
+      const result = await formatAsTree(filesystem, '.', { maxDepth: 3 });
 
       // Should show the symlink but NOT its contents (matches native tree behavior)
       expect(result.tree).toContain('source');
@@ -788,7 +788,7 @@ file.txt`,
       // Create relative symlink like pnpm/npm does
       await fs.symlink('../packages/core', path.join(tempDir, 'node_modules', 'core'));
 
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toContain('core -> ../packages/core');
     });
@@ -798,7 +798,7 @@ file.txt`,
       await fs.symlink(path.join(tempDir, 'does-not-exist'), path.join(tempDir, 'broken-link'));
 
       // Should not throw, should display the symlink
-      const result = await formatAsTree(filesystem, '/');
+      const result = await formatAsTree(filesystem, '.');
 
       expect(result.tree).toContain('broken-link -> ');
     });
@@ -813,7 +813,7 @@ file.txt`,
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'src', 'generated.ts'), '');
 
-      const result = await formatAsTree(filesystem, '/', {
+      const result = await formatAsTree(filesystem, '.', {
         ignoreFilter: (p: string) => p.includes('generated'),
       });
 
@@ -827,7 +827,7 @@ file.txt`,
       await fs.writeFile(path.join(tempDir, 'src', 'index.ts'), '');
       await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
 
-      const result = await formatAsTree(filesystem, '/', {
+      const result = await formatAsTree(filesystem, '.', {
         ignoreFilter: (p: string) => p === 'dist/' || p.startsWith('dist/'),
       });
 
@@ -845,7 +845,7 @@ file.txt`,
       await fs.writeFile(path.join(tempDir, 'dist', 'bundle.js'), '');
       await fs.writeFile(path.join(tempDir, 'node_modules', 'lib.js'), '');
 
-      const result = await formatAsTree(filesystem, '/', {
+      const result = await formatAsTree(filesystem, '.', {
         exclude: 'node_modules',
         ignoreFilter: (p: string) => p === 'dist/' || p.startsWith('dist/'),
       });
