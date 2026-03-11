@@ -1,5 +1,5 @@
 ---
-title: "Reference: Composite Storage | Storage"
+title: "Reference: Composite storage | Storage"
 description: Documentation for combining multiple storage backends in Mastra.
 packages:
   - "@mastra/clickhouse"
@@ -8,7 +8,7 @@ packages:
   - "@mastra/pg"
 ---
 
-# Composite Storage
+# Composite storage
 
 `MastraCompositeStore` can compose storage domains from different providers. Use it when you need different databases for different purposes. For example, use LibSQL for memory and PostgreSQL for workflows.
 
@@ -92,63 +92,62 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this storage instance.",
-isOptional: false,
-},
-{
-name: "default",
-type: "MastraCompositeStore",
-description:
-"Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
-isOptional: true,
-},
-{
-name: "domains",
-type: "object",
-description:
-"Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over the default storage.",
-isOptional: true,
-},
-{
-name: "domains.memory",
-type: "MemoryStorage",
-description: "Storage for threads, messages, and resources.",
-isOptional: true,
-},
-{
-name: "domains.workflows",
-type: "WorkflowsStorage",
-description: "Storage for workflow snapshots.",
-isOptional: true,
-},
-{
-name: "domains.scores",
-type: "ScoresStorage",
-description: "Storage for evaluation scores.",
-isOptional: true,
-},
-{
-name: "domains.observability",
-type: "ObservabilityStorage",
-description: "Storage for traces and spans.",
-isOptional: true,
-},
-{
-name: "domains.agents",
-type: "AgentsStorage",
-description: "Storage for stored agent configurations.",
-isOptional: true,
-},
-{
-name: "disableInit",
-type: "boolean",
-description:
-"When true, automatic initialization is disabled. You must call init() explicitly.",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'default',
+    type: 'MastraCompositeStore',
+    description:
+      "Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
+    isOptional: true,
+  },
+  {
+    name: 'domains',
+    type: 'object',
+    description:
+      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over the default storage.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.memory',
+    type: 'MemoryStorage',
+    description: 'Storage for threads, messages, and resources.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.workflows',
+    type: 'WorkflowsStorage',
+    description: 'Storage for workflow snapshots.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.scores',
+    type: 'ScoresStorage',
+    description: 'Storage for evaluation scores.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.observability',
+    type: 'ObservabilityStorage',
+    description: 'Storage for traces and spans.',
+    isOptional: true,
+  },
+  {
+    name: 'domains.agents',
+    type: 'AgentsStorage',
+    description: 'Storage for stored agent configurations.',
+    isOptional: true,
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description: 'When true, automatic initialization is disabled. You must call init() explicitly.',
+    isOptional: true,
+  },
 ]}
 />
 

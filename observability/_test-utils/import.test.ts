@@ -41,16 +41,22 @@ function getObservabilityPackages() {
 const packages = getObservabilityPackages();
 
 describe('Observability Package Imports', () => {
-  it.each(packages)('should import %s without errors', packageName => {
-    try {
-      require(packageName);
-    } catch (error: any) {
-      // Allow upstream dependency issues (e.g., @arizeai/openinference-genai missing exports)
-      // These are not our code's fault and will be resolved when dependencies are fixed
-      if (error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && error.message.includes('@arizeai/openinference-genai')) {
-        return;
+  // Some packages have heavy dependencies (e.g. @sentry/node ~4-5s to load),
+  // so use a generous timeout to avoid flaky failures.
+  it.each(packages)(
+    'should import %s without errors',
+    packageName => {
+      try {
+        require(packageName);
+      } catch (error: any) {
+        // Allow upstream dependency issues (e.g., @arizeai/openinference-genai missing exports)
+        // These are not our code's fault and will be resolved when dependencies are fixed
+        if (error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && error.message.includes('@arizeai/openinference-genai')) {
+          return;
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    },
+    30_000,
+  );
 });

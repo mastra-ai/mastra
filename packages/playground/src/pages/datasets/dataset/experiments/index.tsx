@@ -1,5 +1,3 @@
-import { useParams, useSearchParams, Link } from 'react-router';
-import { Database, GitCompare, ArrowLeft } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -11,14 +9,28 @@ import {
   MainHeader,
   DatasetExperimentsComparison,
   useDataset,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Database, GitCompare, ArrowLeft } from 'lucide-react';
+import { useParams, useSearchParams, Link } from 'react-router';
 
 function CompareDatasetExperimentsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
   const experimentIdA = searchParams.get('baseline') ?? '';
   const experimentIdB = searchParams.get('contender') ?? '';
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (

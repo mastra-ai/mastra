@@ -1,6 +1,3 @@
-import { useMemo } from 'react';
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
-import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -17,7 +14,12 @@ import {
   Column,
   DatasetCompareVersionToolbar,
   DatasetCompareVersionsList,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
+import { useMemo } from 'react';
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -29,7 +31,7 @@ function DatasetCompareVersionsPage() {
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
   const navigate = useNavigate();
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
 
   const versionA = useDatasetItems(datasetId ?? '', undefined, versionNumbers[0] ?? null);
   const versionB = useDatasetItems(datasetId ?? '', undefined, versionNumbers[1] ?? null);
@@ -51,6 +53,16 @@ function DatasetCompareVersionsPage() {
   // Lookup maps to resolve each item's version in A and B
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (!datasetId || versionNumbers.length < 2) {
     return (
@@ -78,13 +90,13 @@ function DatasetCompareVersionsPage() {
   }
 
   const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
-    navigate(
+    void navigate(
       `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
     );
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
+    void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };

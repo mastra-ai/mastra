@@ -1,5 +1,5 @@
 ---
-title: "Reference: Memory Class | Memory"
+title: "Reference: Memory class | Memory"
 description: "Documentation for the `Memory` class in Mastra, which provides a robust system for managing conversation history and thread-based message storage."
 packages:
   - "@mastra/core"
@@ -8,7 +8,7 @@ packages:
   - "@mastra/pg"
 ---
 
-# Memory Class
+# Memory class
 
 The `Memory` class provides a robust system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and embedder.
 
@@ -32,96 +32,96 @@ export const agent = new Agent({
 })
 ```
 
-> To enable `workingMemory` on an agent, you’ll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class) for more information.
+:::note
+
+To enable `workingMemory` on an agent, you’ll need a storage provider configured on your main Mastra instance. See [Mastra class](../core/mastra-class) for more information.
+
+:::
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-{
-name: "storage",
-type: "MastraCompositeStore",
-description:
-'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
-isOptional: true,
-},
-{
-name: "vector",
-type: "MastraVector | false",
-description:
-"Vector store for semantic search capabilities. Set to `false` to disable vector operations.",
-isOptional: true,
-},
-{
-name: "embedder",
-type: "EmbeddingModel<string> | EmbeddingModelV2<string>",
-description:
-"Embedder instance for vector embeddings. Required when semantic recall is enabled.",
-isOptional: true,
-},
-{
-name: "options",
-type: "MemoryConfig",
-description: "Memory configuration options.",
-isOptional: true,
-},
-
-]}
-/>
-
-### Options parameters
-
-<PropertiesTable
-  content={[
-{
-name: "lastMessages",
-type: "number | false",
-description:
-"Number of most recent messages to include in context. Set to `false` to disable loading conversation history into context. Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To prevent saving new messages, use the `readOnly` option instead.",
-isOptional: true,
-defaultValue: "10",
-},
-{
-name: "readOnly",
-type: "boolean",
-description:
-"When true, prevents memory from saving new messages and provides working memory as read-only context (without the updateWorkingMemory tool). Useful for read-only operations like previews, internal routing agents, or sub agents that should reference but not modify memory.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "semanticRecall",
-type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
-description:
-"Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "workingMemory",
-type: "WorkingMemory",
-description:
-"Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
-isOptional: true,
-defaultValue:
-"{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
-},
-{
-name: "observationalMemory",
-type: "boolean | ObservationalMemoryOptions",
-description:
-"Enable Observational Memory for long-context agentic memory. Set to `true` for defaults, or pass a config object to customize token budgets, models, and scope. See [Observational Memory reference](/reference/memory/observational-memory) for configuration details.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "generateTitle",
-type: "boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }",
-description:
-"Controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'storage',
+    type: 'MastraCompositeStore',
+    description:
+      'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
+    isOptional: true,
+  },
+  {
+    name: 'vector',
+    type: 'MastraVector | false',
+    description: 'Vector store for semantic search capabilities. Set to `false` to disable vector operations.',
+    isOptional: true,
+  },
+  {
+    name: 'embedder',
+    type: 'EmbeddingModel<string> | EmbeddingModelV2<string>',
+    description: 'Embedder instance for vector embeddings. Required when semantic recall is enabled.',
+    isOptional: true,
+  },
+  {
+    name: 'options',
+    type: 'MemoryConfig',
+    description: 'Memory configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        parameters: [
+          {
+            name: 'lastMessages',
+            type: 'number | false',
+            description:
+              'Number of most recent messages to include in context. Set to `false` to disable loading conversation history into context. Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To prevent saving new messages, use the `readOnly` option instead.',
+            isOptional: true,
+            defaultValue: '10',
+          },
+          {
+            name: 'readOnly',
+            type: 'boolean',
+            description:
+              'When true, prevents memory from saving new messages and provides working memory as read-only context (without the updateWorkingMemory tool). Useful for read-only operations like previews, internal routing agents, or sub agents that should reference but not modify memory.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'semanticRecall',
+            type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
+            description:
+              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'workingMemory',
+            type: 'WorkingMemory',
+            description:
+              "Configuration for working memory feature. Can be `{ enabled: boolean; template?: string; schema?: ZodObject<any> | JSONSchema7; scope?: 'thread' | 'resource' }` or `{ enabled: boolean }` to disable.",
+            isOptional: true,
+            defaultValue:
+              "{ enabled: false, template: '# User Information\\n- **First Name**:\\n- **Last Name**:\\n...' }",
+          },
+          {
+            name: 'observationalMemory',
+            type: 'boolean | ObservationalMemoryOptions',
+            description:
+              'Enable Observational Memory for long-context agentic memory. Set to `true` for defaults, or pass a config object to customize token budgets, models, and scope. See [Observational Memory reference](/reference/memory/observational-memory) for configuration details.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'generateTitle',
+            type: 'boolean | { model: DynamicArgument<MastraLanguageModel>; instructions?: DynamicArgument<string> }',
+            description:
+              "Controls automatic thread title generation from the user's first message. Can be a boolean or an object with custom model and instructions.",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -129,11 +129,11 @@ defaultValue: "false",
 
 <PropertiesTable
   content={[
-{
-name: "memory",
-type: "Memory",
-description: "A new Memory instance with the specified configuration.",
-},
+  {
+    name: 'memory',
+    type: 'Memory',
+    description: 'A new Memory instance with the specified configuration.',
+  },
 ]}
 />
 

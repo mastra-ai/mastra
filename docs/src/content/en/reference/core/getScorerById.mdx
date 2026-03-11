@@ -9,7 +9,7 @@ packages:
 
 The `getScorerById()` method retrieves a scorer by searching for its `id` property (or `name` property as a fallback) rather than the registration key. This is useful when you know the scorer's id but not necessarily how it was registered in the Mastra instance.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { mastra } from './mastra'
@@ -33,13 +33,13 @@ await weatherAgent.generate('What is the weather in Rome', {
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description:
-"The id property of the scorer to retrieve. This should match the 'id' field specified when creating the scorer with createScorer(). The method will also search by 'name' property as a fallback.",
-isOptional: false,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      "The id property of the scorer to retrieve. This should match the 'id' field specified when creating the scorer with createScorer(). The method will also search by 'name' property as a fallback.",
+    isOptional: false,
+  },
 ]}
 />
 
@@ -47,16 +47,15 @@ isOptional: false,
 
 <PropertiesTable
   content={[
-{
-name: "scorer",
-type: "MastraScorer",
-description:
-"The MastraScorer instance that has the matching id (or name) property.",
-},
+  {
+    name: 'scorer',
+    type: 'MastraScorer',
+    description: 'The MastraScorer instance that has the matching id (or name) property.',
+  },
 ]}
 />
 
-## Error Handling
+## Error handling
 
 This method throws a `MastraError` if:
 

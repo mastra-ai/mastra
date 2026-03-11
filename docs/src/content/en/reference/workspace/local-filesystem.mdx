@@ -45,45 +45,48 @@ const response = await agent.generate('List all files in the workspace')
 
 <PropertiesTable
   content={[
-{
-name: "basePath",
-type: "string",
-description: "Base directory path on disk. All file paths are resolved relative to this directory.",
-},
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this filesystem instance",
-isOptional: true,
-defaultValue: "Auto-generated",
-},
-{
-name: "contained",
-type: "boolean",
-description: "When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/workspace/filesystem#containment).",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "allowedPaths",
-type: "string[]",
-description: "Additional absolute paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Paths are resolved to absolute paths.",
-isOptional: true,
-defaultValue: "[]",
-},
-{
-name: "instructions",
-type: "string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)",
-description: "Custom instructions that override the default instructions returned by getInstructions(). Pass a string to fully replace them, or a function to extend them with access to the current requestContext for per-request customization.",
-isOptional: true,
-},
-{
-name: "readOnly",
-type: "boolean",
-description: "When true, all write operations are blocked. Read operations are still allowed.",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'basePath',
+    type: 'string',
+    description: 'Base directory path on disk. All file paths are resolved relative to this directory.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this filesystem instance',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'contained',
+    type: 'boolean',
+    description:
+      'When true, all file operations are restricted to stay within basePath. Prevents path traversal attacks and symlink escapes. See [containment](/docs/workspace/filesystem#containment).',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'allowedPaths',
+    type: 'string[]',
+    description:
+      'Additional absolute paths that are allowed beyond basePath. Useful with `contained: true` to grant access to specific directories without disabling containment entirely. Paths are resolved to absolute paths.',
+    isOptional: true,
+    defaultValue: '[]',
+  },
+  {
+    name: 'instructions',
+    type: 'string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string)',
+    description:
+      'Custom instructions that override the default instructions returned by getInstructions(). Pass a string to fully replace them, or a function to extend them with access to the current requestContext for per-request customization.',
+    isOptional: true,
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean',
+    description: 'When true, all write operations are blocked. Read operations are still allowed.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
 ]}
 />
 
@@ -91,36 +94,37 @@ defaultValue: "false",
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Filesystem instance identifier",
-},
-{
-name: "name",
-type: "string",
-description: "Provider name ('LocalFilesystem')",
-},
-{
-name: "provider",
-type: "string",
-description: "Provider identifier ('local')",
-},
-{
-name: "basePath",
-type: "string",
-description: "The absolute base path on disk",
-},
-{
-name: "readOnly",
-type: "boolean | undefined",
-description: "Whether the filesystem is in read-only mode",
-},
-{
-name: "allowedPaths",
-type: "readonly string[]",
-description: "Current set of additional allowed paths (absolute, resolved). These paths are permitted beyond basePath when containment is enabled.",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Filesystem instance identifier',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('LocalFilesystem')",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('local')",
+  },
+  {
+    name: 'basePath',
+    type: 'string',
+    description: 'The absolute base path on disk',
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean | undefined',
+    description: 'Whether the filesystem is in read-only mode',
+  },
+  {
+    name: 'allowedPaths',
+    type: 'readonly string[]',
+    description:
+      'Current set of additional allowed paths (absolute, resolved). These paths are permitted beyond basePath when containment is enabled.',
+  },
 ]}
 />
 
@@ -169,11 +173,11 @@ filesystem.setAllowedPaths([])
 
 <PropertiesTable
   content={[
-{
-name: "pathsOrUpdater",
-type: "string[] | ((current: readonly string[]) => string[])",
-description: "New allowed paths array or updater function receiving current paths",
-},
+  {
+    name: 'pathsOrUpdater',
+    type: 'string[] | ((current: readonly string[]) => string[])',
+    description: 'New allowed paths array or updater function receiving current paths',
+  },
 ]}
 />
 
@@ -190,18 +194,31 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path relative to basePath",
-},
-{
-name: "options.encoding",
-type: "'utf-8' | 'binary'",
-description: "Text or binary encoding",
-isOptional: true,
-defaultValue: "'utf-8'",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path relative to basePath',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'encoding',
+            type: "'utf-8' | 'binary'",
+            description: 'Text or binary encoding',
+            isOptional: true,
+            defaultValue: "'utf-8'",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -218,30 +235,43 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path relative to basePath",
-},
-{
-name: "content",
-type: "string | Buffer",
-description: "File content",
-},
-{
-name: "options.recursive",
-type: "boolean",
-description: "Create parent directories if they don't exist",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "options.overwrite",
-type: "boolean",
-description: "Overwrite existing file",
-isOptional: true,
-defaultValue: "true",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path relative to basePath',
+  },
+  {
+    name: 'content',
+    type: 'string | Buffer',
+    description: 'File content',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: "Create parent directories if they don't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite existing file',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -257,16 +287,16 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path relative to basePath",
-},
-{
-name: "content",
-type: "string | Buffer",
-description: "Content to append",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path relative to basePath',
+  },
+  {
+    name: 'content',
+    type: 'string | Buffer',
+    description: 'Content to append',
+  },
 ]}
 />
 
@@ -283,18 +313,31 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "File path",
-},
-{
-name: "options.force",
-type: "boolean",
-description: "Don't throw error if file doesn't exist",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'File path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw error if file doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -311,23 +354,36 @@ await filesystem.copyFile('/src/config.json', '/backup/config.json', { overwrite
 
 <PropertiesTable
   content={[
-{
-name: "src",
-type: "string",
-description: "Source file path",
-},
-{
-name: "dest",
-type: "string",
-description: "Destination file path",
-},
-{
-name: "options.overwrite",
-type: "boolean",
-description: "Overwrite destination if it exists",
-isOptional: true,
-defaultValue: "true",
-},
+  {
+    name: 'src',
+    type: 'string',
+    description: 'Source file path',
+  },
+  {
+    name: 'dest',
+    type: 'string',
+    description: 'Destination file path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -344,23 +400,36 @@ await filesystem.moveFile('/temp/upload.txt', '/files/document.txt')
 
 <PropertiesTable
   content={[
-{
-name: "src",
-type: "string",
-description: "Source file path",
-},
-{
-name: "dest",
-type: "string",
-description: "Destination file path",
-},
-{
-name: "options.overwrite",
-type: "boolean",
-description: "Overwrite destination if it exists",
-isOptional: true,
-defaultValue: "true",
-},
+  {
+    name: 'src',
+    type: 'string',
+    description: 'Source file path',
+  },
+  {
+    name: 'dest',
+    type: 'string',
+    description: 'Destination file path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'overwrite',
+            type: 'boolean',
+            description: 'Overwrite destination if it exists',
+            isOptional: true,
+            defaultValue: 'true',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -377,18 +446,31 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "Directory path",
-},
-{
-name: "options.recursive",
-type: "boolean",
-description: "Create parent directories",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Directory path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Create parent directories',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -405,25 +487,38 @@ await filesystem.rmdir('/docs/nested', { recursive: true })
 
 <PropertiesTable
   content={[
-{
-name: "path",
-type: "string",
-description: "Directory path",
-},
-{
-name: "options.recursive",
-type: "boolean",
-description: "Remove contents recursively",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "options.force",
-type: "boolean",
-description: "Don't throw if directory doesn't exist",
-isOptional: true,
-defaultValue: "false",
-},
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Directory path',
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'recursive',
+            type: 'boolean',
+            description: 'Remove contents recursively',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'force',
+            type: 'boolean',
+            description: "Don't throw if directory doesn't exist",
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -481,12 +576,12 @@ const instructions = filesystem.getInstructions({ requestContext })
 
 <PropertiesTable
   content={[
-{
-name: "opts.requestContext",
-type: "RequestContext",
-description: "Forwarded to the `instructions` function if one was provided in the constructor.",
-isOptional: true,
-},
+  {
+    name: 'opts.requestContext',
+    type: 'RequestContext',
+    description: 'Forwarded to the `instructions` function if one was provided in the constructor.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -496,7 +591,7 @@ To override the default output, pass an `instructions` option to the constructor
 
 ## Path resolution
 
-### How basePath works
+### How `basePath` works
 
 The `basePath` option sets the root directory for all file operations. File paths passed to methods like `readFile()` are resolved relative to this base:
 

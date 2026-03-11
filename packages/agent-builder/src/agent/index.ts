@@ -4,16 +4,17 @@ import type {
   AgentGenerateOptions,
   AgentStreamOptions,
   AgentExecutionOptions,
-  StructuredOutputOptions,
   AgentExecutionOptionsBase,
   ToolsInput,
   AgentConfig,
+  PublicStructuredOutputOptions,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { CoreMessage } from '@mastra/core/llm';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraModelOutput, FullOutput } from '@mastra/core/stream';
 import { Memory } from '@mastra/memory';
+import type { InferStandardSchemaOutput, StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import { AgentBuilderDefaults } from '../defaults';
 import { ToolSummaryProcessor } from '../processors/tool-summary';
 import type { AgentBuilderConfig, GenerateAgentOptions } from '../types';
@@ -167,22 +168,33 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
+  async stream<
+    OUTPUT extends StandardSchemaWithJSON<any, any>,
+    T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
+  >(
+    messages: MessageListInput,
+    streamOptions: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+    },
+  ): Promise<MastraModelOutput<T>>;
   async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
-      structuredOutput: StructuredOutputOptions<OUTPUT>;
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  async stream<OUTPUT>(
+  async stream(
     messages: MessageListInput,
-    streamOptions: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StructuredOutputOptions<any>;
+    streamOptions: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
     },
-  ): Promise<MastraModelOutput<OUTPUT>>;
-  async stream(messages: MessageListInput, streamOptions?: AgentExecutionOptions): Promise<MastraModelOutput>;
+  ): Promise<MastraModelOutput<TOutput>>;
+  async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
   async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
-    streamOptions?: AgentExecutionOptions<OUTPUT>,
+    streamOptions?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     const { ...baseOptions } = streamOptions || ({} as AgentExecutionOptions<OUTPUT>);
 
@@ -201,7 +213,7 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       maxSteps: baseOptions?.maxSteps || 100,
       instructions: enhancedInstructions,
       context: enhancedContext,
-    };
+    } as any;
 
     this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
       projectPath: this.builderConfig.projectPath,
@@ -210,26 +222,34 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
     return super.stream(messages, enhancedOptions);
   }
 
-  async generate(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>): Promise<FullOutput<TOutput>>;
+  async generate<
+    OUTPUT extends StandardSchemaWithJSON<any, any>,
+    T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
+  >(
+    messages: MessageListInput,
+    options: AgentExecutionOptionsBase<T> & {
+      structuredOutput: PublicStructuredOutputOptions<T>;
+    },
+  ): Promise<FullOutput<T>>;
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
-      structuredOutput: StructuredOutputOptions<OUTPUT>;
-    },
-  ): Promise<FullOutput<OUTPUT>>;
-  // Catch-all overload to handle conditional types when OUTPUT is generic
-  async generate<OUTPUT>(
-    messages: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StructuredOutputOptions<any>;
+      structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<FullOutput<OUTPUT>>;
   async generate(
     messages: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StructuredOutputOptions<any>;
+    options: AgentExecutionOptionsBase<unknown> & {
+      structuredOutput?: never;
     },
-  ): Promise<FullOutput<any>> {
+  ): Promise<FullOutput<TOutput>>;
+  async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
+  async generate<OUTPUT = TOutput>(
+    messages: MessageListInput,
+    options?: AgentExecutionOptionsBase<any> & {
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+    },
+  ): Promise<FullOutput<OUTPUT>> {
     const { ...baseOptions } = options || {};
 
     const originalInstructions = await this.getInstructions({ requestContext: options?.requestContext });
@@ -247,7 +267,7 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       maxSteps: baseOptions?.maxSteps || 100,
       instructions: enhancedInstructions,
       context: enhancedContext,
-    };
+    } as any;
 
     this.logger.debug(`[AgentBuilder:${this.name}] Starting streaming with enhanced context`, {
       projectPath: this.builderConfig.projectPath,

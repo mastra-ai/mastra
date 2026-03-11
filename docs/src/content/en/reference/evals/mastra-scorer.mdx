@@ -9,9 +9,9 @@ packages:
 
 The `MastraScorer` class is the base class for all scorers in Mastra. It provides a standard `.run()` method for evaluating input/output pairs and supports multi-step scoring workflows with preprocess → analyze → generateScore → generateReason execution flow.
 
-**Note:** Most users should use [`createScorer`](./create-scorer) to create scorer instances. Direct instantiation of `MastraScorer` is not recommended.
+**Note:** Most users should use [`createScorer`](./create-scorer) to create scorer instances. Direct instantiation of `MastraScorer` isn't recommended.
 
-## How to Get a MastraScorer Instance
+## How to get a `MastraScorer` instance
 
 Use the `createScorer` factory function, which returns a `MastraScorer` instance:
 
@@ -29,7 +29,7 @@ const scorer = createScorer({
 // scorer is now a MastraScorer instance
 ```
 
-## .run() Method
+## `.run()` method
 
 The `.run()` method is the primary way to execute your scorer and evaluate input/output pairs. It processes the data through your defined steps (preprocess → analyze → generateScore → generateReason) and returns a comprehensive result object with the score, reasoning, and intermediate results.
 
@@ -44,101 +44,97 @@ const result = await scorer.run({
 })
 ```
 
-## .run() Input
+## `.run()` input
 
 <PropertiesTable
   content={[
-{
-name: "input",
-type: "any",
-required: true,
-description:
-"Input data to be evaluated. Can be any type depending on your scorer's requirements.",
-},
-{
-name: "output",
-type: "any",
-required: true,
-description:
-"Output data to be evaluated. Can be any type depending on your scorer's requirements.",
-},
-{
-name: "runId",
-type: "string",
-required: false,
-description: "Optional unique identifier for this scoring run.",
-},
-{
-name: "requestContext",
-type: "any",
-required: false,
-description:
-"Optional request context from the agent or workflow step being evaluated.",
-},
-{
-name: "groundTruth",
-type: "any",
-required: false,
-description:
-"Optional expected or reference output for comparison during scoring. Automatically passed when using runEvals.",
-},
+  {
+    name: 'input',
+    type: 'any',
+    required: true,
+    description: "Input data to be evaluated. Can be any type depending on your scorer's requirements.",
+  },
+  {
+    name: 'output',
+    type: 'any',
+    required: true,
+    description: "Output data to be evaluated. Can be any type depending on your scorer's requirements.",
+  },
+  {
+    name: 'runId',
+    type: 'string',
+    required: false,
+    description: 'Optional unique identifier for this scoring run.',
+  },
+  {
+    name: 'requestContext',
+    type: 'any',
+    required: false,
+    description: 'Optional request context from the agent or workflow step being evaluated.',
+  },
+  {
+    name: 'groundTruth',
+    type: 'any',
+    required: false,
+    description:
+      'Optional expected or reference output for comparison during scoring. Automatically passed when using runEvals.',
+  },
 ]}
 />
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The unique identifier for this scoring run.",
-},
-{
-name: "score",
-type: "number",
-description: "Numerical score computed by the generateScore step.",
-},
-{
-name: "reason",
-type: "string",
-description:
-"Explanation for the score, if generateReason step was defined (optional).",
-},
-{
-name: "preprocessStepResult",
-type: "any",
-description: "Result of the preprocess step, if defined (optional).",
-},
-{
-name: "analyzeStepResult",
-type: "any",
-description: "Result of the analyze step, if defined (optional).",
-},
-{
-name: "preprocessPrompt",
-type: "string",
-description: "Preprocess prompt, if defined (optional).",
-},
-{
-name: "analyzePrompt",
-type: "string",
-description: "Analyze prompt, if defined (optional).",
-},
-{
-name: "generateScorePrompt",
-type: "string",
-description: "Generate score prompt, if defined (optional).",
-},
-{
-name: "generateReasonPrompt",
-type: "string",
-description: "Generate reason prompt, if defined (optional).",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The unique identifier for this scoring run.',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Numerical score computed by the generateScore step.',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description: 'Explanation for the score, if generateReason step was defined (optional).',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'any',
+    description: 'Result of the preprocess step, if defined (optional).',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'any',
+    description: 'Result of the analyze step, if defined (optional).',
+  },
+  {
+    name: 'preprocessPrompt',
+    type: 'string',
+    description: 'Preprocess prompt, if defined (optional).',
+  },
+  {
+    name: 'analyzePrompt',
+    type: 'string',
+    description: 'Analyze prompt, if defined (optional).',
+  },
+  {
+    name: 'generateScorePrompt',
+    type: 'string',
+    description: 'Generate score prompt, if defined (optional).',
+  },
+  {
+    name: 'generateReasonPrompt',
+    type: 'string',
+    description: 'Generate reason prompt, if defined (optional).',
+  },
 ]}
 />
 
-## Step Execution Flow
+## Step execution flow
 
 When you call `.run()`, the MastraScorer executes the defined steps in this order:
 
@@ -149,7 +145,7 @@ When you call `.run()`, the MastraScorer executes the defined steps in this orde
 
 Each step receives the results from previous steps, allowing you to build complex evaluation pipelines.
 
-## Usage Example
+## Usage example
 
 ```typescript
 const scorer = createScorer({

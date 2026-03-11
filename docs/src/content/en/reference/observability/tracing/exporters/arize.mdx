@@ -17,7 +17,7 @@ Sends Tracing data to Arize Phoenix, Arize AX, or any OpenTelemetry-compatible o
 new ArizeExporter(config: ArizeExporterConfig)
 ```
 
-## ArizeExporterConfig
+## `ArizeExporterConfig`
 
 ```typescript
 type ArizeExporterConfig = Omit<OtelExporterConfig, 'provider'> & {
@@ -47,70 +47,66 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
 
 <PropertiesTable
   props={[
-{
-name: "endpoint",
-type: "string",
-description:
-"Collector endpoint for trace exports. Falls back to PHOENIX_ENDPOINT env var. Required for Phoenix.",
-required: false,
-},
-{
-name: "apiKey",
-type: "string",
-description:
-"API key for authentication. Falls back to ARIZE_API_KEY or PHOENIX_API_KEY env var.",
-required: false,
-},
-{
-name: "spaceId",
-type: "string",
-description:
-"Arize AX space identifier. Falls back to ARIZE_SPACE_ID env var. Required for Arize AX.",
-required: false,
-},
-{
-name: "projectName",
-type: "string",
-description: "Project name. Falls back to ARIZE_PROJECT_NAME or PHOENIX_PROJECT_NAME env var.",
-required: false,
-},
-{
-name: "headers",
-type: "Record<string, string>",
-description: "Additional headers for OTLP requests",
-required: false,
-},
-{
-name: "timeout",
-type: "number",
-description:
-"Timeout in milliseconds before exporting spans (default: 30000)",
-required: false,
-},
-{
-name: "batchSize",
-type: "number",
-description: "Number of spans to batch before export (default: 512)",
-required: false,
-},
-{
-name: "logLevel",
-type: "'debug' | 'info' | 'warn' | 'error'",
-description: "Logger level (default: 'warn')",
-required: false,
-},
-{
-name: "resourceAttributes",
-type: "Record<string, any>",
-description: "Custom resource attributes added to each span",
-required: false,
-},
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Collector endpoint for trace exports. Falls back to PHOENIX_ENDPOINT env var. Required for Phoenix.',
+    required: false,
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'API key for authentication. Falls back to ARIZE_API_KEY or PHOENIX_API_KEY env var.',
+    required: false,
+  },
+  {
+    name: 'spaceId',
+    type: 'string',
+    description: 'Arize AX space identifier. Falls back to ARIZE_SPACE_ID env var. Required for Arize AX.',
+    required: false,
+  },
+  {
+    name: 'projectName',
+    type: 'string',
+    description: 'Project name. Falls back to ARIZE_PROJECT_NAME or PHOENIX_PROJECT_NAME env var.',
+    required: false,
+  },
+  {
+    name: 'headers',
+    type: 'Record<string, string>',
+    description: 'Additional headers for OTLP requests',
+    required: false,
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    description: 'Timeout in milliseconds before exporting spans (default: 30000)',
+    required: false,
+  },
+  {
+    name: 'batchSize',
+    type: 'number',
+    description: 'Number of spans to batch before export (default: 512)',
+    required: false,
+  },
+  {
+    name: 'logLevel',
+    type: "'debug' | 'info' | 'warn' | 'error'",
+    description: "Logger level (default: 'warn')",
+    required: false,
+  },
+  {
+    name: 'resourceAttributes',
+    type: 'Record<string, any>',
+    description: 'Custom resource attributes added to each span',
+    required: false,
+  },
 ]}
 />
 
 ## Methods
 
-### exportTracingEvent
+### `exportTracingEvent`
 
 ```typescript prettier:false
 async exportTracingEvent(event: TracingEvent): Promise<void>
@@ -178,11 +174,11 @@ const exporter = new ArizeExporter({
 })
 ```
 
-## OpenInference Semantic Conventions
+## `OpenInference` semantic conventions
 
 The ArizeExporter implements [OpenInference Semantic Conventions](https://github.com/Arize-ai/openinference/tree/main/spec) for generative AI applications, providing standardized trace structure across different observability platforms.
 
-## Tags Support
+## Tags support
 
 The ArizeExporter supports trace tagging for categorization and filtering. Tags are only applied to root spans and are mapped to the native OpenInference `tag.tags` semantic convention.
 

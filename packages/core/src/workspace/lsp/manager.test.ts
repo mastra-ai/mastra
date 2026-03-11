@@ -43,6 +43,15 @@ vi.mock('./client', () => ({
 }));
 
 vi.mock('./servers', () => ({
+  buildServerDefs: vi.fn().mockReturnValue({
+    typescript: {
+      id: 'typescript',
+      name: 'TypeScript Language Server',
+      languageIds: ['typescript', 'typescriptreact'],
+      markers: ['tsconfig.json', 'package.json'],
+      command: () => 'typescript-language-server --stdio',
+    },
+  }),
   walkUp: vi.fn().mockImplementation((startDir: string, _markers: string[]) => {
     // Simulate finding project roots at specific directories
     if (startDir.startsWith('/project') || startDir === '/project') return '/project';
@@ -111,6 +120,15 @@ describe('LSPManager', () => {
 
     // Re-establish server mocks (resetAllMocks clears vi.mock factory implementations)
     const servers = await import('./servers');
+    (servers.buildServerDefs as ReturnType<typeof vi.fn>).mockReturnValue({
+      typescript: {
+        id: 'typescript',
+        name: 'TypeScript Language Server',
+        languageIds: ['typescript', 'typescriptreact'],
+        markers: ['tsconfig.json', 'package.json'],
+        command: () => 'typescript-language-server --stdio',
+      },
+    });
     (servers.walkUp as ReturnType<typeof vi.fn>).mockImplementation((startDir: string, _markers: string[]) => {
       if (startDir.startsWith('/project') || startDir === '/project') return '/project';
       if (startDir.startsWith('/other-project') || startDir === '/other-project') return '/other-project';
@@ -212,9 +230,9 @@ describe('LSPManager', () => {
       });
     });
 
-    it('returns empty array for unsupported files', async () => {
+    it('returns null for unsupported files (no LSP client available)', async () => {
       const diagnostics = await manager.getDiagnostics('/project/data.json', '{}');
-      expect(diagnostics).toEqual([]);
+      expect(diagnostics).toBeNull();
     });
   });
 
@@ -237,7 +255,7 @@ describe('LSPManager', () => {
 
       await restrictedManager.getClient('/project/src/app.ts');
 
-      expect(getServersForFile).toHaveBeenCalledWith('/project/src/app.ts', ['eslint']);
+      expect(getServersForFile).toHaveBeenCalledWith('/project/src/app.ts', ['eslint'], expect.any(Object));
       await restrictedManager.shutdownAll();
     });
   });

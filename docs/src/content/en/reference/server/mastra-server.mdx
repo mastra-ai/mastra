@@ -40,69 +40,69 @@ constructor(options: MastraServerOptions<TApp>)
 
 <PropertiesTable
   content={[
-{
-name: "app",
-type: "TApp",
-description: "Framework app instance",
-isOptional: false,
-},
-{
-name: "mastra",
-type: "Mastra",
-description: "Mastra instance",
-isOptional: false,
-},
-{
-name: "prefix",
-type: "string",
-description: "Route path prefix (e.g., `/api/v2`)",
-isOptional: true,
-defaultValue: "''",
-},
-{
-name: "openapiPath",
-type: "string",
-description: "Path to serve OpenAPI spec",
-isOptional: true,
-defaultValue: "''",
-},
-{
-name: "bodyLimitOptions",
-type: "BodyLimitOptions",
-description: "Request body size limits",
-isOptional: true,
-},
-{
-name: "streamOptions",
-type: "StreamOptions",
-description: "Stream redaction config",
-isOptional: true,
-defaultValue: "{ redact: true }",
-},
-{
-name: "customRouteAuthConfig",
-type: "Map<string, boolean>",
-description: "Per-route auth overrides",
-isOptional: true,
-},
-{
-name: "tools",
-type: "Record<string, Tool>",
-description: "Available tools for the server",
-isOptional: true,
-},
-{
-name: "taskStore",
-type: "InMemoryTaskStore",
-description: "Task store for A2A (Agent-to-Agent) operations",
-isOptional: true,
-},
-{
-name: "mcpOptions",
-type: "MCPOptions",
-description: "MCP transport options for serverless environments",
-isOptional: true,
-},
+  {
+    name: 'app',
+    type: 'TApp',
+    description: 'Framework app instance',
+    isOptional: false,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'Mastra instance',
+    isOptional: false,
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    description: 'Route path prefix (e.g., `/api/v2`)',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'openapiPath',
+    type: 'string',
+    description: 'Path to serve OpenAPI spec',
+    isOptional: true,
+    defaultValue: "''",
+  },
+  {
+    name: 'bodyLimitOptions',
+    type: 'BodyLimitOptions',
+    description: 'Request body size limits',
+    isOptional: true,
+  },
+  {
+    name: 'streamOptions',
+    type: 'StreamOptions',
+    description: 'Stream redaction config',
+    isOptional: true,
+    defaultValue: '{ redact: true }',
+  },
+  {
+    name: 'customRouteAuthConfig',
+    type: 'Map<string, boolean>',
+    description: 'Per-route auth overrides',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'Record<string, Tool>',
+    description: 'Available tools for the server',
+    isOptional: true,
+  },
+  {
+    name: 'taskStore',
+    type: 'InMemoryTaskStore',
+    description: 'Task store for A2A (Agent-to-Agent) operations',
+    isOptional: true,
+  },
+  {
+    name: 'mcpOptions',
+    type: 'MCPOptions',
+    description: 'MCP transport options for serverless environments',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -110,7 +110,7 @@ isOptional: true,
 
 These methods must be implemented by adapters:
 
-### registerContextMiddleware()
+### `registerContextMiddleware()`
 
 Attach Mastra context to every request.
 
@@ -125,7 +125,7 @@ abstract registerContextMiddleware(): void
 - `tools` - Available tools
 - `abortSignal` - Request cancellation signal
 
-### registerAuthMiddleware()
+### `registerAuthMiddleware()`
 
 Register authentication and authorization middleware.
 
@@ -133,7 +133,7 @@ Register authentication and authorization middleware.
 abstract registerAuthMiddleware(): void
 ```
 
-### registerRoute()
+### `registerRoute()`
 
 Register a single route with the framework.
 
@@ -145,7 +145,7 @@ abstract registerRoute(
 ): Promise<void>
 ```
 
-### getParams()
+### `getParams()`
 
 Extract parameters from the request.
 
@@ -160,7 +160,7 @@ abstract getParams(
 }>
 ```
 
-### sendResponse()
+### `sendResponse()`
 
 Send response based on route type.
 
@@ -172,7 +172,7 @@ abstract sendResponse(
 ): Promise<unknown>
 ```
 
-### stream()
+### `stream()`
 
 Handle streaming responses.
 
@@ -186,7 +186,7 @@ abstract stream(
 
 ## Instance methods
 
-### init()
+### `init()`
 
 Initialize the server by registering all middleware and routes.
 
@@ -200,7 +200,7 @@ Calls in order:
 1. `registerAuthMiddleware()`
 1. `registerRoutes()`
 
-### registerRoutes()
+### `registerRoutes()`
 
 Register all Mastra routes.
 
@@ -208,7 +208,7 @@ Register all Mastra routes.
 async registerRoutes(): Promise<void>
 ```
 
-### getApp()
+### `getApp()`
 
 Get the framework app instance.
 
@@ -216,7 +216,7 @@ Get the framework app instance.
 getApp<T = TApp>(): T
 ```
 
-### parsePathParams()
+### `parsePathParams()`
 
 Validate path parameters with the route's Zod schema.
 
@@ -227,7 +227,7 @@ async parsePathParams(
 ): Promise<Record<string, unknown>>
 ```
 
-### parseQueryParams()
+### `parseQueryParams()`
 
 Validate query parameters with the route's Zod schema.
 
@@ -238,7 +238,7 @@ async parseQueryParams(
 ): Promise<Record<string, unknown>>
 ```
 
-### parseBody()
+### `parseBody()`
 
 Validate request body with the route's Zod schema.
 
@@ -249,7 +249,7 @@ async parseBody(
 ): Promise<unknown>
 ```
 
-### registerOpenAPIRoute()
+### `registerOpenAPIRoute()`
 
 Register an endpoint that serves the OpenAPI specification.
 
@@ -263,7 +263,7 @@ async registerOpenAPIRoute(
 
 ## Protected methods
 
-### mergeRequestContext()
+### `mergeRequestContext()`
 
 Merge request context from multiple sources (query params and body).
 
@@ -276,7 +276,7 @@ protected mergeRequestContext(options: {
 
 ## Types
 
-### BodyLimitOptions
+### `BodyLimitOptions`
 
 ```typescript
 interface BodyLimitOptions {
@@ -285,7 +285,7 @@ interface BodyLimitOptions {
 }
 ```
 
-### StreamOptions
+### `StreamOptions`
 
 ```typescript
 interface StreamOptions {

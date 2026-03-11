@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { Plus, Database } from 'lucide-react';
 import {
   Header,
   HeaderTitle,
@@ -13,11 +11,13 @@ import {
   DatasetsTable,
   CreateDatasetDialog,
 } from '@mastra/playground-ui';
+import { Plus, Database } from 'lucide-react';
+import { useState } from 'react';
 
 function Datasets() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { navigate, paths } = useLinkComponent();
-  const { data, isLoading } = useDatasets();
+  const { data, isLoading, error } = useDatasets();
   const datasets = data?.datasets ?? [];
 
   const handleDatasetCreated = (datasetId: string) => {
@@ -45,7 +45,12 @@ function Datasets() {
       </Header>
 
       <MainContentContent isCentered={!isLoading && datasets.length === 0}>
-        <DatasetsTable datasets={datasets} isLoading={isLoading} onCreateClick={() => setIsCreateDialogOpen(true)} />
+        <DatasetsTable
+          datasets={datasets}
+          isLoading={isLoading}
+          error={error}
+          onCreateClick={() => setIsCreateDialogOpen(true)}
+        />
       </MainContentContent>
 
       <CreateDatasetDialog

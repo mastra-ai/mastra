@@ -1,13 +1,12 @@
 import { ReadableStream } from 'node:stream/web';
-import type z from 'zod';
 import type { Run, Step, WorkflowRunStatus } from '../workflows';
 import type { ChunkType } from './types';
 import { ChunkFrom } from './types';
 
 export class MastraWorkflowStream<
-  TState extends z.ZodObject<any>,
-  TInput extends z.ZodType<any>,
-  TOutput extends z.ZodType<any>,
+  TState,
+  TInput,
+  TOutput,
   TSteps extends Step<string, any, any>[],
 > extends ReadableStream<ChunkType> {
   #usageCount = {

@@ -11,8 +11,46 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export interface ClipboardImage {
-  data: string; // base64-encoded image data
+  data: string; // base64-encoded image data or a remote image URL
   mimeType: string;
+}
+
+/**
+ * Read plain text from the system clipboard.
+ * Returns null if clipboard is empty or reading fails.
+ */
+export function getClipboardText(): string | null {
+  try {
+    if (process.platform === 'darwin') {
+      const text = execSync('pbpaste', {
+        encoding: 'utf-8',
+        timeout: 3000,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      return text.length > 0 ? text : null;
+    }
+    if (process.platform === 'linux') {
+      // Try xclip first, then wl-paste
+      try {
+        const text = execSync('xclip -selection clipboard -o', {
+          encoding: 'utf-8',
+          timeout: 3000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        return text.length > 0 ? text : null;
+      } catch {
+        const text = execSync('wl-paste', {
+          encoding: 'utf-8',
+          timeout: 3000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        return text.length > 0 ? text : null;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -38,34 +76,39 @@ export function getClipboardImage(): ClipboardImage | null {
 // =============================================================================
 
 function getMacClipboardImage(): ClipboardImage | null {
-  // Check clipboard types
-  let clipInfo: string;
+  return (
+    tryReadMacClipboardImage({
+      coercion: '«class PNGf»',
+      extension: 'png',
+      mimeType: 'image/png',
+    }) ??
+    tryReadMacClipboardImage({
+      coercion: 'TIFF picture',
+      extension: 'tiff',
+      mimeType: 'image/tiff',
+    }) ??
+    tryReadMacClipboardImage({
+      coercion: '«class TIFF»',
+      extension: 'tiff',
+      mimeType: 'image/tiff',
+    })
+  );
+}
+
+function tryReadMacClipboardImage({
+  coercion,
+  extension,
+  mimeType,
+}: {
+  coercion: string;
+  extension: string;
+  mimeType: string;
+}): ClipboardImage | null {
+  const tmpFile = join(tmpdir(), `mastra-clipboard-${Date.now()}.${extension}`);
+
   try {
-    clipInfo = execSync("osascript -e 'clipboard info'", {
-      encoding: 'utf-8',
-      timeout: 3000,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-  } catch {
-    return null;
-  }
-
-  // Look for image types: PNGf (PNG), TIFF, or public.png
-  const hasPng = clipInfo.includes('PNGf') || clipInfo.includes('public.png');
-  const hasTiff = clipInfo.includes('TIFF');
-
-  if (!hasPng && !hasTiff) {
-    return null;
-  }
-
-  // Extract image data to temp file
-  const tmpFile = join(tmpdir(), `mastra-clipboard-${Date.now()}.png`);
-
-  try {
-    // Prefer PNG if available, otherwise convert TIFF
-    const clipboardClass = hasPng ? 'PNGf' : 'TIFF';
     const script = `
-			set theImage to the clipboard as «class ${clipboardClass}»
+			set theImage to the clipboard as ${coercion}
 			set theFile to open for access POSIX file "${tmpFile}" with write permission
 			write theImage to theFile
 			close access theFile
@@ -75,13 +118,14 @@ function getMacClipboardImage(): ClipboardImage | null {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Read the file as base64
     const buffer = readFileSync(tmpFile);
-    const base64 = buffer.toString('base64');
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+      return null;
+    }
 
     return {
-      data: base64,
-      mimeType: hasPng ? 'image/png' : 'image/tiff',
+      data: buffer.toString('base64'),
+      mimeType,
     };
   } catch {
     return null;

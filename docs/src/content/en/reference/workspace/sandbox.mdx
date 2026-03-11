@@ -9,7 +9,21 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-The `WorkspaceSandbox` interface defines how workspaces execute commands.
+The `WorkspaceSandbox` interface defines how workspaces execute commands and manage background processes.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'processes',
+    type: 'SandboxProcessManager',
+    description:
+      "Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
+    isOptional: true,
+  },
+]}
+/>
 
 ## Methods
 
@@ -52,47 +66,60 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
 
 <PropertiesTable
   content={[
-{
-name: "command",
-type: "string",
-description: "Command to execute",
-},
-{
-name: "args",
-type: "string[]",
-description: "Command arguments",
-isOptional: true,
-},
-{
-name: "options.timeout",
-type: "number",
-description: "Execution timeout in milliseconds",
-isOptional: true,
-},
-{
-name: "options.cwd",
-type: "string",
-description: "Working directory for the command",
-isOptional: true,
-},
-{
-name: "options.env",
-type: "Record<string, string>",
-description: "Additional environment variables",
-isOptional: true,
-},
-{
-name: "options.onStdout",
-type: "(data: string) => void",
-description: "Callback for stdout streaming",
-isOptional: true,
-},
-{
-name: "options.onStderr",
-type: "(data: string) => void",
-description: "Callback for stderr streaming",
-isOptional: true,
-},
+  {
+    name: 'command',
+    type: 'string',
+    description: 'Command to execute',
+  },
+  {
+    name: 'args',
+    type: 'string[]',
+    description: 'Command arguments',
+    isOptional: true,
+  },
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'timeout',
+            type: 'number',
+            description: 'Execution timeout in milliseconds',
+            isOptional: true,
+          },
+          {
+            name: 'cwd',
+            type: 'string',
+            description: 'Working directory for the command',
+            isOptional: true,
+          },
+          {
+            name: 'env',
+            type: 'Record<string, string>',
+            description: 'Additional environment variables',
+            isOptional: true,
+          },
+          {
+            name: 'onStdout',
+            type: '(data: string) => void',
+            description: 'Callback for stdout streaming',
+            isOptional: true,
+          },
+          {
+            name: 'onStderr',
+            type: '(data: string) => void',
+            description: 'Callback for stderr streaming',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -118,12 +145,12 @@ const instructions = sandbox.getInstructions?.()
 
 <PropertiesTable
   content={[
-{
-name: "opts.requestContext",
-type: "RequestContext",
-description: "Forwarded to the `instructions` function if one was provided in the constructor.",
-isOptional: true,
-},
+  {
+    name: 'opts.requestContext',
+    type: 'RequestContext',
+    description: 'Forwarded to the `instructions` function if one was provided in the constructor.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -131,5 +158,7 @@ isOptional: true,
 
 ## Related
 
+- [SandboxProcessManager reference](/reference/workspace/process-manager)
+- [Sandbox](/docs/workspace/sandbox)
 - [Workspace Class](/reference/workspace/workspace-class)
 - [Filesystem Interface](/reference/workspace/filesystem)

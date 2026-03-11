@@ -9,7 +9,7 @@ description: "Use DeepSeek models with Mastra. 2 models available."
 
 Access 2 DeepSeek models through Mastra's model router. Authentication is handled automatically using the `DEEPSEEK_API_KEY` environment variable.
 
-Learn more in the [DeepSeek documentation](https://platform.deepseek.com).
+Learn more in the [DeepSeek documentation](https://api-docs.deepseek.com/quick_start/pricing).
 
 ```bash title=".env"
 DEEPSEEK_API_KEY=your-api-key
@@ -59,16 +59,16 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 128000,
-    "maxOutput": 128000,
+    "maxOutput": 64000,
     "inputCost": 0.28,
     "outputCost": 0.42
   }
 ]}
 />
 
-## Advanced Configuration
+## Advanced configuration
 
-### Custom Headers
+### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
@@ -85,7 +85,7 @@ const agent = new Agent({
 });
 ```
 
-### Dynamic Model Selection
+### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({

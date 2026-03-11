@@ -1,16 +1,16 @@
 ---
-title: "Reference: Cloudflare Storage | Storage"
+title: "Reference: Cloudflare storage | Storage"
 description: Documentation for the Cloudflare KV storage implementation in Mastra.
 packages:
   - "@mastra/cloudflare"
 ---
 
-# Cloudflare Storage
+# Cloudflare storage
 
 The Cloudflare KV storage implementation provides a globally distributed, serverless key-value store solution using Cloudflare Workers KV.
 
 :::warning[Observability Not Supported]
-Cloudflare KV storage **does not support the observability domain**. Traces from the `DefaultExporter` cannot be persisted to KV, and Mastra Studio's observability features won't work with Cloudflare KV as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
+Cloudflare KV storage **doesn't support the observability domain**. Traces from the `DefaultExporter` can't be persisted to KV, and Mastra Studio's observability features won't work with Cloudflare KV as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse or PostgreSQL.
 :::
 
 ## Installation
@@ -48,48 +48,46 @@ const storageRest = new CloudflareStore({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description: "Unique identifier for this storage instance.",
-isOptional: false,
-},
-{
-name: "bindings",
-type: "Record<string, KVNamespace>",
-description: "Cloudflare Workers KV bindings (for Workers runtime)",
-isOptional: true,
-},
-{
-name: "accountId",
-type: "string",
-description: "Cloudflare Account ID (for REST API)",
-isOptional: true,
-},
-{
-name: "apiToken",
-type: "string",
-description: "Cloudflare API Token (for REST API)",
-isOptional: true,
-},
-{
-name: "namespacePrefix",
-type: "string",
-description:
-"Optional prefix for all namespace names (useful for environment isolation)",
-isOptional: true,
-},
-{
-name: "keyPrefix",
-type: "string",
-description:
-"Optional prefix for all keys (useful for environment isolation)",
-isOptional: true,
-},
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'bindings',
+    type: 'Record<string, KVNamespace>',
+    description: 'Cloudflare Workers KV bindings (for Workers runtime)',
+    isOptional: true,
+  },
+  {
+    name: 'accountId',
+    type: 'string',
+    description: 'Cloudflare Account ID (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'apiToken',
+    type: 'string',
+    description: 'Cloudflare API Token (for REST API)',
+    isOptional: true,
+  },
+  {
+    name: 'namespacePrefix',
+    type: 'string',
+    description: 'Optional prefix for all namespace names (useful for environment isolation)',
+    isOptional: true,
+  },
+  {
+    name: 'keyPrefix',
+    type: 'string',
+    description: 'Optional prefix for all keys (useful for environment isolation)',
+    isOptional: true,
+  },
 ]}
 />
 
-### Additional Notes
+### Additional notes
 
 ### Schema Management
 
