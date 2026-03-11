@@ -78,6 +78,8 @@ const SANDBOX_DEAD_PATTERNS: RegExp[] = [
   /sandbox is not running/i,
   /sandbox already destroyed/i,
   /sandbox.*not found/i,
+  /failed to resolve container IP/i,
+  /is the sandbox started/i,
 ];
 
 // =============================================================================
