@@ -280,15 +280,20 @@ export class DaytonaSandbox extends MastraSandbox {
    *
    * @example Direct file operations
    * ```typescript
-   * const daytonaSandbox = sandbox.instance;
+   * const daytonaSandbox = sandbox.daytona;
    * await daytonaSandbox.fs.uploadFile(Buffer.from('Hello'), '/tmp/test.txt');
    * ```
    */
-  get instance(): Sandbox {
+  get daytona(): Sandbox {
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
     return this._sandbox;
+  }
+
+  /** @deprecated Use `daytona` instead. */
+  get instance(): Sandbox {
+    return this.daytona;
   }
 
   // ---------------------------------------------------------------------------

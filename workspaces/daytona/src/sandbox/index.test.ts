@@ -802,11 +802,11 @@ describe('DaytonaSandbox', () => {
     });
   });
 
-  describe('instance accessor', () => {
+  describe('daytona accessor', () => {
     it('throws SandboxNotReadyError when not started', () => {
       const sandbox = new DaytonaSandbox();
 
-      expect(() => sandbox.instance).toThrow('Sandbox is not ready');
+      expect(() => sandbox.daytona).toThrow('Sandbox is not ready');
     });
 
     it('returns sandbox when started', async () => {
@@ -814,7 +814,15 @@ describe('DaytonaSandbox', () => {
 
       await sandbox._start();
 
-      expect(sandbox.instance).toBe(mockSandbox);
+      expect(sandbox.daytona).toBe(mockSandbox);
+    });
+
+    it('deprecated instance getter delegates to daytona', async () => {
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox._start();
+
+      expect(sandbox.instance).toBe(sandbox.daytona);
     });
   });
 

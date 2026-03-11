@@ -205,7 +205,7 @@ export class BlaxelSandbox extends MastraSandbox {
    *
    * @example Direct file operations
    * ```typescript
-   * const blaxelSandbox = sandbox.instance;
+   * const blaxelSandbox = sandbox.blaxel;
    * await blaxelSandbox.fs.write('/tmp/test.txt', 'Hello');
    * const content = await blaxelSandbox.fs.read('/tmp/test.txt');
    * const files = await blaxelSandbox.fs.ls('/tmp');
@@ -213,18 +213,23 @@ export class BlaxelSandbox extends MastraSandbox {
    *
    * @example Process management
    * ```typescript
-   * const blaxelSandbox = sandbox.instance;
+   * const blaxelSandbox = sandbox.blaxel;
    * const proc = await blaxelSandbox.process.exec({
    *   command: 'node server.js',
    *   waitForCompletion: false,
    * });
    * ```
    */
-  get instance(): SandboxInstance {
+  get blaxel(): SandboxInstance {
     if (!this._sandbox) {
       throw new SandboxNotReadyError(this.id);
     }
     return this._sandbox;
+  }
+
+  /** @deprecated Use `blaxel` instead. */
+  get instance(): SandboxInstance {
+    return this.blaxel;
   }
 
   // ---------------------------------------------------------------------------
