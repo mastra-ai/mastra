@@ -1,6 +1,6 @@
 - list:
-  - listitem:
-    - button /Simple MCP Server http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse 1/:
-      - text: ""
-      - img
-      - text: ""
+    - listitem:
+        - button /Simple MCP Server http:\/\/localhost:\d+\/api\/mcp\/simple-mcp-server\/sse 1/:
+            - text: ''
+            - img
+            - text: ''

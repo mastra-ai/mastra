@@ -18,7 +18,14 @@ export default function Scorers() {
   return (
     <PageContent>
       <PageContent.TopBar>
-        <Button as={Link} to="https://mastra.ai/en/docs/evals/overview" target="_blank" rel="noopener noreferrer" variant="ghost" size="md">
+        <Button
+          as={Link}
+          to="https://mastra.ai/en/docs/evals/overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          variant="ghost"
+          size="md"
+        >
           Scorers documentation
           <ExternalLinkIcon />
         </Button>

@@ -117,7 +117,10 @@ test.describe('Viewer Role', () => {
       await expect(page.locator('h1')).toHaveText('Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('main').getByRole('listitem').filter({ hasText: /workflow/i });
+      const workflowRow = page
+        .locator('main')
+        .getByRole('listitem')
+        .filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 

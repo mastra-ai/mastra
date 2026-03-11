@@ -8,7 +8,14 @@ function Workflows() {
   return (
     <PageContent>
       <PageContent.TopBar>
-        <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" rel="noopener noreferrer" variant="ghost" size="md">
+        <Button
+          as={Link}
+          to="https://mastra.ai/en/docs/workflows/overview"
+          target="_blank"
+          rel="noopener noreferrer"
+          variant="ghost"
+          size="md"
+        >
           Workflows documentation
           <ExternalLinkIcon />
         </Button>
