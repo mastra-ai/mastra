@@ -13,6 +13,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { BlaxelSandbox } from './index';
@@ -343,7 +344,7 @@ describe('BlaxelSandbox', () => {
     it('throws SandboxNotReadyError if not started', () => {
       const sandbox = new BlaxelSandbox();
 
-      expect(() => sandbox.blaxel).toThrow();
+      expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
     });
 
     it('returns Blaxel SandboxInstance when started', async () => {
@@ -926,7 +927,7 @@ describe('BlaxelSandbox Error Handling', () => {
   it('SandboxNotReadyError thrown if blaxel accessed before start', () => {
     const sandbox = new BlaxelSandbox();
 
-    expect(() => sandbox.blaxel).toThrow(/not started|not ready|Sandbox/i);
+    expect(() => sandbox.blaxel).toThrow(SandboxNotReadyError);
   });
 
   it('executeCommand auto-starts sandbox if not running', async () => {

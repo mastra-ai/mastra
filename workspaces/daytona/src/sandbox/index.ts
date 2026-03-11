@@ -280,6 +280,7 @@ export class DaytonaSandbox extends MastraSandbox {
    *
    * @example Direct file operations
    * ```typescript
+   * await sandbox.start();
    * const daytonaSandbox = sandbox.daytona;
    * await daytonaSandbox.fs.uploadFile(Buffer.from('Hello'), '/tmp/test.txt');
    * ```

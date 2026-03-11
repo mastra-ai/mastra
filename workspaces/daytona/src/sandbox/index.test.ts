@@ -13,6 +13,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
+import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { DaytonaSandbox } from './index';
@@ -806,7 +807,7 @@ describe('DaytonaSandbox', () => {
     it('throws SandboxNotReadyError when not started', () => {
       const sandbox = new DaytonaSandbox();
 
-      expect(() => sandbox.daytona).toThrow('Sandbox is not ready');
+      expect(() => sandbox.daytona).toThrow(SandboxNotReadyError);
     });
 
     it('returns sandbox when started', async () => {
