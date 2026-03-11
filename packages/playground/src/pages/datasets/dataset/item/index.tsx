@@ -277,8 +277,6 @@ function DatasetItemPage() {
                 {!isEditing && !isDeleted && (
                   <ButtonsGroup>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleEditClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to edit' : undefined}
@@ -286,8 +284,6 @@ function DatasetItemPage() {
                       <Edit2Icon /> Edit
                     </Button>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleDeleteClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to delete' : undefined}

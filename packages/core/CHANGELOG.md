@@ -1,5 +1,30 @@
 # @mastra/core
 
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- MCP tool calls now use `MCP_TOOL_CALL` span type instead of `TOOL_CALL` in traces. `CoreToolBuilder` detects `mcpMetadata` on tools and creates spans with MCP server name, version, and tool description attributes. ([#13274](https://github.com/mastra-ai/mastra/pull/13274))
+
+### Patch Changes
+
+- Added a `mastra/<version>` User-Agent header to all provider API requests (OpenAI, Anthropic, Google, Mistral, Groq, xAI, DeepSeek, and others) across models.dev, Netlify, and Azure gateways for better traffic attribution. ([#13087](https://github.com/mastra-ai/mastra/pull/13087))
+
+- Fix agent loop not continuing when `onIterationComplete` returns `continue: true` ([#14155](https://github.com/mastra-ai/mastra/pull/14155))
+
+- Sub-agents with `defaultOptions.memory` configurations were having their memory settings overridden when called as tools from a parent agent. The parent unconditionally passed its own `memory` option (with newly generated thread/resource IDs), which replaced the sub-agent's intended memory configuration due to shallow object merging. ([#11561](https://github.com/mastra-ai/mastra/pull/11561))
+
+  This fix checks if the sub-agent has its own `defaultOptions.memory` before applying parent-derived memory settings. Sub-agents without their own memory config continue to receive parent-derived IDs as a fallback.
+
+  No code changes required for consumers - sub-agents with explicit `defaultOptions.memory` will now work correctly when used via the `agents: {}` option.
+
+- `fetchWithRetry` now backs off in sequence 2s → 4s → 8s and then caps at 10s. ([#14159](https://github.com/mastra-ai/mastra/pull/14159))
+
+- Preserve trace continuity across workflow suspend/resume for workflows run by the default engine, so resumed workflows appear as children of the original span in tracing tools. ([#12276](https://github.com/mastra-ai/mastra/pull/12276))
+
+- Updated dependencies [[`787f3ac`](https://github.com/mastra-ai/mastra/commit/787f3ac08b3bb77413645a7ab5c447fa851708fd)]:
+  - @mastra/schema-compat@1.2.1-alpha.0
+
 ## 1.11.0
 
 ### Minor Changes

@@ -196,7 +196,7 @@ function EditLayoutWrapper() {
         </HeaderTitle>
         {isReady && (
           <HeaderAction>
-            <Button variant="outline" onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
+            <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -204,9 +204,7 @@ function EditLayoutWrapper() {
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Save />
-                  </Icon>
+                  <Save />
                   Save
                 </>
               )}
@@ -223,9 +221,7 @@ function EditLayoutWrapper() {
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Check />
-                  </Icon>
+                  <Check />
                   Publish
                 </>
               )}
