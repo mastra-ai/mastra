@@ -3325,6 +3325,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   {
     "from": "AGENT",
     "payload": {
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3425,6 +3426,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       "args": {
         "value": "Sparkle Day",
       },
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3562,6 +3564,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3716,6 +3719,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -10047,6 +10051,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   {
     "from": "AGENT",
     "payload": {
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -10147,6 +10152,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "args": {
         "value": "Sparkle Day",
       },
+      "dynamic": undefined,
       "providerExecuted": undefined,
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -10284,6 +10290,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -10438,6 +10445,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
+            "dynamic": undefined,
             "providerExecuted": undefined,
             "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",

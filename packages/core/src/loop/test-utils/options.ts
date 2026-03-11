@@ -4852,6 +4852,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           {
             "from": "AGENT",
             "payload": {
+              "dynamic": undefined,
               "providerExecuted": undefined,
               "providerMetadata": {
                 "provider": {
@@ -4940,6 +4941,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
               "args": {
                 "value": "test",
               },
+              "dynamic": undefined,
               "providerExecuted": undefined,
               "providerMetadata": {
                 "provider": {

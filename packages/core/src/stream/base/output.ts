@@ -184,7 +184,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolCallDeltaIdNameMap: Record<string, string> = {};
   #toolCallStreamingMeta: Record<
     string,
-    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata }
+    { toolName: string; providerExecuted?: boolean; providerMetadata?: ProviderMetadata; dynamic?: boolean }
   > = {};
   #toolCalls: LLMStepResult<OUTPUT>['toolCalls'] = [];
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
@@ -446,6 +446,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 toolName: chunk.payload.toolName,
                 providerExecuted: chunk.payload.providerExecuted,
                 providerMetadata: chunk.payload.providerMetadata,
+                dynamic: chunk.payload.dynamic,
               };
               break;
             case 'tool-call-input-streaming-end': {
@@ -475,6 +476,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     args,
                     providerExecuted: meta.providerExecuted,
                     providerMetadata: meta.providerMetadata,
+                    dynamic: meta.dynamic,
                   },
                 };
                 self.#toolCalls.push(synthetic);
@@ -547,11 +549,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
               const existingSynthetic = self.#toolCalls.find(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
               if (existingSynthetic) {
-                // Merge providerMetadata from the real tool-call onto the synthetic one.
+                // Merge properties from the real tool-call onto the synthetic one.
                 // The AI SDK's streaming path emits tool-input-start without providerMetadata
                 // but includes it on the final tool-call chunk (e.g., OpenAI's fc_* itemId).
                 if (chunk.payload.providerMetadata && !existingSynthetic.payload.providerMetadata) {
                   existingSynthetic.payload.providerMetadata = chunk.payload.providerMetadata;
+                }
+                if (chunk.payload.dynamic != null && existingSynthetic.payload.dynamic == null) {
+                  existingSynthetic.payload.dynamic = chunk.payload.dynamic;
                 }
                 return;
               }
