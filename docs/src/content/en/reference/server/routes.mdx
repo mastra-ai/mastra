@@ -14,11 +14,31 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | Method | Path | Description |
 | - | - | - |
 | `GET` | `/api/agents` | List all agents |
-| `GET` | `/api/agents/:agentId` | Get agent by ID |
+| `GET` | `/api/agents/:agentId` | Get agent by ID (supports version query params) |
 | `POST` | `/api/agents/:agentId/generate` | Generate agent response |
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
 | `GET` | `/api/agents/:agentId/tools` | List agent tools |
 | `POST` | `/api/agents/:agentId/tools/:toolId/execute` | Execute agent tool |
+
+### Get agent query parameters
+
+`GET /api/agents/:agentId` accepts optional query parameters to control which stored config version is applied as overrides to code-defined agents:
+
+| Parameter | Type | Default | Description |
+| - | - | - | - |
+| `status` | `'draft' \| 'published'` | `'draft'` | Which stored version to resolve. `draft` returns the latest version, `published` returns the active published version. |
+| `versionId` | `string` | — | A specific version ID to resolve. Takes precedence over `status`. |
+
+```bash
+# Get agent with latest draft overrides (default)
+GET /api/agents/my-agent
+
+# Get agent with published overrides
+GET /api/agents/my-agent?status=published
+
+# Get agent with a specific version's overrides
+GET /api/agents/my-agent?versionId=abc123
+```
 
 ### Generate request body
 

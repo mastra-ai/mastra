@@ -2,6 +2,18 @@ import type { StorageOrderBy, ThreadOrderBy, ThreadSortDirection } from '../type
 import { StorageDomain } from './base';
 
 // ============================================================================
+// Version Resolution Options
+// ============================================================================
+
+/**
+ * Options for resolving which version of an entity to use.
+ * Either pick by status (draft/published/archived) or by a specific version ID — not both.
+ */
+export type VersionResolutionOptions =
+  | { status?: 'draft' | 'published' | 'archived'; versionId?: never }
+  | { versionId: string; status?: never };
+
+// ============================================================================
 // Generic Version Types
 // ============================================================================
 
@@ -193,12 +205,11 @@ export abstract class VersionedStorageDomain<
 
   /**
    * Resolves an entity by merging its thin record with the active or latest version config.
-   * Pass `{ status: 'draft' }` to resolve with the latest version instead of the active one.
+   * - `{ status: 'draft' }` — resolve with the latest version.
+   * - `{ status: 'published' }` (default) — resolve with the active version, falling back to latest.
+   * - `{ versionId: '...' }` — resolve with a specific version by ID.
    */
-  async getByIdResolved(
-    id: string,
-    options?: { status?: 'draft' | 'published' | 'archived' },
-  ): Promise<TResolved | null> {
+  async getByIdResolved(id: string, options?: VersionResolutionOptions): Promise<TResolved | null> {
     const entity = await this.getById(id);
 
     if (!entity) {
@@ -230,17 +241,18 @@ export abstract class VersionedStorageDomain<
 
   /**
    * Resolves a single entity by merging it with its active or latest version.
-   * - `status: 'published'` (default) — use activeVersionId, fall back to latest.
-   * - `status: 'draft'` — always use the latest version.
+   * - `{ versionId: '...' }` — resolve with a specific version by ID.
+   * - `{ status: 'published' }` (default) — use activeVersionId, fall back to latest.
+   * - `{ status: 'draft' }` — always use the latest version.
    */
-  protected async resolveEntity(
-    entity: TEntity,
-    options?: { status?: 'draft' | 'published' | 'archived' },
-  ): Promise<TResolved> {
+  protected async resolveEntity(entity: TEntity, options?: VersionResolutionOptions): Promise<TResolved> {
     const status = options?.status || 'published';
     let version: TVersion | null = null;
 
-    if (status === 'draft') {
+    if (options?.versionId) {
+      // Specific version resolution: fetch by exact version ID
+      version = await this.getVersion(options.versionId);
+    } else if (status === 'draft') {
       // Draft resolution: always use the latest version (which may be ahead of activeVersionId)
       version = await this.getLatestVersion(entity.id);
     } else {

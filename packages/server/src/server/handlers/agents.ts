@@ -21,6 +21,7 @@ import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
   agentSkillPathParams,
+  agentVersionQuerySchema,
   listAgentsResponseSchema,
   serializedAgentSchema,
   agentExecutionBodySchema,
@@ -559,7 +560,15 @@ async function formatAgentList({
   };
 }
 
-export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context['mastra']; agentId: string }) {
+export async function getAgentFromSystem({
+  mastra,
+  agentId,
+  versionOptions,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+}) {
   const logger = mastra.getLogger();
 
   if (!agentId) {
@@ -598,7 +607,7 @@ export async function getAgentFromSystem({ mastra, agentId }: { mastra: Context[
     try {
       const editorAgent = mastra.getEditor()?.agent;
       if (editorAgent) {
-        agent = await editorAgent.applyStoredOverrides(agent);
+        agent = await editorAgent.applyStoredOverrides(agent, versionOptions);
       }
     } catch (error) {
       logger.debug('Error applying stored overrides to code agent', error);
@@ -878,15 +887,18 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   path: '/agents/:agentId',
   responseType: 'json',
   pathParamSchema: agentIdPathParams,
+  queryParamSchema: agentVersionQuerySchema,
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
-  description: 'Returns details for a specific agent including configuration, tools, and memory settings',
+  description:
+    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=draft (latest, default), ?status=published (active version), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: 'agents:read',
-  handler: async ({ agentId, mastra, requestContext }) => {
+  handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
+      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions });
       const isStudio = false; // TODO: Get from context if needed
       const result = await formatAgent({
         mastra,

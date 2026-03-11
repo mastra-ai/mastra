@@ -105,4 +105,120 @@ describe('applyStoredOverrides', () => {
     // Should be the same object reference
     expect(result).toBe(codeAgent);
   });
+
+  it('resolves with the published (active) version when status is "published"', async () => {
+    const { storage, editor, codeAgent } = await setup({
+      name: 'Draft v1',
+      instructions: 'Version 1 instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+    });
+
+    // Create a second version and activate it as the published version
+    const agentsStore = await storage.getStore('agents');
+    const publishedVersionId = 'published-version-id';
+    await agentsStore?.createVersion({
+      id: publishedVersionId,
+      agentId: 'my-agent',
+      versionNumber: 2,
+      name: 'Published v2',
+      instructions: 'Published version instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+      changedFields: ['instructions'],
+      changeMessage: 'Published version',
+    });
+    await agentsStore?.update({ id: 'my-agent', activeVersionId: publishedVersionId });
+
+    // Create a third version (latest draft) that's newer but not published
+    await agentsStore?.createVersion({
+      id: 'draft-version-id',
+      agentId: 'my-agent',
+      versionNumber: 3,
+      name: 'Draft v3',
+      instructions: 'Latest draft instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+      changedFields: ['instructions'],
+      changeMessage: 'Draft version',
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent, { status: 'published' });
+    const instructions = await result.getInstructions();
+    expect(instructions).toBe('Published version instructions.');
+  });
+
+  it('resolves with the latest draft version by default', async () => {
+    const { storage, editor, codeAgent } = await setup({
+      name: 'Draft v1',
+      instructions: 'Version 1 instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+    });
+
+    // Create a second version and activate it
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.createVersion({
+      id: 'published-version-id',
+      agentId: 'my-agent',
+      versionNumber: 2,
+      name: 'Published v2',
+      instructions: 'Published version instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+      changedFields: ['instructions'],
+      changeMessage: 'Published version',
+    });
+    await agentsStore?.update({ id: 'my-agent', activeVersionId: 'published-version-id' });
+
+    // Create a third version (latest draft)
+    await agentsStore?.createVersion({
+      id: 'draft-version-id',
+      agentId: 'my-agent',
+      versionNumber: 3,
+      name: 'Draft v3',
+      instructions: 'Latest draft instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+      changedFields: ['instructions'],
+      changeMessage: 'Draft version',
+    });
+
+    // Default (no options) should resolve with the latest draft
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const instructions = await result.getInstructions();
+    expect(instructions).toBe('Latest draft instructions.');
+  });
+
+  it('resolves with a specific version when versionId is provided', async () => {
+    const { storage, editor, codeAgent } = await setup({
+      name: 'Draft v1',
+      instructions: 'Version 1 instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+    });
+
+    // Create additional versions
+    const agentsStore = await storage.getStore('agents');
+    const specificVersionId = 'specific-version-id';
+    await agentsStore?.createVersion({
+      id: specificVersionId,
+      agentId: 'my-agent',
+      versionNumber: 2,
+      name: 'Specific v2',
+      instructions: 'Specific version instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+      changedFields: ['instructions'],
+      changeMessage: 'Specific version',
+    });
+
+    // Create a third version (latest)
+    await agentsStore?.createVersion({
+      id: 'latest-version-id',
+      agentId: 'my-agent',
+      versionNumber: 3,
+      name: 'Latest v3',
+      instructions: 'Latest version instructions.',
+      model: { provider: 'openai', name: 'gpt-4o' },
+      changedFields: ['instructions'],
+      changeMessage: 'Latest version',
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent, { versionId: specificVersionId });
+    const instructions = await result.getInstructions();
+    expect(instructions).toBe('Specific version instructions.');
+  });
 });
