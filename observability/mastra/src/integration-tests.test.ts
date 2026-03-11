@@ -4,7 +4,7 @@ import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan, executeWithContext } from '@mastra/core/observability';
 import type { TracingContext } from '@mastra/core/observability';
 
 // Core Mastra imports
@@ -1836,6 +1836,75 @@ describe('Tracing Integration Tests', () => {
       expect(spansWithContext.length).toBeGreaterThanOrEqual(1);
 
       finalExpectations(testExporter);
+    });
+  });
+
+  describe('Standalone tool execution tracing (MCP-style)', () => {
+    it('should create a root span when tool is executed without a parent span context', async () => {
+      const testExporter = new TestExporter();
+
+      const simpleTool = createTool({
+        id: 'standalone-tool',
+        description: 'A tool executed without an agent',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+        execute: async inputData => {
+          return { doubled: inputData.value * 2 };
+        },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        tools: { 'standalone-tool': simpleTool },
+      });
+
+      // Simulate standalone tool execution (e.g. MCP server calling a tool directly)
+      // by using getOrCreateSpan with no tracingContext.currentSpan
+      const selectedInstance = mastra.observability.getSelectedInstance({});
+      expect(selectedInstance).toBeDefined();
+      expect(typeof selectedInstance!.startSpan).toBe('function');
+
+      const toolSpan = getOrCreateSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'standalone-tool'",
+        input: { value: 5 },
+        entityType: EntityType.TOOL,
+        entityId: 'standalone-tool',
+        entityName: 'standalone-tool',
+        attributes: {
+          toolDescription: 'A tool executed without an agent',
+          toolType: 'tool',
+        },
+        tracingContext: { currentSpan: undefined },
+        mastra,
+      });
+
+      expect(toolSpan).toBeDefined();
+
+      // Execute within the span context and complete it
+      const result = await executeWithContext({
+        span: toolSpan!,
+        fn: async () => {
+          return { doubled: 10 };
+        },
+      });
+
+      toolSpan!.end({ output: result });
+
+      // Flush the observability bus to ensure async export handlers complete
+      await selectedInstance!.getObservabilityBus().flush();
+
+      expect(result).toEqual({ doubled: 10 });
+
+      // Verify a TOOL_CALL span was created as a root span
+      const toolSpans = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(toolSpans).toHaveLength(1);
+      expect(toolSpans[0]?.name).toBe("tool: 'standalone-tool'");
+      expect(toolSpans[0]?.traceId).toBeDefined();
+
+      // Verify no incomplete spans
+      const incompleteSpans = testExporter.getIncompleteSpans();
+      expect(incompleteSpans).toHaveLength(0);
     });
   });
 });
