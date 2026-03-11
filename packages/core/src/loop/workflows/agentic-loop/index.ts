@@ -167,6 +167,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         try {
           const iterationResult = await rest.onIterationComplete(iterationContext);
 
+          // console.dir({ iterationResult }, { depth: null });
+
           if (iterationResult) {
             if (iterationResult.feedback && typedInputData.stepResult?.isContinued) {
               messageList.add(
@@ -202,6 +204,14 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
               }
             } else if (iterationResult.continue === false && !hasFinishedSteps) {
               hasFinishedSteps = true;
+            } else if (
+              iterationResult.continue === true &&
+              (hasFinishedSteps || !typedInputData.stepResult?.isContinued)
+            ) {
+              if ((rest.maxSteps && accumulatedSteps.length < rest.maxSteps) || !rest.maxSteps) {
+                typedInputData.stepResult.isContinued = true;
+                hasFinishedSteps = false;
+              }
             }
           }
         } catch (error) {
