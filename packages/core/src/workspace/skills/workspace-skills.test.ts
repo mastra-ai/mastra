@@ -2111,4 +2111,63 @@ Premium instructions.
       expect(afterMaybeRefreshCalls).toBe(initialReadFileCalls);
     });
   });
+
+  describe('migration hints', () => {
+    it('should suggest relative path when absolute skills path gets permission denied', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Create a source where absolute paths throw but relative paths work
+      const inner = createMockFilesystem({
+        'skills/my-skill/SKILL.md': VALID_SKILL_MD,
+      });
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path.startsWith('/')) {
+            throw new Error('Permission denied: exists on /skills');
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({
+        skills: ['/skills'],
+        source,
+      });
+
+      await skills.list();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('did you mean to use the relative path "skills"?'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('should not suggest relative path when relative equivalent also does not exist', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Create a source where absolute paths throw and relative paths don't exist either
+      const inner = createMockFilesystem({});
+      const source: SkillSource = {
+        ...inner,
+        exists: vi.fn(async (path: string) => {
+          if (path.startsWith('/')) {
+            throw new Error('Permission denied: exists on /nonexistent');
+          }
+          return inner.exists(path);
+        }),
+      };
+
+      const skills = new WorkspaceSkillsImpl({
+        skills: ['/nonexistent'],
+        source,
+      });
+
+      await skills.list();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Cannot access skills path "/nonexistent"'));
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('did you mean'));
+
+      warnSpy.mockRestore();
+    });
+  });
 });
