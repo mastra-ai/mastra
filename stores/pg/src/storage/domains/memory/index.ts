@@ -425,7 +425,9 @@ export class MemoryPG extends MemoryStorage {
 
       const limitValue = perPageInput === false ? total : perPage;
       // Select both standard and timezone-aware columns (*Z) for proper UTC timestamp handling
-      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${field}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      // Sort by timezone-aware *Z column (TIMESTAMPTZ) to ensure correct ordering across timezones
+      const orderByField = field === 'createdAt' || field === 'updatedAt' ? `${field}Z` : field;
+      const dataQuery = `SELECT id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ" ${baseQuery} ORDER BY "${orderByField}" ${direction} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       const rows = await this.#db.client.manyOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         dataQuery,
         [...queryParams, limitValue, offset],
@@ -554,7 +556,7 @@ export class MemoryPG extends MemoryStorage {
     };
 
     try {
-      const now = new Date().toISOString();
+      const now = new Date();
       const thread = await this.#db.client.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
         `UPDATE ${threadTableName}
                     SET
@@ -855,7 +857,8 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByField = field === 'createdAt' || field === 'updatedAt' ? `${field}Z` : field;
+      const orderByStatement = `ORDER BY "${orderByField}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1022,7 +1025,8 @@ export class MemoryPG extends MemoryStorage {
 
     try {
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
-      const orderByStatement = `ORDER BY "${field}" ${direction}`;
+      const orderByField = field === 'createdAt' || field === 'updatedAt' ? `${field}Z` : field;
+      const orderByStatement = `ORDER BY "${orderByField}" ${direction}`;
 
       const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -1206,8 +1210,8 @@ export class MemoryPG extends MemoryStorage {
               message.id,
               message.threadId,
               typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
-              message.createdAt || new Date().toISOString(),
-              message.createdAt || new Date().toISOString(),
+              message.createdAt || new Date(),
+              message.createdAt || new Date(),
               message.role,
               message.type || 'v2',
               message.resourceId,
@@ -1216,7 +1220,7 @@ export class MemoryPG extends MemoryStorage {
         });
 
         const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
-        const nowStr = new Date().toISOString();
+        const now = new Date();
         const threadUpdate = t.none(
           `UPDATE ${threadTableName}
                         SET
@@ -1224,7 +1228,7 @@ export class MemoryPG extends MemoryStorage {
                             "updatedAtZ" = $2
                         WHERE id = $3
                     `,
-          [nowStr, nowStr, threadId],
+          [now, now, threadId],
         );
 
         await Promise.all([...messageInserts, threadUpdate]);
