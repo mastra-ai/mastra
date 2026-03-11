@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Moved zod from peerDependencies to dependencies so the CLI ships its own zod version instead of relying on the user's installation. Fixes schema conversion errors when npm resolves to Zod 3.25.x.
+Fixed `mastracode` schema generation when running the CLI with Zod v4-compatible schemas. The CLI now produces valid object JSON Schema instead of failing on some tool input schemas.
