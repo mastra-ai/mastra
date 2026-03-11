@@ -19,6 +19,7 @@ import type {
   WorkflowResult,
   WorkflowStreamEvent,
 } from '@mastra/core/workflows';
+import { context as otelContext } from '@opentelemetry/api';
 import { suppressTracing } from '@opentelemetry/core';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
@@ -77,7 +78,7 @@ export class InngestRun<
       try {
         // Suppress OTel auto-instrumentation on polling fetch calls to avoid
         // excessive trace noise (see https://github.com/mastra-ai/mastra/issues/13892)
-        const response = await suppressTracing(() =>
+        const response = await otelContext.with(suppressTracing(otelContext.active()), () =>
           fetch(`${this.inngest.apiBaseUrl ?? 'https://api.inngest.com'}/v1/events/${eventId}/runs`, {
             headers: {
               Authorization: `Bearer ${process.env.INNGEST_SIGNING_KEY}`,
