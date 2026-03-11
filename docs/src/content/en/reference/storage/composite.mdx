@@ -39,15 +39,6 @@ Mastra organizes storage into domains, each handling a specific type of data. Ea
 | `agents` | Agent configurations for stored agents. Enables agents to be defined and updated at runtime without code deployments. |
 | `datasets` | Evaluation datasets used for experiment runs. Stores dataset definitions, schemas, and versioned items. |
 | `experiments` | Experiment runs and per-item experiment results linked to datasets and targets. |
-| `promptBlocks` | Versioned prompt block entities used by the editor runtime. |
-| `scorerDefinitions` | Versioned scorer definitions used by eval workflows and editor tooling. |
-| `mcpClients` | Versioned MCP client definitions and configuration. |
-| `mcpServers` | Versioned MCP server definitions and transport configuration. |
-| `workspaces` | Versioned workspace entities used to group editor resources. |
-| `skills` | Versioned skill definitions for editor-managed skills. |
-| `blobs` | Content-addressable blob storage used by published skills and other versioned editor artifacts. |
-
-Mastra resolves domains in this order: `domains` overrides, then `editor` for `agents`, `promptBlocks`, `scorerDefinitions`, `mcpClients`, `mcpServers`, `workspaces`, and `skills`, then `default` as a fallback. Configure `blobs` separately with `domains.blobs`.
 
 :::note
 
