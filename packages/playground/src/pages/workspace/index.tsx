@@ -74,11 +74,7 @@ export default function Workspace() {
   // Check if 403 forbidden (permission denied)
   const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
 
-  // For uncontained local filesystems, default to basePath instead of / (which would show the real root)
-  const fsMetadata = workspaceInfo?.filesystem?.metadata;
-  const defaultPath =
-    fsMetadata?.contained === false && typeof fsMetadata?.basePath === 'string' ? fsMetadata.basePath : '.';
-  const pathFromUrl = searchParams.get('path') || defaultPath;
+  const pathFromUrl = searchParams.get('path') || '.';
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
