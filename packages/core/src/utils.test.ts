@@ -6,7 +6,7 @@ import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import { fetchWithRetry, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -343,4 +343,37 @@ it('should log correctly for Vercel tool execution', async () => {
   expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
 
   debugSpy.mockRestore();
+});
+
+describe('fetchWithRetry', () => {
+  it('should use exponential backoff delays capped at 10 seconds', async () => {
+    const delays: number[] = [];
+
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay?: number) => {
+      if (delay && delay > 100) {
+        delays.push(delay);
+      }
+      // Execute callback immediately so the test completes
+      if (typeof fn === 'function') fn();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 4)).rejects.toThrow();
+
+    // With the bug (1000 * Math.pow(2, retryCount) * 1000), delays would be:
+    //   2_000_000, 4_000_000, 8_000_000 — all far exceeding 10_000
+    // Correct delays should be: 2000, 4000, 8000
+    expect(delays.length).toBe(3); // 4 max retries = 3 retry delays
+    for (const delay of delays) {
+      expect(delay).toBeLessThanOrEqual(10000);
+    }
+    expect(delays[0]).toBe(2000); // 1000 * 2^1
+    expect(delays[1]).toBe(4000); // 1000 * 2^2
+    expect(delays[2]).toBe(8000); // 1000 * 2^3
+
+    vi.restoreAllMocks();
+  });
 });
