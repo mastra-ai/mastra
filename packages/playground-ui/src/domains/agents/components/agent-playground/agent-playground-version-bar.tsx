@@ -119,7 +119,7 @@ export function AgentPlaygroundVersionBar({
             value={currentValue}
             onValueChange={onVersionSelect}
             placeholder="Select version..."
-            variant="outline"
+            variant="ghost"
             className="min-w-0 flex-1"
           />
         ) : (
@@ -133,7 +133,7 @@ export function AgentPlaygroundVersionBar({
             <button
               type="button"
               aria-label="Version information"
-              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-0"
+              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
             >
               <Icon size="sm">
                 <Info />

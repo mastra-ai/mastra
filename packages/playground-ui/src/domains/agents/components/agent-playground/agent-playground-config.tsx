@@ -579,11 +579,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
 
   return (
     <div className={cn('flex flex-col h-full')}>
-      <div className="px-4 py-3 border-b border-border1">
-        {/* <Txt variant="ui-xs" className="font-medium text-red uppercase tracking-wider">
-          Configuration
-        </Txt> */}
-      </div>
+      <div className="px-4 py-3 border-b border-border1" />
 
       <ScrollArea className="flex-1 min-h-0">
         {showDiff ? (

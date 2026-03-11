@@ -44,7 +44,13 @@ function HoverPopover({ children, ...props }: PopoverPrimitive.PopoverProps) {
 
   return (
     <Popover open={open} onOpenChange={setOpen} {...props}>
-      <span onMouseEnter={handleOpen} onMouseLeave={handleClose} style={{ display: 'contents' }}>
+      <span
+        onMouseEnter={handleOpen}
+        onMouseLeave={handleClose}
+        onFocusCapture={handleOpen}
+        onBlurCapture={handleClose}
+        style={{ display: 'contents' }}
+      >
         {children}
       </span>
     </Popover>

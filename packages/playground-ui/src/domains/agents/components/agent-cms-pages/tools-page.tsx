@@ -163,7 +163,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-neutral3 hover:text-neutral5 transition-colors focus-visible:outline-none focus-visible:ring-0"
+            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/30"
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="sm">
@@ -198,7 +198,7 @@ export function ToolsPage() {
                       key={tool.value}
                       type="button"
                       onClick={() => handleAddTool(tool.value)}
-                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-0"
+                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-0"
                     >
                       <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
                       {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
