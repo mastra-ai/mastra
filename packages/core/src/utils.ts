@@ -105,8 +105,9 @@ export function generateEmptyFromSchema(schema: string | Record<string, any>): R
     if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
     const obj: Record<string, any> = {};
     for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
-      if ('default' in prop) {
-        obj[key] = prop.default;
+      if (prop && typeof prop === 'object' && 'default' in prop) {
+        obj[key] =
+          prop.default !== null && typeof prop.default === 'object' ? structuredClone(prop.default) : prop.default;
       } else if (prop.type === 'object' && prop.properties) {
         obj[key] = generateEmptyFromSchema(prop);
       } else if (prop.type === 'object') {

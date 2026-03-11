@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-Fixed `generateEmptyFromSchema` crashing on pre-parsed object schemas and returning `{}` for nested object properties. The function now accepts both string and object inputs, recursively initializes nested objects, and respects `default` values defined in schema properties.
+Schema-based form inputs now correctly generate initial values for nested object properties and respect default values. Previously, pre-parsed schemas caused errors and nested objects were not initialized.

@@ -515,4 +515,23 @@ describe('fetchWithRetry', () => {
     expect(delays[3]).toBe(10000); // 1000 * 2^4 = 16000, capped at 10000
 >>>>>>> main
   });
+
+  it('should clone non-primitive default values to prevent reference aliasing', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        prefs: { type: 'object', default: { theme: 'dark' } },
+        tags: { type: 'array', default: ['a', 'b'] },
+      },
+    };
+    const result = generateEmptyFromSchema(schema);
+
+    // Mutate the result
+    result.prefs.theme = 'light';
+    result.tags.push('c');
+
+    // Verify original schema defaults are unchanged
+    expect(schema.properties.prefs.default).toEqual({ theme: 'dark' });
+    expect(schema.properties.tags.default).toEqual(['a', 'b']);
+  });
 });
