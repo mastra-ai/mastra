@@ -831,6 +831,13 @@ const stream = await agent.stream('message for agent')
     description:
       'The trace ID associated with this execution when Tracing is enabled. Use this to correlate logs and debug execution flow.',
   },
+  {
+    name: 'spanId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'The span ID of the root agent run span. When using the Braintrust exporter, this corresponds to the Braintrust root span ID which can be used for efficient queries against the Braintrust API.',
+  },
 ]}
 />
 

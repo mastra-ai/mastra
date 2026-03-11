@@ -127,6 +127,12 @@ export type FullOutput<OUTPUT = undefined> = {
   };
   /** Trace ID for observability */
   traceId: string | undefined;
+  /**
+   * Span ID of the root agent run span.
+   * When using the Braintrust exporter, this corresponds to the Braintrust root span ID
+   * which can be used for efficient queries against the Braintrust API.
+   */
+  spanId: string | undefined;
   /** Run ID for this execution */
   runId: string | undefined;
   /** Payload for resuming suspended tool calls */
@@ -249,6 +255,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Trace ID used on the execution (if the execution was traced).
    */
   public traceId?: string;
+  /**
+   * Span ID of the root agent run span.
+   * When using the Braintrust exporter, this corresponds to the Braintrust root span ID
+   * which can be used for efficient queries against the Braintrust API.
+   */
+  public spanId?: string;
   public messageId: string;
 
   constructor({
@@ -276,6 +288,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#returnScorerData = !!options.returnScorerData;
     this.runId = options.runId;
     this.traceId = options.tracingContext?.currentSpan?.externalTraceId;
+    this.spanId = options.tracingContext?.currentSpan?.isValid ? options.tracingContext.currentSpan.id : undefined;
 
     this.#model = _model;
 
@@ -1332,6 +1345,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       tripwire: this.#tripwire,
       ...(scoringData ? { scoringData } : {}),
       traceId: this.traceId,
+      spanId: this.spanId,
       runId: this.runId,
       suspendPayload: await this.suspendPayload,
       resumeSchema: await this.resumeSchema,

@@ -2943,6 +2943,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
     await this._validateRequestContext(requestContext as RequestContext);
@@ -2972,6 +2973,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3690,6 +3692,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
 
     const executionResultPromise = this.executionEngine
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
@@ -3724,6 +3727,7 @@ export class Run<
           this.closeStreamAction?.().catch(() => {});
         }
         result.traceId = traceId;
+        result.spanId = spanId;
         return result;
       });
 
@@ -3824,6 +3828,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3846,6 +3851,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
@@ -3956,6 +3962,7 @@ export class Run<
     });
 
     const traceId = workflowSpan?.externalTraceId;
+    const spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
 
     const result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
       workflowId: this.workflowId,
@@ -3980,6 +3987,7 @@ export class Run<
     }
 
     result.traceId = traceId;
+    result.spanId = spanId;
     return result;
   }
 
