@@ -59,7 +59,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'agents/using-tools',
-          label: 'Using Tools',
+          label: 'Tools',
         },
         {
           type: 'doc',

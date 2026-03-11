@@ -11,50 +11,103 @@ import { MODEL_SETTINGS_OBJECT } from "@site/src/components/ModelSettingsPropert
 
 The `.generate()` method enables non-streaming response generation from an agent with enhanced capabilities. It accepts messages and optional generation options.
 
-## Usage example
+## Usage examples
 
-```typescript
-// Basic usage
+### Basic usage
+
+Call the agent with a message to generate a response:
+
+```ts
 const result = await agent.generate('message for agent')
+```
 
-// With model settings (e.g., limiting output tokens)
+### With model settings
+
+Example of limiting output tokens and setting temperature:
+
+```ts
 const limitedResult = await agent.generate('Write a short poem about coding', {
   modelSettings: {
     maxOutputTokens: 50,
     temperature: 0.7,
   },
 })
+```
 
-// With structured output
-const structuredResult = await agent.generate("Extract the user's name and age", {
-  structuredOutput: {
-    schema: z.object({
-      name: z.string(),
-      age: z.number(),
-    }),
-  },
-})
+### With memory
 
-// With memory for conversation persistence
+Give your agent access to conversation history and persistence by configuring memory options. This allows the agent to remember previous interactions and maintain context across messages.
+
+```ts
 const memoryResult = await agent.generate('Remember my favorite color is blue', {
   memory: {
     thread: 'user-123-thread',
     resource: 'user-123',
   },
 })
+```
 
-// Accessing response headers
+### Accessing response headers
+
+Some model providers return useful information in response headers, such as remaining token counts or rate limit status. You can access these headers from the result object after generation completes.
+
+```ts
 const result = await agent.generate('Hello!')
 const remainingRequests = result.response?.headers?.['anthropic-ratelimit-requests-remaining']
 const remainingTokens = result.response?.headers?.['x-ratelimit-remaining-tokens']
 console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remainingTokens}`)
 ```
 
-:::info
+### Analyzing images
 
-**Model Compatibility**: This method requires AI SDK v5+ models. If you're using AI SDK v4 models, use the [`.generateLegacy()`](./generateLegacy) method instead. The framework automatically detects your model version and will throw an error if there's a mismatch.
+Agents can analyze and describe images by processing both the visual content and any text within them. To enable image analysis, pass an object with `type: 'image'` and the image URL in the `content` array. You can combine image content with text prompts to guide the agent's analysis.
 
-:::
+```typescript
+const response = await agent.generate([
+  {
+    role: 'user',
+    content: [
+      {
+        type: 'image',
+        image: 'https://placebear.com/cache/395-205.jpg',
+        mimeType: 'image/jpeg',
+      },
+      {
+        type: 'text',
+        text: 'Describe the image in detail, and extract all the text in the image.',
+      },
+    ],
+  },
+])
+
+console.log(response.text)
+```
+
+### Using `maxSteps`
+
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
+
+```typescript
+const response = await agent.generate('Help me organize my day', {
+  maxSteps: 10,
+})
+
+console.log(response.text)
+```
+
+### Using `onStepFinish`
+
+You can monitor the progress of multi-step operations using the `onStepFinish` callback. This is useful for debugging or providing progress updates to users.
+
+`onStepFinish` is only available when streaming or generating text without structured output.
+
+```typescript
+const response = await agent.generate('Help me organize my day', {
+  onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
+    console.log({ text, toolCalls, toolResults, finishReason, usage })
+  },
+})
+```
 
 ## Parameters
 
@@ -1125,9 +1178,3 @@ console.log(`Remaining requests: ${remainingRequests}, Remaining tokens: ${remai
   },
 ]}
 />
-
-## Related
-
-- [Agent Networks](/docs/agents/networks) - Using the supervisor pattern for multi-agent coordination
-- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
-- [Guide: Research Coordinator](/guides/guide/research-coordinator)
