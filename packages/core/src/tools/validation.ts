@@ -44,11 +44,20 @@ export type FormattedValidationErrors<T = unknown> = {
   fields: T extends object ? { [K in keyof T]?: FormattedValidationErrors<T[K]> } : unknown;
 };
 
+/**
+ * Base interface for structured tool errors returned to the model.
+ * Used to signal that a tool call failed, allowing the model to self-correct.
+ */
 export interface ToolError {
   error: true;
   message: string;
 }
 
+/**
+ * Structured validation error returned when tool input, output, or suspend data
+ * fails schema validation. Extends `ToolError` so the model receives a consistent
+ * error shape regardless of whether the failure was a validation or a runtime throw.
+ */
 export interface ValidationError<T = unknown> extends ToolError {
   validationErrors: FormattedValidationErrors<T>;
 }
