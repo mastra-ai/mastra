@@ -19,7 +19,18 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
-import { ObservationalMemoryProcessor } from '../processor';
+import { ObservationalMemoryProcessor, type MemoryContextProvider } from '../processor';
+
+const noopMemoryProvider: MemoryContextProvider = {
+  getContext: async () => ({
+    systemMessage: undefined,
+    messages: [],
+    hasObservations: false,
+    omRecord: null,
+    continuationMessage: undefined,
+    otherThreadsContext: undefined,
+  }),
+};
 import { TokenCounter } from '../token-counter';
 
 // =============================================================================
@@ -158,7 +169,7 @@ describe('Mid-Loop Observation', () => {
         observationTokens: 50000, // High to prevent reflection
       },
     });
-    processor = new ObservationalMemoryProcessor(om);
+    processor = new ObservationalMemoryProcessor(om, noopMemoryProvider);
   });
 
   describe('Token counting and threshold detection', () => {
@@ -304,7 +315,7 @@ describe('Mid-Loop Observation', () => {
           observationTokens: 50000, // High to prevent reflection
         },
       });
-      const processorWithBuffering = new ObservationalMemoryProcessor(omWithBuffering);
+      const processorWithBuffering = new ObservationalMemoryProcessor(omWithBuffering, noopMemoryProvider);
 
       const requestContext = createRequestContext(threadId, resourceId);
       const state: Record<string, unknown> = {};

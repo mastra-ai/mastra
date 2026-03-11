@@ -36,10 +36,12 @@ async function chat(userMessage: string) {
   const ctx = await memory.getContext({ threadId });
   // Returns:
   // {
-  //   systemMessage: string | undefined,  // observations + instructions + working memory
-  //   messages: MastraDBMessage[],         // unobserved messages (or recent N if no OM)
+  //   systemMessage: string | undefined,              // observations + instructions + working memory
+  //   messages: MastraDBMessage[],                     // unobserved messages (or recent N if no OM)
   //   hasObservations: boolean,
   //   omRecord: OMRecord | null,
+  //   continuationMessage: MastraDBMessage | undefined, // OM continuation hint (caller places it)
+  //   otherThreadsContext: string | undefined,          // cross-thread context (resource scope)
   // }
 
   // 2. Call the LLM — context slots right in
@@ -62,11 +64,7 @@ async function chat(userMessage: string) {
 
   // 4. Observe — OM loads messages from storage, decides if threshold is met
   const obsResult = await om.observe({ threadId });
-  // Returns:
-  // {
-  //   observed: boolean,    // did observation trigger?
-  //   record: OMRecord,     // updated state
-  // }
+  // Returns: { observed: boolean, reflected: boolean, record: OMRecord }
 
   if (obsResult.observed) {
     console.log('Observation triggered — messages compressed into observations');
@@ -112,8 +110,10 @@ async function streamChat(userMessage: string) {
 //   1. Gets OM engine (lazy, cached)
 //   2. If OM is configured:
 //      a. Gets OM record
-//      b. Calls om.buildContextSystemMessage() → observations + instructions
-//      c. Loads messages from storage after lastObservedAt (unobserved only)
+//      b. Gets other-threads context (resource scope only)
+//      c. Calls om.buildContextSystemMessage() → observations + cross-thread context
+//      d. Loads messages from storage after lastObservedAt (unobserved only)
+//      e. Builds continuation message for the OM prompt
 //   3. If no OM:
 //      a. Loads last N messages from storage
 //   4. Gets working memory system message

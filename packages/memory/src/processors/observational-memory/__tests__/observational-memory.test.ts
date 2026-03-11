@@ -18,7 +18,73 @@ import {
   sanitizeObservationLines,
   detectDegenerateRepetition,
 } from '../observer-agent';
-import { ObservationalMemoryProcessor } from '../processor';
+import { ObservationalMemoryProcessor, type MemoryContextProvider } from '../processor';
+
+/**
+ * Creates a MemoryContextProvider from an ObservationalMemory engine for tests.
+ * Mirrors what Memory.getContext() does but uses the engine directly.
+ */
+function createMemoryProvider(om: ObservationalMemory): MemoryContextProvider {
+  return {
+    getContext: async ({ threadId, resourceId }) => {
+      const record = await om.getRecord(threadId, resourceId);
+      let systemMessage: string | undefined;
+      let otherThreadsContext: string | undefined;
+
+      if (record?.activeObservations) {
+        if (om.scope === 'resource' && resourceId) {
+          otherThreadsContext = await om.getOtherThreadsContext(resourceId, threadId);
+        }
+        systemMessage = await om.buildContextSystemMessage({
+          threadId,
+          resourceId,
+          record,
+          unobservedContextBlocks: otherThreadsContext,
+        });
+      }
+
+      // Load messages from storage (mirrors Memory.getContext() message loading)
+      const storage = (om as any).storage;
+      let messages: MastraDBMessage[] = [];
+      if (record?.lastObservedAt) {
+        const startDate = new Date(new Date(record.lastObservedAt).getTime() + 1);
+        if (om.scope === 'resource' && resourceId) {
+          const result = await storage.listMessagesByResourceId({
+            resourceId,
+            orderBy: { field: 'createdAt', direction: 'ASC' },
+            perPage: false,
+            filter: { dateRange: { start: startDate } },
+          });
+          messages = result.messages;
+        } else {
+          const result = await storage.listMessages({
+            threadId,
+            orderBy: { field: 'createdAt', direction: 'ASC' },
+            perPage: false,
+            filter: { dateRange: { start: startDate } },
+          });
+          messages = result.messages;
+        }
+      } else {
+        const result = await storage.listMessages({
+          threadId,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          perPage: false,
+        });
+        messages = result.messages;
+      }
+
+      return {
+        systemMessage,
+        messages,
+        hasObservations: !!record?.activeObservations,
+        omRecord: record,
+        continuationMessage: undefined,
+        otherThreadsContext,
+      };
+    },
+  };
+}
 import {
   buildReflectorPrompt,
   parseReflectorOutput,
@@ -1747,7 +1813,7 @@ describe('ObservationalMemory Integration', () => {
       const countImageForModel = async (actorModel: string) => {
         const [provider, modelId] = actorModel.split('/');
 
-        const dynamicProcessor = new ObservationalMemoryProcessor(omWithDynamicObserverModel);
+        const dynamicProcessor = new ObservationalMemoryProcessor(omWithDynamicObserverModel, createMemoryProvider(omWithDynamicObserverModel));
         await dynamicProcessor.processInputStep({
           messageList: new MessageList({ threadId, resourceId }),
           messages: [imageMessage],
@@ -1828,7 +1894,7 @@ describe('ObservationalMemory Integration', () => {
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    const multimodalProcessor = new ObservationalMemoryProcessor(multimodalOm);
+    const multimodalProcessor = new ObservationalMemoryProcessor(multimodalOm, createMemoryProvider(multimodalOm));
     await multimodalProcessor.processInputStep({
       messageList,
       messages: [imageMessage as any],
@@ -1899,7 +1965,7 @@ describe('ObservationalMemory Integration', () => {
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    const multimodalProcessor = new ObservationalMemoryProcessor(multimodalOm);
+    const multimodalProcessor = new ObservationalMemoryProcessor(multimodalOm, createMemoryProvider(multimodalOm));
     await multimodalProcessor.processInputStep({
       messageList,
       messages: [imageLikeFileMessage as any],
@@ -3918,7 +3984,7 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     requestContext.set('MastraMemory', { thread: { id: threadBId }, resourceId });
     requestContext.set('currentDate', new Date('2025-01-01T10:05:00Z').toISOString());
 
-    const processor = new ObservationalMemoryProcessor(om);
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
     await processor.processInputStep({
       messageList,
       messages: [],
@@ -6309,7 +6375,7 @@ describe('Full Async Buffering Flow', () => {
     let sharedMessageList = new MessageList({ threadId, resourceId });
 
     // Helper to call processInputStep
-    const processor = new ObservationalMemoryProcessor(om);
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
     async function step(stepNumber: number, opts?: { freshState?: boolean }) {
       if (opts?.freshState) {
         Object.keys(sharedState).forEach(k => delete sharedState[k]);
@@ -8619,7 +8685,7 @@ describe('Per-step save deduplication', () => {
       throw new Error('aborted');
     }) as any;
 
-    const processor = new ObservationalMemoryProcessor(om);
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
     const runStep = async (stepNumber: number) => {
       await processor.processInputStep({
         messageList,
@@ -8917,7 +8983,7 @@ describe('Single-thread replay red tests', () => {
       reflection: { observationTokens: 200_000 },
     });
 
-    const processor = new ObservationalMemoryProcessor(om);
+    const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
 
     const messageList = new MessageList({ threadId, resourceId });
 

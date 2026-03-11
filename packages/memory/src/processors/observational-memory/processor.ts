@@ -3,11 +3,27 @@ import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { Processor, ProcessInputStepArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { resolveRetentionFloor } from './thresholds';
 import type { TokenCounterModelContext } from './token-counter';
+
+/** Subset of Memory that the processor needs — avoids circular imports. */
+export interface MemoryContextProvider {
+  getContext(opts: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<{
+    systemMessage: string | undefined;
+    messages: MastraDBMessage[];
+    hasObservations: boolean;
+    omRecord: ObservationalMemoryRecord | null;
+    continuationMessage: MastraDBMessage | undefined;
+    otherThreadsContext: string | undefined;
+  }>;
+}
 
 /**
  * Processor adapter for ObservationalMemory.
@@ -28,8 +44,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
   /** The underlying ObservationalMemory engine. */
   readonly engine: ObservationalMemory;
 
-  constructor(engine: ObservationalMemory) {
+  /** Memory instance for loading context. */
+  private readonly memory: MemoryContextProvider;
+
+  constructor(engine: ObservationalMemory, memory: MemoryContextProvider) {
     this.engine = engine;
+    this.memory = memory;
   }
 
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
@@ -75,25 +95,26 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       );
 
       // ════════════════════════════════════════════════════════════════════════
-      // STEP 1: LOAD HISTORICAL MESSAGES (step 0 only)
+      // STEP 1: LOAD CONTEXT (messages + system message + continuation)
       // ════════════════════════════════════════════════════════════════════════
       if (!state.initialSetupDone) {
         state.initialSetupDone = true;
-        await this.engine.loadHistory({
-          messageList,
-          threadId,
-          resourceId,
-          lastObservedAt: record.lastObservedAt,
-        });
+
+        const ctx = await this.memory.getContext({ threadId, resourceId });
+
+        // Add historical messages to the MessageList, filtering out system messages
+        for (const msg of ctx.messages) {
+          if (msg.role !== 'system') {
+            messageList.add(msg, 'memory');
+          }
+        }
+
+        // Store context data for use in later steps
+        state.__omContext = ctx;
       }
 
-      // ════════════════════════════════════════════════════════════════════════
-      // STEP 1b: LOAD OTHER THREADS' UNOBSERVED CONTEXT (resource scope)
-      // ════════════════════════════════════════════════════════════════════════
-      let unobservedContextBlocks: string | undefined;
-      if (this.engine.scope === 'resource' && resourceId) {
-        unobservedContextBlocks = await this.engine.getOtherThreadsContext(resourceId, threadId);
-      }
+      const cachedContext = state.__omContext as Awaited<ReturnType<MemoryContextProvider['getContext']>> | undefined;
+      const otherThreadsContext = cachedContext?.otherThreadsContext;
 
       // ════════════════════════════════════════════════════════════════════════
       // STEP 1c: ACTIVATE BUFFERED OBSERVATIONS (step 0 only)
@@ -105,7 +126,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
           messages: messageList.get.all.db(),
-          otherThreadContext: unobservedContextBlocks,
+          otherThreadContext: otherThreadsContext,
           currentObservationTokens: record.observationTokenCount ?? 0,
           writer,
           requestContext,
@@ -142,7 +163,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
           messages: allMessages,
-          otherThreadContext: unobservedContextBlocks,
+          otherThreadContext: otherThreadsContext,
           currentObservationTokens: record.observationTokenCount ?? 0,
         });
 
@@ -201,7 +222,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
               messages: messageList.get.all.db(),
               messageList,
               threshold,
-              otherThreadContext: unobservedContextBlocks,
+              otherThreadContext: otherThreadsContext,
               writer,
               abortSignal,
               requestContext,
@@ -254,14 +275,41 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // ════════════════════════════════════════════════════════════════════════
       // STEP 3: INJECT OBSERVATIONS & FILTER ALREADY-OBSERVED MESSAGES
       // ════════════════════════════════════════════════════════════════════════
-      await this.engine.injectObservationsIntoMessages({
-        messageList,
-        record,
+
+      // Build fresh system message from the current record (may have changed during Step 2)
+      const rawCurrentDate = requestContext?.get('currentDate');
+      const currentDate =
+        rawCurrentDate instanceof Date
+          ? rawCurrentDate
+          : typeof rawCurrentDate === 'string'
+            ? new Date(rawCurrentDate)
+            : new Date();
+      const observationSystemMessage = await this.engine.buildContextSystemMessage({
         threadId,
         resourceId,
-        unobservedContextBlocks,
-        requestContext,
+        record,
+        unobservedContextBlocks: otherThreadsContext,
+        currentDate,
       });
+
+      if (observationSystemMessage) {
+        messageList.clearSystemMessages('observational-memory');
+        messageList.addSystem(observationSystemMessage, 'observational-memory');
+
+        // Add continuation reminder from cached context, or build inline
+        const contMsg = cachedContext?.continuationMessage ?? {
+          id: 'om-continuation',
+          role: 'user' as const,
+          createdAt: new Date(0),
+          content: {
+            format: 2 as const,
+            parts: [{ type: 'text' as const, text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>` }],
+          },
+          threadId,
+          resourceId,
+        };
+        messageList.add(contMsg, 'memory');
+      }
 
       if (!didThresholdCleanup) {
         await this.engine.filterObservedMessages({
@@ -277,8 +325,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
       const contextMessages = messageList.get.all.db().filter(m => m.id !== 'om-continuation' && m.role !== 'system');
       const freshUnobservedTokens = await this.engine.countMessageTokensAsync(contextMessages);
-      const finalOtherThreadTokens = unobservedContextBlocks
-        ? this.engine.countStringTokens(unobservedContextBlocks)
+      const finalOtherThreadTokens = otherThreadsContext
+        ? this.engine.countStringTokens(otherThreadsContext)
         : 0;
       const finalTotalPending = freshUnobservedTokens + finalOtherThreadTokens;
 

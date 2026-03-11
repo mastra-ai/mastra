@@ -1077,6 +1077,10 @@ ${workingMemory}`;
     hasObservations: boolean;
     /** The OM record, if OM is active. */
     omRecord: ObservationalMemoryRecord | null;
+    /** The om-continuation reminder message, if OM has observations. Caller decides where to place it. */
+    continuationMessage: MastraDBMessage | undefined;
+    /** Formatted context blocks from other threads (resource scope only). */
+    otherThreadsContext: string | undefined;
   }> {
     const { threadId, resourceId, memoryConfig } = opts;
     const config = this.getMergedThreadConfig(memoryConfig);
@@ -1088,20 +1092,48 @@ ${workingMemory}`;
     // 1. OM observations system message
     let hasObservations = false;
     let omRecord: ObservationalMemoryRecord | null = null;
+    let continuationMessage: MastraDBMessage | undefined;
+    let otherThreadsContext: string | undefined;
 
     const omEngine = await this.getOMEngine();
     if (omEngine) {
       omRecord = await omEngine.getRecord(threadId, resourceId);
       if (omRecord?.activeObservations) {
         hasObservations = true;
+
+        // For resource scope, load other threads' unobserved context
+        if (omEngine.scope === 'resource' && resourceId) {
+          otherThreadsContext = await omEngine.getOtherThreadsContext(resourceId, threadId);
+        }
+
         const obsSystemMessage = await omEngine.buildContextSystemMessage({
           threadId,
           resourceId,
           record: omRecord,
+          unobservedContextBlocks: otherThreadsContext,
         });
         if (obsSystemMessage) {
           systemParts.push(obsSystemMessage);
         }
+
+        // Build the continuation reminder message
+        const { OBSERVATION_CONTINUATION_HINT } = await import('./processors/observational-memory/constants');
+        continuationMessage = {
+          id: 'om-continuation',
+          role: 'user' as const,
+          createdAt: new Date(0),
+          content: {
+            format: 2 as const,
+            parts: [
+              {
+                type: 'text' as const,
+                text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>`,
+              },
+            ],
+          },
+          threadId,
+          resourceId,
+        };
       }
     }
 
@@ -1113,21 +1145,28 @@ ${workingMemory}`;
 
     // 3. Load messages — unobserved if OM is active, or recent N
     let messages: MastraDBMessage[];
-    if (hasObservations && omRecord?.lastObservedAt) {
+    if (omEngine && omRecord?.lastObservedAt) {
       // OM is active: load messages after the observation boundary
-      const result = await memoryStore.listMessages({
-        threadId,
-        resourceId,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-        perPage: false,
-        filter: {
-          dateRange: {
-            start: new Date(omRecord.lastObservedAt),
-            startExclusive: true,
-          },
-        },
-      });
-      messages = result.messages;
+      const startDate = new Date(new Date(omRecord.lastObservedAt).getTime() + 1);
+      const dateFilter = { dateRange: { start: startDate } };
+
+      if (omEngine.scope === 'resource' && resourceId) {
+        const result = await memoryStore.listMessagesByResourceId({
+          resourceId,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          perPage: false,
+          filter: dateFilter,
+        });
+        messages = result.messages;
+      } else {
+        const result = await memoryStore.listMessages({
+          threadId,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          perPage: false,
+          filter: dateFilter,
+        });
+        messages = result.messages;
+      }
     } else {
       // No OM or no observations yet: load recent messages
       const lastMessages = config.lastMessages;
@@ -1149,6 +1188,8 @@ ${workingMemory}`;
       messages,
       hasObservations,
       omRecord,
+      continuationMessage,
+      otherThreadsContext,
     };
   }
 
@@ -2198,7 +2239,7 @@ Notes:
         : undefined,
     });
 
-    return new ObservationalMemoryProcessor(engine);
+    return new ObservationalMemoryProcessor(engine, this);
   }
 }
 

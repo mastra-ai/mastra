@@ -4471,7 +4471,7 @@ ${formattedMessages}
    * clears any existing OM system messages, and adds a fresh one along
    * with a continuation reminder.
    */
-  async injectObservationsIntoMessages(opts: {
+  private async injectObservationsIntoMessages(opts: {
     messageList: MessageList;
     record: ObservationalMemoryRecord;
     threadId: string;
@@ -4693,7 +4693,7 @@ ${formattedMessages}
    * In resource scope, loads only the current thread's messages.
    * In thread scope, loads all unobserved messages for the thread.
    */
-  async loadHistory(opts: {
+  private async loadHistory(opts: {
     messageList: MessageList;
     threadId: string;
     resourceId?: string;
