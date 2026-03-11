@@ -11,7 +11,7 @@ export default function Templates() {
   return (
     <PageContent>
       <PageContent.TopBar>
-        <Button as={Link} to="https://mastra.ai/en/docs/overview" target="_blank" variant="ghost" size="md">
+        <Button as={Link} to="https://mastra.ai/en/docs/overview" target="_blank" rel="noopener noreferrer" variant="ghost" size="md">
           <DocsIcon />
           Templates documentation
         </Button>

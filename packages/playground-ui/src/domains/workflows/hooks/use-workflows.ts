@@ -6,8 +6,6 @@ export const useWorkflows = () => {
   const client = useMastraClient();
   const { requestContext } = usePlaygroundStore();
 
-  console.log('Fetching workflows with request context:', requestContext);
-
   return useQuery({
     queryKey: ['workflows', requestContext],
     queryFn: async () => {

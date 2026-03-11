@@ -5,7 +5,7 @@ import { CircleSlashIcon, ExternalLinkIcon, Plus } from 'lucide-react';
 
 export const NoScorersInfo = () => {
   const { isCmsAvailable } = useIsCmsAvailable();
-  const { Link } = useLinkComponent();
+  const { Link, paths } = useLinkComponent();
 
   return (
     <div className="flex h-full items-center justify-center">
@@ -25,7 +25,7 @@ export const NoScorersInfo = () => {
         actionSlot={
           <div className="grid gap-3 justify-items-center">
             {isCmsAvailable && (
-              <Button as={Link} to="/cms/scorers/create">
+              <Button as={Link} to={paths.cmsScorersCreateLink()}>
                 <Plus />
                 Create Scorer
               </Button>
@@ -33,7 +33,7 @@ export const NoScorersInfo = () => {
             <Button
               variant="ghost"
               as="a"
-              href="https://mastra.ai/en/docs/evals/overview"
+              href="https://mastra.ai/docs/evals/overview"
               target="_blank"
               rel="noopener noreferrer"
             >

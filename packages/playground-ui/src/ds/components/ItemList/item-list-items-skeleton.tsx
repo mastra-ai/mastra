@@ -1,7 +1,6 @@
 import { type ItemListColumn } from './types';
 import { ItemListItems } from './item-list-items';
 import { ItemListRow } from './item-list-row';
-import { ItemListTextCell } from './item-list-text-cell';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 

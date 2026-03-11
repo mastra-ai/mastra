@@ -12,11 +12,11 @@ import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { ListSearch } from '@/ds/components/ListSearch';
 import { Column } from '@/ds/components/Columns';
-import { Chip, ChipsGroup } from '@/index';
+import { Chip } from '@/index';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { providerMapToIcon } from '../provider-map-icon';
 import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
-import { CheckIcon, PenIcon, XIcon } from 'lucide-react';
+import { XIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons';
@@ -72,14 +72,10 @@ export function AgentList({ agents, isLoading, error, onCreateClick }: AgentList
   }, [agentData, search, sourceFilter]);
 
   if (error && is403ForbiddenError(error)) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <PermissionDenied resource="agents" />
-      </div>
-    );
+    return <PermissionDenied resource="agents" />;
   }
 
-  if (agentData.length === 0 && !isLoading) {
+  if (agentData.length === 0 && !isLoading && !hasActiveFilters) {
     return <NoAgentsInfo onCreateClick={onCreateClick} />;
   }
 

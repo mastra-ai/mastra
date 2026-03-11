@@ -3,7 +3,7 @@ import { is403ForbiddenError } from '@/lib/query-utils';
 import { ItemList } from '@/ds/components/ItemList';
 import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
 import { type ItemListColumn } from '@/ds/components/ItemList/types';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 import { ListSearch } from '@/ds/components/ListSearch';
 import { Column } from '@/ds/components/Columns';
@@ -96,10 +96,10 @@ export function ProcessorList({ processors, isLoading, error }: ProcessorListPro
                             {processor.phases.length === 1 ? 'Phase' : 'Phases'}:
                           </span>
                           {processor.phases.map(phase => (
-                            <>
+                            <Fragment key={phase}>
                               <ChevronRightIcon className="w-[1.2em] h-[1.2em] opacity-75 " />
-                              <span key={phase}>{phaseLabels[phase] || phase}</span>
-                            </>
+                              <span>{phaseLabels[phase] || phase}</span>
+                            </Fragment>
                           ))}
                         </div>
                       </ItemList.TextCell>

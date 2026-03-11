@@ -5,12 +5,10 @@ import { Link } from 'react-router';
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
 
-  const isEmpty = !isLoading && Object.keys(workflows || {}).length === 0;
-
   return (
     <PageContent>
       <PageContent.TopBar>
-        <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" variant="ghost" size="md">
+        <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" rel="noopener noreferrer" variant="ghost" size="md">
           Workflows documentation
           <ExternalLinkIcon />
         </Button>

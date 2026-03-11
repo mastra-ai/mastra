@@ -70,9 +70,9 @@ export function ScorersList({ scorers, isLoading, error }: ScorersListProps) {
                     className="min-h-16"
                   >
                     <ItemList.TextCell className="grid">
-                      <span className="text-neutral4 text-ui-md truncate">{scorer.scorer.config.name}</span>
-                      {scorer.scorer.config.description && (
-                        <span className="text-neutral2 text-ui-md truncate">{scorer.scorer.config.description}</span>
+                      <span className="text-neutral4 text-ui-md truncate">{scorer.scorer.config?.name}</span>
+                      {scorer.scorer.config?.description && (
+                        <span className="text-neutral2 text-ui-md truncate">{scorer.scorer.config?.description}</span>
                       )}
                     </ItemList.TextCell>
                   </ItemList.RowButton>

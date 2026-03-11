@@ -29,6 +29,7 @@ function Datasets() {
           as={Link}
           to="https://mastra.ai/docs/observability/datasets/overview"
           target="_blank"
+          rel="noopener noreferrer"
           variant="ghost"
           size="md"
         >
@@ -52,7 +53,12 @@ function Datasets() {
             </MainHeader.Column>
           </MainHeader>
 
-          <DatasetsList datasets={datasets} isLoading={isLoading} onCreateClick={() => setIsCreateDialogOpen(true)} />
+          <DatasetsList
+            datasets={datasets}
+            isLoading={isLoading}
+            onCreateClick={() => setIsCreateDialogOpen(true)}
+            error={error}
+          />
         </div>
       </PageContent.Main>
 

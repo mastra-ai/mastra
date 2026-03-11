@@ -18,7 +18,7 @@ export const NoMCPServersInfo = () => (
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
+            href="https://mastra.ai/docs/tools-mcp/mcp-overview"
             target="_blank"
             rel="noopener noreferrer"
           >

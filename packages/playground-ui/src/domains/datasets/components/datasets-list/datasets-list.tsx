@@ -7,6 +7,8 @@ import { useLinkComponent } from '@/lib/framework';
 import { ListSearch } from '@/ds/components/ListSearch';
 import { Column } from '@/ds/components/Columns';
 import { NoDatasetInfo } from './no-datasets-info';
+import { is403ForbiddenError } from '@/lib/query-utils';
+import { PermissionDenied } from '@/index';
 
 const columns: ItemListColumn[] = [
   { name: 'name', label: 'Name & Description', size: '1fr' },
@@ -16,10 +18,11 @@ const columns: ItemListColumn[] = [
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
   isLoading: boolean;
+  error?: Error | null;
   onCreateClick?: () => void;
 }
 
-export function DatasetsList({ datasets, isLoading, onCreateClick }: DatasetsListProps) {
+export function DatasetsList({ datasets, isLoading, onCreateClick, error }: DatasetsListProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
 
@@ -33,6 +36,10 @@ export function DatasetsList({ datasets, isLoading, onCreateClick }: DatasetsLis
     () => sortedData.filter(dataset => dataset.name.toLowerCase().includes(search.toLowerCase())),
     [sortedData, search],
   );
+
+  if (error && is403ForbiddenError(error)) {
+    return <PermissionDenied resource="datasets" />;
+  }
 
   if (datasets.length === 0 && !isLoading) {
     return <NoDatasetInfo onCreateClick={onCreateClick} />;

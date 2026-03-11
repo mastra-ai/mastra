@@ -24,6 +24,7 @@ export default function PromptBlocks() {
           as={Link}
           to="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
           target="_blank"
+          rel="noopener noreferrer"
           variant="ghost"
           size="md"
         >

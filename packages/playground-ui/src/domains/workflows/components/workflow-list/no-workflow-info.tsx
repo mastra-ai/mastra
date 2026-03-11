@@ -17,7 +17,7 @@ export const NoWorkflowInfo = () => (
           <Button
             variant="ghost"
             as="a"
-            href="https://mastra.ai/en/docs/workflows/overview"
+            href="https://mastra.ai/docs/workflows/overview"
             target="_blank"
             rel="noopener noreferrer"
           >

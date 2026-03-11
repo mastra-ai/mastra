@@ -29,7 +29,7 @@ export const NoPromptBlocksInfo = () => {
             <Button
               variant="ghost"
               as="a"
-              href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
+              href="https://mastra.ai/docs/agents/agent-instructions#prompt-blocks"
               target="_blank"
               rel="noopener noreferrer"
             >

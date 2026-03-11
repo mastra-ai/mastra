@@ -11,6 +11,7 @@ const MCPs = () => {
         <Button
           as={Link}
           to="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
+          rel="noopener noreferrer"
           target="_blank"
           variant="ghost"
           size="md"

@@ -1,7 +1,17 @@
 import { cn } from '@/index';
 
-export function PageContentMain({ children, className }: { children: React.ReactNode; className?: string }) {
+export function PageContentMain({
+  children,
+  className,
+  as: Component = 'main',
+}: {
+  children: React.ReactNode;
+  className?: string;
+  as?: 'main' | 'div';
+}) {
   return (
-    <main className={cn('bg-surface2 rounded-lg border overflow-y-auto border-border1', className)}>{children}</main>
+    <Component className={cn('bg-surface2 rounded-lg border overflow-y-auto border-border1', className)}>
+      {children}
+    </Component>
   );
 }

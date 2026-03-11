@@ -58,7 +58,6 @@ export type TemplatesListProps = {
   templates: Template[];
   tags: string[];
   providers: string[];
-  linkComponent?: React.ElementType;
   isLoading?: boolean;
 };
 

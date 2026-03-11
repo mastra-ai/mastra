@@ -16,6 +16,7 @@ export default function Tools() {
           as={Link}
           to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
           target="_blank"
+          rel="noopener noreferrer"
           variant="ghost"
           size="md"
         >
