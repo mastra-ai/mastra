@@ -243,31 +243,7 @@ export async function runStreamAndCollectUsage({
 }
 
 type SeedConversationStore = {
-  getStore(name: string): Promise<
-    | {
-        saveThread: (args: {
-          thread: {
-            id: string;
-            title: string;
-            resourceId: string;
-            createdAt: Date;
-            updatedAt: Date;
-            metadata: unknown;
-          };
-        }) => Promise<unknown>;
-        saveMessages: (args: {
-          messages: {
-            id?: string;
-            threadId: string;
-            role: 'user' | 'assistant';
-            content: unknown;
-            createdAt: Date;
-            type: string;
-          }[];
-        }) => Promise<unknown>;
-      }
-    | undefined
-  >;
+  getStore(name: string): Promise<any>;
 };
 
 export async function seedConversationTurns({
@@ -281,7 +257,31 @@ export async function seedConversationTurns({
   resourceId: string;
   turns?: number;
 }) {
-  const memoryStore = await store.getStore('memory');
+  const memoryStore = (await store.getStore('memory')) as
+    | {
+        saveThread: (args: {
+          thread: {
+            id: string;
+            title: string;
+            resourceId: string;
+            createdAt: Date;
+            updatedAt: Date;
+            metadata: unknown;
+          };
+        }) => Promise<unknown>;
+        saveMessages: (args: {
+          messages: Array<{
+            id?: string;
+            threadId: string;
+            role: 'user' | 'assistant';
+            content: unknown;
+            createdAt: Date;
+            type: string;
+            resourceId?: string;
+          }>;
+        }) => Promise<unknown>;
+      }
+    | undefined;
   if (!memoryStore) {
     throw new Error('Failed to acquire memory store for seeding');
   }

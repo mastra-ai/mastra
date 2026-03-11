@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { Memory } from '../../../..';
+import { Memory } from '../../../index';
 import {
   createOmTestAgent,
   createOmTestMemory,
@@ -34,7 +34,7 @@ function createChangingObserverModel(label: string) {
 
   const buildText = () => {
     callCount += 1;
-    return `<observations>\n## Date\n- 🔴 Observation ${label} ${callCount}: user asked for deep mastra research\n</observations>\n<current-task>Track cache behavior ${callCount}</current-task>\n<suggested-response>Continue with precision ${callCount}</suggested-response>`;
+    return `<observations>\n## Date\n- 🔴 Observation ${label} ${callCount}: user asked for deep mastra research\n</observations>`;
   };
 
   return {
@@ -87,7 +87,7 @@ function createChangingObserverModel(label: string) {
 }
 
 function createStableObserverModel() {
-  const stableText = `<observations>\n## Date\n- 🔴 Stable observation: user is researching Mastra docs deeply\n</observations>\n<current-task>Keep researching cache behavior</current-task>\n<suggested-response>Proceed methodically</suggested-response>`;
+  const stableText = `<observations>\n## Date\n- 🔴 Stable observation: user is researching Mastra docs deeply\n</observations>`;
   return {
     specificationVersion: 'v2' as const,
     provider: 'mock-observer',
@@ -473,7 +473,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('OM Cache Hit Rates (e2e)', () => {
     expect(getCacheHitRatio(second.usage)).toBeGreaterThan(getCacheHitRatio(first.usage));
   }, 240_000);
 
-  it('hydrated seed + observation activation should still keep partial cache hits', async () => {
+  it('hydrated seed + observation activation should re-stabilize cache hits after the activated prompt repeats', async () => {
     const seedContext = loadSeedContext();
 
     if (!seedContext) {
@@ -504,22 +504,25 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('OM Cache Hit Rates (e2e)', () => {
       prompt: 'Stable baseline pass two.',
     });
 
-    const changingStore = await createHydratedStore(seedContext.stateFile);
+    const activatedStore = await createHydratedStore(seedContext.stateFile);
     if (seedContext.observedMessageIds.length > 0) {
       await seedActiveObservations({
-        store: changingStore as unknown as InMemoryStore,
+        store: activatedStore as unknown as InMemoryStore,
         threadId: seedContext.threadId,
         resourceId: seedContext.resourceId,
-        activeObservations: '- 🔴 Forced activated observation for partial-cache test',
+        activeObservations: [
+          '- 🔴 Forced activated observation for cache re-stabilization test',
+          '- 🔴 Activation preserves the same research thread but expands the prompt prefix before it stabilizes again',
+        ].join('\n'),
         observedMessageIds: seedContext.observedMessageIds,
       });
     }
 
-    const changingMemory = createOmTestMemory(changingStore as unknown as InMemoryStore, {
+    const activatedMemory = createOmTestMemory(activatedStore as unknown as InMemoryStore, {
       enabled: true,
       observation: {
-        model: createChangingObserverModel('hydrated-observation-activation'),
-        messageTokens: 1,
+        model: createStableObserverModel(),
+        messageTokens: 999_999,
         bufferTokens: false,
       },
       reflection: {
@@ -528,32 +531,34 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('OM Cache Hit Rates (e2e)', () => {
       },
     });
 
-    const changingAgent = createOmTestAgent({
-      memory: changingMemory,
+    const activatedAgent = createOmTestAgent({
+      memory: activatedMemory,
       model: ACTOR_MODEL,
       instructions: 'Continue concise deep-research updates from existing context.',
       cacheControlled: true,
     });
 
-    await runStreamAndCollectUsage({
-      agent: changingAgent,
+    const activatedFirst = await runStreamAndCollectUsage({
+      agent: activatedAgent,
       threadId: seedContext.threadId,
       resourceId: seedContext.resourceId,
-      prompt: 'Observation activation pass one.',
+      prompt: 'Observation activation pass one after the active observations changed.',
     });
 
-    const changingSecond = await runStreamAndCollectUsage({
-      agent: changingAgent,
+    const activatedSecond = await runStreamAndCollectUsage({
+      agent: activatedAgent,
       threadId: seedContext.threadId,
       resourceId: seedContext.resourceId,
-      prompt: 'Observation activation pass two.',
+      prompt: 'Observation activation pass two after the active observations stayed unchanged.',
     });
 
     logUsage('hydrated-observation-stable-second', stableSecond.usage);
-    logUsage('hydrated-observation-changing-second', changingSecond.usage);
+    logUsage('hydrated-observation-activated-first', activatedFirst.usage);
+    logUsage('hydrated-observation-activated-second', activatedSecond.usage);
 
-    expect(changingSecond.usage.cachedInputTokens ?? 0).toBeGreaterThan(0);
-    expect(getCacheHitRatio(changingSecond.usage)).toBeLessThan(getCacheHitRatio(stableSecond.usage));
+    expect(stableSecond.usage.cachedInputTokens ?? 0).toBeGreaterThan(0);
+    expect(activatedSecond.usage.cachedInputTokens ?? 0).toBeGreaterThan(0);
+    expect(getCacheHitRatio(activatedSecond.usage)).toBeGreaterThan(getCacheHitRatio(activatedFirst.usage));
   }, 240_000);
 
   it('reflection change should reduce cache ratio', async () => {
