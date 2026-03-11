@@ -45,6 +45,9 @@
             "attributes": {
               "status": "success"
             },
+            "metadata": {
+              "runId": "<runId-1>"
+            },
             "input": {
               "value": "child-span-test"
             },
@@ -66,6 +69,7 @@
                 "entityType": "workflow_step",
                 "entityId": "child-span",
                 "metadata": {
+                  "runId": "<runId-1>",
                   "childOperation": "processing",
                   "inputValue": "child-span-test",
                   "endValue": "pizza"
