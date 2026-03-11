@@ -3080,7 +3080,7 @@ describe('Scenario: Observation quality checks', () => {
     const message = createTestMessage('ignored-content', 'assistant');
     message.content = {
       format: 2,
-      parts: [{ type: 'text', text: 'Persistent tiktoken estimate on part metadata' } as any],
+      parts: [{ type: 'text', text: 'Persistent token estimate on part metadata' } as any],
     } as any;
 
     const firstCount = counter.countMessage(message);

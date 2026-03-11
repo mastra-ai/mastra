@@ -35,7 +35,8 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
         'spawns a process and returns a handle with pid',
         async () => {
           const handle = await processes.spawn('echo hello');
-          expect(handle.pid).toBeGreaterThan(0);
+          expect(handle.pid).toBeDefined();
+          expect(handle.pid.length).toBeGreaterThan(0);
           await handle.wait();
         },
         getContext().testTimeout,
@@ -468,7 +469,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns undefined for unknown pid',
         async () => {
-          const retrieved = await processes.get(99999);
+          const retrieved = await processes.get('99999');
           expect(retrieved).toBeUndefined();
         },
         getContext().testTimeout,
@@ -538,7 +539,7 @@ export function createProcessManagementTests(getContext: () => TestContext): voi
       it(
         'returns false for unknown pid',
         async () => {
-          const killed = await processes.kill(99999);
+          const killed = await processes.kill('99999');
           expect(killed).toBe(false);
         },
         getContext().testTimeout,

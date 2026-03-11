@@ -54,7 +54,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'http://my-service/',
           'X-Title': 'my-application-name',
         },
@@ -86,7 +86,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://myapp.com',
           'X-Title': 'MyApp',
         },
@@ -107,7 +107,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
         },
       });
     });
@@ -134,7 +134,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: customApiKey,
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://example.com',
           'X-Title': 'Example App',
         },
@@ -163,7 +163,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://myapp.com',
           'X-Title': 'My Application',
           'X-Custom-Header': 'custom-value',
@@ -192,7 +192,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'test-openrouter-key',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'https://dynamic.com',
           'X-Title': 'Dynamic App',
         },
@@ -234,14 +234,14 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenNthCalledWith(1, {
         apiKey: 'test-openrouter-key',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'X-Title': 'App1',
         },
       });
       expect(createOpenRouter).toHaveBeenNthCalledWith(2, {
         apiKey: 'test-openrouter-key',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'X-Title': 'App2',
         },
       });
@@ -309,7 +309,7 @@ describe('ModelRouter - OpenRouter Headers Support', () => {
       expect(createOpenRouter).toHaveBeenCalledWith({
         apiKey: 'custom-key-no-env',
         headers: {
-          'User-Agent': 'mastra',
+          'User-Agent': expect.stringMatching(/^mastra/),
           'HTTP-Referer': 'http://my-service/',
           'X-Title': 'my-application-name',
         },
