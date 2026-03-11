@@ -314,11 +314,15 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -343,11 +347,15 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -394,11 +402,17 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
               <Icon>
                 <DocsIcon />
               </Icon>
-              Documentation
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -424,11 +438,15 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -466,11 +484,11 @@ export default function Workspace() {
               Search
             </Button>
           )}
-          <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank" variant="ghost" size="md">
             <Icon>
               <DocsIcon />
             </Icon>
-            Documentation
+            Workspaces documentation
           </Button>
         </HeaderAction>
       </Header>

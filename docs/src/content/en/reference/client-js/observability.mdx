@@ -9,7 +9,7 @@ packages:
 
 The Observability API provides methods to retrieve traces, monitor your application's performance, and score traces for evaluation. This helps you understand how your AI agents and workflows are performing.
 
-## Getting a Specific Trace
+## Getting a specific trace
 
 Retrieve a specific trace by its ID, including all its spans and details:
 
@@ -17,7 +17,7 @@ Retrieve a specific trace by its ID, including all its spans and details:
 const trace = await mastraClient.getTrace('trace-id-123')
 ```
 
-## Getting Traces with Filtering
+## Getting traces with filtering
 
 Retrieve a paginated list of trace root spans with optional filtering:
 
@@ -46,7 +46,7 @@ console.log(`Total pages: ${traces.pagination.totalPages}`)
 const completeTrace = await mastraClient.getTrace(traces.spans[0].traceId)
 ```
 
-## Scoring Traces
+## Scoring traces
 
 Score specific traces using registered scorers for evaluation:
 
@@ -60,7 +60,7 @@ const result = await mastraClient.score({
 })
 ```
 
-## Getting Scores by Span
+## Getting scores by span
 
 Retrieve scores for a specific span within a trace:
 
