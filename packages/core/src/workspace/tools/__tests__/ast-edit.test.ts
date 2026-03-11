@@ -3,11 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-import { WORKSPACE_TOOLS } from '../constants';
-import { LocalFilesystem } from '../filesystem';
-import { Workspace } from '../workspace';
-import { isAstGrepAvailable } from './ast-edit';
-import { createWorkspaceTools } from './tools';
+import { WORKSPACE_TOOLS } from '../../constants';
+import { LocalFilesystem } from '../../filesystem';
+import { Workspace } from '../../workspace';
+import { isAstGrepAvailable } from '../ast-edit';
+import { createWorkspaceTools } from '../tools';
 
 // Skip all tests if @ast-grep/napi is not installed
 const describeIfAstGrep = isAstGrepAvailable() ? describe : describe.skip;
