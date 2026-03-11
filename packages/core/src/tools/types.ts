@@ -112,6 +112,16 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
 export type MCPToolType = 'agent' | 'workflow';
 
 /**
+ * Metadata identifying a tool as originating from an MCP server.
+ * Set automatically by the MCP client when creating tools.
+ * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+ */
+export interface McpMetadata {
+  serverName: string;
+  serverVersion?: string;
+}
+
+/**
  * MCP Tool Annotations for describing tool behavior and UI presentation.
  * These annotations are part of the MCP protocol and are used by clients
  * like OpenAI Apps SDK to control tool card display and permission hints.
@@ -374,6 +384,12 @@ export interface ToolAction<
    * ```
    */
   providerOptions?: Record<string, Record<string, unknown>>;
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+   */
+  mcpMetadata?: McpMetadata;
   /**
    * Examples of valid tool inputs. Each example contains an `input` object
    * showing what valid arguments look like.

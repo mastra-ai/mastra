@@ -2,7 +2,7 @@ import { Button } from '@/ds/components/Button/Button';
 import { InfoIcon } from 'lucide-react';
 import { useTriggerScorer } from '@/domains/scores/hooks/use-trigger-scorer';
 import { Notification } from '@/ds/components/Notification';
-import { SelectField } from '@/ds/components/FormFields';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { TextAndIcon } from '@/ds/components/Text';
 import { useEffect, useState } from 'react';
 import { type GetScorerResponse } from '@mastra/client-js';
@@ -89,8 +89,10 @@ export const SpanScoring = ({
     <div>
       <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
         <div className="grid gap-2">
-          <SelectField
-            name={'select-scorer'}
+          <SelectFieldBlock
+            name="select-scorer"
+            label="Select scorer"
+            labelIsHidden={true}
             placeholder="Select a scorer..."
             options={scorerList.map(scorer => ({
               label: scorer.name || scorer.id,

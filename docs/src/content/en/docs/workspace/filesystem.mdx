@@ -118,7 +118,7 @@ const workspace = new Workspace({
 
 When read-only, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) aren't added to the agent's toolset. The agent can still read and list files.
 
-## Mounts and CompositeFilesystem
+## Mounts and `CompositeFilesystem`
 
 When you use the `mounts` option on a workspace, Mastra creates a `CompositeFilesystem` that routes file operations to the correct provider based on path prefix.
 
