@@ -116,17 +116,8 @@ const EmptyPromptBlocksTable = () => (
       titleSlot="No Prompt Blocks"
       descriptionSlot="Create reusable prompt blocks that can be referenced in your agent instructions."
       actionSlot={
-        <Button
-          size="lg"
-          className="w-full"
-          variant="light"
-          as="a"
-          href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
-          target="_blank"
-        >
-          <Icon>
-            <FileTextIcon />
-          </Icon>
+        <Button as="a" href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks" target="_blank">
+          <FileTextIcon />
           Docs
         </Button>
       }

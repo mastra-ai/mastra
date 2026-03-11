@@ -12,11 +12,11 @@ export default function Templates() {
   const [selectedProvider, setSelectedProvider] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  const tagOptions = [{ value: 'all', label: 'All' }];
+  const tagOptions = [{ value: 'all', label: 'Any tag' }];
   (tags || []).forEach(tag => {
     tagOptions.push({ value: tag, label: tag });
   });
-  const providerOptions = [{ value: 'all', label: 'All' }];
+  const providerOptions = [{ value: 'all', label: 'Any provider' }];
   (providers || []).forEach(provider => {
     providerOptions.push({ value: provider, label: provider });
   });

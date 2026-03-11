@@ -86,6 +86,7 @@ function DatasetPage() {
           </Crumb>
         </Breadcrumb>
       </Header>
+
       <MainContentContent className="content-stretch">
         <DatasetPageContent
           datasetId={datasetId}
@@ -95,7 +96,7 @@ function DatasetPage() {
           activeDatasetVersion={activeVersion}
           onVersionSelect={handleVersionSelect}
           experimentTriggerSlot={
-            <Button variant="cta" size="default" onClick={() => setExperimentDialogOpen(true)}>
+            <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
               <Play />
               {activeVersion != null ? `Run on v${activeVersion}` : 'Run Experiment'}
             </Button>

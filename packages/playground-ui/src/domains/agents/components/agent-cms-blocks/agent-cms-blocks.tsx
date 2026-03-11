@@ -9,10 +9,11 @@ import {
   createRefInstructionBlock,
   type InstructionBlock,
 } from '../agent-edit-page/utils/form-validation';
-import { FileText, PenLine, PlusIcon } from 'lucide-react';
+import { ChevronDownIcon, FileText, PenLine, PlusIcon } from 'lucide-react';
 import { Icon } from '@/ds/icons';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { PromptBlockPickerDialog } from './prompt-block-picker-dialog';
+import { Button } from '@/ds/components/Button';
 
 export interface AgentCMSBlocksProps {
   items: Array<InstructionBlock>;
@@ -65,17 +66,10 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
 
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <button
-            type="button"
-            className={cn(
-              'flex justify-center items-center gap-2 border border-dashed border-border1 text-ui-sm py-2 rounded-md bg-surface1 hover:bg-surface2 active:bg-surface3 text-neutral3 hover:text-neutral6',
-            )}
-          >
-            <Icon>
-              <PlusIcon />
-            </Icon>
+          <Button type="button" className="mx-auto">
             Add Instruction block
-          </button>
+            <ChevronDownIcon />
+          </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="center" className="w-[240px]">
           <DropdownMenu.Item onSelect={handleAddInline}>

@@ -143,10 +143,10 @@ export function EditDatasetDialog({ open, onOpenChange, dataset, onSuccess }: Ed
             )}
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="standard" size="default" onClick={handleCancel}>
+              <Button type="button" onClick={handleCancel}>
                 Cancel
               </Button>
-              <Button type="submit" variant="cta" size="default" disabled={updateDataset.isPending || !name.trim()}>
+              <Button type="submit" variant="primary" disabled={updateDataset.isPending || !name.trim()}>
                 {updateDataset.isPending ? 'Saving...' : 'Save Changes'}
               </Button>
             </div>
