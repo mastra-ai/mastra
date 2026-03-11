@@ -5547,8 +5547,15 @@ ${formattedMessages}
       generationBefore = freshRecord.generationCount;
 
       if (this.scope === 'resource' && resourceId) {
-        // Resource scope: check threshold before observing
-        const currentMessages = messages ?? [];
+        // Resource scope: use provided messages or load from storage
+        const currentMessages = messages
+          ? this.getUnobservedMessages(messages, freshRecord)
+          : await this.loadUnobservedMessages(
+              threadId,
+              resourceId,
+              freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
+            );
+
         if (
           !this.meetsObservationThreshold({
             record: freshRecord,
