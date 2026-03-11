@@ -59,7 +59,7 @@ export interface WorkspaceToolConfig {
 
 /** Metadata passed to background process callbacks. */
 export interface BackgroundProcessMeta {
-  pid: string | number;
+  pid: string;
   toolCallId?: string;
 }
 

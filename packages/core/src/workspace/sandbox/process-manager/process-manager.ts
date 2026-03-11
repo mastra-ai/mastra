@@ -127,12 +127,12 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   }
 
   /** Get a handle to a process by PID. Subclasses can override for fallback behavior. */
-  async get(pid: string | number): Promise<ProcessHandle | undefined> {
+  async get(pid: string): Promise<ProcessHandle | undefined> {
     return this._tracked.get(String(pid));
   }
 
   /** Kill a process by PID. Returns true if killed, false if not found. */
-  async kill(pid: string | number): Promise<boolean> {
+  async kill(pid: string): Promise<boolean> {
     const handle = await this.get(pid);
     if (!handle) return false;
     const killed = await handle.kill();

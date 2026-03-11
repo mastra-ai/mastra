@@ -25,7 +25,7 @@ import type { BlaxelSandbox } from './index';
  * Uses streamLogs() for real-time output and get() for exit code resolution.
  */
 class BlaxelProcessHandle extends ProcessHandle {
-  readonly pid: string | number;
+  readonly pid: string;
 
   private readonly _sandbox: SandboxInstance;
   private readonly _startTime: number;
@@ -60,7 +60,7 @@ class BlaxelProcessHandle extends ProcessHandle {
   private async _resolveExitCode(): Promise<void> {
     if (this._exitCode !== undefined) return;
     try {
-      const proc = await this._sandbox.process.get(this.pid as string);
+      const proc = await this._sandbox.process.get(this.pid);
       this._exitCode = proc.status === 'completed' ? (proc.exitCode ?? 0) : (proc.exitCode ?? 1);
     } catch {
       if (this._exitCode === undefined) {
@@ -112,7 +112,7 @@ class BlaxelProcessHandle extends ProcessHandle {
     this._exitCode = 137; // SIGKILL
     this._closeStream?.();
     try {
-      await this._sandbox.process.kill(this.pid as string);
+      await this._sandbox.process.kill(this.pid);
     } catch {
       // Process may already be gone
     }
@@ -192,7 +192,7 @@ export class BlaxelProcessManager extends SandboxProcessManager<BlaxelSandbox> {
     return result;
   }
 
-  async get(pid: string | number): Promise<ProcessHandle | undefined> {
+  async get(pid: string): Promise<ProcessHandle | undefined> {
     return this._tracked.get(String(pid));
   }
 }

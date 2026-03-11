@@ -243,7 +243,7 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
     return result;
   }
 
-  async get(pid: string | number): Promise<ProcessHandle | undefined> {
+  async get(pid: string): Promise<ProcessHandle | undefined> {
     return this._tracked.get(String(pid));
   }
 }

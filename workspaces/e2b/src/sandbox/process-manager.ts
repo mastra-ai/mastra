@@ -22,7 +22,7 @@ import type { E2BSandbox } from './index';
  * methods wire E2B's constructor-time callbacks to handle.emitStdout/emitStderr.
  */
 class E2BProcessHandle extends ProcessHandle {
-  readonly pid: number;
+  readonly pid: string;
 
   private readonly _e2bHandle: E2BCommandHandle;
   private readonly _sandbox: Sandbox;
@@ -30,7 +30,7 @@ class E2BProcessHandle extends ProcessHandle {
 
   constructor(e2bHandle: E2BCommandHandle, sandbox: Sandbox, startTime: number, options?: SpawnProcessOptions) {
     super(options);
-    this.pid = e2bHandle.pid;
+    this.pid = String(e2bHandle.pid);
     this._e2bHandle = e2bHandle;
     this._sandbox = sandbox;
     this._startTime = startTime;
@@ -135,7 +135,7 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
     const e2b = this.sandbox.e2b;
     const procs = await e2b.commands.list();
     return procs.map(proc => ({
-      pid: proc.pid,
+      pid: String(proc.pid),
       command: [proc.cmd, ...proc.args].join(' '),
       running: true, // E2B only lists running processes
     }));
@@ -146,13 +146,13 @@ export class E2BProcessManager extends SandboxProcessManager<E2BSandbox> {
    * Checks base class tracking first, then falls back to commands.connect()
    * for processes spawned externally or before reconnection.
    */
-  async get(pid: string | number): Promise<ProcessHandle | undefined> {
+  async get(pid: string): Promise<ProcessHandle | undefined> {
     const tracked = this._tracked.get(String(pid));
     if (tracked) return tracked;
 
     // Fall back to connect() for unknown PIDs (e.g., pre-existing processes).
-    // E2B supports numeric PIDs; accept numeric strings as well.
-    const numericPid = typeof pid === 'number' ? pid : /^\d+$/.test(pid) ? Number(pid) : undefined;
+    // E2B uses numeric PIDs; parse numeric strings for the SDK call.
+    const numericPid = /^\d+$/.test(pid) ? Number(pid) : undefined;
     if (numericPid === undefined) return undefined;
 
     const e2b = this.sandbox.e2b;

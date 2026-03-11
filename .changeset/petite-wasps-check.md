@@ -2,9 +2,9 @@
 '@mastra/blaxel': patch
 ---
 
-Added support for provider-native string process IDs in Blaxel process APIs.
+Use provider-native string process IDs directly as `ProcessHandle.pid`, removing the previous `parseInt()` workaround.
 
 ```typescript
 const handle = await sandbox.processes.spawn('node server.js');
-await sandbox.processes.get(handle.pid); // handle.pid can be a string
+handle.pid; // string — the Blaxel SDK's native process ID
 ```

@@ -58,7 +58,7 @@ import type { SpawnProcessOptions } from './types';
  */
 export abstract class ProcessHandle {
   /** Process ID */
-  abstract readonly pid: string | number;
+  abstract readonly pid: string;
   /** Exit code, undefined while the process is still running */
   abstract readonly exitCode: number | undefined;
   /** The command that was spawned (set by the process manager) */

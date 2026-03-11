@@ -20,7 +20,7 @@ import {
 
 /** Create a mock ProcessHandle with controllable state. */
 function createMockHandle(opts: {
-  pid: string | number;
+  pid: string;
   stdout?: string;
   stderr?: string;
   exitCode?: number;
@@ -56,8 +56,8 @@ function createMockSandbox(
     executeCommand?: (...args: any[]) => Promise<any>;
     processes?: {
       spawn?: (...args: any[]) => Promise<any>;
-      get?: (pid: string | number) => Promise<any>;
-      kill?: (pid: string | number) => Promise<boolean>;
+      get?: (pid: string) => Promise<any>;
+      kill?: (pid: string) => Promise<boolean>;
       list?: () => Promise<any[]>;
     };
   } = {},
@@ -235,7 +235,7 @@ describe('execute_command tool', () => {
 
   describe('background mode', () => {
     it('returns PID when background: true', async () => {
-      const handle = createMockHandle({ pid: 42 });
+      const handle = createMockHandle({ pid: '42' });
       const sandbox = createMockSandbox({
         processes: {
           spawn: vi.fn().mockResolvedValue(handle),
@@ -273,7 +273,7 @@ describe('execute_command tool', () => {
 describe('get_process_output tool', () => {
   it('returns stdout directly for a running process', async () => {
     const handle = createMockHandle({
-      pid: 10,
+      pid: '10',
       stdout: 'server started on port 3000\n',
       stderr: '',
       exitCode: undefined,
@@ -284,7 +284,7 @@ describe('get_process_output tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await getProcessOutputTool.execute({ pid: 10 }, ctx);
+    const result = await getProcessOutputTool.execute({ pid: '10' }, ctx);
     // Should be just the output — no PID or status labels
     expect(result).toContain('server started on port 3000');
     expect(result).not.toContain('PID:');
@@ -293,7 +293,7 @@ describe('get_process_output tool', () => {
 
   it('returns "no output yet" for a running process with no output', async () => {
     const handle = createMockHandle({
-      pid: 11,
+      pid: '11',
       stdout: '',
       stderr: '',
       exitCode: undefined,
@@ -304,7 +304,7 @@ describe('get_process_output tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await getProcessOutputTool.execute({ pid: 11 }, ctx);
+    const result = await getProcessOutputTool.execute({ pid: '11' }, ctx);
     expect(result).toBe('(no output yet)');
   });
 
@@ -315,7 +315,7 @@ describe('get_process_output tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await getProcessOutputTool.execute({ pid: 99999 }, ctx);
+    const result = await getProcessOutputTool.execute({ pid: '99999' }, ctx);
     expect(result).toContain('No background process found with PID 99999');
   });
 
@@ -338,7 +338,7 @@ describe('get_process_output tool', () => {
 
   it('returns output and exit code for already-exited process (no wait)', async () => {
     const handle = createMockHandle({
-      pid: 12,
+      pid: '12',
       stdout: 'lots of output here\n',
       stderr: '',
       exitCode: 0,
@@ -349,14 +349,14 @@ describe('get_process_output tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await getProcessOutputTool.execute({ pid: 12 }, ctx);
+    const result = await getProcessOutputTool.execute({ pid: '12' }, ctx);
     expect(result).toContain('lots of output here');
     expect(result).toContain('Exit code: 0');
   });
 
   it('labels stdout and stderr when both present', async () => {
     const handle = createMockHandle({
-      pid: 17,
+      pid: '17',
       stdout: 'out data\n',
       stderr: 'err data\n',
       exitCode: undefined,
@@ -367,7 +367,7 @@ describe('get_process_output tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await getProcessOutputTool.execute({ pid: 17 }, ctx);
+    const result = await getProcessOutputTool.execute({ pid: '17' }, ctx);
     expect(result).toContain('stdout:');
     expect(result).toContain('out data');
     expect(result).toContain('stderr:');
@@ -376,7 +376,7 @@ describe('get_process_output tool', () => {
 
   it('does not label stdout when only stdout is present', async () => {
     const handle = createMockHandle({
-      pid: 18,
+      pid: '18',
       stdout: 'just output\n',
       stderr: '',
       exitCode: undefined,
@@ -387,7 +387,7 @@ describe('get_process_output tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await getProcessOutputTool.execute({ pid: 18 }, ctx);
+    const result = await getProcessOutputTool.execute({ pid: '18' }, ctx);
     expect(result).not.toContain('stdout:');
     expect(result).toContain('just output');
   });
@@ -396,7 +396,7 @@ describe('get_process_output tool', () => {
     it('returns last N lines of stdout', async () => {
       const longStdout = Array.from({ length: 500 }, (_, i) => `log ${i + 1}`).join('\n');
       const handle = createMockHandle({
-        pid: 13,
+        pid: '13',
         stdout: longStdout,
         stderr: '',
         exitCode: undefined,
@@ -407,7 +407,7 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: 13, tail: 5 }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '13', tail: 5 }, ctx);
       expect(result).toContain('log 496');
       expect(result).toContain('log 500');
       expect(result).not.toContain('log 1\n');
@@ -416,7 +416,7 @@ describe('get_process_output tool', () => {
     it('tail: 0 returns all output', async () => {
       const longStdout = Array.from({ length: 500 }, (_, i) => `log ${i + 1}`).join('\n');
       const handle = createMockHandle({
-        pid: 14,
+        pid: '14',
         stdout: longStdout,
         stderr: '',
         exitCode: undefined,
@@ -427,7 +427,7 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: 14, tail: 0 }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '14', tail: 0 }, ctx);
       expect(result).toContain('log 1\n');
       expect(result).toContain('log 500');
     });
@@ -436,7 +436,7 @@ describe('get_process_output tool', () => {
   describe('wait param', () => {
     it('blocks until process exits when wait: true', async () => {
       const handle = createMockHandle({
-        pid: 15,
+        pid: '15',
         stdout: 'final output\n',
         stderr: '',
         exitCode: undefined,
@@ -451,7 +451,7 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: 15, wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '15', wait: true }, ctx);
       expect(handle.wait).toHaveBeenCalled();
       expect(result).toContain('final output');
       expect(result).toContain('Exit code: 0');
@@ -459,7 +459,7 @@ describe('get_process_output tool', () => {
 
     it('returns output for exited process when wait: true', async () => {
       const handle = createMockHandle({
-        pid: 16,
+        pid: '16',
         stdout: 'build complete\nDone in 2.3s\n',
         stderr: '',
         exitCode: 0,
@@ -470,7 +470,7 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: 16, wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '16', wait: true }, ctx);
       expect(result).toContain('build complete');
       expect(result).toContain('Done in 2.3s');
     });
@@ -481,7 +481,7 @@ describe('kill_process tool', () => {
   it('kills a running process and returns last output', async () => {
     const stdout = Array.from({ length: 100 }, (_, i) => `server log ${i + 1}`).join('\n');
     const handle = createMockHandle({
-      pid: 20,
+      pid: '20',
       stdout,
       stderr: 'warn: something\n',
       exitCode: undefined,
@@ -493,7 +493,7 @@ describe('kill_process tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await killProcessTool.execute({ pid: 20 }, ctx);
+    const result = await killProcessTool.execute({ pid: '20' }, ctx);
     expect(result).toContain('Process 20 has been killed');
     expect(result).toContain('server log 51');
     expect(result).toContain('server log 100');
@@ -528,13 +528,13 @@ describe('kill_process tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await killProcessTool.execute({ pid: 99999 }, ctx);
+    const result = await killProcessTool.execute({ pid: '99999' }, ctx);
     expect(result).toContain('was not found or had already exited');
   });
 
   it('returns not found when process already exited', async () => {
     const handle = createMockHandle({
-      pid: 21,
+      pid: '21',
       stdout: 'done\n',
       stderr: '',
       exitCode: 0,
@@ -546,13 +546,13 @@ describe('kill_process tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await killProcessTool.execute({ pid: 21 }, ctx);
+    const result = await killProcessTool.execute({ pid: '21' }, ctx);
     expect(result).toContain('was not found or had already exited');
   });
 
   it('returns kill message with no output when process had none', async () => {
     const handle = createMockHandle({
-      pid: 22,
+      pid: '22',
       stdout: '',
       stderr: '',
       exitCode: undefined,
@@ -564,7 +564,7 @@ describe('kill_process tool', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await killProcessTool.execute({ pid: 22 }, ctx);
+    const result = await killProcessTool.execute({ pid: '22' }, ctx);
     expect(result).toBe('Process 22 has been killed.');
     expect(result).not.toContain('stdout');
     expect(result).not.toContain('stderr');
@@ -884,7 +884,7 @@ describe('token limit integration', () => {
     const hugeLines = Array.from({ length: 5000 }, (_, i) => `log entry number ${i + 1}`);
     const hugeStdout = hugeLines.join('\n');
     const handle = createMockHandle({
-      pid: 30,
+      pid: '30',
       stdout: hugeStdout,
       stderr: '',
       exitCode: undefined,
@@ -895,7 +895,7 @@ describe('token limit integration', () => {
       },
     });
     const ctx = createContext(sandbox);
-    const result = await getProcessOutputTool.execute({ pid: 30, tail: 0 }, ctx);
+    const result = await getProcessOutputTool.execute({ pid: '30', tail: 0 }, ctx);
     // get_process_output uses sandwich truncation
     expect(result).toContain('output truncated');
     expect(result).toContain('log entry number 1');
