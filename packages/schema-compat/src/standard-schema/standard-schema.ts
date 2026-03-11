@@ -7,6 +7,7 @@ import type { PublicSchema } from '../schema.types';
 import { toStandardSchema as toStandardSchemaAiSdk } from './adapters/ai-sdk';
 import { toStandardSchema as toStandardSchemaJsonSchema } from './adapters/json-schema';
 import { toStandardSchema as toStandardSchemaZodV3 } from './adapters/zod-v3';
+import { toStandardSchema as toStandardSchemaZodV4 } from './adapters/zod-v4';
 import type { StandardSchemaWithJSON } from './standard-schema.types';
 
 /**
@@ -116,6 +117,16 @@ export function toStandardSchema<T = unknown>(schema: PublicSchema<T>): Standard
   // This handles ArkType, Zod v4 (when it has jsonSchema), and pre-wrapped schemas
   if (isStandardSchemaWithJSON(schema)) {
     return schema;
+  }
+
+  // Check for Zod v4 schemas without ~standard.jsonSchema
+  // This handles both real Zod v4 and Zod 3.25's v4 compat layer where
+  // ~standard.jsonSchema is not present on the schema object
+  if (isZodV4(schema)) {
+    return toStandardSchemaZodV4(schema as any, {
+      unrepresentable: JSON_SCHEMA_LIBRARY_OPTIONS.unrepresentable,
+      override: JSON_SCHEMA_LIBRARY_OPTIONS.override,
+    });
   }
 
   // Check for Zod v3 schemas (need wrapping to add JSON Schema support)
