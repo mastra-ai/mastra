@@ -30,7 +30,14 @@ import { isZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
-import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
+import type {
+  CoreTool,
+  McpMetadata,
+  MastraToolInvocationOptions,
+  ToolAction,
+  VercelTool,
+  VercelToolV5,
+} from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -329,19 +336,29 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions.tracingContext || options.tracingContext;
 
+      // Extract MCP metadata once with proper typing to avoid repeated unsafe casts
+      const mcpMeta =
+        !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
+
       // Create tool span - either as child of existing span or as new root span (e.g. MCP tools)
       const toolRequestContext = execOptions.requestContext ?? options.requestContext;
       const toolSpan = getOrCreateSpan({
-        type: SpanType.TOOL_CALL,
-        name: `tool: '${options.name}'`,
+        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
         entityId: options.name,
         entityName: options.name,
-        attributes: {
-          toolDescription: options.description,
-          toolType: logType || 'tool',
-        },
+        attributes: mcpMeta
+          ? {
+              mcpServer: mcpMeta.serverName,
+              serverVersion: mcpMeta.serverVersion,
+              toolDescription: options.description,
+            }
+          : {
+              toolDescription: options.description,
+              toolType: logType || 'tool',
+            },
         tracingPolicy: options.tracingPolicy,
         tracingContext: tracingContext,
         requestContext: toolRequestContext,
