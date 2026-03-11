@@ -6,9 +6,9 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import dotenv from 'dotenv';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi, afterEach } from 'vitest';
 
+import { CloudflareStore } from '..';
 import { createSampleTrace, createSampleWorkflowSnapshot, retryUntil } from './test-utils';
 import type { CloudflareStoreConfig } from './types';
-import { CloudflareStore } from '.';
 
 dotenv.config();
 

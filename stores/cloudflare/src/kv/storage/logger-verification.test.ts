@@ -12,8 +12,8 @@ import {
 } from '@mastra/core/storage';
 import { Miniflare } from 'miniflare';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CloudflareStore } from '..';
 import type { CloudflareWorkersConfig } from './types';
-import { CloudflareStore } from './index';
 
 describe('Logger Verification - No PII Leakage', () => {
   let mf: Miniflare;

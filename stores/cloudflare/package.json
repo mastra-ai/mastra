@@ -20,6 +20,26 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./kv": {
+      "import": {
+        "types": "./dist/kv/index.d.ts",
+        "default": "./dist/kv/index.js"
+      },
+      "require": {
+        "types": "./dist/kv/index.d.ts",
+        "default": "./dist/kv/index.cjs"
+      }
+    },
+    "./do": {
+      "import": {
+        "types": "./dist/do/index.d.ts",
+        "default": "./dist/do/index.js"
+      },
+      "require": {
+        "types": "./dist/do/index.d.ts",
+        "default": "./dist/do/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -50,6 +70,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
+    "@cloudflare/workers-types": "^4.20240919.0",
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
