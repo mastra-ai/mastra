@@ -1,5 +1,5 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
@@ -346,6 +346,11 @@ it('should log correctly for Vercel tool execution', async () => {
 });
 
 describe('fetchWithRetry', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
   it('should use exponential backoff delays capped at 10 seconds', async () => {
     const delays: number[] = [];
 
@@ -361,19 +366,17 @@ describe('fetchWithRetry', () => {
     const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
     vi.stubGlobal('fetch', mockFetch);
 
-    await expect(fetchWithRetry('https://example.com', {}, 4)).rejects.toThrow();
+    // Use 5 retries so computed backoff 1000 * 2^4 = 16000 exceeds the 10000 cap
+    await expect(fetchWithRetry('https://example.com', {}, 5)).rejects.toThrow();
 
-    // With the bug (1000 * Math.pow(2, retryCount) * 1000), delays would be:
-    //   2_000_000, 4_000_000, 8_000_000 — all far exceeding 10_000
-    // Correct delays should be: 2000, 4000, 8000
-    expect(delays.length).toBe(3); // 4 max retries = 3 retry delays
+    // Delays: 2000 (2^1), 4000 (2^2), 8000 (2^3), 10000 (2^4=16000 capped to 10000)
+    expect(delays.length).toBe(4); // 5 max retries = 4 retry delays
     for (const delay of delays) {
       expect(delay).toBeLessThanOrEqual(10000);
     }
     expect(delays[0]).toBe(2000); // 1000 * 2^1
     expect(delays[1]).toBe(4000); // 1000 * 2^2
     expect(delays[2]).toBe(8000); // 1000 * 2^3
-
-    vi.restoreAllMocks();
+    expect(delays[3]).toBe(10000); // 1000 * 2^4 = 16000, capped at 10000
   });
 });
