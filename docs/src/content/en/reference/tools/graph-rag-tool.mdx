@@ -10,7 +10,7 @@ packages:
 
 The `createGraphRAGTool()` creates a tool that enhances RAG by building a graph of semantic relationships between documents. It uses the `GraphRAG` system under the hood to provide graph-based retrieval, finding relevant content through both direct similarity and connected relationships.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { createGraphRAGTool } from '@mastra/rag'
@@ -43,116 +43,112 @@ time.
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-description:
-"Custom ID for the tool. By default: 'GraphRAG {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
-isOptional: true,
-},
-{
-name: "description",
-type: "string",
-description:
-"Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns.' (Set at creation only.)",
-isOptional: true,
-},
-{
-name: "vectorStoreName",
-type: "string",
-description:
-"Name of the vector store to query. (Can be set at creation or overridden at runtime.)",
-isOptional: false,
-},
-{
-name: "indexName",
-type: "string",
-description:
-"Name of the index within the vector store. (Can be set at creation or overridden at runtime.)",
-isOptional: false,
-},
-{
-name: "model",
-type: "EmbeddingModel",
-description:
-"Embedding model to use for vector search. (Set at creation only.)",
-isOptional: false,
-},
-{
-name: "enableFilter",
-type: "boolean",
-description:
-"Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the request context.)",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "includeSources",
-type: "boolean",
-description:
-"Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "graphOptions",
-type: "GraphOptions",
-description: "Configuration for the graph-based retrieval",
-isOptional: true,
-defaultValue: "Default graph options",
-},
-{
-name: "providerOptions",
-type: "Record<string, Record<string, any>>",
-description:
-"Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.",
-isOptional: true,
-},
-{
-name: "vectorStore",
-type: "MastraVector | VectorStoreResolver",
-description:
-"Direct vector store instance or a resolver function for dynamic selection. Use a function for multi-tenant applications where the vector store is selected based on request context. When provided, `vectorStoreName` becomes optional.",
-isOptional: true,
-},
-]}
-/>
-
-### GraphOptions
-
-<PropertiesTable
-  content={[
-{
-name: "dimension",
-type: "number",
-description: "Dimension of the embedding vectors",
-isOptional: true,
-defaultValue: "1536",
-},
-{
-name: "threshold",
-type: "number",
-description:
-"Similarity threshold for creating edges between nodes (0-1)",
-isOptional: true,
-defaultValue: "0.7",
-},
-{
-name: "randomWalkSteps",
-type: "number",
-description:
-"Number of steps in random walk for graph traversal. (Can be set at creation or overridden at runtime.)",
-isOptional: true,
-defaultValue: "100",
-},
-{
-name: "restartProb",
-type: "number",
-description:
-"Probability of restarting random walk from query node. (Can be set at creation or overridden at runtime.)",
-isOptional: true,
-defaultValue: "0.15",
-},
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      "Custom ID for the tool. By default: 'GraphRAG {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description:
+      "Custom description for the tool. By default: 'Access and analyze relationships between information in the knowledge base to answer complex questions about connections and patterns.' (Set at creation only.)",
+    isOptional: true,
+  },
+  {
+    name: 'vectorStoreName',
+    type: 'string',
+    description: 'Name of the vector store to query. (Can be set at creation or overridden at runtime.)',
+    isOptional: false,
+  },
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index within the vector store. (Can be set at creation or overridden at runtime.)',
+    isOptional: false,
+  },
+  {
+    name: 'model',
+    type: 'EmbeddingModel',
+    description: 'Embedding model to use for vector search. (Set at creation only.)',
+    isOptional: false,
+  },
+  {
+    name: 'enableFilter',
+    type: 'boolean',
+    description:
+      'Enable filtering of results based on metadata. (Set at creation only, but will be automatically enabled if a filter is provided in the request context.)',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'includeSources',
+    type: 'boolean',
+    description:
+      'Include the full retrieval objects in the results. (Can be set at creation or overridden at runtime.)',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'graphOptions',
+    type: 'GraphOptions',
+    description: 'Configuration for the graph-based retrieval',
+    isOptional: true,
+    defaultValue: 'Default graph options',
+    properties: [
+      {
+        type: 'GraphOptions',
+        parameters: [
+          {
+            name: 'dimension',
+            type: 'number',
+            description: 'Dimension of the embedding vectors',
+            isOptional: true,
+            defaultValue: '1536',
+          },
+          {
+            name: 'threshold',
+            type: 'number',
+            description: 'Similarity threshold for creating edges between nodes (0-1)',
+            isOptional: true,
+            defaultValue: '0.7',
+          },
+          {
+            name: 'randomWalkSteps',
+            type: 'number',
+            description:
+              'Number of steps in random walk for graph traversal. (Can be set at creation or overridden at runtime.)',
+            isOptional: true,
+            defaultValue: '100',
+          },
+          {
+            name: 'restartProb',
+            type: 'number',
+            description:
+              'Probability of restarting random walk from query node. (Can be set at creation or overridden at runtime.)',
+            isOptional: true,
+            defaultValue: '0.15',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'providerOptions',
+    type: 'Record<string, Record<string, any>>',
+    description:
+      'Provider-specific options for the embedding model (e.g., outputDimensionality). **Important**: Only works with AI SDK EmbeddingModelV2 models. For V1 models, configure options when creating the model itself.',
+    isOptional: true,
+  },
+  {
+    name: 'vectorStore',
+    type: 'MastraVector | VectorStoreResolver',
+    description:
+      'Direct vector store instance or a resolver function for dynamic selection. Use a function for multi-tenant applications where the vector store is selected based on request context. When provided, `vectorStoreName` becomes optional.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -162,22 +158,21 @@ The tool returns an object with:
 
 <PropertiesTable
   content={[
-{
-name: "relevantContext",
-type: "string",
-description:
-"Combined text from the most relevant document chunks, retrieved using graph-based ranking",
-},
-{
-name: "sources",
-type: "QueryResult[]",
-description:
-"Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.",
-},
+  {
+    name: 'relevantContext',
+    type: 'string',
+    description: 'Combined text from the most relevant document chunks, retrieved using graph-based ranking',
+  },
+  {
+    name: 'sources',
+    type: 'QueryResult[]',
+    description:
+      'Array of full retrieval result objects. Each object contains all information needed to reference the original document, chunk, and similarity score.',
+  },
 ]}
 />
 
-### QueryResult object structure
+### `QueryResult` object structure
 
 ```typescript prettier:false
 {
@@ -189,7 +184,7 @@ description:
 }
 ```
 
-## Default Tool Description
+## Default tool description
 
 The default description focuses on:
 
@@ -197,7 +192,7 @@ The default description focuses on:
 - Finding patterns and connections
 - Answering complex queries
 
-## Advanced Example
+## Advanced example
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -213,7 +208,7 @@ const graphTool = createGraphRAGTool({
 })
 ```
 
-## Example with Custom Description
+## Example with custom description
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -227,7 +222,7 @@ const graphTool = createGraphRAGTool({
 
 This example shows how to customize the tool description for a specific use case while maintaining its core purpose of relationship analysis.
 
-## Example: Using Request Context
+## Example: Using request context
 
 ```typescript
 const graphTool = createGraphRAGTool({
@@ -263,7 +258,7 @@ For more information on request context, please see:
 - [Agent Request Context](/docs/server/request-context)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)
 
-## Dynamic Vector Store for Multi-Tenant Applications
+## Dynamic vector store for multi-tenant applications
 
 For multi-tenant applications where each tenant has isolated data, you can pass a resolver function instead of a static vector store:
 

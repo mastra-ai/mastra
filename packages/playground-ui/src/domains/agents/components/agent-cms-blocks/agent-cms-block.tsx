@@ -106,7 +106,7 @@ const InlineBlockContent = ({
         value={block.content}
         onChange={handleContentChange}
         placeholder={placeholder}
-        className="border-none rounded-none text-neutral6 h-full bg-surface2 min-h-[300px]"
+        className="border-none rounded-none text-neutral6 h-full bg-surface2 min-h-[4.5rem]"
         language="markdown"
         highlightVariables
         showCopyButton={false}

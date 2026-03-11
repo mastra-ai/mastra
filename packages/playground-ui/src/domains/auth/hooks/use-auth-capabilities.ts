@@ -1,7 +1,34 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { AuthCapabilities } from '../types';
+
+/**
+ * Makes a request to the auth capabilities endpoint.
+ * Exported for testing purposes.
+ *
+ * @internal
+ */
+export async function makeAuthCapabilitiesRequest(client: MastraClient): Promise<AuthCapabilities> {
+  const { baseUrl = '', headers: clientHeaders = {}, apiPrefix } = client.options as any;
+  const raw = (apiPrefix || '/api').trim();
+  const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
+
+  const response = await fetch(`${baseUrl}${prefix}/auth/capabilities`, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...clientHeaders,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch auth capabilities: ${response.status}`);
+  }
+
+  return response.json();
+}
 
 /**
  * Hook to fetch authentication capabilities.
@@ -36,22 +63,7 @@ export function useAuthCapabilities() {
 
   return useQuery<AuthCapabilities>({
     queryKey: ['auth', 'capabilities'],
-    queryFn: async () => {
-      // Use the client's internal request method to call the auth endpoint
-      // This ensures proper base URL handling and headers
-      const response = await fetch(`${(client as any).options?.baseUrl || ''}/api/auth/capabilities`, {
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch auth capabilities: ${response.status}`);
-      }
-
-      return response.json();
-    },
+    queryFn: () => makeAuthCapabilitiesRequest(client),
     staleTime: 60 * 1000, // Cache for 1 minute
     retry: false, // Don't retry auth requests
   });

@@ -1,41 +1,41 @@
 ---
-title: "Reference: Tone Consistency Scorer | Evals"
+title: "Reference: Tone consistency scorer | Evals"
 description: Documentation for the Tone Consistency Scorer in Mastra, which evaluates emotional tone and sentiment consistency in text.
 packages:
   - "@mastra/core"
   - "@mastra/evals"
 ---
 
-# Tone Consistency Scorer
+# Tone consistency scorer
 
 The `createToneScorer()` function evaluates the text's emotional tone and sentiment consistency. It can operate in two modes: comparing tone between input/output pairs or analyzing tone stability within a single text.
 
 ## Parameters
 
-The `createToneScorer()` function does not take any options.
+The `createToneScorer()` function doesn't take any options.
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description: "The id of the run (optional).",
-},
-{
-name: "analyzeStepResult",
-type: "object",
-description:
-"Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)",
-},
-{
-name: "score",
-type: "number",
-description: "Tone consistency/stability score (0-1).",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The id of the run (optional).',
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description:
+      'Object with tone metrics: { responseSentiment: number, referenceSentiment: number, difference: number } (for comparison mode) OR { avgSentiment: number, sentimentVariance: number } (for stability mode)',
+  },
+  {
+    name: 'score',
+    type: 'number',
+    description: 'Tone consistency/stability score (0-1).',
+  },
 ]}
 />
 
@@ -55,7 +55,7 @@ description: "Tone consistency/stability score (0-1).",
 }
 ```
 
-## Scoring Details
+## Scoring details
 
 The scorer evaluates sentiment consistency through tone pattern analysis and mode-specific scoring.
 
@@ -87,7 +87,7 @@ Final score: `mode_specific_score * scale`
 - 0.1-0.3: Poor consistency with major tone changes
 - 0.0: No consistency - completely different tones
 
-### analyzeStepResult
+### `analyzeStepResult`
 
 Object with tone metrics:
 

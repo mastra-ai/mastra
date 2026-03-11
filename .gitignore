@@ -3,6 +3,7 @@ dist/
 test-outputs/
 .vitest-reports/
 .DS_Store
+.mastra-om-repro/
 
 # IDE
 .vscode/

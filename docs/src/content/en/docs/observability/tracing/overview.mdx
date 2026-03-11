@@ -13,7 +13,7 @@ Tracing provides specialized monitoring and debugging for the AI-related operati
 
 Unlike traditional application tracing, Tracing focuses specifically on understanding your AI pipeline — capturing token usage, model parameters, tool execution details, and conversation flows. This makes it easier to debug issues, optimize performance, and understand how your AI systems behave in production.
 
-## How It Works
+## How it works
 
 Traces are created by:
 
@@ -108,7 +108,7 @@ Bridges provide bidirectional integration with external tracing systems. Unlike 
 
 You can use both together — a bridge for context propagation and exporters to send traces to additional destinations.
 
-## Sampling Strategies
+## Sampling strategies
 
 Sampling allows you to control which traces are collected, helping you balance between observability needs and resource costs. In production environments with high traffic, collecting every trace can be expensive and unnecessary. Sampling strategies let you capture a representative subset of traces while ensuring you don't miss critical information about errors or important operations.
 
@@ -184,7 +184,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Multi-Config Setup
+## Multi-config setup
 
 Complex applications often require different tracing configurations for different scenarios. You might want detailed traces with full sampling during development, sampled traces sent to external providers in production, and specialized configurations for specific features or customer segments. The `configSelector` function enables dynamic configuration selection at runtime, allowing you to route traces based on request context, environment variables, feature flags, or any custom logic.
 
@@ -326,7 +326,7 @@ Remember: A single trace can be sent to multiple exporters. You don't need separ
 
 :::
 
-## Adding Custom Metadata
+## Adding custom metadata
 
 Custom metadata allows you to attach additional context to your traces, making it easier to debug issues and understand system behavior in production. Metadata can include business logic details, performance metrics, user context, or any information that helps you understand what happened during execution.
 
@@ -354,7 +354,7 @@ execute: async (inputData, context) => {
 
 Metadata set here will be shown in all configured exporters.
 
-### Automatic Metadata from RequestContext
+### Automatic Metadata from `RequestContext`
 
 Instead of manually adding metadata to each span, you can configure Mastra to automatically extract values from RequestContext and attach them as metadata to all spans in a trace. This is useful for consistently tracking user identifiers, environment information, feature flags, or any request-scoped data across your entire trace.
 
@@ -433,7 +433,7 @@ requestContext.set('session', { data: { experimentId: 'exp-999' } })
 // Metadata will include: { user: { id: 'user-456' }, session: { data: { experimentId: 'exp-999' } } }
 ```
 
-#### How It Works
+#### How it works
 
 1. **TraceState Computation**: At the start of a trace (root span creation), Mastra computes which keys to extract by merging configuration-level and per-request keys
 1. **Automatic Extraction**: Root spans (agent runs, workflow executions) automatically extract metadata from RequestContext
@@ -442,7 +442,7 @@ requestContext.set('session', { data: { experimentId: 'exp-999' } })
 
 ### Adding Tags to Traces
 
-Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are simple strings designed for quick filtering and organization.
+Tags are string labels that help you categorize and filter traces. Unlike metadata (which contains structured key-value data), tags are plain strings designed for quick filtering and organization.
 
 Use `tracingOptions.tags` to add tags when executing agents or workflows:
 
@@ -520,7 +520,7 @@ const result = await agent.generate([{ role: 'user', content: 'Handle confidenti
 })
 ```
 
-#### How It Works
+#### How it works
 
 - **Trace-wide effect**: When set on the root span, these options apply to all child spans in the trace (tool calls, model generations, etc.)
 - **Export-time filtering**: The data is still available internally during execution but is excluded when spans are exported to observability platforms
@@ -572,7 +572,7 @@ execute: async (inputData, context) => {
 
 This gives you fine-grained control over which child spans include RequestContext metadata. Root spans (agent/workflow executions) always extract metadata automatically, while child spans only extract when you explicitly pass `requestContext`.
 
-## Creating Child Spans
+## Creating child spans
 
 Child spans allow you to track fine-grained operations within your workflow steps or tools. They provide visibility into sub-operations like database queries, API calls, file operations, or complex calculations. This hierarchical structure helps you identify performance bottlenecks and understand the exact sequence of operations.
 
@@ -611,7 +611,7 @@ execute: async (inputData, context) => {
 
 Child spans automatically inherit the trace context from their parent, maintaining the relationship hierarchy in your observability platform.
 
-## Span Formatting
+## Span formatting
 
 Mastra provides two ways to transform span data before it reaches your observability platform: **span processors** and **custom span formatters**. Both allow you to modify, filter, or enrich trace data, but they operate at different levels and serve different purposes.
 
@@ -631,11 +631,11 @@ Span processors transform, filter, or enrich trace data before it's exported. Th
 
 #### Built-in Processors
 
-- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It is enabled in the default observability config.
+- [Sensitive Data Filter](/docs/observability/tracing/processors/sensitive-data-filter) redacts sensitive information. It's enabled in the default observability config.
 
 #### Creating Custom Processors
 
-You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a simple example that converts all input text in spans to lowercase:
+You can create custom span processors by implementing the `SpanOutputProcessor` interface. Here's a basic example that converts all input text in spans to lowercase:
 
 ```ts title="src/processors/lowercase-input-processor.ts"
 import type { SpanOutputProcessor, AnySpan } from '@mastra/observability'
@@ -678,10 +678,10 @@ Processors are executed in the order they're defined, allowing you to chain mult
 
 Custom span formatters transform how spans appear in specific observability platforms. Unlike span processors, formatters are configured per-exporter, allowing different formatting for different destinations. Formatters support both synchronous and asynchronous operations.
 
-#### Use Cases
+#### Use cases
 
 - **Extract plain text from AI SDK messages** - Convert structured message arrays to readable text
-- **Transform input/output formats** - Customize how data appears in specific platforms
+- **Transform input/output formats** - Customize how data displays in specific platforms
 - **Platform-specific field mapping** - Add or remove fields based on platform requirements
 - **Async data enrichment** - Fetch additional context from external APIs or databases
 
@@ -810,7 +810,7 @@ const exporter = new LangfuseExporter({
 Async formatters add latency to span export. Keep async operations fast (under 100ms) to avoid slowing down your application. Consider using caching for frequently accessed data.
 :::
 
-## Serialization Options
+## Serialization options
 
 Serialization options control how span data (input, output, and attributes) is truncated before export. This is useful when working with large payloads, deeply nested objects, or when you need to optimize trace storage.
 
@@ -846,7 +846,7 @@ export const mastra = new Mastra({
 | `maxArrayLength` | 50 | Maximum number of items in arrays. Additional items are omitted. |
 | `maxObjectKeys` | 50 | Maximum number of keys in objects. Additional keys are omitted. |
 
-### Use Cases
+### Use cases
 
 **Increasing limits for debugging**: If your agents or tools work with large documents, API responses, or data structures, increase these limits to capture more context in your traces:
 
@@ -871,7 +871,7 @@ serializationOptions: {
 
 All options are optional — if not specified, they fall back to the defaults shown above.
 
-## Retrieving Trace IDs
+## Retrieving trace IDs
 
 When you execute agents or workflows with tracing enabled, the response includes a `traceId` that you can use to look up the full trace in your observability platform. This is useful for debugging, customer support, or correlating traces with other events in your system.
 
@@ -927,7 +927,7 @@ Once you have a trace ID, you can:
 
 The trace ID is only available when tracing is enabled. If tracing is disabled or sampling excludes the request, `traceId` will be `undefined`.
 
-## Integrating with External Tracing Systems
+## Integrating with external tracing systems
 
 When running Mastra agents or workflows within applications that have existing distributed tracing (OpenTelemetry, Datadog, etc.), you can connect Mastra traces to your parent trace context. This creates a unified view of your entire request flow, making it easier to understand how Mastra operations fit into the broader system.
 
@@ -1033,7 +1033,7 @@ app.post('/api/analyze', async (req, res) => {
 
 This creates a single distributed trace that includes both the HTTP request handling and the Mastra agent execution, viewable in your observability platform of choice.
 
-## Flushing Traces in Serverless Environments
+## Flushing traces in serverless environments
 
 In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflare Workers, runtime instances can be reused across multiple requests. The `flush()` method allows you to ensure all buffered spans are exported before the runtime terminates, without shutting down the exporter (which would prevent future exports).
 
@@ -1041,7 +1041,7 @@ In serverless environments like Vercel's fluid compute, AWS Lambda, or Cloudflar
 Serverless environments have ephemeral filesystems. Use external storage instead of local file storage (`file:./mastra.db`). See the [Vercel deployment guide](/guides/deployment/vercel#observability) for a complete setup example.
 :::
 
-### Using flush()
+### Using `flush()`
 
 Call `flush()` on the observability instance to flush all exporters:
 
@@ -1053,7 +1053,7 @@ const observability = mastra.getObservability()
 await observability.flush()
 ```
 
-### When to Use flush()
+### When to Use `flush()`
 
 Use `flush()` in these scenarios:
 
@@ -1074,7 +1074,7 @@ export async function POST(req: Request) {
 }
 ```
 
-### flush() vs shutdown()
+### `flush()` vs `shutdown()`
 
 | Method | Behavior | Use Case |
 | - | - | - |
@@ -1083,7 +1083,7 @@ export async function POST(req: Request) {
 
 Use `flush()` when you need to ensure data is exported but want to keep the exporter ready for future requests. Use `shutdown()` only when the application is terminating.
 
-## What Gets Traced
+## What gets traced
 
 Mastra automatically creates spans for:
 
@@ -1101,7 +1101,7 @@ Mastra automatically creates spans for:
 - **Control flow** - Conditionals, loops, parallel execution
 - **Wait operations** - Delays and event waiting
 
-## See Also
+## See also
 
 ### Reference Documentation
 

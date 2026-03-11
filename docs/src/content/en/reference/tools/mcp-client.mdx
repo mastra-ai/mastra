@@ -28,31 +28,30 @@ constructor({
 
 <PropertiesTable
   content={[
-{
-name: "id",
-type: "string",
-isOptional: true,
-description:
-"Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.",
-},
-{
-name: "servers",
-type: "Record<string, MastraMCPServerDefinition>",
-description:
-"A map of server configurations, where each key is a unique server identifier and the value is the server configuration.",
-},
-{
-name: "timeout",
-type: "number",
-isOptional: true,
-defaultValue: "60000",
-description:
-"Global timeout value in milliseconds for all servers unless overridden in individual server configs.",
-},
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.',
+  },
+  {
+    name: 'servers',
+    type: 'Record<string, MastraMCPServerDefinition>',
+    description:
+      'A map of server configurations, where each key is a unique server identifier and the value is the server configuration.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
+  },
 ]}
 />
 
-### MastraMCPServerDefinition
+### `MastraMCPServerDefinition`
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
@@ -63,89 +62,88 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 
 <PropertiesTable
   content={[
-{
-name: "command",
-type: "string",
-isOptional: true,
-description: "For Stdio servers: The command to execute.",
-},
-{
-name: "args",
-type: "string[]",
-isOptional: true,
-description: "For Stdio servers: Arguments to pass to the command.",
-},
-{
-name: "env",
-type: "Record<string, string>",
-isOptional: true,
-description:
-"For Stdio servers: Environment variables to set for the command.",
-},
-{
-name: "url",
-type: "URL",
-isOptional: true,
-description:
-"For HTTP servers (Streamable HTTP or SSE): The URL of the server.",
-},
-{
-name: "requestInit",
-type: "RequestInit",
-isOptional: true,
-description: "For HTTP servers: Request configuration for the fetch API.",
-},
-{
-name: "eventSourceInit",
-type: "EventSourceInit",
-isOptional: true,
-description:
-"For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.",
-},
-{
-name: "fetch",
-type: "MastraFetchLike",
-isOptional: true,
-description:
-"For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.",
-},
-{
-name: "logger",
-type: "LogHandler",
-isOptional: true,
-description: "Optional additional handler for logging.",
-},
-{
-name: "timeout",
-type: "number",
-isOptional: true,
-description: "Server-specific timeout in milliseconds.",
-},
-{
-name: "capabilities",
-type: "ClientCapabilities",
-isOptional: true,
-description: "Server-specific capabilities configuration.",
-},
-{
-name: "authProvider",
-type: "OAuthClientProvider",
-isOptional: true,
-description: "For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.",
-},
-{
-name: "enableServerLogs",
-type: "boolean",
-isOptional: true,
-defaultValue: "true",
-description: "Whether to enable logging for this server.",
-},
+  {
+    name: 'command',
+    type: 'string',
+    isOptional: true,
+    description: 'For Stdio servers: The command to execute.',
+  },
+  {
+    name: 'args',
+    type: 'string[]',
+    isOptional: true,
+    description: 'For Stdio servers: Arguments to pass to the command.',
+  },
+  {
+    name: 'env',
+    type: 'Record<string, string>',
+    isOptional: true,
+    description: 'For Stdio servers: Environment variables to set for the command.',
+  },
+  {
+    name: 'url',
+    type: 'URL',
+    isOptional: true,
+    description: 'For HTTP servers (Streamable HTTP or SSE): The URL of the server.',
+  },
+  {
+    name: 'requestInit',
+    type: 'RequestInit',
+    isOptional: true,
+    description: 'For HTTP servers: Request configuration for the fetch API.',
+  },
+  {
+    name: 'eventSourceInit',
+    type: 'EventSourceInit',
+    isOptional: true,
+    description:
+      'For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.',
+  },
+  {
+    name: 'fetch',
+    type: 'MastraFetchLike',
+    isOptional: true,
+    description:
+      'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
+  },
+  {
+    name: 'logger',
+    type: 'LogHandler',
+    isOptional: true,
+    description: 'Optional additional handler for logging.',
+  },
+  {
+    name: 'timeout',
+    type: 'number',
+    isOptional: true,
+    description: 'Server-specific timeout in milliseconds.',
+  },
+  {
+    name: 'capabilities',
+    type: 'ClientCapabilities',
+    isOptional: true,
+    description: 'Server-specific capabilities configuration.',
+  },
+  {
+    name: 'authProvider',
+    type: 'OAuthClientProvider',
+    isOptional: true,
+    description:
+      'For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.',
+  },
+  {
+    name: 'enableServerLogs',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Whether to enable logging for this server.',
+  },
 ]}
 />
 
 ## Methods
 
-### listTools()
+### `listTools()`
 
 Retrieves all tools from all configured servers, with tool names namespaced by their server name (in the format `serverName_toolName`) to prevent conflicts.
 Intended to be passed onto an Agent definition.
@@ -154,7 +152,7 @@ Intended to be passed onto an Agent definition.
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
 
-### listToolsets()
+### `listToolsets()`
 
 Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
 Intended to be passed dynamically into the generate or stream method.
@@ -165,7 +163,7 @@ const res = await agent.stream(prompt, {
 })
 ```
 
-### disconnect()
+### `disconnect()`
 
 Disconnects from all MCP servers and cleans up resources.
 
@@ -331,7 +329,7 @@ mcpClient.elicitation.onRequest('serverName', async request => {
 
 Sets up a handler function that will be called when any connected MCP server sends an elicitation request. The handler receives the request and must return a response.
 
-##### ElicitationHandler Function
+##### `ElicitationHandler` Function
 
 The handler function receives a request object with:
 
@@ -626,7 +624,7 @@ mcpClient.elicitation.onRequest('interactiveServer', async request => {
 })
 ```
 
-### Response Types
+### Response types
 
 Your elicitation handler must return one of three response types:
 
@@ -683,7 +681,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 })
 ```
 
-### Best Practices
+### Best practices
 
 - **Always handle elicitation**: Set up your handler before calling tools that might use elicitation
 - **Validate input**: Check that required fields are provided
@@ -691,7 +689,7 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
 - **Clear UI**: Make it obvious what information is being requested and why
 - **Security**: Never auto-accept requests for sensitive information
 
-## OAuth Authentication
+## OAuth authentication
 
 For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
 
@@ -910,7 +908,7 @@ const response = await agent.stream('How is AAPL doing and what is the weather?'
 })
 ```
 
-## Instance Management
+## Instance management
 
 The `MCPClient` class includes built-in memory leak prevention for managing multiple instances:
 
@@ -954,7 +952,7 @@ const mcp4 = new MCPClient({
 })
 ```
 
-## Server Lifecycle
+## Server lifecycle
 
 MCPClient handles server connections gracefully:
 
@@ -962,7 +960,7 @@ MCPClient handles server connections gracefully:
 1. Graceful server shutdown to prevent error messages during development
 1. Proper cleanup of resources when disconnecting
 
-## Using Custom Fetch for Dynamic Authentication
+## Using custom fetch for dynamic authentication
 
 For HTTP servers, you can provide a custom `fetch` function to handle dynamic authentication, request interception, or other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
@@ -1001,7 +999,7 @@ await agent.generate('Hello!', {
 })
 ```
 
-## Using SSE Request Headers
+## Using SSE request headers
 
 When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:
 
@@ -1050,7 +1048,7 @@ const sseClientWithFetch = new MCPClient({
 })
 ```
 
-## Related Information
+## Related information
 
 - For creating MCP servers, see the [MCPServer documentation](./mcp-server).
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

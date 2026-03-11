@@ -93,6 +93,7 @@ export class DatasetsManager {
     description?: string;
     inputSchema?: unknown;
     groundTruthSchema?: unknown;
+    requestContextSchema?: Record<string, unknown> | null;
     metadata?: Record<string, unknown>;
   }): Promise<Dataset> {
     const store = await this.#getDatasetsStore();

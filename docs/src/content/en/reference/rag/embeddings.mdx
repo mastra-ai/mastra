@@ -9,7 +9,7 @@ packages:
 
 Mastra uses the AI SDK's `embed` and `embedMany` functions to generate vector embeddings for text inputs, enabling similarity search and RAG workflows.
 
-## Single Embedding
+## Single embedding
 
 The `embed` function generates a vector embedding for a single text input:
 
@@ -28,54 +28,51 @@ const result = await embed({
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "EmbeddingModel",
-description:
-"The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
-},
-{
-name: "value",
-type: "string | Record<string, any>",
-description: "The text content or object to embed",
-},
-{
-name: "maxRetries",
-type: "number",
-description:
-"Maximum number of retries per embedding call. Set to 0 to disable retries.",
-isOptional: true,
-defaultValue: "2",
-},
-{
-name: "abortSignal",
-type: "AbortSignal",
-description: "Optional abort signal to cancel the request",
-isOptional: true,
-},
-{
-name: "headers",
-type: "Record<string, string>",
-description:
-"Additional HTTP headers for the request (only for HTTP-based providers)",
-isOptional: true,
-},
+  {
+    name: 'model',
+    type: 'EmbeddingModel',
+    description: "The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
+  },
+  {
+    name: 'value',
+    type: 'string | Record<string, any>',
+    description: 'The text content or object to embed',
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Maximum number of retries per embedding call. Set to 0 to disable retries.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Optional abort signal to cancel the request',
+    isOptional: true,
+  },
+  {
+    name: 'headers',
+    type: 'Record<string, string>',
+    description: 'Additional HTTP headers for the request (only for HTTP-based providers)',
+    isOptional: true,
+  },
 ]}
 />
 
-### Return Value
+### Return value
 
 <PropertiesTable
   content={[
-{
-name: "embedding",
-type: "number[]",
-description: "The embedding vector for the input",
-},
+  {
+    name: 'embedding',
+    type: 'number[]',
+    description: 'The embedding vector for the input',
+  },
 ]}
 />
 
-## Multiple Embeddings
+## Multiple embeddings
 
 For embedding multiple texts at once, use the `embedMany` function:
 
@@ -93,55 +90,51 @@ const result = await embedMany({
 
 <PropertiesTable
   content={[
-{
-name: "model",
-type: "EmbeddingModel",
-description:
-"The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
-},
-{
-name: "values",
-type: "string[] | Record<string, any>[]",
-description: "Array of text content or objects to embed",
-},
-{
-name: "maxRetries",
-type: "number",
-description:
-"Maximum number of retries per embedding call. Set to 0 to disable retries.",
-isOptional: true,
-defaultValue: "2",
-},
-{
-name: "abortSignal",
-type: "AbortSignal",
-description: "Optional abort signal to cancel the request",
-isOptional: true,
-},
-{
-name: "headers",
-type: "Record<string, string>",
-description:
-"Additional HTTP headers for the request (only for HTTP-based providers)",
-isOptional: true,
-},
+  {
+    name: 'model',
+    type: 'EmbeddingModel',
+    description: "The embedding model to use (e.g. openai.embedding('text-embedding-3-small'))",
+  },
+  {
+    name: 'values',
+    type: 'string[] | Record<string, any>[]',
+    description: 'Array of text content or objects to embed',
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Maximum number of retries per embedding call. Set to 0 to disable retries.',
+    isOptional: true,
+    defaultValue: '2',
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Optional abort signal to cancel the request',
+    isOptional: true,
+  },
+  {
+    name: 'headers',
+    type: 'Record<string, string>',
+    description: 'Additional HTTP headers for the request (only for HTTP-based providers)',
+    isOptional: true,
+  },
 ]}
 />
 
-### Return Value
+### Return value
 
 <PropertiesTable
   content={[
-{
-name: "embeddings",
-type: "number[][]",
-description:
-"Array of embedding vectors corresponding to the input values",
-},
+  {
+    name: 'embeddings',
+    type: 'number[][]',
+    description: 'Array of embedding vectors corresponding to the input values',
+  },
 ]}
 />
 
-## Example Usage
+## Example usage
 
 ```typescript
 import { embed, embedMany } from 'ai'

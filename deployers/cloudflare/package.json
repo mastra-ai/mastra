@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.1.6",
+  "version": "1.1.9-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -46,7 +46,7 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^4.5.0",
-    "rollup": "~4.55.1",
+    "rollup": "^4.59.0",
     "rollup-plugin-esbuild": "^6.2.1"
   },
   "devDependencies": {
@@ -55,10 +55,10 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/babel__core": "^7.20.5",
-    "@types/node": "22.19.7",
+    "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

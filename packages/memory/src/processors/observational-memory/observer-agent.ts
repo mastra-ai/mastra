@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { CoreMessage } from '@mastra/core/llm';
 
 /**
  * The core extraction instructions for the Observer.
@@ -415,59 +416,257 @@ export interface ObserverResult {
  * Format messages for the Observer's input.
  * Includes timestamps for temporal context.
  */
-export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
-  const maxLen = options?.maxPartLength;
+type ObserverAttachmentPart =
+  | {
+      type: 'image';
+      image: unknown;
+      mimeType?: string;
+      filename?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    }
+  | {
+      type: 'file';
+      data: unknown;
+      mimeType?: string;
+      filename?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    };
 
-  return messages
-    .map(msg => {
-      const timestamp = msg.createdAt
-        ? new Date(msg.createdAt).toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
-          })
-        : '';
+type ObserverInputAttachmentPart =
+  | {
+      type: 'image';
+      image: unknown;
+      mimeType?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    }
+  | {
+      type: 'file';
+      data: unknown;
+      mimeType?: string;
+      filename?: string;
+      providerOptions?: unknown;
+      providerMetadata?: unknown;
+      experimental_providerMetadata?: unknown;
+    };
 
-      const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      const timestampStr = timestamp ? ` (${timestamp})` : '';
+interface ObserverFormattedMessage {
+  text: string;
+  attachments: ObserverInputAttachmentPart[];
+}
 
-      // Extract text content from the message
-      // IMPORTANT: Check parts FIRST since it contains the full message (including tool calls)
-      // The content.content string is just the text portion
-      let content = '';
-      if (typeof msg.content === 'string') {
-        content = maybeTruncate(msg.content, maxLen);
-      } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-        // Use parts array - this includes tool invocations and results
-        content = msg.content.parts
-          .map(part => {
-            if (part.type === 'text') return maybeTruncate(part.text, maxLen);
-            if (part.type === 'tool-invocation') {
-              const inv = part.toolInvocation;
-              if (inv.state === 'result') {
-                const resultStr = JSON.stringify(inv.result, null, 2);
-                return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
-              }
-              const argsStr = JSON.stringify(inv.args, null, 2);
-              return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
-            }
-            // Skip all data-* parts (observation markers, activation markers, buffering markers, etc.)
-            if (part.type?.startsWith('data-')) return '';
-            return '';
-          })
-          .filter(Boolean)
-          .join('\n');
-      } else if (msg.content?.content) {
-        // Fallback to text string if no parts
-        content = maybeTruncate(msg.content.content, maxLen);
+interface ObserverAttachmentCounter {
+  nextImageId: number;
+  nextFileId: number;
+}
+
+const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
+  'png',
+  'jpg',
+  'jpeg',
+  'webp',
+  'gif',
+  'bmp',
+  'tiff',
+  'tif',
+  'heic',
+  'heif',
+  'avif',
+]);
+
+function formatObserverTimestamp(createdAt: MastraDBMessage['createdAt']): string {
+  return createdAt
+    ? new Date(createdAt).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+    : '';
+}
+
+function getObserverPathExtension(value: string): string | undefined {
+  const normalized = value.split('#', 1)[0]?.split('?', 1)[0] ?? value;
+  const match = normalized.match(/\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase();
+}
+
+function hasObserverImageFilenameExtension(filename: unknown): boolean {
+  return typeof filename === 'string' && OBSERVER_IMAGE_FILE_EXTENSIONS.has(getObserverPathExtension(filename) ?? '');
+}
+
+function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
+  if (part.type !== 'file') {
+    return false;
+  }
+
+  if (typeof part.mimeType === 'string' && part.mimeType.toLowerCase().startsWith('image/')) {
+    return true;
+  }
+
+  if (typeof part.data === 'string' && part.data.startsWith('data:image/')) {
+    return true;
+  }
+
+  if (part.data instanceof URL && hasObserverImageFilenameExtension(part.data.pathname)) {
+    return true;
+  }
+
+  if (typeof part.data === 'string') {
+    try {
+      const url = new URL(part.data);
+      if ((url.protocol === 'http:' || url.protocol === 'https:') && hasObserverImageFilenameExtension(url.pathname)) {
+        return true;
       }
+    } catch {
+      // ignore invalid URL string
+    }
+  }
 
-      return `**${role}${timestampStr}:**\n${content}`;
-    })
-    .join('\n\n---\n\n');
+  return hasObserverImageFilenameExtension(part.filename);
+}
+
+function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart {
+  if (part.type === 'image') {
+    return {
+      type: 'image',
+      image: part.image,
+      mimeType: part.mimeType,
+      providerOptions: part.providerOptions,
+      providerMetadata: part.providerMetadata,
+      experimental_providerMetadata: part.experimental_providerMetadata,
+    };
+  }
+
+  if (isImageLikeObserverFilePart(part)) {
+    return {
+      type: 'image',
+      image: part.data,
+      mimeType: part.mimeType,
+      providerOptions: part.providerOptions,
+      providerMetadata: part.providerMetadata,
+      experimental_providerMetadata: part.experimental_providerMetadata,
+    };
+  }
+
+  return {
+    type: 'file',
+    data: part.data,
+    mimeType: part.mimeType,
+    filename: part.filename,
+    providerOptions: part.providerOptions,
+    providerMetadata: part.providerMetadata,
+    experimental_providerMetadata: part.experimental_providerMetadata,
+  };
+}
+
+function resolveObserverAttachmentLabel(part: ObserverAttachmentPart): string | undefined {
+  if (part.filename?.trim()) {
+    return part.filename.trim();
+  }
+
+  const asset = part.type === 'image' ? part.image : part.data;
+  if (typeof asset !== 'string' || asset.startsWith('data:')) {
+    return part.mimeType;
+  }
+
+  try {
+    const url = new URL(asset);
+    const basename = url.pathname.split('/').filter(Boolean).pop();
+    return basename ? decodeURIComponent(basename) : part.mimeType;
+  } catch {
+    return part.mimeType;
+  }
+}
+
+function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, counter: ObserverAttachmentCounter): string {
+  const attachmentType = part.type === 'image' || isImageLikeObserverFilePart(part) ? 'Image' : 'File';
+  const attachmentId = attachmentType === 'Image' ? counter.nextImageId++ : counter.nextFileId++;
+  const label = resolveObserverAttachmentLabel(part);
+  return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
+}
+
+function formatObserverMessage(
+  msg: MastraDBMessage,
+  counter: ObserverAttachmentCounter,
+  options?: { maxPartLength?: number },
+): ObserverFormattedMessage {
+  const maxLen = options?.maxPartLength;
+  const timestamp = formatObserverTimestamp(msg.createdAt);
+  const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
+  const timestampStr = timestamp ? ` (${timestamp})` : '';
+  const attachments: ObserverInputAttachmentPart[] = [];
+
+  let content = '';
+  if (typeof msg.content === 'string') {
+    content = maybeTruncate(msg.content, maxLen);
+  } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
+    content = msg.content.parts
+      .map(part => {
+        if (part.type === 'text') return maybeTruncate(part.text, maxLen);
+        if (part.type === 'tool-invocation') {
+          const inv = part.toolInvocation;
+          if (inv.state === 'result') {
+            const resultStr = JSON.stringify(inv.result, null, 2);
+            return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
+          }
+          const argsStr = JSON.stringify(inv.args, null, 2);
+          return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
+        }
+
+        const partType = (part as { type?: string }).type;
+        if (partType === 'image' || partType === 'file') {
+          const attachment = part as ObserverAttachmentPart;
+          const inputAttachment = toObserverInputAttachmentPart(attachment);
+          if (inputAttachment) {
+            attachments.push(inputAttachment);
+          }
+          return formatObserverAttachmentPlaceholder(attachment, counter);
+        }
+        if (partType?.startsWith('data-')) return '';
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  } else if (msg.content?.content) {
+    content = maybeTruncate(msg.content.content, maxLen);
+  }
+
+  return {
+    text: `**${role}${timestampStr}:**\n${content}`,
+    attachments,
+  };
+}
+
+export function formatMessagesForObserver(messages: MastraDBMessage[], options?: { maxPartLength?: number }): string {
+  const counter = { nextImageId: 1, nextFileId: 1 };
+  return messages.map(msg => formatObserverMessage(msg, counter, options).text).join('\n\n---\n\n');
+}
+
+export function buildObserverHistoryMessage(messages: MastraDBMessage[]): CoreMessage {
+  const counter = { nextImageId: 1, nextFileId: 1 };
+  const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
+
+  messages.forEach((message, index) => {
+    const formatted = formatObserverMessage(message, counter);
+    content.push({ type: 'text', text: formatted.text });
+    content.push(...formatted.attachments);
+    if (index < messages.length - 1) {
+      content.push({ type: 'text', text: '\n\n---\n\n' });
+    }
+  });
+
+  return {
+    role: 'user',
+    content,
+  } as CoreMessage;
 }
 
 /** Truncate a string to maxLen characters, appending a note if truncated. */
@@ -499,18 +698,50 @@ export function formatMultiThreadMessagesForObserver(
   return sections.join('\n\n');
 }
 
-/**
- * Build the prompt for multi-thread batched observation.
- */
-export function buildMultiThreadObserverPrompt(
-  existingObservations: string | undefined,
+export function buildMultiThreadObserverHistoryMessage(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
+): CoreMessage {
+  const counter = { nextImageId: 1, nextFileId: 1 };
+  const content: any[] = [
+    {
+      type: 'text',
+      text: `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n`,
+    },
+  ];
+
+  threadOrder.forEach((threadId, threadIndex) => {
+    const messages = messagesByThread.get(threadId);
+    if (!messages || messages.length === 0) return;
+
+    content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
+
+    messages.forEach((message, messageIndex) => {
+      const formatted = formatObserverMessage(message, counter);
+      content.push({ type: 'text', text: formatted.text });
+      content.push(...formatted.attachments);
+      if (messageIndex < messages.length - 1) {
+        content.push({ type: 'text', text: '\n\n---\n\n' });
+      }
+    });
+
+    content.push({ type: 'text', text: '\n</thread>' });
+    if (threadIndex < threadOrder.length - 1) {
+      content.push({ type: 'text', text: '\n\n' });
+    }
+  });
+
+  return {
+    role: 'user',
+    content,
+  } as CoreMessage;
+}
+
+export function buildMultiThreadObserverTaskPrompt(
+  existingObservations: string | undefined,
+  threadOrder?: string[],
   priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
 ): string {
-  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
-  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
-
   let prompt = '';
 
   if (existingObservations) {
@@ -519,10 +750,9 @@ export function buildMultiThreadObserverPrompt(
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
-  prompt += `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n`;
-
+  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
   const threadMetadataLines = threadOrder
-    .map(threadId => {
+    ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
       if (!metadata?.currentTask && !metadata?.suggestedResponse) {
         return '';
@@ -568,6 +798,19 @@ export function buildMultiThreadObserverPrompt(
   prompt += `</observations>`;
 
   return prompt;
+}
+
+/**
+ * Build the prompt for multi-thread batched observation.
+ */
+export function buildMultiThreadObserverPrompt(
+  existingObservations: string | undefined,
+  messagesByThread: Map<string, MastraDBMessage[]>,
+  threadOrder: string[],
+  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+): string {
+  const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread)}`;
 }
 
 /**
@@ -646,22 +889,14 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
   };
 }
 
-/**
- * Build the full prompt for the Observer agent.
- * Includes emphasis on the most recent user message for priority handling.
- */
-export function buildObserverPrompt(
+export function buildObserverTaskPrompt(
   existingObservations: string | undefined,
-  messagesToObserve: MastraDBMessage[],
   options?: {
     skipContinuationHints?: boolean;
     priorCurrentTask?: string;
     priorSuggestedResponse?: string;
   },
 ): string {
-  const formattedMessages = formatMessagesForObserver(messagesToObserve);
-  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
-
   let prompt = '';
 
   if (existingObservations) {
@@ -670,8 +905,7 @@ export function buildObserverPrompt(
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
-  prompt += `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n`;
-
+  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
   const priorMetadataLines: string[] = [];
   if (options?.priorCurrentTask) {
     priorMetadataLines.push(`- prior current-task: ${options.priorCurrentTask}`);
@@ -697,6 +931,23 @@ export function buildObserverPrompt(
   }
 
   return prompt;
+}
+
+/**
+ * Build the full prompt for the Observer agent.
+ * Includes emphasis on the most recent user message for priority handling.
+ */
+export function buildObserverPrompt(
+  existingObservations: string | undefined,
+  messagesToObserve: MastraDBMessage[],
+  options?: {
+    skipContinuationHints?: boolean;
+    priorCurrentTask?: string;
+    priorSuggestedResponse?: string;
+  },
+): string {
+  const formattedMessages = formatMessagesForObserver(messagesToObserve);
+  return `## New Message History to Observe\n\n${formattedMessages}\n\n---\n\n${buildObserverTaskPrompt(existingObservations, options)}`;
 }
 
 /**

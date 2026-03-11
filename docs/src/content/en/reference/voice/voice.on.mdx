@@ -11,7 +11,7 @@ packages:
 
 The `on()` method registers event listeners for various voice events. This is particularly important for real-time voice providers, where events are used to communicate transcribed text, audio responses, and other state changes.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
@@ -61,26 +61,26 @@ voice.on('error', ({ message, code, details }) => {
 
 <PropertiesTable
   content={[
-{
-name: "event",
-type: "string",
-description:
-"Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.",
-isOptional: false,
-},
-{
-name: "callback",
-type: "function",
-description:
-"Callback function that will be called when the event occurs. The callback signature depends on the specific event.",
-isOptional: false,
-},
+  {
+    name: 'event',
+    type: 'string',
+    description:
+      'Name of the event to listen for. See the [Voice Events](./voice.events) documentation for a list of available events.',
+    isOptional: false,
+  },
+  {
+    name: 'callback',
+    type: 'function',
+    description:
+      'Callback function that will be called when the event occurs. The callback signature depends on the specific event.',
+    isOptional: false,
+  },
 ]}
 />
 
-## Return Value
+## Return value
 
-This method does not return a value.
+This method doesn't return a value.
 
 ## Events
 
@@ -97,7 +97,7 @@ Common events include:
 
 Different voice providers may support different sets of events with varying payload structures.
 
-## Using with CompositeVoice
+## Using with `CompositeVoice`
 
 When using `CompositeVoice`, the `on()` method delegates to the configured real-time provider:
 
@@ -134,4 +134,4 @@ voice.on('speaker', stream => {
 - To remove an event listener, use the [voice.off()](./voice.off) method with the same event name and callback function
 - Multiple listeners can be registered for the same event
 - The callback function will receive different data depending on the event type (see [Voice Events](./voice.events))
-- For best performance, consider removing event listeners when they are no longer needed
+- For best performance, consider removing event listeners when they're no longer needed

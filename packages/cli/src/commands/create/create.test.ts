@@ -51,7 +51,7 @@ vi.mock('../init/utils', () => ({
   interactivePrompt: vi.fn(),
   getModelIdentifier: vi.fn((provider: string) => {
     const models: Record<string, string> = {
-      openai: "'openai/gpt-4o-mini'",
+      openai: "'openai/gpt-5-mini'",
       anthropic: "'anthropic/claude-sonnet-4-5-20250929'",
       groq: "'groq/llama-3.3-70b-versatile'",
       google: "'google/gemini-2.5-pro'",

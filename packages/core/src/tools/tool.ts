@@ -1,8 +1,9 @@
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
-import type { SchemaWithValidation } from '../stream/base/schema';
+import { toStandardSchema } from '../schema';
+import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
+import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -85,22 +86,22 @@ export class Tool<
   description: string;
 
   /** Schema for validating input parameters */
-  inputSchema?: SchemaWithValidation<TSchemaIn>;
+  inputSchema?: StandardSchemaWithJSON<TSchemaIn>;
 
   /** Schema for validating output structure */
-  outputSchema?: SchemaWithValidation<TSchemaOut>;
+  outputSchema?: StandardSchemaWithJSON<TSchemaOut>;
 
   /** Schema for suspend operation data */
-  suspendSchema?: SchemaWithValidation<TSuspendSchema>;
+  suspendSchema?: StandardSchemaWithJSON<TSuspendSchema>;
 
   /** Schema for resume operation data */
-  resumeSchema?: SchemaWithValidation<TResumeSchema>;
+  resumeSchema?: StandardSchemaWithJSON<TResumeSchema>;
 
   /**
    * Schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
 
   /**
    * Tool execution function
@@ -201,6 +202,17 @@ export class Tool<
   >['onOutput'];
 
   /**
+   * Examples of valid tool inputs passed through to the AI SDK.
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
+
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   */
+  mcpMetadata?: McpMetadata;
+
+  /**
    * Creates a new Tool instance with input validation wrapper.
    *
    * @param opts - Tool configuration and execute function
@@ -218,16 +230,18 @@ export class Tool<
     (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
-    this.inputSchema = opts.inputSchema;
-    this.outputSchema = opts.outputSchema;
-    this.suspendSchema = opts.suspendSchema;
-    this.resumeSchema = opts.resumeSchema;
+    this.inputSchema = opts.inputSchema ? toStandardSchema(opts.inputSchema) : undefined;
+    this.outputSchema = opts.outputSchema ? toStandardSchema(opts.outputSchema) : undefined;
+    this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;
+    this.resumeSchema = opts.resumeSchema ? toStandardSchema(opts.resumeSchema) : undefined;
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
+    this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
+    this.mcpMetadata = opts.mcpMetadata;
     this.onInputStart = opts.onInputStart;
     this.onInputDelta = opts.onInputDelta;
     this.onInputAvailable = opts.onInputAvailable;
@@ -238,11 +252,11 @@ export class Tool<
     // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (inputData: unknown, context?: any) => {
+      this.execute = async (inputData: TSchemaIn, context?: any) => {
         // Validate input if schema exists
         const { data, error } = validateToolInput(this.inputSchema, inputData, this.id);
         if (error) {
-          return error as any;
+          return error;
         }
 
         // Validate request context if schema exists
@@ -372,6 +386,7 @@ export class Tool<
 
         // Validate output if schema exists
         const outputValidation = validateToolOutput(this.outputSchema, output, this.id, skiptOutputValidation);
+
         if (outputValidation.error) {
           return outputValidation.error as any;
         }
@@ -458,20 +473,53 @@ export class Tool<
  * });
  * ```
  */
-export function createTool<
-  TId extends string = string,
-  TSchemaIn = unknown,
-  TSchemaOut = unknown,
-  TSuspend = unknown,
-  TResume = unknown,
-  TRequestContext extends Record<string, any> | unknown = unknown,
-  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
-    TSuspend,
-    TResume,
+type SchemaLike = PublicSchema<any> | undefined;
+type InferSchema<T extends SchemaLike> = T extends PublicSchema<any> ? InferPublicSchema<T> : unknown;
+
+type CreateToolOpts<
+  TId extends string,
+  TInputSchema extends SchemaLike,
+  TOutputSchema extends SchemaLike,
+  TSuspendSchema extends SchemaLike,
+  TResumeSchema extends SchemaLike,
+  TRequestContext,
+  TContext extends ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext>,
+> = Omit<
+  ToolAction<
+    InferSchema<TInputSchema>,
+    InferSchema<TOutputSchema>,
+    InferSchema<TSuspendSchema>,
+    InferSchema<TResumeSchema>,
+    TContext,
+    TId,
     TRequestContext
   >,
+  'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema'
+> & {
+  inputSchema?: TInputSchema;
+  outputSchema?: TOutputSchema;
+  suspendSchema?: TSuspendSchema;
+  resumeSchema?: TResumeSchema;
+};
+export function createTool<
+  TId extends string = string,
+  TInputSchema extends SchemaLike = undefined,
+  TOutputSchema extends SchemaLike = undefined,
+  TSuspendSchema extends SchemaLike = undefined,
+  TResumeSchema extends SchemaLike = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext> =
+    ToolExecutionContext<InferSchema<TSuspendSchema>, InferSchema<TResumeSchema>, TRequestContext>,
 >(
-  opts: ToolAction<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-): Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext> {
+  opts: CreateToolOpts<TId, TInputSchema, TOutputSchema, TSuspendSchema, TResumeSchema, TRequestContext, TContext>,
+): Tool<
+  InferSchema<TInputSchema>,
+  InferSchema<TOutputSchema>,
+  InferSchema<TSuspendSchema>,
+  InferSchema<TResumeSchema>,
+  TContext,
+  TId,
+  TRequestContext
+> {
   return new Tool(opts);
 }

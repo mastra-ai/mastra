@@ -1,9 +1,9 @@
 ---
-title: "Guide: Automating Multi-Language PR Descriptions in GitHub Actions"
+title: "Guide: Automating multi-language PR descriptions in GitHub Actions"
 description: Automate multi-language pull request descriptions with a GitHub Actions workflow that uses Mastra to read diffs and generate concise PR descriptions.
 ---
 
-# Building a PR Description Agent for GitHub Actions
+# Building a PR description agent for GitHub Actions
 
 In this guide, you'll build a [GitHub Action](https://docs.github.com/en/actions) that uses a Mastra agent to read pull request diffs, generate multi-language summaries, and write them directly to the PR description in the GitHub UI. The action runs whenever a pull request is created or updated and regenerates the description as the diff changes.
 
@@ -15,7 +15,7 @@ The setup consists of three parts:
 - A GitHub Actions workflow that triggers on pull requests
 - A Node.js script that connects the workflow to the agent
 
-The finished action writes a description with summaries in English, Spanish, and Japanese, each marked with a flag emoji for easy scanning. For example:
+The finished action writes a description with summaries in English, Spanish, and Japanese, each marked with a flag emoji for quick scanning. For example:
 
 ```text
 🇬🇧 English
@@ -51,7 +51,7 @@ The workflow references this secret as `${{ secrets.OPENAI_API_KEY }}` and makes
 
 The PR description agent is responsible for turning a git diff into a clear, reviewer-friendly pull request description.
 
-This agent receives the raw diff from a pull request. It generates descriptions in the configured languages and formats the output using emoji flags so each language section is easy to scan in the PR.
+This agent receives the raw diff from a pull request. It generates descriptions in the configured languages and formats the output using emoji flags so each language section is quick to scan in the PR.
 
 ```ts title="src/mastra/agents/description-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -119,7 +119,7 @@ Before deploying the workflow, you can test the agent in [Mastra Studio](/docs/g
 
 The agent will return a formatted description with sections in English, Spanish, and Japanese.
 
-## GitHub Actions
+## GitHub actions
 
 GitHub Actions run your workflows in short-lived environments on GitHub's infrastructure. Each run starts with a clean virtual machine, checks out your code, installs dependencies, runs your workflow steps, and then shuts down. Nothing persists between runs unless you explicitly save it as an artifact or cache.
 

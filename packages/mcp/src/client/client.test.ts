@@ -1,15 +1,18 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 import { InternalMastraMCPClient } from './client.js';
 
@@ -408,6 +411,81 @@ describe('MastraMCPClient - outputSchema Zod stripping', () => {
 
     // Should return the full result, not {}
     expect(result).toEqual(fullResult);
+  });
+});
+
+describe('MastraMCPClient - AbortSignal forwarding', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+
+    // Add a slow tool that takes 60s
+    testServer.mcpServer.tool('slow_tool', 'A slow tool', { input: z.string() }, async () => {
+      await new Promise(resolve => setTimeout(resolve, 60_000));
+      return { content: [{ type: 'text' as const, text: 'done' }] };
+    });
+
+    client = new InternalMastraMCPClient({
+      name: 'abort-signal-test-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should forward abortSignal to callTool and reject when aborted', async () => {
+    const tools = await client.tools();
+    const slowTool = tools['slow_tool'];
+    expect(slowTool).toBeDefined();
+
+    const abortController = new AbortController();
+
+    // Abort after 100ms
+    const timeoutId = setTimeout(() => abortController.abort(), 100);
+
+    const start = Date.now();
+    try {
+      await expect(slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal })).rejects.toThrow();
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    const elapsed = Date.now() - start;
+
+    // Should abort quickly (< 5s), not wait the full 60s tool duration
+    expect(elapsed).toBeLessThan(5_000);
+  });
+
+  it('should pass abortSignal through to the MCP SDK client', async () => {
+    const sdkClient = (client as any).client as Client;
+    const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const slowTool = tools['slow_tool'];
+
+    const abortController = new AbortController();
+    await slowTool.execute?.({ input: 'test' }, { abortSignal: abortController.signal });
+
+    expect(callToolSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'slow_tool' }),
+      expect.anything(),
+      expect.objectContaining({ signal: abortController.signal }),
+    );
   });
 });
 
@@ -1502,46 +1580,6 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     await serverTransport.close().catch(() => {});
     httpServer.close();
   });
-
-  it('should reconnect and retry when streamable SSE stream is terminated', async () => {
-    const testServer = await setupTestServer(true);
-    const client = new InternalMastraMCPClient({
-      name: 'sse-terminated-retry-test',
-      server: { url: testServer.baseUrl },
-    });
-
-    await client.connect();
-
-    const tools = await client.tools();
-    const greetTool = tools['greet'];
-    expect(greetTool).toBeDefined();
-
-    const sdkClient = (client as any).client as Client;
-    const originalCallTool = sdkClient.callTool.bind(sdkClient);
-
-    const callToolSpy = vi
-      .spyOn(sdkClient, 'callTool')
-      .mockImplementationOnce(async () => {
-        throw new Error('SSE stream disconnected: TypeError: terminated');
-      })
-      .mockImplementation(originalCallTool);
-
-    const forceReconnectSpy = vi.spyOn(client as any, 'forceReconnect').mockResolvedValue(undefined);
-
-    try {
-      const result = await greetTool.execute?.({ name: 'Recovered' });
-      expect(result).toEqual({ content: [{ type: 'text', text: 'Hello, Recovered!' }] });
-      expect(forceReconnectSpy).toHaveBeenCalledTimes(1);
-      expect(callToolSpy).toHaveBeenCalledTimes(2);
-    } finally {
-      forceReconnectSpy.mockRestore();
-      callToolSpy.mockRestore();
-      await client.disconnect().catch(() => {});
-      await testServer.mcpServer.close().catch(() => {});
-      await testServer.serverTransport.close().catch(() => {});
-      testServer.httpServer.close();
-    }
-  });
 });
 
 describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => {
@@ -1761,6 +1799,49 @@ describe('MastraMCPClient - Filesystem Server Integration (Issue #8660)', () => 
   }, 30000);
 });
 
+describe('MastraMCPClient - mcpMetadata on tools', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'metadata-test-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should set mcpMetadata.serverName on created tools', async () => {
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool).toBeDefined();
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverName).toBe('metadata-test-client');
+  });
+
+  it('should set mcpMetadata.serverVersion after connection', async () => {
+    const tools = await client.tools();
+    const greetTool = tools.greet;
+    expect(greetTool.mcpMetadata).toBeDefined();
+    expect(greetTool.mcpMetadata!.serverVersion).toBe('1.0.0');
+  });
+});
+
 describe('MastraMCPClient fetch with requestContext', () => {
   let testServer: {
     httpServer: HttpServer;
@@ -1899,4 +1980,57 @@ describe('MastraMCPClient fetch with requestContext', () => {
     const lastToolCallFetch = callsDuringToolExec[callsDuringToolExec.length - 1];
     expect(lastToolCallFetch!.length).toBeGreaterThanOrEqual(3);
   }, 15000);
+});
+
+describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
+  it('should pipe stderr instead of inheriting it when stderr is set to "pipe"', async () => {
+    const STDERR_MARKER = 'noisy-server: startup log';
+
+    // Spy on parent process stderr to verify the marker does NOT appear
+    const stderrSpy = vi.spyOn(process.stderr, 'write');
+
+    const client = new InternalMastraMCPClient({
+      name: 'noisy',
+      server: {
+        command: 'npx',
+        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/noisy-server.ts')],
+        stderr: 'pipe',
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    expect(tools).toBeDefined();
+
+    // Verify the child's stderr marker was NOT inherited to the parent's stderr
+    const stderrOutput = stderrSpy.mock.calls.map(call => String(call[0])).join('');
+    expect(stderrOutput).not.toContain(STDERR_MARKER);
+
+    stderrSpy.mockRestore();
+    await client.disconnect();
+  }, 30000);
+
+  it('should forward cwd option to the child process', async () => {
+    const targetDir = fs.realpathSync(os.tmpdir());
+
+    const client = new InternalMastraMCPClient({
+      name: 'cwd-test',
+      server: {
+        command: 'npx',
+        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/cwd-reporter.ts')],
+        cwd: targetDir,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+    const getCwdTool = tools['getCwd'];
+    expect(getCwdTool).toBeDefined();
+
+    // Execute the tool and verify the child process cwd matches
+    const result = (await getCwdTool!.execute({}, {})) as { content: Array<{ type: string; text: string }> };
+    expect(result.content[0]!.text).toBe(targetDir);
+
+    await client.disconnect();
+  }, 30000);
 });
