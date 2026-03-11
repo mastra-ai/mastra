@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "1.0.11",
+  "version": "1.0.12-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "fs-extra": "^11.3.3"
+    "fs-extra": "^11.3.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -43,7 +43,7 @@
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

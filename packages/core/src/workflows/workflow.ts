@@ -14,6 +14,7 @@ import type { MastraScorers } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event } from '../events/types';
+import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext, TracingOptions, TracingPolicy } from '../observability';
@@ -48,6 +49,7 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
+import { forwardAgentStreamChunk } from './stream-utils';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -502,7 +504,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         });
       } else {
         for await (const chunk of stream) {
-          await writer.write(chunk as any);
+          await forwardAgentStreamChunk({ writer, chunk });
           if (chunk.type === 'tripwire') {
             tripwireChunk = chunk;
             break;
@@ -996,6 +998,10 @@ function createStepFromProcessor<TProcessorId extends string>(
           }
 
           case 'outputStream': {
+            // Skip data-* chunks for processors that haven't opted in
+            if (part && (part as ChunkType).type.startsWith('data-') && !processor.processDataParts) {
+              return { ...passThrough, part };
+            }
             if (processor.processOutputStream) {
               // Manage per-processor span lifecycle across stream chunks
               // Use unique key to store span on shared state object
@@ -1453,6 +1459,11 @@ export class Workflow<
     if (p.logger) {
       this.__setLogger(p.logger);
     }
+  }
+
+  __setLogger(logger: IMastraLogger) {
+    super.__setLogger(logger);
+    this.executionEngine.__setLogger(logger);
   }
 
   setStepFlow(stepFlow: StepFlowEntry<TEngineType>[]) {
