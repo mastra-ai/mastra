@@ -30,7 +30,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@upstash/redis": "^1.36.3",
-    "@upstash/vector": "^1.2.2"
+    "@upstash/vector": "^1.2.3"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
