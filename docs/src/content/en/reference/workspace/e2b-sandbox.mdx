@@ -171,7 +171,7 @@ if (handle) {
 
 See [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
-## Mounting Cloud Storage
+## Mounting cloud storage
 
 E2B sandboxes can mount S3 or GCS filesystems, making cloud storage accessible as local directories inside the sandbox. This is useful for:
 
@@ -218,7 +218,7 @@ E2B sandboxes use FUSE (Filesystem in Userspace) to mount cloud storage:
 
 The E2B sandbox automatically installs the required FUSE tools when mounting is used. For best performance, pre-build a custom template with the tools installed.
 
-## Custom Templates
+## Custom templates
 
 By default, when no template is specified, E2BSandbox automatically builds a template with `s3fs` installed for S3 mounting support. This template is cached and reused across sandbox instances.
 

@@ -1,5 +1,7 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
+import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { is403ForbiddenError } from '@/lib/query-utils';
 import { ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import React, { useMemo, useState } from 'react';
 
@@ -13,10 +15,11 @@ import { EmptyDatasetsTable } from '../empty-datasets-table';
 export interface DatasetsTableProps {
   datasets: DatasetRecord[];
   isLoading: boolean;
+  error?: Error | null;
   onCreateClick?: () => void;
 }
 
-export function DatasetsTable({ datasets, isLoading, onCreateClick }: DatasetsTableProps) {
+export function DatasetsTable({ datasets, isLoading, error, onCreateClick }: DatasetsTableProps) {
   const [search, setSearch] = useState('');
   const { navigate, paths } = useLinkComponent();
   const tableData: DatasetTableColumn[] = useMemo(() => datasets, [datasets]);
@@ -29,6 +32,15 @@ export function DatasetsTable({ datasets, isLoading, onCreateClick }: DatasetsTa
 
   const ths = table.getHeaderGroups()[0];
   const rows = table.getRowModel().rows.concat();
+
+  // 403 check BEFORE empty state - permission denied takes precedence
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="datasets" />
+      </div>
+    );
+  }
 
   // Show empty state when no datasets and not loading
   if (rows.length === 0 && !isLoading) {

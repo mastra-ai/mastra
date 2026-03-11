@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Observability Instances
 
-## DefaultObservabilityInstance
+## `DefaultObservabilityInstance`
 
 Default implementation of the ObservabilityInstance interface.
 
@@ -25,13 +25,13 @@ Creates a new DefaultObservabilityInstance with the specified configuration.
 
 Inherits all properties and methods from BaseObservabilityInstance.
 
-## BaseObservabilityInstance
+## `BaseObservabilityInstance`
 
 Base class for custom ObservabilityInstance implementations.
 
 ### Methods
 
-#### getConfig
+#### `getConfig`
 
 ```typescript prettier:false
 getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
@@ -39,7 +39,7 @@ getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
 
 Returns the current observability configuration.
 
-#### getExporters
+#### `getExporters`
 
 ```typescript prettier:false
 getExporters(): readonly ObservabilityExporter[]
@@ -47,7 +47,7 @@ getExporters(): readonly ObservabilityExporter[]
 
 Returns all configured exporters.
 
-#### getSpanOutputProcessors
+#### `getSpanOutputProcessors`
 
 ```typescript prettier:false
 getSpanOutputProcessors(): readonly SpanOutputProcessor[]
@@ -55,7 +55,7 @@ getSpanOutputProcessors(): readonly SpanOutputProcessor[]
 
 Returns all configured span output processors.
 
-#### getLogger
+#### `getLogger`
 
 ```typescript prettier:false
 getLogger(): IMastraLogger
@@ -63,7 +63,7 @@ getLogger(): IMastraLogger
 
 Returns the logger instance for exporters and other components.
 
-#### startSpan
+#### `startSpan`
 
 ```typescript prettier:false
 startSpan<TType extends SpanType>(
@@ -128,7 +128,7 @@ async shutdown(): Promise<void>
 
 Shuts down all exporters and processors, cleaning up resources.
 
-## Custom Implementation
+## Custom implementation
 
 To create a custom ObservabilityInstance implementation, extend BaseObservabilityInstance:
 
@@ -147,7 +147,7 @@ class CustomObservabilityInstance extends BaseObservabilityInstance {
 }
 ```
 
-## See Also
+## See also
 
 ### Documentation
 
