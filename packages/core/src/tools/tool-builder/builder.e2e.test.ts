@@ -2,9 +2,10 @@ import { openai } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV1 as LanguageModel } from '@internal/ai-sdk-v4';
+import { createGatewayMock } from '@internal/test-utils';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { createOpenRouter as createOpenRouterV5 } from '@openrouter/ai-sdk-provider-v5';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent, isSupportedLanguageModel } from '../../agent';
 import { SpanType } from '../../observability';
@@ -12,6 +13,10 @@ import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { CoreToolBuilder } from './builder';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 export const isOpenAIModel = (model: LanguageModel | LanguageModelV2) =>
   model.provider.includes('openai') || model.modelId.includes('openai');
@@ -602,7 +607,10 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'tracing-test-tool',
       entityName: 'tracing-test-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify tracingContext was injected with the tool span
@@ -617,7 +625,7 @@ describe('Tool Tracing Context Injection', () => {
     expect(result).toEqual({ result: 'processed: test' });
   });
 
-  it('should not inject tracingContext when agentSpan is not available', async () => {
+  it('should not inject tracingContext when agentSpan is not available and no observability configured', async () => {
     let receivedTracingContext: any = undefined;
 
     const testTool = createTool({
@@ -649,7 +657,7 @@ describe('Tool Tracing Context Injection', () => {
     const builtTool = builder.build();
     const result = await builtTool.execute!({ message: 'test' }, { toolCallId: 'test-call-id', messages: [] });
 
-    // Verify tracingContext was injected but currentSpan is undefined
+    // Verify tracingContext was injected but currentSpan is undefined (no observability configured)
     expect(receivedTracingContext).toEqual({ currentSpan: undefined });
     expect(result).toEqual({ result: 'processed: test' });
   });
@@ -708,7 +716,10 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'vercel-tool',
       entityName: 'vercel-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
 
     // Verify Vercel tool execute was called (without tracingContext)
@@ -828,7 +839,10 @@ describe('Tool Tracing Context Injection', () => {
       entityId: 'toolset-tool',
       entityName: 'toolset-tool',
       entityType: 'tool',
+      requestContext: new RequestContext(),
       tracingPolicy: undefined,
+      mastra: undefined,
+      metadata: {},
     });
   });
 });

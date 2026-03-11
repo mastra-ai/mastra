@@ -11,9 +11,17 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
+import { Mastra } from '../..';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
-import { SpanType, wrapMastra, executeWithContext, EntityType, createObservabilityContext } from '../../observability';
+import {
+  SpanType,
+  wrapMastra,
+  executeWithContext,
+  EntityType,
+  getOrCreateSpan,
+  createObservabilityContext,
+} from '../../observability';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import { isVercelTool } from '../../tools/toolchecks';
@@ -22,7 +30,14 @@ import { isZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
-import type { CoreTool, MastraToolInvocationOptions, ToolAction, VercelTool, VercelToolV5 } from '../types';
+import type {
+  CoreTool,
+  McpMetadata,
+  MastraToolInvocationOptions,
+  ToolAction,
+  VercelTool,
+  VercelToolV5,
+} from '../types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData } from '../validation';
 
 /**
@@ -75,7 +90,7 @@ export class CoreToolBuilder extends MastraBase {
 
       if (isZodObject(schema)) {
         this.originalTool.inputSchema = schema.extend({
-          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional().default(''),
+          suspendedToolRunId: z.string().describe('The runId of the suspended tool').nullable().optional(),
           resumeData: z
             .any()
             .describe('The resumeData object created from the resumeSchema of suspended tool')
@@ -89,10 +104,8 @@ export class CoreToolBuilder extends MastraBase {
           jsonSchema.properties = {
             ...jsonSchema.properties,
             suspendedToolRunId: {
-              type: 'string',
+              type: ['string', 'null'],
               description: 'The runId of the suspended tool',
-              anyOf: [{ type: 'string' }, { type: 'null' }],
-              default: '',
             },
             resumeData: {
               description: 'The resumeData object created from the resumeSchema of suspended tool',
@@ -323,21 +336,33 @@ export class CoreToolBuilder extends MastraBase {
       // Fall back to build-time context for Legacy methods (AI SDK v4 doesn't support passing custom options)
       const tracingContext = execOptions.tracingContext || options.tracingContext;
 
-      // Create tool span if we have a current span available
+      // Extract MCP metadata once with proper typing to avoid repeated unsafe casts
+      const mcpMeta =
+        !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
+
+      // Create tool span - either as child of existing span or as new root span (e.g. MCP tools)
       const toolRequestContext = execOptions.requestContext ?? options.requestContext;
-      const toolSpan = tracingContext?.currentSpan?.createChildSpan({
-        type: SpanType.TOOL_CALL,
-        name: `tool: '${options.name}'`,
+      const toolSpan = getOrCreateSpan({
+        type: mcpMeta ? SpanType.MCP_TOOL_CALL : SpanType.TOOL_CALL,
+        name: mcpMeta ? `mcp_tool: '${options.name}' on '${mcpMeta.serverName}'` : `tool: '${options.name}'`,
         input: args,
         entityType: EntityType.TOOL,
         entityId: options.name,
         entityName: options.name,
-        attributes: {
-          toolDescription: options.description,
-          toolType: logType || 'tool',
-        },
+        attributes: mcpMeta
+          ? {
+              mcpServer: mcpMeta.serverName,
+              serverVersion: mcpMeta.serverVersion,
+              toolDescription: options.description,
+            }
+          : {
+              toolDescription: options.description,
+              toolType: logType || 'tool',
+            },
         tracingPolicy: options.tracingPolicy,
+        tracingContext: tracingContext,
         requestContext: toolRequestContext,
+        mastra: options.mastra instanceof Mastra ? options.mastra : undefined,
       });
 
       try {

@@ -20,6 +20,8 @@ import {
   Column,
   ButtonsGroup,
   Chip,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import type { DatasetItemVersion } from '@mastra/playground-ui';
 import { format } from 'date-fns';
@@ -61,7 +63,7 @@ function DatasetItemVersionsComparePage() {
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
 
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
   const { Link: FrameworkLink } = useLinkComponent();
   const { data: allVersions } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
 
@@ -77,6 +79,16 @@ function DatasetItemVersionsComparePage() {
     versionNumbers[1] ?? 0,
     dataset?.version,
   );
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (!datasetId || !itemId || versionNumbers.length < 2) {
     return (

@@ -637,6 +637,7 @@ export function fullStreamTests({
     it('should send tool results', async () => {
       const messageList = createMessageListWithUserMessage();
 
+      let toolResultCallCount = 0;
       const result = loopFn({
         methodType: 'stream',
         runId,
@@ -646,27 +647,50 @@ export function fullStreamTests({
             id: 'test-model',
             maxRetries: 0,
             model: new MockModel({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  {
-                    type: 'tool-call',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsageForVersion,
-                  },
-                ] as any),
-              }),
+              doStream: async () => {
+                toolResultCallCount++;
+                if (toolResultCallCount === 1) {
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      {
+                        type: 'tool-call',
+                        toolCallId: 'call-1',
+                        toolName: 'tool1',
+                        input: `{ "value": "value" }`,
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsageForVersion,
+                      },
+                    ] as any),
+                  };
+                }
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsageForVersion,
+                    },
+                  ] as any),
+                };
+              },
             } as any),
           },
         ],
@@ -699,6 +723,7 @@ export function fullStreamTests({
       vi.useRealTimers();
       const messageList = createMessageListWithUserMessage();
 
+      let delayedCallCount = 0;
       const result = loopFn({
         methodType: 'stream',
         runId,
@@ -708,27 +733,50 @@ export function fullStreamTests({
             id: 'test-model',
             maxRetries: 0,
             model: new MockModel({
-              doStream: async () => ({
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  {
-                    type: 'tool-call',
-                    toolCallId: 'call-1',
-                    toolName: 'tool1',
-                    input: `{ "value": "value" }`,
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: testUsageForVersion,
-                  },
-                ] as any),
-              }),
+              doStream: async () => {
+                delayedCallCount++;
+                if (delayedCallCount === 1) {
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: 'id-0',
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(0),
+                      },
+                      {
+                        type: 'tool-call',
+                        toolCallId: 'call-1',
+                        toolName: 'tool1',
+                        input: `{ "value": "value" }`,
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: testUsageForVersion,
+                      },
+                    ] as any),
+                  };
+                }
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'id-0',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(0),
+                    },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: testUsageForVersion,
+                    },
+                  ] as any),
+                };
+              },
             } as any),
           },
         ],

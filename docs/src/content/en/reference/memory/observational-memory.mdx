@@ -1,12 +1,12 @@
 ---
-title: "Reference: Observational Memory | Memory"
+title: "Reference: Observational memory | Memory"
 description: "API reference for Observational Memory in Mastra — a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
 ---
 
-# Observational Memory
+# Observational memory
 
 **Added in:** `@mastra/memory@1.1.0`
 
@@ -33,6 +33,8 @@ export const agent = new Agent({
 ## Configuration
 
 The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `google/gemini-2.5-flash` as the default model. When passing a config object, a `model` must be explicitly set — either at the top level, or on `observation.model` and/or `reflection.model`.
+
+Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. Non-image files appear as placeholders only.
 
 <PropertiesTable
   content={[
@@ -95,7 +97,7 @@ The `observationalMemory` option accepts `true`, a configuration object, or `fal
             name: 'messageTokens',
             type: 'number',
             description:
-              'Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called.',
+              'Token count of unobserved messages that triggers observation. When unobserved message tokens exceed this threshold, the Observer agent is called. Image parts are included with model-aware estimates when possible, with deterministic fallbacks when image metadata is incomplete. Image-like `file` parts are counted the same way when uploads are normalized as files.',
             isOptional: true,
             defaultValue: '30000',
           },

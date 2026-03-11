@@ -452,6 +452,7 @@ export class ProcessorRunner {
               },
               observabilityContext,
               requestContext,
+              writer,
             );
 
             // Extract the processed part from the result if it exists

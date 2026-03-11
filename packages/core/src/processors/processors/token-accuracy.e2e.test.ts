@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai';
+import { createGatewayMock } from '@internal/test-utils';
 import cl100k_base from 'js-tiktoken/ranks/cl100k_base';
-import { describe, it, expect, vi } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
@@ -12,6 +13,10 @@ import { TokenLimiterProcessor } from './token-limiter';
 import { ToolCallFilter } from './tool-call-filter';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 describe('TokenLimiterProcessor', () => {
   it('should limit messages to the specified token count', async () => {

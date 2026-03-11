@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -55,7 +55,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai-v5": "npm:ai@5.0.97",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "typescript-eslint": "^8.51.0",
