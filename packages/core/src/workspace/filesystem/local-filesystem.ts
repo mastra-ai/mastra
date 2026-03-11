@@ -69,12 +69,10 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    */
   readOnly?: boolean;
   /**
-   * Additional paths allowed beyond basePath.
-   * Useful with `contained: true` to grant access to specific directories
-   * outside the basePath without disabling containment entirely.
+   * Additional directories the agent can access outside of `basePath`.
    *
-   * Relative paths are resolved against `basePath`.
-   * Absolute paths are used as-is.
+   * Relative paths resolve against `basePath`.
+   * Absolute and tilde paths are used as-is.
    *
    * @example
    * ```typescript
