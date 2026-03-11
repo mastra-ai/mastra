@@ -1,13 +1,6 @@
 import { cn } from '@/lib/utils';
 import * as React from 'react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectValue,
-  SelectTrigger,
-  SelectTriggerProps,
-} from '@/ds/components/Select';
+import { Select, SelectContent, SelectItem, SelectValue, SelectTrigger } from '@/ds/components/Select';
 import { type FormElementSize } from '@/ds/primitives/form-element';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
@@ -24,8 +17,7 @@ export type SelectFieldProps = Omit<React.SelectHTMLAttributes<HTMLSelectElement
   options: { value: string; label: React.ReactNode; icon?: React.ReactNode; disabled?: boolean }[];
   placeholder?: string;
   onValueChange: (value: string) => void;
-  size?: FormElementSize | 'default';
-  variant?: SelectTriggerProps['variant'];
+  size?: FormElementSize;
 };
 
 export function SelectField({
@@ -40,8 +32,7 @@ export function SelectField({
   options,
   onValueChange,
   placeholder = 'Select an option',
-  size = 'lg',
-  variant = 'default',
+  size = 'default',
 }: SelectFieldProps) {
   const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
     return labelIsHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
@@ -65,12 +56,7 @@ export function SelectField({
         </label>
       </LabelWrapper>
       <Select name={name} value={value} onValueChange={onValueChange} disabled={disabled}>
-        <SelectTrigger
-          id={`select-${name}`}
-          size={size}
-          variant={variant}
-          className="grid grid-cols-[1fr_auto] [&>span]:truncate"
-        >
+        <SelectTrigger id={`select-${name}`} size={size} className="grid grid-cols-[1fr_auto] [&>span]:truncate w-full">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

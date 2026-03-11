@@ -168,11 +168,11 @@ function DatasetItemVersionsComparePage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <ButtonsGroup>
-                <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`} variant="standard" size="default">
+                <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
                   <ArrowLeftIcon />
                   Back to Item
                 </Button>
-                <Button variant="cta" size="default" onClick={() => setIsDiffView(v => !v)}>
+                <Button variant="primary" onClick={() => setIsDiffView(v => !v)}>
                   {isDiffView ? (
                     <>
                       <ColumnsIcon /> Default View
@@ -287,8 +287,6 @@ function CompareVersionColumn({
           onValueChange={(val: string) => onVersionChange(Number(val))}
           options={options}
           placeholder="Select version"
-          variant="experimental"
-          size="default"
           labelIsHidden={true}
           className="w-full"
         />

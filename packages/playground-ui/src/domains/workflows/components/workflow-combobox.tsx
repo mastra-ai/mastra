@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { toast } from '@/lib/toast';
-import { Combobox } from '@/ds/components/Combobox';
+import { Combobox, type ComboboxProps } from '@/ds/components/Combobox';
 import { useWorkflows } from '../hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -12,7 +12,7 @@ export interface WorkflowComboboxProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
-  variant?: 'default' | 'light' | 'outline' | 'ghost';
+  variant?: ComboboxProps['variant'];
 }
 
 export function WorkflowCombobox({
@@ -23,7 +23,7 @@ export function WorkflowCombobox({
   emptyText = 'No workflows found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'inputLike',
 }: WorkflowComboboxProps) {
   const { data: workflows = {}, isLoading, isError, error } = useWorkflows();
   const { navigate, paths } = useLinkComponent();
