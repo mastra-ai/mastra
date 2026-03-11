@@ -53,6 +53,7 @@ export function TextFieldBlock({
         <Input
           name={name}
           disabled={disabled}
+          required={required}
           value={value}
           placeholder={placeholder}
           data-testid={testId}

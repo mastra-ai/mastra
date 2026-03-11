@@ -168,7 +168,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button size="default" onClick={handleCancel}>
+              <Button type="button" onClick={handleCancel}>
                 Cancel
               </Button>
               <Button type="submit" variant="primary" disabled={addItem.isPending}>

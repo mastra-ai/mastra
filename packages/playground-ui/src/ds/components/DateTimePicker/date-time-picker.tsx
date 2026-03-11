@@ -239,12 +239,13 @@ export const DateTimePickerContent = ({
 
       <div className="grid grid-cols-[1fr_2fr] gap-2 m-4 mt-0">
         {newValueDefined && (
-          <Button tabIndex={0} size="md" onClick={handleClear}>
+          <Button tabIndex={0} size="md" onClick={handleClear} type="button">
             Clear
           </Button>
         )}
         <Button
           tabIndex={0}
+          type="button"
           size="md"
           variant={newValueDefined ? 'primary' : 'default'}
           onClick={() => {

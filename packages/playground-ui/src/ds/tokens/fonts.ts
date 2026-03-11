@@ -17,7 +17,8 @@ export const FontSizes = {
 export const LineHeights = {
   'ui-xs': '160%', // 16px
   'ui-sm': '150%', // 18px
-  'ui-smd': '143%', // 13px - special line height for e.g. form field labels
+  'ui-smd': '150%', // 
+  'ui-md': '143%', // 20px
   'ui-lg': '150%', // 24px
   'header-xs': '137%', // 22px
   'header-sm': '133%', // 24px
