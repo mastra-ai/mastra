@@ -50,7 +50,7 @@ export function createLspEslintTests(getContext: () => TestContext): void {
         const diagnostics = await lsp.getDiagnostics(join(testDir, 'lint-error.js'), content);
 
         // Graceful skip: if ESLint language server not available, returns []
-        if (diagnostics?.length === 0) return ctx.skip();
+        if (!diagnostics?.length) return ctx.skip();
 
         expect(diagnostics?.some(d => d.message.toLowerCase().includes('var') || d.message.includes('no-var'))).toBe(
           true,

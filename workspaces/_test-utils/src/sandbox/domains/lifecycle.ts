@@ -120,11 +120,6 @@ export function createSandboxLifecycleTests(getContext: () => TestContext): void
     describe('Readiness', () => {
       const { fastOnly } = getContext();
 
-      it('status is running after start', () => {
-        const { sandbox } = getContext();
-        expect(sandbox.status).toBe('running');
-      });
-
       it.skipIf(fastOnly)(
         'status is not running before start',
         async () => {

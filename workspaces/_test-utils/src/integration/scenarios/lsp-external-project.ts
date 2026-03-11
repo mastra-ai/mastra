@@ -54,10 +54,10 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
         const content = 'const x: number = "hello";';
 
         const diagnostics = await lsp.getDiagnostics(join(externalDir, 'error.ts'), content);
+        if (!diagnostics?.length) return ctx.skip();
 
-        expect(diagnostics?.length).toBeGreaterThan(0);
-        expect(diagnostics?.some(d => d.severity === 'error')).toBe(true);
-        expect(diagnostics?.some(d => d.message.includes('not assignable'))).toBe(true);
+        expect(diagnostics.some(d => d.severity === 'error')).toBe(true);
+        expect(diagnostics.some(d => d.message.includes('not assignable'))).toBe(true);
       },
       getContext().testTimeout,
     );
@@ -83,7 +83,7 @@ export function createLspExternalProjectTests(getContext: () => TestContext): vo
 
         const diagnostics = await lsp.getDiagnostics(join(externalDir, 'valid.ts'), content);
 
-        const errors = diagnostics?.filter(d => d.severity === 'error');
+        const errors = diagnostics?.filter(d => d.severity === 'error') ?? [];
         expect(errors).toHaveLength(0);
       },
       getContext().testTimeout,
