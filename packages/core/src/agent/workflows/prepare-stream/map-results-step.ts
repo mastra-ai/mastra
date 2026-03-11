@@ -4,7 +4,7 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
-import { resolveObservabilityContext, createObservabilityContext } from '../../../observability';
+import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
@@ -55,7 +55,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   },
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
-  return async ({ inputData, bail, ...observabilityContext }) => {
+  return async ({ inputData, bail, ..._observabilityContext }) => {
     const toolsData = inputData['prepare-tools-step'];
     const memoryData = inputData['prepare-memory-step'];
 
@@ -122,7 +122,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         const modelOutput = await getModelOutputForTripwire<OUTPUT>({
           tripwire: memoryData.tripwire!,
           runId,
-          ...resolveObservabilityContext(observabilityContext),
+          ...createObservabilityContext({ currentSpan: agentSpan }),
           options: options,
           model: agentModel,
           messageList: memoryData.messageList,
