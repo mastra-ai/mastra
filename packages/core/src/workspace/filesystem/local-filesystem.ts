@@ -50,7 +50,7 @@ export interface LocalFilesystemOptions extends MastraFilesystemOptions {
    * When true, all file operations are restricted to stay within basePath.
    * Prevents path traversal attacks and symlink escapes.
    *
-   * - `contained: true` (default) — All paths are resolved relative to
+   * - `contained: true` (default) — Relative paths are resolved against
    *   basePath. Any resolved path that escapes basePath (and allowedPaths)
    *   throws a PermissionError.
    * - `contained: false` — Absolute paths are treated as real filesystem
