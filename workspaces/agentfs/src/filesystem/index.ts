@@ -5,8 +5,6 @@
  * Follows the same pattern as S3Filesystem.
  */
 
-import { AgentFS } from 'agentfs-sdk';
-
 import type {
   FileContent,
   FileStat,
@@ -32,6 +30,7 @@ import {
   PermissionError,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
+import { AgentFS } from 'agentfs-sdk';
 
 // ---------------------------------------------------------------------------
 // Path utilities (POSIX-style with leading slash)

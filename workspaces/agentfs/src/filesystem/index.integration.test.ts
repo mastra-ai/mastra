@@ -5,10 +5,7 @@
  * No mocks — every test hits the real agentfs-sdk.
  */
 
-import {
-  createFilesystemTestSuite,
-  createWorkspaceIntegrationTests,
-} from '@internal/workspace-test-utils';
+import { createFilesystemTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
 import { cleanupCompositeMounts } from '@internal/workspace-test-utils/integration';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

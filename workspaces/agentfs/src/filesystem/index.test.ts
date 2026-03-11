@@ -6,7 +6,6 @@
  * No mocks — these tests hit the real agentfs-sdk.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   FileNotFoundError,
   FileExistsError,
@@ -15,6 +14,7 @@ import {
   DirectoryNotEmptyError,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { AgentFSFilesystem } from './index';
 
