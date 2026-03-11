@@ -130,7 +130,11 @@ export function AgentPlaygroundVersionBar({
 
         <HoverPopover>
           <PopoverTrigger asChild>
-            <button type="button" aria-label="Version information" className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-0">
+            <button
+              type="button"
+              aria-label="Version information"
+              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-0"
+            >
               <Icon size="sm">
                 <Info />
               </Icon>

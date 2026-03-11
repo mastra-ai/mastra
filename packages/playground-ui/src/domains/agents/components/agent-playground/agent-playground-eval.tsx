@@ -450,7 +450,18 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
       isStartingExperimentRef.current = false;
       setIsRunning(false);
     }
-  }, [selectedDatasetId, selectedScorers, agentId, onSaveDraft, triggerExperiment, mergedRequestContext, queryClient, experimentProvider, experimentModel, form]);
+  }, [
+    selectedDatasetId,
+    selectedScorers,
+    agentId,
+    onSaveDraft,
+    triggerExperiment,
+    mergedRequestContext,
+    queryClient,
+    experimentProvider,
+    experimentModel,
+    form,
+  ]);
 
   const selectedExperiment = selectedExperimentId ? experiments?.find(e => e.id === selectedExperimentId) : null;
 
@@ -501,11 +512,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
           </div>
           <div className="grid gap-1">
             <Label>Model</Label>
-            <LLMModels
-              llmId={experimentProvider}
-              value={experimentModel}
-              onValueChange={setExperimentModel}
-            />
+            <LLMModels llmId={experimentProvider} value={experimentModel} onValueChange={setExperimentModel} />
           </div>
         </div>
 
@@ -516,11 +523,7 @@ export function AgentPlaygroundEval({ agentId, onSaveDraft }: AgentPlaygroundEva
               Current changes will be saved before running
             </Txt>
           )}
-          <Button
-            variant="cta"
-            onClick={handleRunExperiment}
-            disabled={!selectedDatasetId || isRunning}
-          >
+          <Button variant="cta" onClick={handleRunExperiment} disabled={!selectedDatasetId || isRunning}>
             {isRunning ? (
               <>
                 <Spinner className="h-4 w-4" />

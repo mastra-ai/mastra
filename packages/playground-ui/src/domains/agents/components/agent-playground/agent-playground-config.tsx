@@ -41,7 +41,12 @@ function CollapsibleSection({
 
   return (
     <div className="border-b border-border1">
-      <div className={cn('group flex items-center gap-2 px-4 py-3 hover:bg-surface3 transition-colors', isOpen && 'bg-surface3')}>
+      <div
+        className={cn(
+          'group flex items-center gap-2 px-4 py-3 hover:bg-surface3 transition-colors',
+          isOpen && 'bg-surface3',
+        )}
+      >
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
@@ -54,7 +59,14 @@ function CollapsibleSection({
           <Icon size="sm" className="text-neutral3">
             {icon}
           </Icon>
-          <Txt as="span" variant="ui-sm" className={cn('font-normal text-neutral3 transition-colors group-hover:text-neutral5', isOpen && 'text-neutral5')}>
+          <Txt
+            as="span"
+            variant="ui-sm"
+            className={cn(
+              'font-normal text-neutral3 transition-colors group-hover:text-neutral5',
+              isOpen && 'text-neutral5',
+            )}
+          >
             {title}
           </Txt>
         </button>
@@ -582,24 +594,24 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
           />
         ) : (
           <>
-            <CollapsibleSection
-              title="System Prompt"
-              icon={<Cpu />}
-              defaultOpen
-            >
+            <CollapsibleSection title="System Prompt" icon={<Cpu />} defaultOpen>
               <div className="flex flex-col gap-3 pt-4 px-4 pb-2">
                 <Txt variant="ui-sm" className="font-normal text-neutral3">
                   Add instruction blocks to your agent. Blocks are combined in order to form the system prompt. You can{' '}
                   <HoverPopover>
                     <PopoverTrigger asChild>
-                      <button type="button" className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline">
+                      <button
+                        type="button"
+                        className="text-neutral3 underline decoration-dotted hover:text-neutral5 cursor-pointer inline"
+                      >
                         use variables
                       </button>
-                    </PopoverTrigger> as part of your instruction blocks.
+                    </PopoverTrigger>{' '}
+                    as part of your instruction blocks.
                     <PopoverContent side="bottom" align="start">
                       <p className="text-ui-sm text-neutral5">
-                        Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert dynamic
-                        values into your instruction blocks.
+                        Use <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax to insert
+                        dynamic values into your instruction blocks.
                       </p>
                     </PopoverContent>
                   </HoverPopover>

@@ -201,9 +201,7 @@ export function ToolsPage() {
                       className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-0"
                     >
                       <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
-                      {tool.description && (
-                        <span className="text-ui-xs text-neutral3">{tool.description}</span>
-                      )}
+                      {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}
                     </button>
                   ))}
                 </PopoverContent>
