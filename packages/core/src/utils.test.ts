@@ -6,7 +6,7 @@ import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import { generateEmptyFromSchema, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -343,4 +343,140 @@ it('should log correctly for Vercel tool execution', async () => {
   expect(debugSpy).toHaveBeenCalledWith('[Agent:testAgent] - Executing tool testTool', expect.any(Object));
 
   debugSpy.mockRestore();
+});
+
+describe('generateEmptyFromSchema', () => {
+  it('should handle a JSON string schema with flat properties', () => {
+    const schema = JSON.stringify({
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+        active: { type: 'boolean' },
+        tags: { type: 'array' },
+        count: { type: 'integer' },
+      },
+    });
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: '',
+      age: 0,
+      active: false,
+      tags: [],
+      count: 0,
+    });
+  });
+
+  it('should handle a pre-parsed object schema', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: '',
+      age: 0,
+    });
+  });
+
+  it('should recurse into nested object properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        user: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            preferences: {
+              type: 'object',
+              properties: {
+                theme: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      user: {
+        name: '',
+        preferences: {
+          theme: '',
+        },
+      },
+    });
+  });
+
+  it('should respect default values', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        name: { type: 'string', default: 'unknown' },
+        count: { type: 'number', default: 42 },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      name: 'unknown',
+      count: 42,
+    });
+  });
+
+  it('should return {} for invalid JSON string', () => {
+    expect(generateEmptyFromSchema('not json')).toEqual({});
+  });
+
+  it('should return {} for schema without properties', () => {
+    expect(generateEmptyFromSchema(JSON.stringify({ type: 'object' }))).toEqual({});
+  });
+
+  it('should return {} for non-object type schema', () => {
+    expect(generateEmptyFromSchema(JSON.stringify({ type: 'string' }))).toEqual({});
+  });
+
+  it('should return null for unknown property types', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        data: { type: 'unknown_type' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: null });
+  });
+
+  it('should handle deeply nested schemas from JSON string', () => {
+    const schema = JSON.stringify({
+      type: 'object',
+      properties: {
+        level1: {
+          type: 'object',
+          properties: {
+            level2: {
+              type: 'object',
+              properties: {
+                value: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(generateEmptyFromSchema(schema)).toEqual({
+      level1: {
+        level2: {
+          value: '',
+        },
+      },
+    });
+  });
+
+  it('should return {} for object property without nested properties', () => {
+    const schema = {
+      type: 'object',
+      properties: {
+        data: { type: 'object' },
+      },
+    };
+    expect(generateEmptyFromSchema(schema)).toEqual({ data: {} });
+  });
 });
