@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from './data';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -84,55 +84,46 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
 
     it('should persist and reload token estimates written by token counting', async () => {
       const counter = new TokenCounter();
-      const encoder = (counter as any).encoder;
-      const originalEncode = encoder.encode.bind(encoder);
-      let encodeCalls = 0;
+      const countStringSpy = vi.spyOn(counter, 'countString');
 
-      try {
-        encoder.encode = (...args: any[]) => {
-          encodeCalls += 1;
-          return originalEncode(...args);
-        };
+      const cachedMessage = createSampleMessageV2({
+        threadId: thread.id,
+        resourceId: thread.resourceId,
+        role: 'assistant',
+        content: {
+          parts: [
+            {
+              type: 'text',
+              text: 'message with cached token estimate from counter',
+            } as any,
+          ],
+        },
+      });
 
-        const cachedMessage = createSampleMessageV2({
-          threadId: thread.id,
-          resourceId: thread.resourceId,
-          role: 'assistant',
-          content: {
-            parts: [
-              {
-                type: 'text',
-                text: 'message with cached token estimate from counter',
-              } as any,
-            ],
-          },
-        });
+      const firstCount = counter.countMessage(cachedMessage);
+      const callsAfterFirst = countStringSpy.mock.calls.length;
+      const firstEstimate = (cachedMessage.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
 
-        const firstCount = counter.countMessage(cachedMessage);
-        const callsAfterFirst = encodeCalls;
-        const firstEstimate = (cachedMessage.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate;
+      expect(firstCount).toBeGreaterThan(0);
+      expect(firstEstimate).toBeTruthy();
+      expect(callsAfterFirst).toBeGreaterThan(1);
 
-        expect(firstCount).toBeGreaterThan(0);
-        expect(firstEstimate).toBeTruthy();
-        expect(callsAfterFirst).toBeGreaterThan(1);
+      await memoryStorage.saveMessages({ messages: [cachedMessage] });
 
-        await memoryStorage.saveMessages({ messages: [cachedMessage] });
+      const result = await memoryStorage.listMessages({
+        threadId: thread.id,
+      });
 
-        const result = await memoryStorage.listMessages({
-          threadId: thread.id,
-        });
+      const reloaded = result.messages.find(m => m.id === cachedMessage.id);
+      expect(reloaded).toBeTruthy();
+      expect((reloaded!.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate).toEqual(firstEstimate);
 
-        const reloaded = result.messages.find(m => m.id === cachedMessage.id);
-        expect(reloaded).toBeTruthy();
-        expect((reloaded!.content as any).parts[0].providerMetadata?.mastra?.tokenEstimate).toEqual(firstEstimate);
+      const secondCount = counter.countMessage(reloaded!);
+      const callsAfterSecond = countStringSpy.mock.calls.length;
+      expect(secondCount).toBe(firstCount);
+      expect(callsAfterSecond - callsAfterFirst).toBe(1);
 
-        const secondCount = counter.countMessage(reloaded!);
-        const callsAfterSecond = encodeCalls;
-        expect(secondCount).toBe(firstCount);
-        expect(callsAfterSecond - callsAfterFirst).toBe(1);
-      } finally {
-        encoder.encode = originalEncode;
-      }
+      countStringSpy.mockRestore();
     });
 
     it('should list messages with pagination', async () => {
