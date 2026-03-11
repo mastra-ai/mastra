@@ -122,7 +122,7 @@ export const SmallSize: Story = {
   args: {
     name: 'fruit',
     label: 'Fruit',
-    size: 'small',
+    size: 'sm',
   },
 };
 

@@ -115,7 +115,7 @@ export const SmallSize: Story = {
   args: {
     name: 'tag',
     label: 'Tag',
-    size: 'small',
+    size: 'sm',
   },
 };
 

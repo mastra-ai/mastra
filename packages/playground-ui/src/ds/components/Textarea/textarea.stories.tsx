@@ -40,7 +40,6 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-[300px]">
       <Textarea variant="default" placeholder="default" />
-      <Textarea variant="filled" placeholder="filled" />
       <Textarea variant="unstyled" placeholder="unstyled" />
     </div>
   ),
