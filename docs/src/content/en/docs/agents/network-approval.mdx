@@ -1,5 +1,5 @@
 ---
-title: "Network Approval | Agents"
+title: "Network approval | Agents"
 description: Learn how to require approvals, suspend execution, and resume suspended networks while keeping humans in control of agent network workflows.
 packages:
   - "@mastra/core"
@@ -7,7 +7,13 @@ packages:
   - "@mastra/memory"
 ---
 
-# Network Approval
+# Network approval
+
+:::warning[Deprecated]
+
+Agent networks are deprecated and will be removed in a future release. Use the [supervisor pattern](/docs/agents/supervisor-agents) instead. See the [migration guide](/guides/migrations/network-to-supervisor) to upgrade.
+
+:::
 
 Agent networks can require the same [human-in-the-loop](/docs/workflows/human-in-the-loop) oversight used in individual agents and workflows. When a tool, subagent, or workflow within a network requires approval or suspends execution, the network pauses and emits events that allow your application to collect user input before resuming.
 
@@ -275,7 +281,8 @@ Both approaches work with the same tool definitions. Automatic resumption trigge
 
 ## Related
 
-- [Agent Networks](./networks)
+- [Supervisor Agents](./supervisor-agents)
+- [Migration: .network() to Supervisor Pattern](/guides/migrations/network-to-supervisor)
 - [Agent Approval](./agent-approval)
 - [Human-in-the-Loop](/docs/workflows/human-in-the-loop)
 - [Agent Memory](./agent-memory)

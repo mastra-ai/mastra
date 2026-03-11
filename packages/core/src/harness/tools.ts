@@ -1,9 +1,10 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
 import type { ToolsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { createTool } from '../tools/tool';
+import { createWorkspaceTools } from '../workspace/tools/tools';
 
 import type { HarnessRequestContext, HarnessSubagent } from './types';
 
@@ -404,13 +405,22 @@ Use this tool when:
         };
       }
 
+      const workspace = context?.workspace;
+
       const subagent = new Agent({
         id: `subagent-${definition.id}`,
         name: `${definition.name} Subagent`,
         instructions: definition.instructions,
         model,
         tools: mergedTools,
+        workspace,
       });
+
+      // Compute the full set of workspace tool names (after renames) so
+      // prepareStep can selectively hide workspace tools not listed in
+      // allowedWorkspaceTools while leaving all other tools untouched.
+      const allWorkspaceToolNames = workspace ? new Set(Object.keys(createWorkspaceTools(workspace))) : undefined;
+      const allowedWs = definition.allowedWorkspaceTools ? new Set(definition.allowedWorkspaceTools) : undefined;
 
       const startTime = Date.now();
 
@@ -427,13 +437,21 @@ Use this tool when:
 
       try {
         const response = await subagent.stream(task, {
-          maxSteps: definition.maxSteps ?? 50,
+          maxSteps: definition.maxSteps ?? (definition.stopWhen ? undefined : 50),
           stopWhen: definition.stopWhen,
           abortSignal,
           requireToolApproval: false,
           // Forward the parent's request context so the subagent inherits
           // sandbox allowed paths and other harness state.
           requestContext: context?.requestContext,
+          // When allowedWorkspaceTools is set, hide workspace tools not in
+          // the list. Non-workspace tools always pass through.
+          prepareStep:
+            allowedWs && allWorkspaceToolNames
+              ? ({ tools }) => ({
+                  activeTools: Object.keys(tools ?? {}).filter(k => !allWorkspaceToolNames.has(k) || allowedWs!.has(k)),
+                })
+              : undefined,
         });
 
         for await (const chunk of response.fullStream) {

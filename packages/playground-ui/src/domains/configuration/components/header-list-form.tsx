@@ -1,10 +1,10 @@
 import { Button } from '@/ds/components/Button/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { InputField } from '@/ds/components/FormFields';
 import { useId } from 'react';
 
 import { Plus, Trash } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { ButtonWithTooltip } from '@/ds/components/Button';
+import { TextFieldBlock } from '@/ds/components/FormFieldBlocks/fields/text-field-block';
 
 export type HeaderListFormItem = {
   name: string;
@@ -20,11 +20,11 @@ export interface HeaderListFormProps {
 export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
   return (
     <div className="space-y-4">
-      <Txt as="h2" variant="header-md" className="text-neutral6">
+      <Txt as="h2" variant="header-xs" className="text-neutral6">
         Headers
       </Txt>
 
-      <div className="bg-surface4 rounded-lg p-4 border border-border2 space-y-4">
+      <div className=" space-y-6">
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (
@@ -35,18 +35,18 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderL
           </ul>
         )}
 
-        <Button
-          type="button"
-          variant="light"
-          className="w-full border-dashed !bg-surface4 !border-border2 hover:!bg-surface5"
-          size="lg"
-          onClick={() => onAddHeader({ name: '', value: '' })}
-        >
-          <Icon>
+        <div className="flex items-center gap-2 justify-between">
+          {headers.length === 0 && <Txt className="text-neutral3">No header yet</Txt>}
+          <Button
+            type="button"
+            onClick={() => onAddHeader({ name: '', value: '' })}
+            size={headers.length === 0 ? 'md' : 'sm'}
+            className=""
+          >
             <Plus />
-          </Icon>
-          Add Header
-        </Button>
+            {headers.length === 0 ? 'Add Header' : 'Add Another Header'}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -64,7 +64,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
 
   return (
     <div className="grid grid-cols-[1fr_1fr_auto] gap-4 items-end">
-      <InputField
+      <TextFieldBlock
         id={nameId}
         name={`headers.${index}.name`}
         label="Name"
@@ -73,7 +73,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
         defaultValue={header.name}
       />
 
-      <InputField
+      <TextFieldBlock
         id={valueId}
         name={`headers.${index}.value`}
         label="Value"
@@ -82,17 +82,9 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
         defaultValue={header.value}
       />
 
-      <Button
-        type="button"
-        variant="light"
-        className="w-full !bg-surface4 !border-border2 hover:!bg-surface5"
-        size="lg"
-        onClick={onRemove}
-      >
-        <Icon>
-          <Trash aria-label="Remove header" />
-        </Icon>
-      </Button>
+      <ButtonWithTooltip type="button" onClick={onRemove} aria-label="Remove header" tooltipContent="Remove header">
+        <Trash />
+      </ButtonWithTooltip>
     </div>
   );
 };

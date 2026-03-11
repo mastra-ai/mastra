@@ -67,7 +67,7 @@ export const mastra = new Mastra({
 Event handlers for the internal pub/sub system. Maps event topics to handler functions that are called when events are published to those topics.
 
 :::warning
-This is used internally by Mastra's workflow engine. Most users will not need to configure this option.
+This is used internally by Mastra's workflow engine. Most users won't need to configure this option.
 :::
 
 ```typescript title="src/mastra/index.ts"
@@ -103,14 +103,24 @@ export const mastra = new Mastra({
 
 ### idGenerator
 
-**Type:** `() => string`\
+**Type:** `(context?: IdGeneratorContext) => string`\
 **Default:** `crypto.randomUUID()`
 
-Custom ID generator function for creating unique identifiers.
+Custom ID generator function for creating unique identifiers. Mastra passes optional context so you can generate IDs based on what's being created.
+
+`IdGeneratorContext` includes:
+
+- `idType`: `'thread' | 'message' | 'run' | 'step' | 'generic'`
+- `source?`: `'agent' | 'workflow' | 'memory'`
+- `entityId?`: ID of the requesting agent/workflow/memory entity
+- `threadId?`: Thread ID when relevant (for example, when creating message IDs)
+- `resourceId?`: Resource ID when relevant (for example, user-scoped threads)
+- `role?`: Message role when creating a message ID
+- `stepType?`: Workflow step type when creating a step ID
 
 :::warning
 
-This is used internally by Mastra for creating IDs for workflow runs, agent conversations, and other resources. Most users will not need to configure this option.
+This is used internally by Mastra for creating IDs for workflow runs, agent conversations, and other resources. Most users won't need to configure this option.
 
 :::
 
@@ -119,7 +129,17 @@ import { Mastra } from '@mastra/core'
 import { nanoid } from 'nanoid'
 
 export const mastra = new Mastra({
-  idGenerator: () => nanoid(),
+  idGenerator: context => {
+    if (context?.idType === 'message' && context?.threadId) {
+      return `msg-${context.threadId}-${nanoid(8)}`
+    }
+
+    if (context?.idType === 'run' && context?.source && context?.entityId) {
+      return `${context.source}-run-${context.entityId}-${nanoid(6)}`
+    }
+
+    return nanoid()
+  },
 })
 ```
 
@@ -265,7 +285,7 @@ export const mastra = new Mastra({
 Pub/sub system for event-driven communication between components. Used internally by Mastra for workflow event processing and component communication.
 
 :::warning
-This is used internally by Mastra. Most users will not need to configure this option.
+This is used internally by Mastra. Most users won't need to configure this option.
 :::
 
 ```typescript title="src/mastra/index.ts"
@@ -725,6 +745,42 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+### server.onValidationError
+
+**Type:** `(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined`
+
+Custom handler called when a request fails Zod schema validation. Use this to customize validation error responses, change the status code, or format errors to match your API standards.
+
+Return a `{ status, body }` object to override the default `400` response, or `undefined` to fall through to the default behavior. This hook is supported by all server adapters (Hono, Express, Fastify, Koa).
+
+The `context` parameter indicates which part of the request failed validation:
+
+- `'query'` — query parameters
+- `'body'` — request body
+- `'path'` — path parameters
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    onValidationError: (error, context) => ({
+      status: 422,
+      body: {
+        ok: false,
+        errors: error.issues.map(i => ({
+          path: i.path.join('.'),
+          message: i.message,
+        })),
+        source: context,
+      },
+    }),
+  },
+})
+```
+
+You can also set `onValidationError` on individual routes created with `createRoute()`. A route-level hook takes precedence over the server-level hook.
 
 ### server.port
 

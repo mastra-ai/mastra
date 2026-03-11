@@ -14,7 +14,7 @@ import type { MastraUnion } from '../action';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
 import type { RequestContext } from '../request-context';
-import type { SchemaWithValidation } from '../stream/base/schema';
+import type { PublicSchema } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
 import type { Workspace } from '../workspace/workspace';
 import type { ToolStream } from './stream';
@@ -112,6 +112,16 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
 export type MCPToolType = 'agent' | 'workflow';
 
 /**
+ * Metadata identifying a tool as originating from an MCP server.
+ * Set automatically by the MCP client when creating tools.
+ * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+ */
+export interface McpMetadata {
+  serverName: string;
+  serverVersion?: string;
+}
+
+/**
  * MCP Tool Annotations for describing tool behavior and UI presentation.
  * These annotations are part of the MCP protocol and are used by clients
  * like OpenAI Apps SDK to control tool card display and permission hints.
@@ -207,6 +217,13 @@ export type CoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (options: { inputTextDelta: string } & ToolCallOptions) => void | PromiseLike<void>;
   onInputAvailable?: (options: { input: any } & ToolCallOptions) => void | PromiseLike<void>;
@@ -251,6 +268,13 @@ export type InternalCoreTool = {
    * Passed through from the original tool definition.
    */
   toModelOutput?: (output: unknown) => unknown;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (options: { inputTextDelta: string } & ToolCallOptions) => void | PromiseLike<void>;
   onInputAvailable?: (options: { input: any } & ToolCallOptions) => void | PromiseLike<void>;
@@ -316,16 +340,16 @@ export interface ToolAction<
 > {
   id: TId;
   description: string;
-  inputSchema?: SchemaWithValidation<TSchemaIn>;
-  outputSchema?: SchemaWithValidation<TSchemaOut>;
-  suspendSchema?: SchemaWithValidation<TSuspend>;
-  resumeSchema?: SchemaWithValidation<TResume>;
+  inputSchema?: PublicSchema<TSchemaIn>;
+  outputSchema?: PublicSchema<TSchemaOut>;
+  suspendSchema?: PublicSchema<TSuspend>;
+  resumeSchema?: PublicSchema<TResume>;
   /**
    * Optional schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    * If validation fails, a validation error is returned instead of executing the tool.
    */
-  requestContextSchema?: SchemaWithValidation<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext>;
   /**
    * Optional MCP-specific properties.
    * Only populated when the tool is being used in an MCP context.
@@ -360,6 +384,19 @@ export interface ToolAction<
    * ```
    */
   providerOptions?: Record<string, Record<string, unknown>>;
+  /**
+   * Metadata identifying this tool as originating from an MCP server.
+   * Set automatically by the MCP client when creating tools.
+   * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+   */
+  mcpMetadata?: McpMetadata;
+  /**
+   * Examples of valid tool inputs. Each example contains an `input` object
+   * showing what valid arguments look like.
+   * Passed through to the AI SDK which forwards them to model providers
+   * that support input examples (e.g., Anthropic's `input_examples` beta feature).
+   */
+  inputExamples?: Array<{ input: Record<string, unknown> }>;
   onInputStart?: (options: ToolCallOptions) => void | PromiseLike<void>;
   onInputDelta?: (
     options: {

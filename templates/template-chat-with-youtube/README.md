@@ -1,27 +1,41 @@
-# chat-with-youtube
+# Chat with YouTube
 
-Welcome to your new [Mastra](https://mastra.ai/) project! We're excited to see what you'll build.
+An AI assistant that helps you understand YouTube videos. Paste a link and ask questions, get summaries, or generate chapter timestamps — all backed by the actual transcript with clickable citations. Built with [Mastra](https://mastra.ai).
 
-## Getting Started
+## Why we built this
 
-Start the development server:
+This template shows how to build a conversational agent with persistent memory that uses custom tools to fetch and analyze external content. It demonstrates tool composition — getting metadata first for context, then fetching the transcript for detailed analysis.
 
-```shell
-npm run dev
-```
+## Features
 
-Open [http://localhost:4111](http://localhost:4111) in your browser to access [Mastra Studio](https://mastra.ai/docs/getting-started/studio). It provides an interactive UI for building and testing your agents, along with a REST API that exposes your Mastra application as a local service. This lets you start building without worrying about integration right away.
+- Summarize video content with timestamped sections
+- Answer questions about what was said in the video
+- Generate chapter timestamps for easy navigation
+- Find specific moments where topics are discussed
+- Clickable timestamp citations that link directly to the video
+- Conversational memory to ask follow-up questions
 
-You can start editing files inside the `src/mastra` directory. The development server will automatically reload whenever you make changes.
+## Prerequisites
 
-## Learn more
+- [OpenAI API key](https://platform.openai.com/api-keys) — used by default, but you can swap in any model
 
-To learn more about Mastra, visit our [documentation](https://mastra.ai/docs/). Your bootstrapped project includes example code for [agents](https://mastra.ai/docs/agents/overview), [tools](https://mastra.ai/docs/agents/using-tools), [workflows](https://mastra.ai/docs/workflows/overview), [scorers](https://mastra.ai/docs/evals/overview), and [observability](https://mastra.ai/docs/observability/overview).
+## Quickstart
 
-If you're new to AI agents, check out our [course](https://mastra.ai/course) and [YouTube videos](https://youtube.com/@mastra-ai). You can also join our [Discord](https://discord.gg/BTYqqHKUrf) community to get help and share your projects.
+1. **Clone the template**
+   - Run `npx create-mastra@latest --template chat-with-youtube` to scaffold the project locally.
+2. **Add your API keys**
+   - Copy `.env.example` to `.env` and fill in your OpenAI key.
+3. **Start the dev server**
+   - Run `npm run dev` and open [localhost:4111](http://localhost:4111) to try it out.
 
-## Deploy on Mastra Cloud
+## Making it yours
 
-[Mastra Cloud](https://cloud.mastra.ai/) gives you a serverless agent environment with atomic deployments. Access your agents from anywhere and monitor performance. Make sure they don't go off the rails with evals and tracing.
+Open Studio and start chatting with the `chat-with-youtube` agent. Paste any YouTube URL and ask for a summary, specific questions about the content, or chapter timestamps. The agent fetches the transcript and responds with citations you can click to jump to that moment in the video.
 
-Check out the [deployment guide](https://mastra.ai/docs/deployment/overview) for more details.
+Swap in a different model, add your own tools for video analysis, or wire the agent into your app using the [Mastra Client SDK](https://mastra.ai/docs/server/mastra-client). The agent and tools are all in `src/` — edit them directly to fit your use case.
+
+## About Mastra templates
+
+[Mastra templates](https://mastra.ai/templates) are ready-to-use projects that show off what you can build — clone one, poke around, and make it yours. They live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are automatically synced to standalone repositories for easier cloning.
+
+Want to contribute? See [CONTRIBUTING.md](https://github.com/mastra-ai/mastra/blob/main/templates/template-chat-with-youtube/CONTRIBUTING.md).

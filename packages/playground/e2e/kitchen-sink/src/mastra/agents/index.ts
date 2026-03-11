@@ -22,17 +22,9 @@ const memory = new Memory({
 
 // Mock model for Observer/Reflector in E2E tests
 // Returns a simple observation/reflection response
-const mockObserverModel = new aiTest.MockLanguageModelV2({
-  provider: 'mock',
-  modelId: 'mock-observer',
-  doGenerate: async () => ({
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    finishReason: 'stop' as const,
-    usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
-    content: [
-      {
-        type: 'text' as const,
-        text: `<observations>
+// Both doGenerate and doStream are required because OM processor calls agent.stream()
+
+const observerText = `<observations>
 ## January 27, 2026
 
 ### Thread: test-thread
@@ -40,9 +32,46 @@ const mockObserverModel = new aiTest.MockLanguageModelV2({
 -  User mentioned they need assistance
 </observations>
 <current-task>Help the user with their request</current-task>
-<suggested-response>I can help you with that. What specifically do you need?</suggested-response>`,
-      },
-    ],
+<suggested-response>I can help you with that. What specifically do you need?</suggested-response>`;
+
+const reflectorText = `<observations>
+## January 27, 2026
+
+### Condensed observations
+- 🔴 User needs help with tasks
+</observations>`;
+
+function createTextStream(text: string, modelId: string) {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'stream-start', warnings: [] });
+      controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId, timestamp: new Date() });
+      controller.enqueue({ type: 'text-start', id: 'text-0' });
+      controller.enqueue({ type: 'text-delta', id: 'text-0', delta: text });
+      controller.enqueue({ type: 'text-end', id: 'text-0' });
+      controller.enqueue({
+        type: 'finish',
+        finishReason: 'stop',
+        usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
+      });
+      controller.close();
+    },
+  });
+}
+
+const mockObserverModel = new aiTest.MockLanguageModelV2({
+  provider: 'mock',
+  modelId: 'mock-observer',
+  doGenerate: async () => ({
+    rawCall: { rawPrompt: null, rawSettings: {} },
+    finishReason: 'stop' as const,
+    usage: { inputTokens: 50, outputTokens: 100, totalTokens: 150 },
+    content: [{ type: 'text' as const, text: observerText }],
+    warnings: [],
+  }),
+  doStream: async () => ({
+    stream: createTextStream(observerText, 'mock-observer'),
+    rawCall: { rawPrompt: null, rawSettings: {} },
     warnings: [],
   }),
 });
@@ -54,17 +83,12 @@ const mockReflectorModel = new aiTest.MockLanguageModelV2({
     rawCall: { rawPrompt: null, rawSettings: {} },
     finishReason: 'stop' as const,
     usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-    content: [
-      {
-        type: 'text' as const,
-        text: `<observations>
-## January 27, 2026
-
-### Condensed observations
-- 🔴 User needs help with tasks
-</observations>`,
-      },
-    ],
+    content: [{ type: 'text' as const, text: reflectorText }],
+    warnings: [],
+  }),
+  doStream: async () => ({
+    stream: createTextStream(reflectorText, 'mock-reflector'),
+    rawCall: { rawPrompt: null, rawSettings: {} },
     warnings: [],
   }),
 });

@@ -1,6 +1,6 @@
 import { EntityHeader } from '@/ds/components/EntityHeader';
 import { Badge } from '@/ds/components/Badge';
-import { CopyIcon, Pencil, CopyPlus } from 'lucide-react';
+import { CopyIcon, CopyPlus } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -26,8 +26,8 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
   const agentName = agent?.name || '';
   const isStoredAgent = agent?.source === 'stored';
 
+  const showStoredAgentBadge = isCmsAvailable && isStoredAgent;
   const canWriteAgents = isCmsAvailable && canEdit('stored-agents');
-  const showStoredAgentBadge = canWriteAgents && isStoredAgent;
 
   const handleClone = async () => {
     const clonedAgent = await cloneAgent(agentId);
@@ -59,18 +59,6 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
           </TooltipTrigger>
           <TooltipContent>Copy Agent ID for use in code</TooltipContent>
         </Tooltip>
-        {showStoredAgentBadge && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button onClick={() => navigate(`/cms/agents/${agentId}/edit`)} className="h-badge-default shrink-0 ml-2">
-                <Badge icon={<Pencil />} variant="default">
-                  Edit
-                </Badge>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Edit agent configuration</TooltipContent>
-          </Tooltip>
-        )}
         {canWriteAgents && (
           <Tooltip>
             <TooltipTrigger asChild>

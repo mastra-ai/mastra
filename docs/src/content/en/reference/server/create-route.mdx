@@ -29,90 +29,98 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
 
 <PropertiesTable
   content={[
-{
-name: "method",
-type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
-description: "HTTP method",
-isOptional: false,
-},
-{
-name: "path",
-type: "string",
-description: "Route path with optional params (e.g., `/api/items/:id`)",
-isOptional: false,
-},
-{
-name: "responseType",
-type: "'json' | 'stream'",
-description: "Response format. Internal routes may use additional types (`datastream-response`, `mcp-http`, `mcp-sse`).",
-isOptional: false,
-},
-{
-name: "handler",
-type: "ServerRouteHandler",
-description: "Route handler function",
-isOptional: false,
-},
-{
-name: "pathParamSchema",
-type: "ZodSchema",
-description: "Validates URL path parameters",
-isOptional: true,
-},
-{
-name: "queryParamSchema",
-type: "ZodSchema",
-description: "Validates query string parameters",
-isOptional: true,
-},
-{
-name: "bodySchema",
-type: "ZodSchema",
-description: "Validates request body",
-isOptional: true,
-},
-{
-name: "responseSchema",
-type: "ZodSchema",
-description: "Documents response shape for OpenAPI",
-isOptional: true,
-},
-{
-name: "streamFormat",
-type: "'sse' | 'stream'",
-description: "Stream format (when responseType is 'stream')",
-isOptional: true,
-},
-{
-name: "maxBodySize",
-type: "number",
-description: "Override default body size limit in bytes",
-isOptional: true,
-},
-{
-name: "summary",
-type: "string",
-description: "OpenAPI summary",
-isOptional: true,
-},
-{
-name: "description",
-type: "string",
-description: "OpenAPI description",
-isOptional: true,
-},
-{
-name: "tags",
-type: "string[]",
-description: "OpenAPI tags",
-isOptional: true,
-},
-{
-name: "deprecated",
-type: "boolean",
-description: "Mark route as deprecated",
-isOptional: true,
-},
+  {
+    name: 'method',
+    type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
+    description: 'HTTP method',
+    isOptional: false,
+  },
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Route path with optional params (e.g., `/api/items/:id`)',
+    isOptional: false,
+  },
+  {
+    name: 'responseType',
+    type: "'json' | 'stream'",
+    description:
+      'Response format. Internal routes may use additional types (`datastream-response`, `mcp-http`, `mcp-sse`).',
+    isOptional: false,
+  },
+  {
+    name: 'handler',
+    type: 'ServerRouteHandler',
+    description: 'Route handler function',
+    isOptional: false,
+  },
+  {
+    name: 'pathParamSchema',
+    type: 'ZodSchema',
+    description: 'Validates URL path parameters',
+    isOptional: true,
+  },
+  {
+    name: 'queryParamSchema',
+    type: 'ZodSchema',
+    description: 'Validates query string parameters',
+    isOptional: true,
+  },
+  {
+    name: 'bodySchema',
+    type: 'ZodSchema',
+    description: 'Validates request body',
+    isOptional: true,
+  },
+  {
+    name: 'responseSchema',
+    type: 'ZodSchema',
+    description: 'Documents response shape for OpenAPI',
+    isOptional: true,
+  },
+  {
+    name: 'streamFormat',
+    type: "'sse' | 'stream'",
+    description: "Stream format (when responseType is 'stream')",
+    isOptional: true,
+  },
+  {
+    name: 'maxBodySize',
+    type: 'number',
+    description: 'Override default body size limit in bytes',
+    isOptional: true,
+  },
+  {
+    name: 'summary',
+    type: 'string',
+    description: 'OpenAPI summary',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'OpenAPI description',
+    isOptional: true,
+  },
+  {
+    name: 'tags',
+    type: 'string[]',
+    description: 'OpenAPI tags',
+    isOptional: true,
+  },
+  {
+    name: 'deprecated',
+    type: 'boolean',
+    description: 'Mark route as deprecated',
+    isOptional: true,
+  },
+  {
+    name: 'onValidationError',
+    type: "(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined",
+    description:
+      'Custom validation error handler for this route. Overrides the server-level `onValidationError` hook. Return `{ status, body }` to customize the response, or `undefined` to use the default.',
+    isOptional: true,
+  },
 ]}
 />
 

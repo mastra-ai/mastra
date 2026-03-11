@@ -17,23 +17,22 @@ The `listen()` method is a core function available in all Mastra voice providers
 
 <PropertiesTable
   content={[
-{
-name: "audioStream",
-type: "NodeJS.ReadableStream",
-description:
-"Audio stream to transcribe. This can be a file stream or a microphone stream.",
-isOptional: false,
-},
-{
-name: "options",
-type: "object",
-description: "Provider-specific options for speech recognition",
-isOptional: true,
-},
+  {
+    name: 'audioStream',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe. This can be a file stream or a microphone stream.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Provider-specific options for speech recognition',
+    isOptional: true,
+  },
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns one of the following:
 
@@ -41,7 +40,7 @@ Returns one of the following:
 - `Promise<NodeJS.ReadableStream>`: A promise that resolves to a stream of transcribed text (for streaming transcription)
 - `Promise<void>`: For real-time providers that emit 'writing' events instead of returning text directly
 
-## Provider-Specific Options
+## Provider-specific options
 
 Each voice provider may support additional options specific to their implementation. Here are some examples:
 
@@ -49,25 +48,38 @@ Each voice provider may support additional options specific to their implementat
 
 <PropertiesTable
   content={[
-{
-name: "options.filetype",
-type: "string",
-description: "Audio file format (e.g., 'mp3', 'wav', 'm4a')",
-isOptional: true,
-defaultValue: "'mp3'",
-},
-{
-name: "options.prompt",
-type: "string",
-description: "Text to guide the model's transcription",
-isOptional: true,
-},
-{
-name: "options.language",
-type: "string",
-description: "Language code (e.g., 'en', 'fr', 'de')",
-isOptional: true,
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'filetype',
+            type: 'string',
+            description: "Audio file format (e.g., 'mp3', 'wav', 'm4a')",
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+          {
+            name: 'prompt',
+            type: 'string',
+            description: "Text to guide the model's transcription",
+            isOptional: true,
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: "Language code (e.g., 'en', 'fr', 'de')",
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -75,21 +87,33 @@ isOptional: true,
 
 <PropertiesTable
   content={[
-{
-name: "options.stream",
-type: "boolean",
-description: "Whether to use streaming recognition",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "options.config",
-type: "object",
-description:
-"Recognition configuration from Google Cloud Speech-to-Text API",
-isOptional: true,
-defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'stream',
+            type: 'boolean',
+            description: 'Whether to use streaming recognition',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'config',
+            type: 'object',
+            description: 'Recognition configuration from Google Cloud Speech-to-Text API',
+            isOptional: true,
+            defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -97,24 +121,37 @@ defaultValue: "{ encoding: 'LINEAR16', languageCode: 'en-US' }",
 
 <PropertiesTable
   content={[
-{
-name: "options.model",
-type: "string",
-description: "Deepgram model to use for transcription",
-isOptional: true,
-defaultValue: "'nova-2'",
-},
-{
-name: "options.language",
-type: "string",
-description: "Language code for transcription",
-isOptional: true,
-defaultValue: "'en'",
-},
+  {
+    name: 'options',
+    type: 'Options',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'Options',
+        parameters: [
+          {
+            name: 'model',
+            type: 'string',
+            description: 'Deepgram model to use for transcription',
+            isOptional: true,
+            defaultValue: "'nova-2'",
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: 'Language code for transcription',
+            isOptional: true,
+            defaultValue: "'en'",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIVoice } from '@mastra/voice-openai'
@@ -149,7 +186,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 })
 ```
 
-## Using with CompositeVoice
+## Using with `CompositeVoice`
 
 When using `CompositeVoice`, the `listen()` method delegates to the configured listening provider:
 
@@ -198,7 +235,7 @@ const transcriptWithOptions = await voice.listen(audioStream, {
 
 See the [CompositeVoice reference](/reference/voice/composite-voice) for more details on AI SDK integration.
 
-## Realtime Voice Providers
+## Realtime voice providers
 
 When using realtime voice providers like `OpenAIRealtimeVoice`, the `listen()` method behaves differently:
 
@@ -231,7 +268,7 @@ await voice.listen(microphoneStream)
 - Some providers support streaming transcription, where text is returned as it's transcribed
 - For best performance, consider closing or ending the audio stream when you're done with it
 
-## Related Methods
+## Related methods
 
 - [voice.speak()](./voice.speak) - Converts text to speech
 - [voice.send()](./voice.send) - Sends audio data to the voice provider in real-time

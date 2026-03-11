@@ -9,7 +9,7 @@ packages:
 
 The `updateConfig()` method allows you to update the configuration of a voice provider at runtime. This is useful for changing voice settings, API keys, or other provider-specific options without creating a new instance.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
@@ -46,21 +46,20 @@ await voice.speak('Hello with my new voice!')
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "Record<string, unknown>",
-description:
-"Configuration options to update. The specific properties depend on the voice provider.",
-isOptional: false,
-},
+  {
+    name: 'options',
+    type: 'Record<string, unknown>',
+    description: 'Configuration options to update. The specific properties depend on the voice provider.',
+    isOptional: false,
+  },
 ]}
 />
 
-## Return Value
+## Return value
 
-This method does not return a value.
+This method doesn't return a value.
 
-## Configuration Options
+## Configuration options
 
 Different voice providers support different configuration options:
 
@@ -70,20 +69,18 @@ Different voice providers support different configuration options:
 
 <PropertiesTable
   content={[
-{
-name: "voice",
-type: "string",
-description:
-"Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
-isOptional: true,
-},
-{
-name: "turn_detection",
-type: "{ type: string, threshold?: number, silence_duration_ms?: number }",
-description:
-"Configuration for detecting when a user has finished speaking",
-isOptional: true,
-},
+  {
+    name: 'voice',
+    type: 'string',
+    description: "Voice ID to use for speech synthesis (e.g., 'alloy', 'echo', 'nova')",
+    isOptional: true,
+  },
+  {
+    name: 'turn_detection',
+    type: '{ type: string, threshold?: number, silence_duration_ms?: number }',
+    description: 'Configuration for detecting when a user has finished speaking',
+    isOptional: true,
+  },
 ]}
 />
 

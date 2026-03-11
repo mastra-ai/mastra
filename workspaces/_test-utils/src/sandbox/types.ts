@@ -41,6 +41,15 @@ export interface SandboxTestConfig {
    * Required for mount operation tests that actually mount filesystems.
    */
   createMountableFilesystem?: () => Promise<WorkspaceFilesystem> | WorkspaceFilesystem;
+
+  /**
+   * Optional callback to externally kill/stop a sandbox, bypassing the wrapper's cleanup.
+   * Used to test retryOnDead recovery when the sandbox dies outside our control
+   * (e.g. provider auto-stop, external termination).
+   *
+   * If not provided, external kill recovery tests are skipped.
+   */
+  killSandboxExternally?: (sandbox: MastraSandbox) => Promise<void>;
 }
 
 /**

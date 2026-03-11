@@ -11,7 +11,7 @@ packages:
 
 The `answer()` method is used in real-time voice providers to trigger the AI to generate a response. This method is particularly useful in speech-to-speech conversations where you need to explicitly signal the AI to respond after receiving user input.
 
-## Usage Example
+## Usage example
 
 ```typescript
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
@@ -52,16 +52,16 @@ await voice.answer()
 
 <PropertiesTable
   content={[
-{
-name: "options",
-type: "Record<string, unknown>",
-description: "Provider-specific options for the response",
-isOptional: true,
-},
+  {
+    name: 'options',
+    type: 'Record<string, unknown>',
+    description: 'Provider-specific options for the response',
+    isOptional: true,
+  },
 ]}
 />
 
-## Return Value
+## Return value
 
 Returns a `Promise<void>` that resolves when the response has been triggered.
 

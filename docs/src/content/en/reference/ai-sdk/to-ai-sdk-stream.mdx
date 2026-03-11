@@ -62,66 +62,69 @@ The second parameter is an options object:
 
 <PropertiesTable
   content={[
-{
-name: "from",
-type: "'agent' | 'network' | 'workflow'",
-description: "The type of Mastra stream being converted.",
-isOptional: false,
-defaultValue: "'agent'",
-},
-{
-name: "lastMessageId",
-type: "string",
-description: "(Agent only) The ID of the last message in the conversation.",
-isOptional: true,
-},
-{
-name: "sendStart",
-type: "boolean",
-description: "(Agent only) Whether to send start events in the stream.",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "sendFinish",
-type: "boolean",
-description: "(Agent only) Whether to send finish events in the stream.",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "sendReasoning",
-type: "boolean",
-description: "(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream reasoning content from models that support extended thinking.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "sendSources",
-type: "boolean",
-description: "(Agent only) Whether to include source citations in the output.",
-isOptional: true,
-defaultValue: "false",
-},
-{
-name: "includeTextStreamParts",
-type: "boolean",
-description: "(Workflow only) Whether to include text stream parts in the output.",
-isOptional: true,
-defaultValue: "true",
-},
-{
-name: "messageMetadata",
-type: "(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined",
-description: "(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.",
-isOptional: true,
-},
-{
-name: "onError",
-type: "(error: unknown) => string",
-description: "(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.",
-isOptional: true,
-},
+  {
+    name: 'from',
+    type: "'agent' | 'network' | 'workflow'",
+    description: 'The type of Mastra stream being converted.',
+    isOptional: false,
+    defaultValue: "'agent'",
+  },
+  {
+    name: 'lastMessageId',
+    type: 'string',
+    description: '(Agent only) The ID of the last message in the conversation.',
+    isOptional: true,
+  },
+  {
+    name: 'sendStart',
+    type: 'boolean',
+    description: '(Agent only) Whether to send start events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendFinish',
+    type: 'boolean',
+    description: '(Agent only) Whether to send finish events in the stream.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'sendReasoning',
+    type: 'boolean',
+    description:
+      '(Agent only) Whether to include reasoning-delta chunks in the stream. Set to true to stream reasoning content from models that support extended thinking.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'sendSources',
+    type: 'boolean',
+    description: '(Agent only) Whether to include source citations in the output.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'includeTextStreamParts',
+    type: 'boolean',
+    description: '(Workflow only) Whether to include text stream parts in the output.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart }) => Record<string, unknown> | undefined',
+    description:
+      '(Agent only) A function that receives the current stream part and returns metadata to attach to start and finish chunks.',
+    isOptional: true,
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown) => string',
+    description:
+      '(Agent only) A function to handle errors during stream conversion. Receives the error and should return a string representation.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -214,7 +217,7 @@ export async function POST(req: Request) {
 }
 ```
 
-### Using messageMetadata
+### Using `messageMetadata`
 
 ```typescript title="app/api/chat-with-metadata/route.ts" {13-19}
 import { mastra } from '../../mastra'

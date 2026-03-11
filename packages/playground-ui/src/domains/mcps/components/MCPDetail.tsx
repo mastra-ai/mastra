@@ -91,7 +91,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{httpStreamUrl}</Txt>
               <div className="pt-1">
-                <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} iconSize="sm" />
+                <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} />
               </div>
             </div>
           </div>
@@ -107,7 +107,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{sseUrl}</Txt>
               <div className="pt-1">
-                <CopyButton tooltip="Copy SSE URL" content={sseUrl} iconSize="sm" />
+                <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
               </div>
             </div>
           </div>
@@ -121,7 +121,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
             <div className="flex items-start gap-2">
               <Txt className="px-2 py-1 bg-surface4 rounded-lg">{commandLineConfig}</Txt>
               <div className="pt-1">
-                <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} iconSize="sm" />
+                <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} />
               </div>
             </div>
           </div>

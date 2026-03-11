@@ -11,7 +11,7 @@ Welcome to Mastra! We welcome contributions of any size and skill level. Thanks 
 Please read the guidance below about what to do if you:
 
 - [Found a bug](#did-you-find-a-bug)
-- [Fixed a bug](#did-you-write-a-patch-that-fixes-a-bug)
+- [Want to open a Pull Request](#do-you-want-to-open-a-pull-request)
 - [Want to add a new feature or change an existing one](#do-you-intend-to-add-a-new-feature-or-change-an-existing-one)
 - [Want to improve documentation](#want-to-improve-documentation)
 
@@ -24,10 +24,13 @@ Read the [Development Guide](./DEVELOPMENT.md) for information on setting up a d
 
 Be sure to include a title and clear description, as much relevant information as possible, and a **code sample** or an **executable test case** demonstrating the expected behavior that is not occurring.
 
-### Did you write a patch that fixes a bug?
+### Do you want to open a Pull Request?
 
-- Open a new GitHub pull request with the patch
-- Ensure the PR description clearly describes the problem and solution. Include the relevant issue number if applicable
+Follow the [Development Guide](./DEVELOPMENT.md) to learn how to set up this repository and run its tests. After successfully testing things locally, open a pull request with your changes.
+
+Ensure that the PR description clearly describes the problem and solution. Include the relevant issue number if applicable.
+
+**Important:** Coderabbit, our AI assistant, will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and provide feedback or merge it.
 
 ### Do you intend to add a new feature or change an existing one?
 
@@ -141,3 +144,26 @@ For complex reproductions, you may also need to:
 - **Network traces**: For integration issues, include relevant network request/response data
 
 A well-crafted minimal reproduction is the best way to get your issue resolved quickly.
+
+## Automated PR commands
+
+Mastra maintainers (organization members) can trigger automated CI commands by commenting on a pull request with `@dane-ai-mastra` followed by a command name.
+
+### Available commands
+
+| Command                       | Description                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| `@dane-ai-mastra fix-ci`      | Diagnoses and fixes GitHub Actions CI failures on the PR branch |
+| `@dane-ai-mastra fix-lint`    | Runs formatting/linting fixes and pushes a commit               |
+| `@dane-ai-mastra pr-comments` | Addresses PR review comments and CodeRabbit suggestions         |
+
+### How it works
+
+1. Comment on a PR with one of the commands above
+2. The bot reacts with 👀 to acknowledge the request
+3. The command runs in a GitHub Actions workflow with full repo access
+4. On success, the bot reacts with 🚀. On failure, it reacts with 😕 and posts an error comment.
+
+### Who can use it
+
+Only members of the Mastra GitHub organization can trigger these commands. Comments from non-members are ignored.

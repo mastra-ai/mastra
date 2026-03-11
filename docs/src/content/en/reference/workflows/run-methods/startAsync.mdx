@@ -29,73 +29,72 @@ const result = await workflow.getWorkflowRunExecutionResult(runId)
 
 <PropertiesTable
   content={[
-{
-name: "inputData",
-type: "z.infer<TInput>",
-description: "Input data that matches the workflow's input schema",
-isOptional: true,
-},
-{
-name: "requestContext",
-type: "RequestContext",
-description: "Request Context data to use during workflow execution",
-isOptional: true,
-},
-{
-name: "initialState",
-type: "z.infer<TState>",
-description: "Initial state to use for the workflow execution",
-isOptional: true,
-},
-{
-name: "tracingOptions",
-type: "TracingOptions",
-isOptional: true,
-description: "Options for Tracing configuration.",
-properties: [
-{
-parameters: [
-{
-name: "metadata",
-type: "Record<string, any>",
-isOptional: true,
-description:
-"Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.",
-},
-],
-},
-{
-parameters: [
-{
-name: "traceId",
-type: "string",
-isOptional: true,
-description:
-"Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.",
-},
-],
-},
-],
-},
-{
-name: "outputOptions",
-type: "OutputOptions",
-isOptional: true,
-description: "Options for output configuration.",
-properties: [
-{
-parameters: [
-{
-name: "includeState",
-type: "boolean",
-isOptional: true,
-description:
-"Whether to include the workflow run state in the result.",
-},
-],
-},
-],
-},
+  {
+    name: 'inputData',
+    type: 'z.infer<TInput>',
+    description: "Input data that matches the workflow's input schema",
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'Request Context data to use during workflow execution',
+    isOptional: true,
+  },
+  {
+    name: 'initialState',
+    type: 'z.infer<TState>',
+    description: 'Initial state to use for the workflow execution',
+    isOptional: true,
+  },
+  {
+    name: 'tracingOptions',
+    type: 'TracingOptions',
+    isOptional: true,
+    description: 'Options for Tracing configuration.',
+    properties: [
+      {
+        parameters: [
+          {
+            name: 'metadata',
+            type: 'Record<string, any>',
+            isOptional: true,
+            description:
+              'Metadata to add to the root trace span. Useful for adding custom attributes like user IDs, session IDs, or feature flags.',
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
+            name: 'traceId',
+            type: 'string',
+            isOptional: true,
+            description:
+              'Trace ID to use for this execution (1-32 hexadecimal characters). If provided, this trace will be part of the specified trace.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'outputOptions',
+    type: 'OutputOptions',
+    isOptional: true,
+    description: 'Options for output configuration.',
+    properties: [
+      {
+        parameters: [
+          {
+            name: 'includeState',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Whether to include the workflow run state in the result.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -103,16 +102,15 @@ description:
 
 <PropertiesTable
   content={[
-{
-name: "runId",
-type: "string",
-description:
-"The unique identifier for this workflow run. Use this to check status or retrieve results later.",
-},
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The unique identifier for this workflow run. Use this to check status or retrieve results later.',
+  },
 ]}
 />
 
-## When to use startAsync()
+## When to use `startAsync()`
 
 Use `startAsync()` instead of `start()` when:
 

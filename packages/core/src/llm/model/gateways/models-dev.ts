@@ -15,7 +15,7 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type { GatewayLanguageModel, ProviderConfig } from './base.js';
-import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevProviderInfo {
   id: string;
@@ -198,45 +198,41 @@ export class ModelsDevGateway extends MastraModelGateway {
   }): Promise<GatewayLanguageModel> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
 
+    const mastraHeaders = { 'User-Agent': MASTRA_USER_AGENT, ...headers };
+
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey }).responses(modelId);
+        return createOpenAI({ apiKey, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
       case 'google':
-        return createGoogleGenerativeAI({
-          apiKey,
-        }).chat(modelId);
+        return createGoogleGenerativeAI({ apiKey, headers: mastraHeaders }).chat(modelId);
       case 'anthropic':
-        return createAnthropic({ apiKey })(modelId);
+        return createAnthropic({ apiKey, headers: mastraHeaders })(modelId);
       case 'mistral':
-        return createMistral({ apiKey })(modelId);
+        return createMistral({ apiKey, headers: mastraHeaders })(modelId);
       case 'groq':
-        return createGroq({ apiKey })(modelId);
+        return createGroq({ apiKey, headers: mastraHeaders })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey, headers })(modelId);
+        return createOpenRouter({ apiKey, headers: mastraHeaders })(modelId);
       case 'xai':
-        return createXai({
-          apiKey,
-        })(modelId);
+        return createXai({ apiKey, headers: mastraHeaders })(modelId);
       case 'deepseek':
-        return createDeepSeek({
-          apiKey,
-        })(modelId);
+        return createDeepSeek({ apiKey, headers: mastraHeaders })(modelId);
       case 'perplexity':
-        return createPerplexity({ apiKey })(modelId);
+        return createPerplexity({ apiKey, headers: mastraHeaders })(modelId);
       case 'cerebras':
-        return createCerebras({ apiKey })(modelId);
+        return createCerebras({ apiKey, headers: mastraHeaders })(modelId);
       case 'togetherai':
-        return createTogetherAI({ apiKey })(modelId);
+        return createTogetherAI({ apiKey, headers: mastraHeaders })(modelId);
       case 'deepinfra':
-        return createDeepInfra({ apiKey })(modelId);
+        return createDeepInfra({ apiKey, headers: mastraHeaders })(modelId);
       case 'vercel':
-        return createGateway({ apiKey, headers })(modelId);
+        return createGateway({ apiKey, headers: mastraHeaders })(modelId);
       case 'moonshotai':
       case 'moonshotai-cn': {
         // moonshotai uses Anthropic-compatible API endpoint
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        return createAnthropic({ apiKey, baseURL })(modelId);
+        return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       }
       default: {
         // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
@@ -245,28 +241,32 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         if (npm === '@ai-sdk/anthropic') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createAnthropic({ apiKey, baseURL })(modelId);
+          return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
         }
 
         if (npm === '@ai-sdk/openai') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createOpenAI({ apiKey, baseURL }).chat(modelId);
+          return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
         }
 
         if (npm === '@ai-sdk/google') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createGoogleGenerativeAI({ apiKey, baseURL }).chat(modelId);
+          return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
         }
 
         if (npm === '@ai-sdk/mistral') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createMistral({ apiKey, baseURL })(modelId);
+          return createMistral({ apiKey, baseURL, headers: mastraHeaders })(modelId);
         }
 
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-        return createOpenAICompatible({ name: providerId, apiKey, baseURL, supportsStructuredOutputs: true }).chatModel(
-          modelId,
-        );
+        return createOpenAICompatible({
+          name: providerId,
+          apiKey,
+          baseURL,
+          headers: mastraHeaders,
+          supportsStructuredOutputs: true,
+        }).chatModel(modelId);
       }
     }
   }
