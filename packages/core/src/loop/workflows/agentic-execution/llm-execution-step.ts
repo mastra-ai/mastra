@@ -1280,20 +1280,23 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // isContinued should be true if:
       // - shouldRetry is true (processor requested retry)
-      // - OR there are non-provider-executed tool calls with execute functions to process
-      //   (some LLMs return finishReason 'stop' even with tool calls)
-      // - OR finishReason indicates more work (e.g., tool-use)
+      // - AND no client tool calls are present (client tools must return to the caller)
+      // - AND either there are pending server-side tool calls to process,
+      //   or finishReason indicates more work (e.g., tool-use)
       // Provider-executed tools (e.g. web_search) are handled server-side — the response already
       // contains both the tool execution and the text output, so no additional loop iteration is needed.
       // Client tools without execute are meant for client-side execution — the loop should stop
-      // and return control to the caller.
+      // and return control to the caller, even in mixed batches with server tools.
       const resolveTool = (toolName: string) =>
         stepTools?.[toolName] || Object.values(stepTools || {})?.find((t: any) => 'id' in t && t.id === toolName);
+      const hasClientToolCalls =
+        toolCalls && toolCalls.some(tc => !tc.providerExecuted && !resolveTool(tc.toolName)?.execute);
       const hasPendingToolCalls =
-        toolCalls && toolCalls.some(tc => !tc.providerExecuted && resolveTool(tc.toolName)?.execute);
+        toolCalls && toolCalls.some(tc => !tc.providerExecuted && !!resolveTool(tc.toolName)?.execute);
       const shouldContinue =
         shouldRetry ||
         (!tripwireTriggered &&
+          !hasClientToolCalls &&
           (hasPendingToolCalls || !['stop', 'error', 'length', 'tool-calls'].includes(finishReason)));
 
       // Increment processor retry count if we're retrying
