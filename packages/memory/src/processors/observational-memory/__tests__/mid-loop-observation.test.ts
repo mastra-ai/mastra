@@ -19,7 +19,8 @@ import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { ObservationalMemory } from '../observational-memory';
-import { ObservationalMemoryProcessor, type MemoryContextProvider } from '../processor';
+import { ObservationalMemoryProcessor } from '../processor';
+import type { MemoryContextProvider } from '../processor';
 
 const noopMemoryProvider: MemoryContextProvider = {
   getContext: async () => ({
@@ -30,6 +31,7 @@ const noopMemoryProvider: MemoryContextProvider = {
     continuationMessage: undefined,
     otherThreadsContext: undefined,
   }),
+  persistMessages: async () => {},
 };
 import { TokenCounter } from '../token-counter';
 

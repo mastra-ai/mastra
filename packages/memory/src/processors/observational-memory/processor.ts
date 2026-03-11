@@ -12,10 +12,7 @@ import type { TokenCounterModelContext } from './token-counter';
 
 /** Subset of Memory that the processor needs — avoids circular imports. */
 export interface MemoryContextProvider {
-  getContext(opts: {
-    threadId: string;
-    resourceId?: string;
-  }): Promise<{
+  getContext(opts: { threadId: string; resourceId?: string }): Promise<{
     systemMessage: string | undefined;
     messages: MastraDBMessage[];
     hasObservations: boolean;
@@ -23,6 +20,8 @@ export interface MemoryContextProvider {
     continuationMessage: MastraDBMessage | undefined;
     otherThreadsContext: string | undefined;
   }>;
+  /** Raw message upsert — persist sealed messages to storage without embedding or working memory processing. */
+  persistMessages(messages: MastraDBMessage[]): Promise<void>;
 }
 
 /**
@@ -147,7 +146,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             requestContext,
           });
         }
-
       }
 
       // ════════════════════════════════════════════════════════════════════════
@@ -173,32 +171,41 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         threshold = status.threshold;
         effectiveObservationTokensThreshold = status.effectiveObservationTokensThreshold;
 
-        // Merge sealed IDs from processor state with engine's sealed IDs
+        // Sealed IDs track messages frozen for buffering so incremental saves skip them
         const sealedIds: Set<string> = (state.sealedIds as Set<string>) ?? new Set<string>();
-        const staticSealed = this.engine.getSealedIds(threadId, resourceId);
-        if (staticSealed) {
-          for (const id of staticSealed) sealedIds.add(id);
-        }
         state.sealedIds = sealedIds;
 
         omDebug(
           `[OM:step] step=${stepNumber}: totalPending=${totalPendingTokens}, unbuffered=${status.unbufferedPendingTokens}, threshold=${threshold}, sealedIds=${sealedIds.size}`,
         );
 
-        // Trigger async buffering if we've crossed an interval boundary
-        if (status.asyncObservationEnabled) {
+        // Trigger buffering if we've crossed an interval boundary
+        if (status.shouldBuffer) {
           const unobservedMessages = this.engine.getUnobservedMessages(allMessages, status.record);
-          await this.engine.triggerAsyncBuffering({
-            threadId,
-            resourceId,
-            record: status.record,
-            pendingTokens: totalPendingTokens,
-            unbufferedPendingTokens: status.unbufferedPendingTokens,
-            unobservedMessages,
-            threshold,
-            writer,
-            requestContext,
-          });
+
+          // Fire-and-forget — buffer() does cursor filtering, then calls beforeBuffer to seal
+          void this.engine
+            .buffer({
+              threadId,
+              resourceId,
+              messages: unobservedMessages,
+              pendingTokens: totalPendingTokens,
+              record: status.record,
+              writer,
+              requestContext,
+              // Called with the final cursor-filtered candidates before the observer runs.
+              // Seals them in the live MessageList and persists to storage.
+              beforeBuffer: async (candidates: MastraDBMessage[]) => {
+                this.engine.sealMessagesForBuffering(candidates);
+                await this.memory.persistMessages(candidates);
+                for (const msg of candidates) {
+                  sealedIds.add(msg.id);
+                }
+              },
+            })
+            .catch(err => {
+              omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
+            });
         }
 
         if (stepNumber > 0) {
@@ -304,7 +311,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           createdAt: new Date(0),
           content: {
             format: 2 as const,
-            parts: [{ type: 'text' as const, text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>` }],
+            parts: [
+              { type: 'text' as const, text: `<system-reminder>${OBSERVATION_CONTINUATION_HINT}</system-reminder>` },
+            ],
           },
           threadId,
           resourceId,
@@ -340,9 +349,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
       const allDbMsgs = messageList.get.all.db();
       const contextTokens = await this.engine.countMessageTokensAsync(allDbMsgs);
-      const otherThreadTokens = otherThreadsContext
-        ? this.engine.countStringTokens(otherThreadsContext)
-        : 0;
+      const otherThreadTokens = otherThreadsContext ? this.engine.countStringTokens(otherThreadsContext) : 0;
       const finalTotalPending = contextTokens + otherThreadTokens;
 
       await this.engine.savePendingTokens(freshRecord.id, finalTotalPending);

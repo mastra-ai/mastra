@@ -1194,6 +1194,16 @@ ${workingMemory}`;
   }
 
   /**
+   * Raw message upsert — persist messages to storage without embedding or working memory processing.
+   * Used by the processor to save sealed messages before firing a background buffer operation.
+   */
+  async persistMessages(messages: MastraDBMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+    const memoryStore = await this.getMemoryStore();
+    await memoryStore.saveMessages({ messages });
+  }
+
+  /**
    * Get or create the cached ObservationalMemory engine instance.
    * Returns null if OM is not configured.
    */

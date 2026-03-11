@@ -18,7 +18,8 @@ import {
   sanitizeObservationLines,
   detectDegenerateRepetition,
 } from '../observer-agent';
-import { ObservationalMemoryProcessor, type MemoryContextProvider } from '../processor';
+import { ObservationalMemoryProcessor } from '../processor';
+import type { MemoryContextProvider } from '../processor';
 
 /**
  * Creates a MemoryContextProvider from an ObservationalMemory engine for tests.
@@ -82,6 +83,11 @@ function createMemoryProvider(om: ObservationalMemory): MemoryContextProvider {
         continuationMessage: undefined,
         otherThreadsContext,
       };
+    },
+    persistMessages: async (messages: MastraDBMessage[]) => {
+      if (messages.length === 0) return;
+      const storage = (om as any).storage;
+      await storage.saveMessages({ messages });
     },
   };
 }
@@ -1813,7 +1819,10 @@ describe('ObservationalMemory Integration', () => {
       const countImageForModel = async (actorModel: string) => {
         const [provider, modelId] = actorModel.split('/');
 
-        const dynamicProcessor = new ObservationalMemoryProcessor(omWithDynamicObserverModel, createMemoryProvider(omWithDynamicObserverModel));
+        const dynamicProcessor = new ObservationalMemoryProcessor(
+          omWithDynamicObserverModel,
+          createMemoryProvider(omWithDynamicObserverModel),
+        );
         await dynamicProcessor.processInputStep({
           messageList: new MessageList({ threadId, resourceId }),
           messages: [imageMessage],
