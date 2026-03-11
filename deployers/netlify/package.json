@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "",
   "type": "module",
   "files": [
@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "fs-extra": "^11.3.3"
+    "fs-extra": "^11.3.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
