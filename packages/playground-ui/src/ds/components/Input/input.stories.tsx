@@ -129,7 +129,9 @@ export const SizesWithButton: Story = {
       {(['sm', 'md', 'default', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Input size={size} placeholder={size} />
-          <Button size={size} className="justify-self-start">Button</Button>
+          <Button size={size} className="justify-self-start">
+            Button
+          </Button>
         </Fragment>
       ))}
     </div>

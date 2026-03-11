@@ -7,12 +7,7 @@ export type FieldBlocksLayoutRootProps = {
   gap?: string;
 };
 
-export function FieldBlocksLayoutRoot({
-  children,
-  className,
-  columns = 1,
-  gap,
-}: FieldBlocksLayoutRootProps) {
+export function FieldBlocksLayoutRoot({ children, className, columns = 1, gap }: FieldBlocksLayoutRootProps) {
   return (
     <div
       className={cn(

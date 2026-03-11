@@ -5,12 +5,7 @@ import { SearchFieldBlock, type SearchFieldBlockProps } from './search-field-blo
 function SearchFieldBlockControlled(props: SearchFieldBlockProps) {
   const [value, setValue] = useState(props.value ?? '');
   return (
-    <SearchFieldBlock
-      {...props}
-      value={value}
-      onChange={e => setValue(e.target.value)}
-      onReset={() => setValue('')}
-    />
+    <SearchFieldBlock {...props} value={value} onChange={e => setValue(e.target.value)} onReset={() => setValue('')} />
   );
 }
 
