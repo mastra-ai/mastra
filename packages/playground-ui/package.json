@@ -127,7 +127,7 @@
     "superjson": "^2.2.6",
     "tailwindcss-animate": "^1.0.7",
     "use-debounce": "^10.0.6",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.11"
   },
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
