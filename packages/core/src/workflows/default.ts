@@ -832,7 +832,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 spanId: workflowSpan.id,
                 parentSpanId: workflowSpan.getParentSpanId(),
               }
-            : undefined;
+            : result.status === 'suspended'
+              ? {}
+              : undefined;
 
         await this.persistStepUpdate({
           workflowId,

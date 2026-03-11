@@ -9,5 +9,5 @@
 export * from './types';
 export * from './no-op';
 export * from './utils';
-export { wrapMastra } from './context';
+export { wrapMastra, isMastra } from './context';
 export { createObservabilityContext, resolveObservabilityContext } from './context-factory';

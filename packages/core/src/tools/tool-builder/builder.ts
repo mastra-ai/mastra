@@ -11,12 +11,13 @@ import {
   jsonSchema,
 } from '@mastra/schema-compat';
 import { z } from 'zod/v4';
-import { Mastra } from '../..';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
+import type { Mastra } from '../../mastra';
 import {
   SpanType,
   wrapMastra,
+  isMastra,
   executeWithContext,
   EntityType,
   getOrCreateSpan,
@@ -362,7 +363,7 @@ export class CoreToolBuilder extends MastraBase {
         tracingPolicy: options.tracingPolicy,
         tracingContext: tracingContext,
         requestContext: toolRequestContext,
-        mastra: options.mastra instanceof Mastra ? options.mastra : undefined,
+        mastra: options.mastra && isMastra(options.mastra) ? (options.mastra as Mastra) : undefined,
       });
 
       try {
