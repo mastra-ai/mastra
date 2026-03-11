@@ -6,7 +6,7 @@ import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
-import { makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
+import { generateEmptyFromSchema, makeCoreTool, maskStreamTags, resolveSerializedZodOutput } from './utils';
 
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
@@ -150,6 +150,79 @@ describe('resolveSerializedZodOutput', () => {
     expect(() => result.parse({ name: 'test' })).not.toThrow();
     expect(() => result.parse({ name: 123 })).toThrow();
     expect(() => result.parse({})).toThrow();
+  });
+});
+
+describe('generateEmptyFromSchema', () => {
+  it('should accept pre-parsed schema objects', () => {
+    expect(
+      generateEmptyFromSchema({
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          active: { type: 'boolean' },
+        },
+      }),
+    ).toEqual({
+      name: '',
+      active: false,
+    });
+  });
+
+  it('should recursively populate nested object properties', () => {
+    expect(
+      generateEmptyFromSchema(
+        JSON.stringify({
+          type: 'object',
+          properties: {
+            user: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                age: { type: 'number' },
+                preferences: {
+                  type: 'object',
+                  properties: {
+                    theme: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        }),
+      ),
+    ).toEqual({
+      user: {
+        name: '',
+        age: 0,
+        preferences: {
+          theme: '',
+        },
+      },
+    });
+  });
+
+  it('should respect schema defaults', () => {
+    expect(
+      generateEmptyFromSchema({
+        type: 'object',
+        properties: {
+          status: { type: 'string', default: 'active' },
+          retries: { type: 'integer', default: 3 },
+          metadata: {
+            type: 'object',
+            default: { source: 'system' },
+            properties: {
+              source: { type: 'string' },
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      status: 'active',
+      retries: 3,
+      metadata: { source: 'system' },
+    });
   });
 });
 

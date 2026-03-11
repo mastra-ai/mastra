@@ -99,23 +99,50 @@ export function deepEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
-export function generateEmptyFromSchema(schema: string) {
-  try {
-    const parsedSchema = JSON.parse(schema);
-    if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
-    const obj: Record<string, any> = {};
-    const TYPE_DEFAULTS = {
-      string: '',
-      array: [],
-      object: {},
-      number: 0,
-      integer: 0,
-      boolean: false,
-    };
-    for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
-      obj[key] = TYPE_DEFAULTS[prop.type as keyof typeof TYPE_DEFAULTS] ?? null;
+function generateEmptyValueFromSchemaProperty(prop: any): any {
+  if (!prop || typeof prop !== 'object') return null;
+  if (Object.prototype.hasOwnProperty.call(prop, 'default')) return prop.default;
+
+  if (Array.isArray(prop.type)) {
+    const firstConcreteType = prop.type.find((type: unknown) => type !== 'null');
+    if (firstConcreteType) {
+      return generateEmptyValueFromSchemaProperty({ ...prop, type: firstConcreteType });
     }
-    return obj;
+  }
+
+  switch (prop.type) {
+    case 'string':
+      return '';
+    case 'array':
+      return [];
+    case 'object':
+      return generateEmptyFromParsedSchema(prop);
+    case 'number':
+    case 'integer':
+      return 0;
+    case 'boolean':
+      return false;
+    default:
+      return null;
+  }
+}
+
+function generateEmptyFromParsedSchema(parsedSchema: any): Record<string, any> {
+  if (!parsedSchema || parsedSchema.type !== 'object' || !parsedSchema.properties) return {};
+
+  const obj: Record<string, any> = {};
+
+  for (const [key, prop] of Object.entries<any>(parsedSchema.properties)) {
+    obj[key] = generateEmptyValueFromSchemaProperty(prop);
+  }
+
+  return obj;
+}
+
+export function generateEmptyFromSchema(schema: string | Record<string, any>) {
+  try {
+    const parsedSchema = typeof schema === 'string' ? JSON.parse(schema) : schema;
+    return generateEmptyFromParsedSchema(parsedSchema);
   } catch {
     return {};
   }
