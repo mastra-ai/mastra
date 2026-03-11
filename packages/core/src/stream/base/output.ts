@@ -543,9 +543,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               break;
             }
-            case 'tool-call':
+            case 'tool-call': {
               // Skip if a synthetic tool-call was already created from tool-call-input-streaming-end
-              if (self.#toolCalls.some(tc => tc.payload.toolCallId === chunk.payload.toolCallId)) {
+              const existingSynthetic = self.#toolCalls.find(tc => tc.payload.toolCallId === chunk.payload.toolCallId);
+              if (existingSynthetic) {
+                // Merge providerMetadata from the real tool-call onto the synthetic one.
+                // The AI SDK's streaming path emits tool-input-start without providerMetadata
+                // but includes it on the final tool-call chunk (e.g., OpenAI's fc_* itemId).
+                if (chunk.payload.providerMetadata && !existingSynthetic.payload.providerMetadata) {
+                  existingSynthetic.payload.providerMetadata = chunk.payload.providerMetadata;
+                }
                 return;
               }
               self.#toolCalls.push(chunk);
@@ -560,6 +567,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               }
               break;
+            }
             case 'tool-result':
               self.#toolResults.push(chunk);
               self.#bufferedByStep.toolResults.push(chunk);

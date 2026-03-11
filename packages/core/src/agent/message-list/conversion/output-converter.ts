@@ -134,7 +134,9 @@ export function sanitizeV5UIMessages(
           // remaining parts. Text parts carry msg_* itemIds that reference the stripped
           // rs_* reasoning items — if retained, the SDK sends item_reference instead of
           // inline content, and the API rejects the orphaned reference.
-          if (hasOpenAIReasoning && 'providerMetadata' in part && part.providerMetadata) {
+          // Tool-invocation parts carry fc_* itemIds that are independent from reasoning
+          // rs_* items — preserve them so the SDK uses item_reference for tool calls.
+          if (hasOpenAIReasoning && !AIV5.isToolUIPart(part) && 'providerMetadata' in part && part.providerMetadata) {
             const meta = part.providerMetadata as Record<string, unknown>;
             if ('openai' in meta) {
               const { openai: _, ...restMeta } = meta;
