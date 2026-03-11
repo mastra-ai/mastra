@@ -2,7 +2,7 @@ export const Sizes = {
   'icon-default': '16px',
   'icon-lg': '20px',
   'icon-sm': '12px',
-  'form-sm': '1.5rem',
+  'form-sm': '1.75rem',
   'form-md': '2rem',
   'form-default': '2.25rem',
   'form-lg': '2.5rem',

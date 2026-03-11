@@ -114,14 +114,8 @@ export function DynamicForm({
     () => ({
       SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
         onSubmit ? (
-          <Button variant="light" className="w-full" size="md" disabled={isSubmitLoading}>
-            {isSubmitLoading ? (
-              <Icon>
-                <Loader2 className="animate-spin" />
-              </Icon>
-            ) : (
-              submitButtonLabel || buttonChildren
-            )}
+          <Button className="w-full" disabled={isSubmitLoading}>
+            {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel || buttonChildren}
           </Button>
         ) : null,
     }),
