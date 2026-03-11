@@ -118,5 +118,25 @@
     "@mastra/gcs": "0.1.1",
     "@mastra/s3": "0.2.2"
   },
-  "changesets": []
+  "changesets": [
+    "@mastra_editor-14052-dependencies",
+    "add-mcp-servers-config",
+    "add-user-agent-header",
+    "cloudflare-do-storage",
+    "crisp-eyes-invite",
+    "cyan-ravens-post",
+    "cyan-wolves-wish",
+    "eleven-weeks-mix",
+    "fix-studio-array-fields",
+    "fix-sub-agent-memory-override",
+    "fuzzy-buckets-teach",
+    "little-beers-fetch",
+    "long-rooms-argue",
+    "mcp-tool-icon",
+    "mcp-tool-metadata",
+    "mcp-tool-tracing",
+    "proud-jeans-beg",
+    "ripe-otters-burn",
+    "short-kids-scan"
+  ]
 }

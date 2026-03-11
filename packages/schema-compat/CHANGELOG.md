@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed Zod v4 schema conversion when `zod/v4` compat layer from Zod 3.25.x is used. Schemas like `ask_user` and other harness tools were not being properly converted to JSON Schema when `~standard.jsonSchema` was absent, causing `type: "None"` errors from the Anthropic API. ([#14157](https://github.com/mastra-ai/mastra/pull/14157))
+
 ## 1.2.0
 
 ### Minor Changes

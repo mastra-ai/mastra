@@ -181,12 +181,7 @@ export function AgentEditSidebar({
                   control={control}
                   render={({ field }) => (
                     <div className={readOnly ? 'pointer-events-none opacity-60' : ''}>
-                      <LLMProviders
-                        value={field.value}
-                        onValueChange={field.onChange}
-                        variant="light"
-                        container={formRef}
-                      />
+                      <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
                     </div>
                   )}
                 />
@@ -209,7 +204,6 @@ export function AgentEditSidebar({
                         value={field.value}
                         onValueChange={field.onChange}
                         llmId={form.watch('model.provider') || ''}
-                        variant="light"
                         container={formRef}
                       />
                     </div>
