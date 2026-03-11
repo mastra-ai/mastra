@@ -1357,6 +1357,9 @@ importers:
       vscode-languageserver-protocol:
         specifier: latest
         version: 3.17.5
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -1394,9 +1397,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.0.18(@opentelemetry/api@1.9.0)(@types/node@22.19.13)(@vitest/ui@4.0.18)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.31.1)(msw@2.12.10(@types/node@22.19.13)(typescript@5.9.3))(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.1)
-      zod:
-        specifier: 'catalog:'
-        version: 4.3.6
 
   observability/_test-utils:
     devDependencies:

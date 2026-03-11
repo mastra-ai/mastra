@@ -78,10 +78,8 @@
     "tree-kill": "latest",
     "vscode-jsonrpc": "latest",
     "vscode-languageserver-protocol": "latest",
-    "@mastra/pg": "workspace:*"
-  },
-  "peerDependencies": {
-    "zod": "^3.25.0 || ^4.0.0"
+    "@mastra/pg": "workspace:*",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
