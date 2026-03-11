@@ -11,8 +11,8 @@
  * - GCS_SERVICE_ACCOUNT_KEY, TEST_GCS_BUCKET: For GCS mount tests
  */
 
-import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 import { Daytona } from '@daytonaio/sdk';
+import { createSandboxTestSuite } from '@internal/workspace-test-utils';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { DaytonaSandbox } from './index';
@@ -864,7 +864,7 @@ describe.skipIf(!process.env.DAYTONA_API_KEY)('DaytonaSandbox Conformance', () =
       : undefined,
     killSandboxExternally: async sb => {
       const daytona = new Daytona();
-      await daytona.stop((sb as DaytonaSandbox).instance);
+      await daytona.stop((sb as DaytonaSandbox).daytona);
     },
     capabilities: {
       supportsMounting: true,
