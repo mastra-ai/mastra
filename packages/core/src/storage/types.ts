@@ -1993,6 +1993,16 @@ export interface UpdateWorkflowStateOptions {
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+  /**
+   * Tracing context for span continuity during suspend/resume.
+   * Persisted when workflow suspends to enable linking resumed spans
+   * as children of the original suspended span.
+   */
+  tracingContext?: {
+    traceId?: string;
+    spanId?: string;
+    parentSpanId?: string;
+  };
 }
 
 function unwrapSchema(schema: z.ZodTypeAny): { base: z.ZodTypeAny; nullable: boolean } {

@@ -243,7 +243,7 @@
         "qwen/qwen3-next-80b-a3b-thinking",
         "qwen/qwen3.5-397b-a17b",
         "qwen/qwq-32b",
-        "stepfun-ai/step-3-5-flash",
+        "stepfun-ai/step-3.5-flash",
         "z-ai/glm4.7",
         "z-ai/glm5"
       ],
@@ -502,7 +502,8 @@
         "openai/gpt-oss-20b",
         "zai-org/GLM-4.5",
         "zai-org/GLM-4.5-Air",
-        "zai-org/GLM-4.7-FP8"
+        "zai-org/GLM-4.7-FP8",
+        "zai-org/GLM-5"
       ],
       "docUrl": "https://docs.tokenfactory.nebius.com/",
       "gateway": "models.dev"
@@ -862,7 +863,8 @@
         "mimo-v2-flash-free",
         "minimax-m2.1",
         "minimax-m2.5",
-        "minimax-m2.5-free"
+        "minimax-m2.5-free",
+        "nemotron-3-super-free"
       ],
       "docUrl": "https://opencode.ai/docs/zen",
       "gateway": "models.dev"
@@ -4259,7 +4261,7 @@
       "qwen/qwen3-next-80b-a3b-thinking",
       "qwen/qwen3.5-397b-a17b",
       "qwen/qwq-32b",
-      "stepfun-ai/step-3-5-flash",
+      "stepfun-ai/step-3.5-flash",
       "z-ai/glm4.7",
       "z-ai/glm5"
     ],
@@ -4438,7 +4440,8 @@
       "openai/gpt-oss-20b",
       "zai-org/GLM-4.5",
       "zai-org/GLM-4.5-Air",
-      "zai-org/GLM-4.7-FP8"
+      "zai-org/GLM-4.7-FP8",
+      "zai-org/GLM-5"
     ],
     "qiniu-ai": [
       "MiniMax-M1",
@@ -4717,7 +4720,8 @@
       "mimo-v2-flash-free",
       "minimax-m2.1",
       "minimax-m2.5",
-      "minimax-m2.5-free"
+      "minimax-m2.5-free",
+      "nemotron-3-super-free"
     ],
     "poe": [
       "anthropic/claude-haiku-3",

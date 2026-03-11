@@ -1,11 +1,11 @@
 ---
-title: "Reference: Convex Storage | Storage"
+title: "Reference: Convex storage | Storage"
 description: Documentation for the Convex storage implementation in Mastra.
 packages:
   - "@mastra/convex"
 ---
 
-# Convex Storage
+# Convex storage
 
 The Convex storage implementation provides a serverless storage solution using [Convex](https://convex.dev), a full-stack TypeScript development platform with real-time sync and automatic caching.
 
@@ -23,7 +23,7 @@ Convex enforces a **1 MiB maximum record size**. This limit can be exceeded when
 npm install @mastra/convex@latest
 ```
 
-## Convex Setup
+## Convex setup
 
 Before using `ConvexStore`, you need to set up the Convex schema and storage handler in your Convex project.
 
@@ -112,7 +112,7 @@ const storage = new ConvexStore({
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 ```ts
 import { ConvexStore } from '@mastra/convex'
@@ -133,7 +133,7 @@ const storeCustom = new ConvexStore({
 })
 ```
 
-## Additional Notes
+## Additional notes
 
 ### Schema Management
 
@@ -157,7 +157,7 @@ All typed tables include:
 
 This design ensures compatibility with Mastra's storage contract while leveraging Convex's automatic indexing and real-time capabilities.
 
-### Environment Variables
+### Environment variables
 
 Set these environment variables for your deployment:
 
