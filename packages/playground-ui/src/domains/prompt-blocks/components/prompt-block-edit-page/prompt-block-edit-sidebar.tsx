@@ -4,7 +4,6 @@ import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons';
 import { Spinner } from '@/ds/components/Spinner';
 import { Input } from '@/ds/components/Input';
 import { Textarea } from '@/ds/components/Textarea';
@@ -25,7 +24,7 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className="py-2 border-border1 border-l-4 border-b">
+    <div className={'py-2'} style={{ paddingLeft: depth * 8 }}>
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
           <div className="flex flex-row gap-4 items-center">
@@ -36,10 +35,10 @@ function RecursiveFieldRenderer({
               className="[&_input]:bg-surface3 w-full"
             />
 
-            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-surface3 w-full" />
+            <JSONSchemaForm.FieldType placeholder="Type" />
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
-            <JSONSchemaForm.FieldRemove variant="outline" size="md" className="shrink-0" />
+            <JSONSchemaForm.FieldRemove variant="outline" />
           </div>
         </div>
 
@@ -54,8 +53,8 @@ function RecursiveFieldRenderer({
               />
             )}
           </JSONSchemaForm.FieldList>
-          <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
-            <PlusIcon className="w-3 h-3 mr-1" />
+          <JSONSchemaForm.AddField className="mt-2" size="sm">
+            <PlusIcon />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -167,10 +166,8 @@ export function PromptBlockEditSidebar({
             </JSONSchemaForm.FieldList>
 
             <div className="p-2">
-              <JSONSchemaForm.AddField className="bg-transparent flex items-center justify-center gap-2 text-ui-sm text-neutral3 hover:text-neutral6 w-full border border-dashed border-border1 p-2 rounded-md">
-                <Icon>
-                  <Plus />
-                </Icon>
+              <JSONSchemaForm.AddField>
+                <Plus />
                 Add variable
               </JSONSchemaForm.AddField>
             </div>
@@ -182,12 +179,7 @@ export function PromptBlockEditSidebar({
       <div className="flex-shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={onSaveDraft}
-              disabled={!isDirty || isSavingDraft || isSubmitting}
-              className="flex-1"
-            >
+            <Button onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -195,9 +187,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Save />
-                  </Icon>
+                  <Save />
                   Save
                 </>
               )}
@@ -215,9 +205,7 @@ export function PromptBlockEditSidebar({
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Check />
-                  </Icon>
+                  <Check />
                   Publish
                 </>
               )}
@@ -232,9 +220,7 @@ export function PromptBlockEditSidebar({
               </>
             ) : (
               <>
-                <Icon>
-                  <Check />
-                </Icon>
+                <Check />
                 Create prompt block
               </>
             )}

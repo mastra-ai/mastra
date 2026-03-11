@@ -1,12 +1,12 @@
 ---
-title: "Custom Auth Provider | Auth"
+title: "Custom auth provider | Auth"
 description: "Create custom authentication providers for specialized identity systems"
 packages:
   - "@mastra/core"
   - "@mastra/auth"
 ---
 
-# Custom Auth Providers
+# Custom auth providers
 
 Custom auth providers allow you to implement authentication for identity systems that aren't covered by the built-in providers. Extend the `MastraAuthProvider` base class to integrate with any authentication system.
 
@@ -25,7 +25,7 @@ Create custom auth providers to support:
 - Specialized authorization rules
 - Enterprise SSO integrations
 
-## Creating a Custom Auth Provider
+## Creating a custom auth provider
 
 Extend the `MastraAuthProvider` class and implement the required methods:
 
@@ -109,9 +109,9 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 }
 ```
 
-## Required Methods
+## Required methods
 
-### authenticateToken()
+### `authenticateToken()`
 
 Verify the incoming token and return the user object if valid, or `null` if authentication fails.
 
@@ -128,7 +128,7 @@ async authenticateToken(token: string, request: HonoRequest): Promise<TUser | nu
 
 The token is automatically extracted from the `Authorization: Bearer <token>` header. If you need to access other headers or cookies, use the `request` parameter.
 
-### authorizeUser()
+### `authorizeUser()`
 
 Determine if the authenticated user is allowed to access the resource.
 
@@ -143,7 +143,7 @@ async authorizeUser(user: TUser, request: HonoRequest): Promise<boolean> | boole
 
 **Returns**: `true` to allow access, `false` to deny (returns 403 Forbidden).
 
-## Configuration Options
+## Configuration options
 
 The `MastraAuthProviderOptions` interface supports these options:
 
@@ -176,7 +176,7 @@ const auth = new MyAuthProvider({
 })
 ```
 
-## Using Your Auth Provider
+## Using your auth provider
 
 Register your custom auth provider with the Mastra instance:
 
@@ -194,7 +194,7 @@ export const mastra = new Mastra({
 })
 ```
 
-## Helper Utilities
+## Helper utilities
 
 The `@mastra/auth` package provides utilities for common token verification patterns:
 
@@ -276,7 +276,7 @@ export class MyJwksAuth extends MastraAuthProvider<MyUser> {
 }
 ```
 
-## Custom Authorization Logic
+## Custom authorization logic
 
 Override the default authorization by providing a custom `authorizeUser` function:
 
@@ -316,7 +316,7 @@ const auth = new MyAuthProvider({
 })
 ```
 
-## Testing Custom Auth Providers
+## Testing custom auth providers
 
 Example test structure using Vitest:
 
@@ -440,7 +440,7 @@ describe('MyAuthProvider', () => {
 })
 ```
 
-## Error Handling
+## Error handling
 
 Provide descriptive errors for common failure scenarios:
 
@@ -498,7 +498,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 }
 ```
 
-## Built-in Providers
+## Built-in providers
 
 Mastra includes these auth providers as reference implementations:
 

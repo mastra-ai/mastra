@@ -78,25 +78,20 @@ const AssistantActionBar = () => {
     >
       <MessagePrimitive.If speaking={false}>
         <ActionBarPrimitive.Speak asChild>
-          <IconButton variant="light" size="md" tooltip="Read aloud">
+          <IconButton tooltip="Read aloud">
             <AudioLinesIcon />
           </IconButton>
         </ActionBarPrimitive.Speak>
       </MessagePrimitive.If>
       <MessagePrimitive.If speaking>
         <ActionBarPrimitive.StopSpeaking asChild>
-          <IconButton variant="light" size="md" tooltip="Stop">
+          <IconButton tooltip="Stop">
             <StopCircleIcon />
           </IconButton>
         </ActionBarPrimitive.StopSpeaking>
       </MessagePrimitive.If>
       <ActionBarPrimitive.Copy asChild>
-        <IconButton
-          variant="light"
-          size="md"
-          tooltip="Copy"
-          className="bg-transparent text-neutral3 hover:text-neutral6"
-        >
+        <IconButton tooltip="Copy">
           <MessagePrimitive.If copied>
             <CheckIcon />
           </MessagePrimitive.If>

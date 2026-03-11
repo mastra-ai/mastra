@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { IconProps } from '@/ds/icons';
 import { Button, ButtonProps } from '../Button';
 
 export type CopyButtonProps = {
@@ -12,18 +11,11 @@ export type CopyButtonProps = {
   copyMessage?: string;
   tooltip?: string;
   className?: string;
-  iconSize?: IconProps['size'];
   size?: ButtonProps['size'];
+  
 };
 
-export function CopyButton({
-  content,
-  copyMessage,
-  tooltip = 'Copy to clipboard',
-  iconSize = 'default',
-  className,
-  size = 'sm',
-}: CopyButtonProps) {
+export function CopyButton({ content, copyMessage, tooltip = 'Copy to clipboard', size = 'sm', className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
   const { handleCopy: originalHandleCopy } = useCopyToClipboard({
     text: content,
@@ -39,13 +31,7 @@ export function CopyButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button
-          onClick={handleCopy}
-          type="button"
-          //    className={cn('rounded-lg p-1', transitions.all, focusRing.visible, 'hover:bg-surface4', className)}
-          size={size}
-          variant="standard"
-        >
+        <Button onClick={handleCopy} type="button" size={size} className={className} aria-label={copied ? 'Copied!' : tooltip}>
           {copied ? <CheckIcon /> : <CopyIcon />}
         </Button>
       </TooltipTrigger>
