@@ -1,5 +1,13 @@
 # mastra
 
+## 1.3.8-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`1d0a8a8`](https://github.com/mastra-ai/mastra/commit/1d0a8a8acf33203d5744fc429b090ad8598aa8ed)]:
+  - @mastra/core@1.11.0-alpha.2
+  - @mastra/deployer@1.11.0-alpha.2
+
 ## 1.3.8-alpha.1
 
 ### Patch Changes
