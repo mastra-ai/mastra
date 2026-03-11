@@ -25,11 +25,19 @@ export const CustomArrayField: React.FC<{
     defaultValue = null;
   }
 
+  const subField = field.schema?.[0];
+
+  if (!subField) {
+    return (
+      <uiComponents.ErrorMessage error={`[AutoForm] Unable to determine array element schema for "${getLabel(field)}"`} />
+    );
+  }
+
   return (
     <uiComponents.ArrayWrapper label={getLabel(field)} field={field} onAddItem={() => append(defaultValue)}>
       {fields.map((item, index) => (
         <uiComponents.ArrayElementWrapper key={item.id} onRemove={() => remove(index)} index={index}>
-          <CustomAutoFormField field={field.schema![0]!} path={[...path, index.toString()]} />
+          <CustomAutoFormField field={subField} path={[...path, index.toString()]} />
         </uiComponents.ArrayElementWrapper>
       ))}
     </uiComponents.ArrayWrapper>
