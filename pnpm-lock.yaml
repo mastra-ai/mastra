@@ -3907,7 +3907,7 @@ importers:
         specifier: ^10.0.6
         version: 10.0.6(react@19.2.4)
       zustand:
-        specifier: ^5.0.9
+        specifier: ^5.0.11
         version: 5.0.11(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
     devDependencies:
       '@mastra/ai-sdk':
@@ -4086,8 +4086,8 @@ importers:
         specifier: ^2.7.0
         version: 2.7.0
       zod-from-json-schema:
-        specifier: ^0.5.0
-        version: 0.5.0
+        specifier: ^0.5.2
+        version: 0.5.2
       zod-from-json-schema-v3:
         specifier: npm:zod-from-json-schema@^0.0.5
         version: zod-from-json-schema@0.0.5
@@ -24078,8 +24078,8 @@ packages:
   zod-from-json-schema@0.0.5:
     resolution: {integrity: sha512-zYEoo86M1qpA1Pq6329oSyHLS785z/mTwfr9V1Xf/ZLhuuBGaMlDGu/pDVGVUe4H4oa1EFgWZT53DP0U3oT9CQ==}
 
-  zod-from-json-schema@0.5.0:
-    resolution: {integrity: sha512-W1v1YIoimOJfvuorGGp1QroizLL3jEGELJtgrHiVg/ytxVZdh/BTTVyPypGB7YK30LHrCkkebbjuyHIjBGCEzw==}
+  zod-from-json-schema@0.5.2:
+    resolution: {integrity: sha512-/dNaicfdhJTOuUd4RImbLUE2g5yrSzzDjI/S6C2vO2ecAGZzn9UcRVgtyLSnENSmAOBRiSpUdzDS6fDWX3Z35g==}
 
   zod-to-json-schema@3.25.1:
     resolution: {integrity: sha512-pM/SU9d3YAggzi6MtR4h7ruuQlqKtad8e9S0fmxcMi+ueAK5Korys/aWcV9LIIHTVbj01NdzxcnXSN+O74ZIVA==}
@@ -29754,7 +29754,7 @@ snapshots:
     dependencies:
       json-schema-to-zod: 2.7.0
       zod: 3.25.76
-      zod-from-json-schema: 0.5.0
+      zod-from-json-schema: 0.5.2
       zod-from-json-schema-v3: zod-from-json-schema@0.0.5
       zod-to-json-schema: 3.25.1(zod@3.25.76)
 
@@ -46523,7 +46523,7 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
-  zod-from-json-schema@0.5.0:
+  zod-from-json-schema@0.5.2:
     dependencies:
       zod: 4.3.6
 

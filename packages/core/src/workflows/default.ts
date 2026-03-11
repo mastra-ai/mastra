@@ -832,7 +832,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                 spanId: workflowSpan.id,
                 parentSpanId: workflowSpan.getParentSpanId(),
               }
-            : undefined;
+            : {};
 
         await this.persistStepUpdate({
           workflowId,
