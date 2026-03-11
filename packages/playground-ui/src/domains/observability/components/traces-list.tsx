@@ -101,19 +101,21 @@ function GroupedTracesList({
   onTraceClick,
   filtersApplied,
   threadTitles,
+  columns = tracesListColumns,
 }: {
   traces: Trace[];
   selectedTraceId?: string;
   onTraceClick?: (id: string) => void;
   filtersApplied?: boolean;
   threadTitles?: Record<string, string>;
+  columns?: typeof tracesListColumns;
 }) {
   const { groups, ungrouped } = groupTracesByThread(traces as SpanRecord[]);
 
   if (groups.length === 0 && ungrouped.length === 0) {
     return (
       <EntryList.Trim>
-        <EntryList.Header columns={tracesListColumns} />
+        <EntryList.Header columns={columns} />
         <EntryList.Message
           message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
         />
@@ -140,11 +142,12 @@ function GroupedTracesList({
               <span className="text-neutral3">({group.traces.length})</span>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <EntryList.Header columns={tracesListColumns} />
+              <EntryList.Header columns={columns} />
               <TraceEntries
                 traces={group.traces as Trace[]}
                 selectedTraceId={selectedTraceId}
                 onTraceClick={onTraceClick}
+                columns={columns}
               />
             </CollapsibleContent>
           </div>
@@ -163,11 +166,12 @@ function GroupedTracesList({
               <span className="text-neutral3">({ungrouped.length})</span>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <EntryList.Header columns={tracesListColumns} />
+              <EntryList.Header columns={columns} />
               <TraceEntries
                 traces={ungrouped as Trace[]}
                 selectedTraceId={selectedTraceId}
                 onTraceClick={onTraceClick}
+                columns={columns}
               />
             </CollapsibleContent>
           </div>
@@ -199,7 +203,7 @@ export function TracesList({
       <EntryList>
         {errorMsg ? (
           <EntryList.Trim>
-            <EntryList.Header columns={tracesListColumns} />
+            <EntryList.Header columns={columns} />
             <EntryList.Message message={errorMsg} type="error" />
           </EntryList.Trim>
         ) : (
@@ -209,6 +213,7 @@ export function TracesList({
             onTraceClick={onTraceClick}
             filtersApplied={filtersApplied}
             threadTitles={threadTitles}
+            columns={columns}
           />
         )}
         <EntryList.NextPageLoading
