@@ -884,3 +884,176 @@ describe('Reasoning + Memory Integration', () => {
     }
   });
 });
+
+/**
+ * Spy Tests: Compare LLM Response Output vs Next Request Input
+ *
+ * These tests use MockLanguageModelV2.doStreamCalls to spy on what the model
+ * receives on the second call, and compare it with what the first call returned.
+ * This reveals exactly what reasoning data survives the conversion pipeline:
+ * MastraDBMessage → UIMessage → ModelMessage → LanguageModelV2Prompt
+ *
+ * @see https://github.com/mastra-ai/mastra/issues/12980
+ */
+describe('Reasoning Data Spy: Response vs Request Comparison (Issue #12980)', () => {
+  /**
+   * OpenAI reasoning with rs_ and msg_ item IDs through round-trip.
+   *
+   * OpenAI gpt-5.2 produces reasoning parts with providerMetadata.openai.itemId (rs_*)
+   * and text parts with their own itemId (msg_*). When replayed as conversation history,
+   * these cause fatal errors because the Responses API enforces mandatory pairing:
+   *   - "Item 'rs_*' of type 'reasoning' was provided without its required following item"
+   *   - "Item 'msg_*' of type 'message' was provided without its required 'reasoning' item"
+   *
+   * The fix strips reasoning parts AND clears providerMetadata.openai from text parts
+   * so the SDK sends inline content instead of item_reference.
+   */
+  it('should strip OpenAI reasoning and providerMetadata through round-trip', async () => {
+    const threadId = randomUUID();
+    const resourceId = 'user-spy-openai';
+    const reasoningItemId = 'rs_spy_reasoning_123';
+    const textItemId = 'msg_spy_text_456';
+
+    // Turn 1: OpenAI-style model returns reasoning (rs_*) + text (msg_*)
+    const openaiModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-1', modelId: 'gpt-5.2', timestamp: new Date(0) },
+          {
+            type: 'reasoning-start',
+            id: 'reasoning-1',
+            providerMetadata: {
+              openai: {
+                itemId: reasoningItemId,
+                reasoningEncryptedContent: null,
+              },
+            },
+          },
+          {
+            type: 'reasoning-delta',
+            id: 'reasoning-1',
+            delta: 'Let me think step by step...',
+            providerMetadata: {
+              openai: {
+                itemId: reasoningItemId,
+                reasoningEncryptedContent: null,
+              },
+            },
+          },
+          {
+            type: 'reasoning-end',
+            id: 'reasoning-1',
+            providerMetadata: {
+              openai: {
+                itemId: reasoningItemId,
+                reasoningEncryptedContent: null,
+              },
+            },
+          },
+          {
+            type: 'text-start',
+            id: 'text-1',
+            providerMetadata: {
+              openai: {
+                itemId: textItemId,
+              },
+            },
+          },
+          { type: 'text-delta', id: 'text-1', delta: 'The answer is 42.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ] as any),
+      }),
+    });
+
+    // Turn 2: Spy model
+    const spyModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'response-2', modelId: 'spy', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Follow-up.' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+
+    // --- Turn 1 ---
+    const agent1 = new Agent({
+      id: 'spy-openai-reasoning',
+      name: 'Spy OpenAI Reasoning',
+      instructions: 'You are a helpful assistant.',
+      model: openaiModel,
+      memory: mockMemory,
+    });
+
+    const resp1 = await agent1.stream('What is the meaning of life?', {
+      memory: { thread: threadId, resource: resourceId },
+    });
+    await resp1.consumeStream();
+
+    // Verify Turn 1 DB storage — reasoning and text should both be preserved in DB
+    const dbMessages = resp1.messageList.get.all.db();
+    const turn1Assistant = dbMessages.find(m => m.role === 'assistant');
+    expect(turn1Assistant).toBeDefined();
+
+    const turn1ReasoningDB = turn1Assistant!.content.parts.find(p => p.type === 'reasoning');
+    expect(turn1ReasoningDB).toBeDefined();
+    expect(turn1ReasoningDB!.providerMetadata?.openai?.itemId).toBe(reasoningItemId);
+
+    const turn1TextDB = turn1Assistant!.content.parts.find(p => p.type === 'text');
+    expect(turn1TextDB).toBeDefined();
+    expect(turn1TextDB!.text).toBe('The answer is 42.');
+    expect(turn1TextDB!.providerMetadata?.openai?.itemId).toBe(textItemId);
+
+    // --- Turn 2: Spy ---
+    const agent2 = new Agent({
+      id: 'spy-openai-reasoning',
+      name: 'Spy OpenAI Reasoning',
+      instructions: 'You are a helpful assistant.',
+      model: spyModel,
+      memory: mockMemory,
+    });
+
+    const resp2 = await agent2.stream('Tell me more', {
+      memory: { thread: threadId, resource: resourceId, options: { lastMessages: 10 } },
+    });
+    await resp2.consumeStream();
+
+    // Capture Turn 2 input — what did the LLM actually receive?
+    const turn2Prompt = spyModel.doStreamCalls[0]!.prompt;
+    const turn2AssistantMsg = turn2Prompt.find((m: any) => m.role === 'assistant');
+    expect(turn2AssistantMsg).toBeDefined();
+
+    const turn2Content = turn2AssistantMsg!.content as any[];
+
+    // === KEY ASSERTIONS ===
+
+    // 1. Reasoning parts must NOT be sent to the LLM (would cause item pairing errors)
+    const turn2Reasoning = turn2Content.find((p: any) => p.type === 'reasoning');
+    expect(turn2Reasoning).toBeUndefined();
+
+    // 2. Text must survive but WITHOUT providerMetadata.openai (would cause item_reference linking)
+    const turn2Text = turn2Content.find((p: any) => p.type === 'text');
+    expect(turn2Text).toBeDefined();
+    expect(turn2Text.text).toBe('The answer is 42.');
+    expect(turn2Text.providerOptions?.openai).toBeUndefined();
+  });
+});
