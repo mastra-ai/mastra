@@ -569,6 +569,198 @@ export function pgTests() {
       });
     });
 
+    describe('Timezone-aware ordering and filtering', () => {
+      let memory: MemoryStorage;
+      let testResourceId: string;
+
+      beforeAll(async () => {
+        store = new PostgresStore(TEST_CONFIG);
+        await store.init();
+        memory = (await store.getStore('memory'))!;
+      });
+      afterAll(async () => {
+        try {
+          await store.close();
+        } catch {}
+      });
+
+      beforeEach(() => {
+        testResourceId = `resource-${Date.now()}`;
+      });
+
+      it('should order threads correctly when legacy rows have null updatedAtZ', async () => {
+        const threadA = `thread-a-${Date.now()}`;
+        const threadB = `thread-b-${Date.now()}`;
+        const threadC = `thread-c-${Date.now()}`;
+
+        const oldest = new Date('2024-01-01T10:00:00Z');
+        const middle = new Date('2024-01-01T12:00:00Z');
+        const newest = new Date('2024-01-01T14:00:00Z');
+
+        // threadA: normal row with both columns populated
+        await store.db.none(
+          `INSERT INTO mastra_threads (id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [threadA, testResourceId, 'Thread A', '{}', oldest, oldest, newest, newest],
+        );
+
+        // threadB: legacy row with null *Z columns
+        await store.db.none(
+          `INSERT INTO mastra_threads (id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+           VALUES ($1, $2, $3, $4, $5, NULL, $6, NULL)`,
+          [threadB, testResourceId, 'Thread B', '{}', middle, middle],
+        );
+
+        // threadC: normal row
+        await store.db.none(
+          `INSERT INTO mastra_threads (id, "resourceId", title, metadata, "createdAt", "createdAtZ", "updatedAt", "updatedAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [threadC, testResourceId, 'Thread C', '{}', newest, newest, oldest, oldest],
+        );
+
+        // Order by createdAt DESC: C (newest), B (middle), A (oldest)
+        const byCreatedDesc = await memory.listThreads({
+          filter: { resourceId: testResourceId },
+          orderBy: { field: 'createdAt', direction: 'DESC' },
+        });
+        expect(byCreatedDesc.threads.map((t: any) => t.id)).toEqual([threadC, threadB, threadA]);
+
+        // Order by updatedAt DESC: A (newest updatedAt), B (middle), C (oldest updatedAt)
+        const byUpdatedDesc = await memory.listThreads({
+          filter: { resourceId: testResourceId },
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
+        });
+        expect(byUpdatedDesc.threads.map((t: any) => t.id)).toEqual([threadA, threadB, threadC]);
+      });
+
+      it('should order messages correctly when legacy rows have null createdAtZ', async () => {
+        const threadId = `thread-msg-order-${Date.now()}`;
+        const thread = createSampleThread({ id: threadId, resourceId: testResourceId });
+        await memory.saveThread({ thread });
+
+        const msg1 = `msg-1-${Date.now()}`;
+        const msg2 = `msg-2-${Date.now()}`;
+        const msg3 = `msg-3-${Date.now()}`;
+
+        const t1 = new Date('2024-06-01T08:00:00Z');
+        const t2 = new Date('2024-06-01T09:00:00Z');
+        const t3 = new Date('2024-06-01T10:00:00Z');
+
+        // msg1: normal row
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg1, threadId, 'First', 'user', 'v2', testResourceId, t1, t1],
+        );
+
+        // msg2: legacy row with null createdAtZ
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [msg2, threadId, 'Second', 'assistant', 'v2', testResourceId, t2],
+        );
+
+        // msg3: normal row
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msg3, threadId, 'Third', 'user', 'v2', testResourceId, t3, t3],
+        );
+
+        const result = await memory.listMessages({ threadId, orderBy: { field: 'createdAt', direction: 'ASC' } });
+        expect(result.messages.map((m: any) => m.id)).toEqual([msg1, msg2, msg3]);
+
+        const resultDesc = await memory.listMessages({ threadId, orderBy: { field: 'createdAt', direction: 'DESC' } });
+        expect(resultDesc.messages.map((m: any) => m.id)).toEqual([msg3, msg2, msg1]);
+      });
+
+      it('should apply date range filters using timezone-aware columns in listMessagesByResourceId', async () => {
+        const threadId = `thread-daterange-${Date.now()}`;
+        const thread = createSampleThread({ id: threadId, resourceId: testResourceId });
+        await memory.saveThread({ thread });
+
+        const earlyCreatedAt = new Date('2024-03-01T06:00:00Z');
+        const earlyCreatedAtZ = new Date('2024-03-01T08:00:00Z');
+        const lateCreatedAt = new Date('2024-03-01T20:00:00Z');
+        const lateCreatedAtZ = new Date('2024-03-01T22:00:00Z');
+
+        const msgEarly = `msg-early-${Date.now()}`;
+        const msgLate = `msg-late-${Date.now()}`;
+
+        // Insert messages where createdAt and createdAtZ differ
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msgEarly, threadId, 'Early', 'user', 'v2', testResourceId, earlyCreatedAt, earlyCreatedAtZ],
+        );
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [msgLate, threadId, 'Late', 'assistant', 'v2', testResourceId, lateCreatedAt, lateCreatedAtZ],
+        );
+
+        // Filter using a range that includes earlyCreatedAtZ but excludes earlyCreatedAt
+        // This verifies the filter uses createdAtZ, not createdAt
+        const result = await memory.listMessagesByResourceId({
+          resourceId: testResourceId,
+          filter: {
+            dateRange: {
+              start: new Date('2024-03-01T07:00:00Z'), // after earlyCreatedAt, before earlyCreatedAtZ
+              end: new Date('2024-03-01T09:00:00Z'), // after earlyCreatedAtZ, before lateCreatedAt
+            },
+          },
+        });
+
+        // If filtering uses createdAtZ (correct): earlyCreatedAtZ (08:00) is in range → 1 result
+        // If filtering uses createdAt (wrong): earlyCreatedAt (06:00) is out of range → 0 results
+        expect(result.messages.length).toBe(1);
+        expect(result.messages[0]?.id).toBe(msgEarly);
+      });
+
+      it('should apply date range filters with fallback for legacy rows missing createdAtZ', async () => {
+        const threadId = `thread-daterange-legacy-${Date.now()}`;
+        const thread = createSampleThread({ id: threadId, resourceId: testResourceId });
+        await memory.saveThread({ thread });
+
+        const legacyCreatedAt = new Date('2024-05-15T14:00:00Z');
+        const msgLegacy = `msg-legacy-${Date.now()}`;
+
+        // Legacy row with null createdAtZ
+        await store.db.none(
+          `INSERT INTO mastra_messages (id, thread_id, content, role, type, "resourceId", "createdAt", "createdAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)`,
+          [msgLegacy, threadId, 'Legacy', 'user', 'v2', testResourceId, legacyCreatedAt],
+        );
+
+        // Filter range that includes legacyCreatedAt
+        const result = await memory.listMessagesByResourceId({
+          resourceId: testResourceId,
+          filter: {
+            dateRange: {
+              start: new Date('2024-05-15T13:00:00Z'),
+              end: new Date('2024-05-15T15:00:00Z'),
+            },
+          },
+        });
+
+        // COALESCE falls back to createdAt when createdAtZ is null
+        expect(result.messages.length).toBe(1);
+        expect(result.messages[0]?.id).toBe(msgLegacy);
+
+        // Filter range that excludes legacyCreatedAt
+        const emptyResult = await memory.listMessagesByResourceId({
+          resourceId: testResourceId,
+          filter: {
+            dateRange: {
+              start: new Date('2024-05-15T15:00:00Z'),
+              end: new Date('2024-05-15T16:00:00Z'),
+            },
+          },
+        });
+        expect(emptyResult.messages.length).toBe(0);
+      });
+    });
+
     // PG-specific: Cloud SQL Connector configuration tests (not covered by factory)
     describe('Cloud SQL Connector Config', () => {
       it('accepts config with stream property (Cloud SQL connector)', () => {
