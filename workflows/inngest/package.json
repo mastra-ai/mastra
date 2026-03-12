@@ -34,6 +34,7 @@
   "dependencies": {
     "@inngest/realtime": "^0.4.6",
     "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/core": "^1.30.0",
     "inngest": "^3.44.3"
   },
   "devDependencies": {
