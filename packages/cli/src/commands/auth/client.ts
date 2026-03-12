@@ -1,8 +1,8 @@
 import createClient from 'openapi-fetch';
 
-import type { paths } from '../cloud-api.js';
+import type { paths } from '../platform-api.js';
 
-export const MASTRA_CLOUD_API_URL = process.env.MASTRA_CLOUD_API_URL || 'https://platform.staging.mastra.ai';
+export const MASTRA_PLATFORM_API_URL = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.staging.mastra.ai';
 
 /**
  * Create a typed API client with Bearer token + org ID headers.
@@ -16,7 +16,7 @@ export function createApiClient(token: string, orgId?: string) {
   }
 
   return createClient<paths>({
-    baseUrl: MASTRA_CLOUD_API_URL,
+    baseUrl: MASTRA_PLATFORM_API_URL,
     headers,
   });
 }

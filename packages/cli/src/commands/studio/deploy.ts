@@ -7,7 +7,7 @@ import * as p from '@clack/prompts';
 import archiver from 'archiver';
 import { fetchOrgs } from '../auth/api.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './cloud-api.js';
+import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
 import { loadProjectConfig, saveProjectConfig } from './project-config.js';
 
 /* ------------------------------------------------------------------ */

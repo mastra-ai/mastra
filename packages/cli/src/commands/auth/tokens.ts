@@ -1,4 +1,4 @@
-import { MASTRA_CLOUD_API_URL, authHeaders } from './client.js';
+import { MASTRA_PLATFORM_API_URL, authHeaders } from './client.js';
 import { getToken, getCurrentOrgId } from './credentials.js';
 
 async function resolveOrgId(): Promise<string | null> {
@@ -18,7 +18,7 @@ export async function createTokenAction(name: string) {
   const orgId = await resolveOrgId();
   if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
 
-  const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/auth/tokens`, {
+  const resp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`, {
     method: 'POST',
     headers: {
       ...authHeaders(token, orgId),
@@ -49,7 +49,7 @@ export async function listTokensAction() {
   const orgId = await resolveOrgId();
   if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
 
-  const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/auth/tokens`, {
+  const resp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`, {
     headers: authHeaders(token, orgId),
   });
 
@@ -78,7 +78,7 @@ export async function revokeTokenAction(tokenId: string) {
   const orgId = await resolveOrgId();
   if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
 
-  const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/auth/tokens/${encodeURIComponent(tokenId)}`, {
+  const resp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens/${encodeURIComponent(tokenId)}`, {
     method: 'DELETE',
     headers: authHeaders(token, orgId),
   });

@@ -30,7 +30,7 @@
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "eslint .",
-    "generate:api": "npx openapi-typescript ${MASTRA_CLOUD_API_URL:-https://platform.staging.mastra.ai}/openapi.json -o src/commands/cloud-api.d.ts"
+    "generate:api": "npx openapi-typescript ${MASTRA_PLATFORM_API_URL:-https://platform.staging.mastra.ai}/openapi.json -o src/commands/platform-api.d.ts"
   },
   "keywords": [
     "mastra",

@@ -1,5 +1,5 @@
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { fetchProjects } from './cloud-api.js';
+import { fetchProjects } from './platform-api.js';
 
 const statusIcon: Record<string, string> = {
   starting: '🚀',

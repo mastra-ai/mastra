@@ -1,6 +1,6 @@
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import type { DeployInfo } from './cloud-api.js';
-import { fetchDeployStatus } from './cloud-api.js';
+import type { DeployInfo } from './platform-api.js';
+import { fetchDeployStatus } from './platform-api.js';
 
 function printDeploy(deploy: DeployInfo) {
   const statusIcon: Record<string, string> = {

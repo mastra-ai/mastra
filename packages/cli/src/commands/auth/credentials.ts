@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { createApiClient, MASTRA_CLOUD_API_URL } from './client.js';
+import { createApiClient, MASTRA_PLATFORM_API_URL } from './client.js';
 
 const CREDENTIALS_DIR = join(homedir(), '.mastra');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
@@ -96,7 +96,7 @@ export async function login(): Promise<Credentials> {
     });
   });
 
-  const loginUrl = `${MASTRA_CLOUD_API_URL}/v1/auth/login?product=cli&cli_port=${port}`;
+  const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}`;
   console.info(`   Opening browser...\n`);
 
   try {

@@ -1,4 +1,4 @@
-import { authHeaders, createApiClient, MASTRA_CLOUD_API_URL } from '../auth/client.js';
+import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 
 export interface Project {
   id: string;
@@ -80,7 +80,7 @@ export async function uploadDeploy(
   if (meta?.projectName) headers['x-project-name'] = meta.projectName;
 
   // Step 1: Create the deploy with optional envVars
-  const createResp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/studio/deploys`, {
+  const createResp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ envVars: meta?.envVars }),
@@ -111,7 +111,7 @@ export async function uploadDeploy(
   }
 
   // Notify API that upload is complete → triggers deploy pipeline
-  const completeResp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/studio/deploys/${deploy.id}/upload-complete`, {
+  const completeResp = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deploy.id}/upload-complete`, {
     method: 'POST',
     headers: authHeaders(token, orgId),
   });
@@ -127,7 +127,7 @@ async function streamDeployLogs(deployId: string, token: string, orgId: string, 
   // Small delay to let the deploy pipeline start before requesting logs
   await new Promise(r => setTimeout(r, 2000));
 
-  const url = `${MASTRA_CLOUD_API_URL}/v1/studio/deploys/${deployId}/logs/stream`;
+  const url = `${MASTRA_PLATFORM_API_URL}/v1/studio/deploys/${deployId}/logs/stream`;
 
   const resp = await fetch(url, {
     headers: authHeaders(token, orgId),

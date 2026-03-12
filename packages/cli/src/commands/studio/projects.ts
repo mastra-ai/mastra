@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts';
 import { fetchOrgs } from '../auth/api.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { fetchProjects, createProject } from './cloud-api.js';
+import { fetchProjects, createProject } from './platform-api.js';
 
 /**
  * Resolve the current org, auto-selecting if only one exists.

@@ -172,7 +172,7 @@ program
 
 const studioCommand = program
   .command('studio')
-  .description('Manage Mastra Studio (local and cloud)')
+  .description('Manage Mastra Studio')
   .option('-p, --port <port>', 'Port to run the studio on (default: 3000)')
   .option('-e, --env <env>', 'Custom env file to include in the studio')
   .option('-h, --server-host <serverHost>', 'Host of the Mastra API server (default: localhost)')
@@ -184,7 +184,7 @@ const studioCommand = program
 
 const deployCommand = studioCommand
   .command('deploy [dir]')
-  .description('Deploy studio to Mastra Cloud')
+  .description('Deploy studio')
   .option('--org <id>', 'Organization ID')
   .option('--project <id>', 'Project ID')
   .option('-y, --yes', 'Auto-accept defaults without confirmation')
@@ -234,9 +234,9 @@ scorersCommand.command('list').description('List available scorer templates').ac
 
 // ---- Auth commands ----
 
-const authCommand = program.command('auth').description('Manage Mastra Cloud authentication');
+const authCommand = program.command('auth').description('Manage authentication');
 
-authCommand.command('login').description('Log in to Mastra Cloud').action(wrapAction(loginAction));
+authCommand.command('login').description('Log in to Mastra').action(wrapAction(loginAction));
 
 authCommand.command('logout').description('Log out and clear credentials').action(wrapAction(logoutAction));
 
