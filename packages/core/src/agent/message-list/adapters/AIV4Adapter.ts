@@ -19,11 +19,13 @@ import type {
 import { findToolCallArgs } from '../utils/provider-compat';
 
 /**
- * Filter out data-* parts from MastraMessagePart[] to get V4-compatible parts.
- * Data parts are a Mastra extension for custom streaming data and aren't supported by AI SDK V4.
+ * Separate data-* parts from V4-compatible parts.
+ * Data parts (e.g. data-tool-call-suspended) are a Mastra extension not natively typed in AI SDK V4,
+ * but they must survive the DB → UI round-trip so features like HITL workflow resumption work
+ * after a page refresh. We keep them in the parts array alongside V4 parts.
  */
 function filterDataParts(parts: MastraMessagePart[]): UIMessageV4Part[] {
-  return parts.filter((part): part is UIMessageV4Part => !part.type.startsWith('data-'));
+  return parts as UIMessageV4Part[];
 }
 
 /**
