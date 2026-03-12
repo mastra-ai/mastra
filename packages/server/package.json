@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.12.0-alpha.0",
+  "version": "1.12.0",
   "description": "",
   "type": "module",
   "files": [
@@ -69,6 +69,16 @@
       "require": {
         "types": "./dist/server/auth/index.d.ts",
         "default": "./dist/server/auth/index.cjs"
+      }
+    },
+    "./schemas": {
+      "import": {
+        "types": "./dist/server/schemas/index.d.ts",
+        "default": "./dist/server/schemas/index.js"
+      },
+      "require": {
+        "types": "./dist/server/schemas/index.d.ts",
+        "default": "./dist/server/schemas/index.cjs"
       }
     },
     "./package.json": "./package.json"

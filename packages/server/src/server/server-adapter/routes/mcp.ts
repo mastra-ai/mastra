@@ -8,7 +8,6 @@ import {
   MCP_SSE_TRANSPORT_ROUTE,
   MCP_SSE_MESSAGES_ROUTE,
 } from '../../handlers/mcp';
-import type { ServerRoute } from '.';
 
 /**
  * MCP Routes
@@ -16,7 +15,7 @@ import type { ServerRoute } from '.';
  * Registry routes provide access to the MCP server registry and tools.
  * Transport routes handle the MCP protocol communication (HTTP and SSE).
  */
-export const MCP_ROUTES: ServerRoute<any, any, any>[] = [
+export const MCP_ROUTES = [
   // ============================================================================
   // MCP Server Registry Routes
   // ============================================================================
@@ -36,4 +35,4 @@ export const MCP_ROUTES: ServerRoute<any, any, any>[] = [
   MCP_HTTP_TRANSPORT_ROUTE,
   MCP_SSE_TRANSPORT_ROUTE,
   MCP_SSE_MESSAGES_ROUTE,
-];
+] as const;
