@@ -411,6 +411,121 @@ export function createObservabilityTests({ storage }: { storage: MastraStorage }
       });
     });
 
+    describe('deleteTracesOlderThan', () => {
+      it('should delete old traces and keep recent ones', async () => {
+        // Create traces - all will get createdAt = now from the DB
+        await observabilityStorage.batchCreateSpans({
+          records: [
+            createSpan({
+              traceId: 'old-trace-1',
+              spanId: 'old-root-1',
+              environment: 'production',
+              entityType: EntityType.AGENT,
+            }),
+            createChildSpan('old-root-1', {
+              traceId: 'old-trace-1',
+              spanId: 'old-child-1',
+            }),
+            createSpan({
+              traceId: 'old-trace-2',
+              spanId: 'old-root-2',
+              environment: 'staging',
+              entityType: EntityType.WORKFLOW_RUN,
+            }),
+          ],
+        });
+
+        // Delete with beforeDate in the future - should delete all traces
+        const futureDate = new Date(Date.now() + 60_000);
+        const result = await observabilityStorage.deleteTracesOlderThan({
+          beforeDate: futureDate,
+        });
+
+        expect(result.deletedCount).toBe(2);
+        expect(await observabilityStorage.getTrace({ traceId: 'old-trace-1' })).toBeNull();
+        expect(await observabilityStorage.getTrace({ traceId: 'old-trace-2' })).toBeNull();
+      });
+
+      it('should not delete traces newer than beforeDate', async () => {
+        // Create traces - all will get createdAt = now
+        await observabilityStorage.batchCreateSpans({
+          records: [createSpan({ traceId: 'recent-trace', spanId: 'recent-root' })],
+        });
+
+        // Delete with beforeDate in the past - should delete nothing
+        const pastDate = new Date('2020-01-01T00:00:00Z');
+        const result = await observabilityStorage.deleteTracesOlderThan({
+          beforeDate: pastDate,
+        });
+
+        expect(result.deletedCount).toBe(0);
+        expect(await observabilityStorage.getTrace({ traceId: 'recent-trace' })).not.toBeNull();
+      });
+
+      it('should delete child spans along with their parent trace', async () => {
+        await observabilityStorage.batchCreateSpans({
+          records: [
+            createSpan({ traceId: 'parent-trace', spanId: 'root-span' }),
+            createChildSpan('root-span', { traceId: 'parent-trace', spanId: 'child-1' }),
+            createChildSpan('root-span', { traceId: 'parent-trace', spanId: 'child-2' }),
+          ],
+        });
+
+        const futureDate = new Date(Date.now() + 60_000);
+        await observabilityStorage.deleteTracesOlderThan({ beforeDate: futureDate });
+
+        // All spans including children should be deleted
+        expect(await observabilityStorage.getTrace({ traceId: 'parent-trace' })).toBeNull();
+        expect(await observabilityStorage.getSpan({ traceId: 'parent-trace', spanId: 'child-1' })).toBeNull();
+        expect(await observabilityStorage.getSpan({ traceId: 'parent-trace', spanId: 'child-2' })).toBeNull();
+      });
+
+      it('should filter by environment when specified', async () => {
+        await observabilityStorage.batchCreateSpans({
+          records: [
+            createSpan({ traceId: 'prod-trace', spanId: 'prod-root', environment: 'production' }),
+            createSpan({ traceId: 'stg-trace', spanId: 'stg-root', environment: 'staging' }),
+          ],
+        });
+
+        const futureDate = new Date(Date.now() + 60_000);
+        const result = await observabilityStorage.deleteTracesOlderThan({
+          beforeDate: futureDate,
+          filters: { environment: 'production' },
+        });
+
+        expect(result.deletedCount).toBe(1);
+        expect(await observabilityStorage.getTrace({ traceId: 'prod-trace' })).toBeNull();
+        expect(await observabilityStorage.getTrace({ traceId: 'stg-trace' })).not.toBeNull();
+      });
+
+      it('should filter by entityType when specified', async () => {
+        await observabilityStorage.batchCreateSpans({
+          records: [
+            createSpan({ traceId: 'agent-trace', spanId: 'agent-root', entityType: EntityType.AGENT }),
+            createSpan({ traceId: 'workflow-trace', spanId: 'wf-root', entityType: EntityType.WORKFLOW_RUN }),
+          ],
+        });
+
+        const futureDate = new Date(Date.now() + 60_000);
+        const result = await observabilityStorage.deleteTracesOlderThan({
+          beforeDate: futureDate,
+          filters: { entityType: EntityType.AGENT },
+        });
+
+        expect(result.deletedCount).toBe(1);
+        expect(await observabilityStorage.getTrace({ traceId: 'agent-trace' })).toBeNull();
+        expect(await observabilityStorage.getTrace({ traceId: 'workflow-trace' })).not.toBeNull();
+      });
+
+      it('should return zero when no traces match', async () => {
+        const result = await observabilityStorage.deleteTracesOlderThan({
+          beforeDate: new Date('2020-01-01T00:00:00Z'),
+        });
+        expect(result.deletedCount).toBe(0);
+      });
+    });
+
     describe('listTraces', () => {
       const createMultipleTraces = async () => {
         const baseDate = DEFAULT_BASE_DATE;
