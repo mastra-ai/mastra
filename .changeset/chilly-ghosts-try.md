@@ -2,4 +2,6 @@
 '@mastra/schema-compat': patch
 ---
 
-Fixed type bundling to include AI SDK v5 types, ensuring all necessary type definitions are available when using schema-compat
+`@mastra/schema-compat`: patch
+
+Fixed published `@mastra/schema-compat` types so AI SDK v5 schemas resolve correctly for consumers
