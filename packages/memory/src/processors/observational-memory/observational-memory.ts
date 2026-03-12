@@ -1708,22 +1708,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       return existingObservations;
     }
 
+    const bufferedReflection =
+      useBufferedReflection && record?.bufferedReflection
+        ? `--- BUFFERED REFLECTION (pending activation) ---\n\n${record.bufferedReflection}`
+        : undefined;
+
     if (!existingObservations) {
-      return existingObservations;
+      return bufferedReflection;
     }
 
-    // Start with the baseline (full observations)
+    // 1. Apply tail truncation to observations only (buffered reflection stays outside the budget)
     let optimized = existingObservations;
-
-    // 1. Optionally append buffered reflection content
-    if (useBufferedReflection && record?.bufferedReflection) {
-      optimized = `${optimized}\n\n--- BUFFERED REFLECTION (pending activation) ---\n\n${record.bufferedReflection}`;
-    }
-
-    // 2. Apply tail truncation to previousObservationTokens (keep most recent observations)
     if (tokenBudget !== undefined) {
       if (tokenBudget === 0) {
-        return '';
+        return bufferedReflection ?? '';
       }
 
       const currentTokens = this.tokenCounter.countObservations(optimized);
@@ -1732,7 +1730,8 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
     }
 
-    return optimized;
+    // 2. Append buffered reflection after truncation so it's never truncated away
+    return bufferedReflection ? `${optimized}\n\n${bufferedReflection}` : optimized;
   }
 
   /**
@@ -5523,7 +5522,9 @@ ${formattedMessages}
       }
 
       // Combine results: wrap each thread's observations and append to existing
-      let currentObservations = existingObservations;
+      // Use rawExistingObservations (not the truncated existingObservations) so
+      // we persist the full observation history rather than the context-window version
+      let currentObservations = rawExistingObservations;
       let cycleObservationTokens = 0; // Track total new observation tokens generated in this cycle
 
       for (const obsResult of observationResults) {

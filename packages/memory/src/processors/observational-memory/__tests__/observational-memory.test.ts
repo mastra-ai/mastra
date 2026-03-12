@@ -8961,6 +8961,17 @@ describe('Observer Context Optimization', () => {
       expect(result).toBe('');
     });
 
+    it('should return buffered reflection even when observer.previousObservationTokens is 0', () => {
+      const om = createOM({ previousObservationTokens: 0, useBufferedReflection: true });
+      const observations = '- User likes TypeScript\n- User prefers dark mode';
+      const record = { bufferedReflection: '- Condensed reflection content' };
+      const result = prepareObserverContext(om, observations, record);
+      // Observations are fully truncated, but buffered reflection is preserved outside the budget
+      expect(result).toContain('BUFFERED REFLECTION');
+      expect(result).toContain('- Condensed reflection content');
+      expect(result).not.toContain('- User likes TypeScript');
+    });
+
     it('should disable truncation when observer.previousObservationTokens is false', () => {
       const om = createOM({ previousObservationTokens: false });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
@@ -9006,7 +9017,7 @@ describe('Observer Context Optimization', () => {
   });
 
   describe('prepareObserverContext - combined optimizations', () => {
-    it('should include buffered reflection then truncate within budget', () => {
+    it('should truncate observations within budget and append buffered reflection outside budget', () => {
       const tc = new TokenCounter();
       const lines = Array.from({ length: 40 }, (_, i) => `- Observation line ${i + 1}`);
       const observations = lines.join('\n');
@@ -9019,13 +9030,18 @@ describe('Observer Context Optimization', () => {
 
       const result = prepareObserverContext(om, observations, record);
       expect(result).toBeDefined();
-      // Result should fit within budget
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+      // Buffered reflection is appended outside the budget
+      expect(result!).toContain('BUFFERED REFLECTION');
+      expect(result!).toContain(reflectionContent);
       // Most recent observations should be preserved (tail truncation)
       expect(result!).toContain('Observation line 40');
+
+      // The observation portion (before the buffered reflection separator) should fit within budget
+      const observationPart = result!.split('--- BUFFERED REFLECTION')[0].trim();
+      expect(tc.countObservations(observationPart)).toBeLessThanOrEqual(budget);
     });
 
-    it('should apply both: reflection inclusion + truncation', () => {
+    it('should apply both: reflection inclusion + truncation (reflection outside budget)', () => {
       const tc = new TokenCounter();
       const lines = Array.from({ length: 50 }, (_, i) => `- Observation line ${i + 1}`);
       const observations = lines.join('\n');
@@ -9040,7 +9056,12 @@ describe('Observer Context Optimization', () => {
 
       const result = prepareObserverContext(om, observations, record);
       expect(result).not.toBe(observations);
-      expect(tc.countObservations(result!)).toBeLessThanOrEqual(budget);
+      // Buffered reflection is appended outside the budget and survives truncation
+      expect(result!).toContain('BUFFERED REFLECTION');
+      expect(result!).toContain('- Reflection summary');
+      // The observation portion should fit within budget
+      const observationPart = result!.split('--- BUFFERED REFLECTION')[0].trim();
+      expect(tc.countObservations(observationPart)).toBeLessThanOrEqual(budget);
     });
   });
 
