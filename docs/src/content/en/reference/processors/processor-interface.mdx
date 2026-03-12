@@ -101,6 +101,13 @@ interface Processor<TId extends string = string> {
     description: 'Optional display name for the processor. Falls back to id if not provided.',
     isOptional: true,
   },
+  {
+    name: 'processDataParts',
+    type: 'boolean',
+    description:
+      'When true, the processOutputStream method also receives `data-*` chunks emitted by tools via writer.custom(). Defaults to false.',
+    isOptional: true,
+  },
 ]}
 />
 

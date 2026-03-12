@@ -121,20 +121,9 @@ export class CustomInputProcessor implements Processor {
 }
 ```
 
-The `processInput` method receives:
+The `processInput` method receives `messages`, `systemMessages`, and an `abort` function. Return a `MastraDBMessage[]` to replace messages, or `{ messages, systemMessages }` to also modify system messages.
 
-- `messages`: User and assistant messages (not system messages)
-- `systemMessages`: All system messages (agent instructions, memory context, user-provided system prompts)
-- `messageList`: The full MessageList instance for advanced use cases
-- `abort`: Function to stop processing and return early
-- `requestContext`: Execution metadata like `threadId` and `resourceId`
-
-The method can return:
-
-- `MastraDBMessage[]` — Transformed messages array (backward compatible)
-- `{ messages, systemMessages }` — Both messages and modified system messages. Use this to trim verbose system prompts, filter semantic-recall content, or adjust instructions per conversation.
-
-The framework handles both return formats, so modifying system messages is optional and existing processors continue to work.
+See the [`Processor` reference](/reference/processors/processor-interface#processinput) for all available arguments and return types.
 
 ### Control each step
 
@@ -168,32 +157,9 @@ export class DynamicModelProcessor implements Processor {
 }
 ```
 
-The `processInputStep` method receives:
+The method receives the current `stepNumber`, `model`, `tools`, `toolChoice`, `messages`, and more. Return an object with any properties you want to override for that step, for example `{ model, toolChoice, tools, systemMessages }`.
 
-- `stepNumber`: Current step in the agentic loop (0-indexed)
-- `steps`: Results from previous steps
-- `messages`: Current messages snapshot (read-only)
-- `systemMessages`: Current system messages (read-only)
-- `messageList`: The full MessageList instance for mutations
-- `model`: Current model being used
-- `tools`: Current tools available for this step
-- `toolChoice`: Current tool choice setting
-- `activeTools`: Currently active tools
-- `providerOptions`: Provider-specific options
-- `modelSettings`: Model settings like temperature
-- `structuredOutput`: Structured output configuration
-
-The method can return any combination of:
-
-- `model`: Change the model for this step
-- `tools`: Replace or add tools (use spread to merge: `{ tools: { ...tools, newTool } }`)
-- `toolChoice`: Change tool selection behavior
-- `activeTools`: Filter which tools are available
-- `messages`: Replace messages (applied to messageList)
-- `systemMessages`: Replace all system messages
-- `providerOptions`: Modify provider options
-- `modelSettings`: Modify model settings
-- `structuredOutput`: Modify structured output configuration
+See the [`Processor` reference](/reference/processors/processor-interface#processinputstep) for all available arguments and return types.
 
 ### Use the `prepareStep` callback
 
@@ -227,7 +193,7 @@ export class CustomOutputProcessor implements Processor {
 }
 ```
 
-The `result` object contains the resolved generation data — token usage, text, finish reason, and steps. Access it to track usage or inspect tool calls:
+The method also receives a `result` object with the full generation data — `text`, `usage` (token counts), `finishReason`, and `steps` (each containing `toolCalls`, `toolResults`, etc.). Use it to track usage or inspect tool calls:
 
 ```typescript title="src/mastra/processors/usage-tracker.ts"
 import type { Processor } from '@mastra/core'
@@ -236,18 +202,8 @@ export class UsageTracker implements Processor {
   id = 'usage-tracker'
 
   async processOutputResult({ messages, result }) {
-    console.log(`Text: ${result.text}`)
     console.log(`Tokens: ${result.usage.inputTokens} in, ${result.usage.outputTokens} out`)
     console.log(`Finish reason: ${result.finishReason}`)
-    console.log(`Steps: ${result.steps.length}`)
-
-    // Each step contains toolCalls, toolResults, reasoning, sources, files, etc.
-    for (const step of result.steps) {
-      if (step.toolCalls?.length) {
-        console.log(`Step used ${step.toolCalls.length} tool calls`)
-      }
-    }
-
     return messages
   }
 }
@@ -305,94 +261,32 @@ Mastra provides utility processors for common tasks:
 
 ### `TokenLimiter`
 
-Prevents context window overflow by removing older messages when the total token count exceeds a specified limit.
+Prevents context window overflow by removing older messages when the total token count exceeds a specified limit. Prioritizes recent messages and preserves system messages.
 
-```typescript {7-10}
+```typescript {7}
 import { Agent } from '@mastra/core/agent'
 import { TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
   name: 'my-agent',
   model: 'openai/gpt-5.4',
-  inputProcessors: [
-    // Ensure the total tokens don't exceed ~127k
-    new TokenLimiter(127000),
-  ],
+  inputProcessors: [new TokenLimiter(127000)],
 })
 ```
 
-The `TokenLimiter` uses the `o200k_base` encoding by default (suitable for GPT-4o). You can specify other encodings for different models:
-
-```typescript {6-9}
-import cl100k_base from 'js-tiktoken/ranks/cl100k_base'
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'openai/gpt-5.4',
-  inputProcessors: [
-    new TokenLimiter({
-      limit: 16000, // Example limit for a 16k context model
-      encoding: cl100k_base,
-    }),
-  ],
-})
-```
+See the [`TokenLimiterProcessor` reference](/reference/processors/token-limiter-processor) for custom encoding, strategy, and count mode options.
 
 ### `ToolCallFilter`
 
-Removes tool calls from messages sent to the LLM, saving tokens by excluding potentially verbose tool interactions.
+Removes tool calls and results from messages sent to the LLM, saving tokens on verbose tool interactions. Optionally exclude only specific tools. This filter only affects the LLM input, filtered messages are still saved to memory.
 
-```typescript {7-16}
-import { Agent } from '@mastra/core/agent'
-import { ToolCallFilter, TokenLimiter } from '@mastra/core/processors'
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'openai/gpt-5.4',
-  inputProcessors: [
-    // Example 1: Remove all tool calls/results
-    new ToolCallFilter(),
-
-    // Example 2: Remove only specific tool calls
-    new ToolCallFilter({ exclude: ['generateImageTool'] }),
-
-    // Always place TokenLimiter last
-    new TokenLimiter(127000),
-  ],
-})
-```
-
-:::note
-
-The example above filters tool calls and limits tokens for the LLM, but these filtered messages will still be saved to memory. To also filter messages before they're saved to memory, manually add memory processors before utility processors. See [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) for details.
-
-:::
+See the [`ToolCallFilter` reference](/reference/processors/tool-call-filter) for configuration options and the [Memory Processors](/docs/memory/memory-processors#manual-control-and-deduplication) page for pre-memory filtering.
 
 ### `ToolSearchProcessor`
 
-Enables dynamic tool discovery and loading for agents with large tool libraries. Instead of providing all tools upfront, the agent searches for tools by keyword and loads them on demand, reducing context token usage.
+Enables dynamic tool discovery for agents with large tool libraries. Instead of providing all tools upfront, the processor gives the agent `search_tools` and `load_tool` meta-tools to find and load tools by keyword on demand, reducing context token usage.
 
-```typescript {2,9-18}
-import { Agent } from '@mastra/core/agent'
-import { ToolSearchProcessor } from '@mastra/core/processors'
-
-const agent = new Agent({
-  name: 'my-agent',
-  model: 'openai/gpt-5.4',
-  inputProcessors: [
-    new ToolSearchProcessor({
-      tools: {
-        createIssue: githubTools.createIssue,
-        sendEmail: emailTools.send,
-        // ... hundreds of tools
-      },
-      search: { topK: 5, minScore: 0.1 },
-    }),
-  ],
-})
-```
-
-The processor gives the agent two meta-tools: `search_tools` to find tools by keyword and `load_tool` to add a tool to the conversation. Loaded tools persist within the thread. See the [ToolSearchProcessor reference](/reference/processors/tool-search-processor) for full configuration options.
+See the [`ToolSearchProcessor` reference](/reference/processors/tool-search-processor) for configuration options and usage examples.
 
 ## Advanced patterns
 
@@ -436,29 +330,18 @@ export class EnsureFinalResponseProcessor implements Processor {
 }
 ```
 
-Use it with your agent:
+Add it to `inputProcessors` and pass the same `maxSteps` value to `generate()` or `stream()`:
 
-```typescript title="src/mastra/agents/bounded-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { EnsureFinalResponseProcessor } from '../processors/ensure-final-response'
-
+```typescript
 const MAX_STEPS = 5
 
 const agent = new Agent({
-  id: 'bounded-agent',
-  name: 'Bounded Agent',
-  model: 'openai/gpt-5-mini',
-  tools: {
-    /* your tools */
-  },
   inputProcessors: [new EnsureFinalResponseProcessor(MAX_STEPS)],
+  // ...
 })
 
-// Pass maxSteps when calling generate/stream
-const result = await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
+await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 ```
-
-This ensures that on the final allowed step (step 4 when `maxSteps` is 5, since steps are 0-indexed), the LLM generates a summary instead of attempting another tool call, and clearly indicates if the task is incomplete.
 
 ### Emit custom stream events
 
