@@ -13,7 +13,7 @@ import { stream } from 'hono/streaming';
 
 export async function getAgentCardByIdHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
+  const agentId = c.req.param('agentId')!;
   const requestContext: RequestContext = c.get('requestContext');
 
   const result = await getOriginalAgentCardByIdHandler({
@@ -27,7 +27,7 @@ export async function getAgentCardByIdHandler(c: Context) {
 
 export async function getAgentExecutionHandler(c: Context) {
   const mastra: Mastra = c.get('mastra');
-  const agentId = c.req.param('agentId');
+  const agentId = c.req.param('agentId')!;
   const requestContext: RequestContext = c.get('requestContext');
   const taskStore: InMemoryTaskStore = c.get('taskStore');
   const logger = mastra.getLogger();
