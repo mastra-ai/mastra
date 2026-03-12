@@ -223,13 +223,13 @@ const response = await agentWithTools.generate('Your prompt', {
 
 When `model` is provided to the `structuredOutput` property, Mastra uses a separate internal agent to handle the structured output. The main agent will handle all of the steps (including tool calling) and the structured output model will handle only the generation of structured output.
 
-```typescript prettier:false
-const response = await testAgent.generate("Tell me about TypeScript.", {
+```typescript
+const response = await testAgent.generate('Tell me about TypeScript.', {
   structuredOutput: {
-    schema: yourSchema
-    model: 'openai/gpt-5.4'
-  }
-});
+    schema: yourSchema,
+    model: 'openai/gpt-5.4',
+  },
+})
 ```
 
 ### Multi-step approach with `prepareStep`
@@ -241,7 +241,7 @@ const result = await agent.stream('weather in vancouver?', {
   prepareStep: async ({ stepNumber }) => {
     if (stepNumber === 0) {
       return {
-        model: 'anthropic/claude-sonnet-4-20250514',
+        model: 'openai/gpt-5.4',
         tools: {
           weatherTool,
         },
@@ -249,7 +249,7 @@ const result = await agent.stream('weather in vancouver?', {
       }
     }
     return {
-      model: 'anthropic/claude-sonnet-4-20250514',
+      model: 'openai/gpt-5.4',
       tools: undefined,
       structuredOutput: {
         schema: z.object({
@@ -268,8 +268,6 @@ const result = await agent.stream('weather in vancouver?', {
 When schema validation fails, you can control how errors are handled using `errorStrategy`. The default `strict` strategy throws an error, while `warn` logs a warning and continues. The `fallback` strategy returns the values provided using `fallbackValue`.
 
 ```typescript
-import { z } from 'zod'
-
 const response = await testAgent.generate('Tell me about TypeScript.', {
   structuredOutput: {
     schema: z.object({

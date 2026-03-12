@@ -48,7 +48,7 @@ const supervisor = new Agent({
   id: 'supervisor',
   instructions: `You coordinate research and writing using specialized agents.
     Delegate to research-agent for facts, then writing-agent for content.`,
-  model: 'openai/gpt-5.1',
+  model: 'openai/gpt-5.4',
   agents: { researchAgent, writingAgent },
   memory: new Memory({
     storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
