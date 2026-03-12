@@ -164,20 +164,33 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             defaultValue: '1.2 (when bufferTokens is set)',
           },
           {
-            name: 'observer.previousObservationTokens',
-            type: 'number | false',
-            description:
-              "Optional token budget for the observer's previous-observations context. When set to a number, the observations passed to the Observer agent are tail-truncated to fit within this budget while keeping the newest observations and preserving highlighted 🔴 items when possible. Set to `0` to omit previous observations entirely, or `false` to disable truncation explicitly.",
+            name: 'observer',
+            type: 'ObservationObserverConfig',
+            description: "Settings that control the Observer agent's input context.",
             isOptional: true,
-            defaultValue: 'undefined (disabled)',
-          },
-          {
-            name: 'observer.useBufferedReflection',
-            type: 'boolean',
-            description:
-              'When `true`, pending buffered reflection content is included in the observer context. This only applies when async reflection buffering is enabled and a buffered reflection currently exists.',
-            isOptional: true,
-            defaultValue: 'false',
+            properties: [
+              {
+                type: 'ObservationObserverConfig',
+                parameters: [
+                  {
+                    name: 'previousObservationTokens',
+                    type: 'number | false',
+                    description:
+                      "Optional token budget for the observer's previous-observations context. When set to a number, the observations passed to the Observer agent are tail-truncated to fit within this budget while keeping the newest observations and preserving highlighted 🔴 items when possible. Set to `0` to omit previous observations entirely, or `false` to disable truncation explicitly.",
+                    isOptional: true,
+                    defaultValue: 'undefined (disabled)',
+                  },
+                  {
+                    name: 'useBufferedReflection',
+                    type: 'boolean',
+                    description:
+                      'When `true`, pending buffered reflection content is included in the observer context. This only applies when async reflection buffering is enabled and a buffered reflection currently exists.',
+                    isOptional: true,
+                    defaultValue: 'false',
+                  },
+                ],
+              },
+            ],
           },
         ],
       },
