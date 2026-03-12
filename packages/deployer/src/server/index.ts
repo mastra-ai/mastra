@@ -199,7 +199,6 @@ export async function createHonoServer(
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
   }
 
-
   // Health check endpoint (before auth middleware so it's publicly accessible)
   app.get(
     '/health',
