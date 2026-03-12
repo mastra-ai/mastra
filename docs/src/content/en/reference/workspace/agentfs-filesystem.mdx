@@ -131,7 +131,6 @@ defaultValue: "false",
 ]}
 />
 
-You must provide at least one of `agentId`, `path`, or `agent`.
 
 ## Properties
 
@@ -160,51 +159,3 @@ description: "Whether the filesystem is in read-only mode",
 ]}
 />
 
-## Methods
-
-AgentFSFilesystem implements the [WorkspaceFilesystem interface](/reference/workspace/filesystem), providing all standard filesystem methods:
-
-- `readFile(path, options?)` - Read file contents
-- `writeFile(path, content, options?)` - Write content to a file
-- `appendFile(path, content)` - Append content to a file
-- `deleteFile(path, options?)` - Delete a file
-- `copyFile(src, dest, options?)` - Copy a file
-- `moveFile(src, dest, options?)` - Move or rename a file
-- `mkdir(path, options?)` - Create a directory
-- `rmdir(path, options?)` - Remove a directory
-- `readdir(path, options?)` - List directory contents
-- `exists(path)` - Check if a path exists
-- `stat(path)` - Get file or directory metadata
-
-### `init()`
-
-Initialize the filesystem. Opens the underlying SQLite database.
-
-```typescript
-await filesystem.init()
-```
-
-### `destroy()`
-
-Clean up resources. Closes the database connection if the filesystem owns it (i.e. was not created with a pre-opened `agent`).
-
-```typescript
-await filesystem.destroy()
-```
-
-### `getInfo()`
-
-Returns metadata about this filesystem instance.
-
-```typescript
-const info = filesystem.getInfo()
-// { id: '...', name: 'AgentFSFilesystem', provider: 'agentfs', status: 'ready' }
-```
-
-## Related
-
-- [WorkspaceFilesystem interface](/reference/workspace/filesystem)
-- [S3Filesystem reference](/reference/workspace/s3-filesystem)
-- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
-- [LocalFilesystem reference](/reference/workspace/local-filesystem)
-- [Workspace overview](/docs/workspace/overview)
