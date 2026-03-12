@@ -78,11 +78,7 @@ export function TracesTools({
         />
 
         <label className={cn('flex gap-2 items-center shrink-0 cursor-pointer')}>
-          <Switch
-            checked={groupByThread}
-            onCheckedChange={onGroupByThreadChange}
-            disabled={isLoading}
-          />
+          <Switch checked={groupByThread} onCheckedChange={onGroupByThreadChange} disabled={isLoading} />
           <span className={cn('text-ui-md text-neutral3')}>Group by thread</span>
         </label>
 

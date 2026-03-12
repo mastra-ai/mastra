@@ -54,8 +54,7 @@ function traceToEntry(trace: Trace, selectedTraceId?: string) {
     time: format(createdAtDate, 'h:mm:ss aaa'),
     name: trace?.name,
     input: getInputPreview(trace?.input),
-    entityId:
-      trace?.entityName || trace?.entityId || trace?.attributes?.agentId || trace?.attributes?.workflowId,
+    entityId: trace?.entityName || trace?.entityId || trace?.attributes?.agentId || trace?.attributes?.workflowId,
     status: trace?.attributes?.status,
     isSelected: selectedTraceId === trace.traceId,
   };
@@ -120,9 +119,7 @@ function GroupedTracesList({
     return (
       <EntryList.Trim>
         <EntryList.Header columns={columns} />
-        <EntryList.Message
-          message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
-        />
+        <EntryList.Message message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'} />
       </EntryList.Trim>
     );
   }
@@ -139,9 +136,13 @@ function GroupedTracesList({
             >
               <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">
-                {threadTitles?.[group.threadId]
-                  ? <>Thread '{threadTitles[group.threadId]}' ({getShortId(group.threadId) || group.threadId})</>
-                  : <>Thread {getShortId(group.threadId) || group.threadId}</>}
+                {threadTitles?.[group.threadId] ? (
+                  <>
+                    Thread '{threadTitles[group.threadId]}' ({getShortId(group.threadId) || group.threadId})
+                  </>
+                ) : (
+                  <>Thread {getShortId(group.threadId) || group.threadId}</>
+                )}
               </span>
               <span className="text-neutral3">({group.traces.length})</span>
             </CollapsibleTrigger>
@@ -240,7 +241,12 @@ export function TracesList({
         ) : (
           <>
             {traces.length > 0 ? (
-              <TraceEntries traces={traces} selectedTraceId={selectedTraceId} onTraceClick={onTraceClick} columns={columns} />
+              <TraceEntries
+                traces={traces}
+                selectedTraceId={selectedTraceId}
+                onTraceClick={onTraceClick}
+                columns={columns}
+              />
             ) : (
               <EntryList.Message
                 message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
