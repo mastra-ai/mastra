@@ -1,4 +1,5 @@
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { ItemList } from '@/ds/components/ItemList';
 import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
@@ -50,6 +51,10 @@ export function ProcessorList({ processors, isLoading, error }: ProcessorListPro
 
   if (error && is403ForbiddenError(error)) {
     return <PermissionDenied resource="processors" />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load processors" message={error.message} />;
   }
 
   if (processorData.length === 0 && !isLoading) {

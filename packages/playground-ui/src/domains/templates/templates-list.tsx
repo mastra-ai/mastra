@@ -10,7 +10,7 @@ import { NetworkIcon, WorkflowIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Column } from '@/ds/components/Columns';
-import { Chip } from '@/ds/components/Chip';
+import { Chip, ChipsGroup } from '@/ds/components/Chip';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { ItemList } from '@/ds/components/ItemList';
 import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
@@ -160,24 +160,24 @@ export function TemplatesList({ templates, tags, providers, isLoading }: Templat
                         {hasEntities && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <div className="text-neutral2 text-ui-sm inline-flex gap-1 items-center">
+                              <ChipsGroup>
                                 {agentsCount > 0 && (
-                                  <Chip color="purple" intensity="muted">
+                                  <Chip intensity="muted">
                                     <AgentIcon /> {agentsCount}
                                   </Chip>
                                 )}
                                 {toolsCount > 0 && (
-                                  <Chip color="yellow" intensity="muted">
+                                  <Chip intensity="muted">
                                     <ToolsIcon /> {toolsCount}
                                   </Chip>
                                 )}
                                 {workflowsCount > 0 && (
-                                  <Chip color="blue" intensity="muted">
+                                  <Chip intensity="muted">
                                     <WorkflowIcon /> {workflowsCount}
                                   </Chip>
                                 )}
                                 {networksCount > 0 && (
-                                  <Chip color="green" intensity="muted">
+                                  <Chip intensity="muted">
                                     <NetworkIcon /> {networksCount}
                                   </Chip>
                                 )}
@@ -186,7 +186,7 @@ export function TemplatesList({ templates, tags, providers, isLoading }: Templat
                                     <McpServerIcon /> {mcpCount}
                                   </Chip>
                                 )}
-                              </div>
+                              </ChipsGroup>
                             </TooltipTrigger>
                             <TooltipContent>
                               <div className="flex flex-col gap-1">

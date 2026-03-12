@@ -1,6 +1,5 @@
 import { Button, DocsIcon, TemplatesList, PageContent, MainHeader } from '@mastra/playground-ui';
 import { PackageIcon } from 'lucide-react';
-import { Link } from 'react-router';
 
 import { useMastraTemplates } from '@/hooks/use-templates';
 
@@ -12,8 +11,8 @@ export default function Templates() {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/en/docs/overview"
+          as="a"
+          href="https://mastra.ai/en/docs/overview"
           target="_blank"
           rel="noopener noreferrer"
           variant="ghost"

@@ -9,6 +9,7 @@ import { Column } from '@/ds/components/Columns';
 import { NoDatasetInfo } from './no-datasets-info';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { PermissionDenied } from '@/index';
+import { ErrorState } from '@/ds/components/ErrorState';
 
 const columns: ItemListColumn[] = [
   { name: 'name', label: 'Name & Description', size: '1fr' },
@@ -39,6 +40,10 @@ export function DatasetsList({ datasets, isLoading, onCreateClick, error }: Data
 
   if (error && is403ForbiddenError(error)) {
     return <PermissionDenied resource="datasets" />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load datasets" message={error.message} />;
   }
 
   if (datasets.length === 0 && !isLoading) {

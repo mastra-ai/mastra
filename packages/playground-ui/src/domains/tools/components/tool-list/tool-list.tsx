@@ -1,5 +1,6 @@
 import { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { ItemList } from '@/ds/components/ItemList';
 import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
@@ -39,6 +40,10 @@ export function ToolList({ tools, agents, isLoading, error }: ToolListProps) {
 
   if (error && is403ForbiddenError(error)) {
     return <PermissionDenied resource="tools" />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load tools" message={error.message} />;
   }
 
   if (toolData.length === 0 && !isLoading) {

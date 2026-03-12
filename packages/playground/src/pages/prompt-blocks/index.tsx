@@ -8,7 +8,6 @@ import {
   MainHeader,
 } from '@mastra/playground-ui';
 import { ExternalLinkIcon, FileTextIcon, Plus } from 'lucide-react';
-import { Link } from 'react-router';
 
 export default function PromptBlocks() {
   const { Link: FrameworkLink, paths } = useLinkComponent();
@@ -21,8 +20,8 @@ export default function PromptBlocks() {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
+          as="a"
+          href="https://mastra.ai/en/docs/agents/agent-instructions#prompt-blocks"
           target="_blank"
           rel="noopener noreferrer"
           variant="ghost"

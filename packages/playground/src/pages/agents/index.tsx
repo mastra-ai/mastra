@@ -28,12 +28,12 @@ function Agents() {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/en/docs/agents/overview"
+          as="a"
+          href="https://mastra.ai/en/docs/agents/overview"
           target="_blank"
+          rel="noopener noreferrer"
           variant="ghost"
           size="md"
-          rel="noopener noreferrer"
         >
           Agents Documentation
           <ExternalLinkIcon />

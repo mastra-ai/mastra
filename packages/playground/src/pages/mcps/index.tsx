@@ -1,6 +1,5 @@
 import { Button, MCPServerList, McpServerIcon, useMCPServers, PageContent, MainHeader } from '@mastra/playground-ui';
 import { ExternalLinkIcon } from 'lucide-react';
-import { Link } from 'react-router';
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();
@@ -9,10 +8,10 @@ const MCPs = () => {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
-          rel="noopener noreferrer"
+          as="a"
+          href="https://mastra.ai/en/docs/tools-mcp/mcp-overview"
           target="_blank"
+          rel="noopener noreferrer"
           variant="ghost"
           size="md"
         >

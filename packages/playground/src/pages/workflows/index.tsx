@@ -1,6 +1,5 @@
 import { WorkflowList, Button, WorkflowIcon, useWorkflows, PageContent, MainHeader } from '@mastra/playground-ui';
 import { ExternalLinkIcon } from 'lucide-react';
-import { Link } from 'react-router';
 
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
@@ -9,8 +8,8 @@ function Workflows() {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/en/docs/workflows/overview"
+          as="a"
+          href="https://mastra.ai/en/docs/workflows/overview"
           target="_blank"
           rel="noopener noreferrer"
           variant="ghost"

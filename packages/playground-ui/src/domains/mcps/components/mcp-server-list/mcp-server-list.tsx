@@ -1,6 +1,7 @@
 import { McpServerListResponse } from '@mastra/client-js';
 import { ServerInfo } from '@mastra/core/mcp';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { ItemList } from '@/ds/components/ItemList';
 import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
@@ -42,6 +43,10 @@ export function MCPServerList({ mcpServers, isLoading, error }: MCPServerListPro
 
   if (error && is403ForbiddenError(error)) {
     return <PermissionDenied resource="MCP servers" />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load MCP servers" message={error.message} />;
   }
 
   if (mcpServers.length === 0 && !isLoading) {

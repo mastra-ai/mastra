@@ -8,7 +8,6 @@ import {
   MainHeader,
 } from '@mastra/playground-ui';
 import { ExternalLinkIcon, GaugeIcon, Plus } from 'lucide-react';
-import { Link } from 'react-router';
 
 export default function Scorers() {
   const { Link: FrameworkLink } = useLinkComponent();
@@ -19,8 +18,8 @@ export default function Scorers() {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/en/docs/evals/overview"
+          as="a"
+          href="https://mastra.ai/en/docs/evals/overview"
           target="_blank"
           rel="noopener noreferrer"
           variant="ghost"

@@ -9,7 +9,6 @@ import {
 } from '@mastra/playground-ui';
 import { Plus, Database, ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router';
 
 function Datasets() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -26,8 +25,8 @@ function Datasets() {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/docs/observability/datasets/overview"
+          as="a"
+          href="https://mastra.ai/docs/observability/datasets/overview"
           target="_blank"
           rel="noopener noreferrer"
           variant="ghost"

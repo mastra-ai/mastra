@@ -1,6 +1,5 @@
 import { Button, ProcessorList, useProcessors, ProcessorIcon, PageContent, MainHeader } from '@mastra/playground-ui';
 import { ExternalLinkIcon } from 'lucide-react';
-import { Link } from 'react-router';
 
 export function Processors() {
   const { data: processors = {}, isLoading, error } = useProcessors();
@@ -9,8 +8,8 @@ export function Processors() {
     <PageContent>
       <PageContent.TopBar>
         <Button
-          as={Link}
-          to="https://mastra.ai/docs/agents/processors"
+          as="a"
+          href="https://mastra.ai/docs/agents/processors"
           target="_blank"
           rel="noopener noreferrer"
           variant="ghost"

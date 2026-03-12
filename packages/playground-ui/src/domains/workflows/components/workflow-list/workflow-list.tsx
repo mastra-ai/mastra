@@ -1,5 +1,6 @@
 import { GetWorkflowResponse } from '@mastra/client-js';
 import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { ErrorState } from '@/ds/components/ErrorState';
 import { is403ForbiddenError } from '@/lib/query-utils';
 import { ItemList } from '@/ds/components/ItemList';
 import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
@@ -42,6 +43,10 @@ export function WorkflowList({ workflows, isLoading, error }: WorkflowListProps)
 
   if (error && is403ForbiddenError(error)) {
     return <PermissionDenied resource="workflows" />;
+  }
+
+  if (error) {
+    return <ErrorState title="Failed to load workflows" message={error.message} />;
   }
 
   if (workflowData.length === 0 && !isLoading) {
