@@ -1,0 +1,216 @@
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "WebInspector",
+      "version": "537.36"
+    },
+    "pages": [
+      {
+        "startedDateTime": "2026-03-06T21:08:11.992Z",
+        "id": "page_1",
+        "title": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net/agents",
+        "pageTimings": {
+          "onContentLoad": 536.7170000099577,
+          "onLoad": 1517.3410000279546
+        }
+      }
+    ],
+    "entries": [
+      {
+        "_connectionId": "4689113",
+        "_initiator": {
+          "type": "script",
+          "stack": {
+            "callFrames": [
+              {
+                "functionName": "",
+                "scriptId": "67",
+                "url": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net/assets/index-Jz0oSmxC.js",
+                "lineNumber": 0,
+                "columnNumber": 1961
+              },
+              {
+                "functionName": "",
+                "scriptId": "67",
+                "url": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net/assets/index-Jz0oSmxC.js",
+                "lineNumber": 0,
+                "columnNumber": 1910
+              }
+            ],
+            "parent": {
+              "description": "Promise.then",
+              "callFrames": [
+                {
+                  "functionName": "E",
+                  "scriptId": "67",
+                  "url": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net/assets/index-Jz0oSmxC.js",
+                  "lineNumber": 0,
+                  "columnNumber": 1838
+                },
+                {
+                  "functionName": "",
+                  "scriptId": "67",
+                  "url": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net/assets/index-Jz0oSmxC.js",
+                  "lineNumber": 0,
+                  "columnNumber": 1926
+                }
+              ]
+            }
+          }
+        },
+        "_priority": "High",
+        "_resourceType": "script",
+        "cache": {},
+        "connection": "443",
+        "pageref": "page_1",
+        "request": {
+          "method": "GET",
+          "url": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net/assets/main-BO2Dp5qX.js",
+          "httpVersion": "http/2.0",
+          "headers": [
+            {
+              "name": ":authority",
+              "value": "3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net"
+            },
+            {
+              "name": ":method",
+              "value": "GET"
+            },
+            {
+              "name": ":path",
+              "value": "/assets/main-BO2Dp5qX.js"
+            },
+            {
+              "name": ":scheme",
+              "value": "https"
+            },
+            {
+              "name": "accept",
+              "value": "*/*"
+            },
+            {
+              "name": "accept-encoding",
+              "value": "gzip, deflate, br, zstd"
+            },
+            {
+              "name": "accept-language",
+              "value": "en-US,en;q=0.9"
+            },
+            {
+              "name": "origin",
+              "value": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net"
+            },
+            {
+              "name": "priority",
+              "value": "u=1"
+            },
+            {
+              "name": "referer",
+              "value": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net/assets/index-Jz0oSmxC.js"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\""
+            },
+            {
+              "name": "sec-ch-ua-mobile",
+              "value": "?0"
+            },
+            {
+              "name": "sec-ch-ua-platform",
+              "value": "\"macOS\""
+            },
+            {
+              "name": "sec-fetch-dest",
+              "value": "script"
+            },
+            {
+              "name": "sec-fetch-mode",
+              "value": "cors"
+            },
+            {
+              "name": "sec-fetch-site",
+              "value": "same-origin"
+            },
+            {
+              "name": "user-agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+            }
+          ],
+          "queryString": [],
+          "cookies": [],
+          "headersSize": -1,
+          "bodySize": 0
+        },
+        "response": {
+          "status": 200,
+          "statusText": "",
+          "httpVersion": "http/2.0",
+          "headers": [
+            {
+              "name": "access-control-allow-credentials",
+              "value": "true"
+            },
+            {
+              "name": "access-control-allow-origin",
+              "value": "https://3000-00ca40e1-4bc8-4be7-85eb-88b0891b6dcd.daytonaproxy01.net"
+            },
+            {
+              "name": "access-control-expose-headers",
+              "value": "Content-Length,X-Requested-With"
+            },
+            {
+              "name": "content-length",
+              "value": "5834976"
+            },
+            {
+              "name": "content-type",
+              "value": "text/javascript; charset=utf-8"
+            },
+            {
+              "name": "date",
+              "value": "Fri, 06 Mar 2026 21:08:12 GMT"
+            },
+            {
+              "name": "vary",
+              "value": "Origin"
+            },
+            {
+              "name": "x-request-id",
+              "value": "34d0ba5f-dabd-4782-bfe3-17b515488148"
+            }
+          ],
+          "cookies": [],
+          "content": {
+            "size": 5834976,
+            "mimeType": "text/javascript"
+          },
+          "redirectURL": "",
+          "headersSize": -1,
+          "bodySize": -1,
+          "_transferSize": 5841690,
+          "_error": null,
+          "_fetchedViaServiceWorker": false
+        },
+        "serverIPAddress": "54.81.93.126",
+        "startedDateTime": "2026-03-06T21:08:12.529Z",
+        "time": 5767.4340000376105,
+        "timings": {
+          "blocked": 1.0170000276342033,
+          "dns": -1,
+          "ssl": -1,
+          "connect": -1,
+          "send": 0.264,
+          "wait": 98.61599997969716,
+          "receive": 5667.537000030279,
+          "_blocked_queueing": 0.44700002763420343,
+          "_workerStart": -1,
+          "_workerReady": -1,
+          "_workerFetchStart": -1,
+          "_workerRespondWithSettled": -1
+        }
+      }
+    ]
+  }
+}

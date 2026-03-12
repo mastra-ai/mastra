@@ -22,10 +22,8 @@ export const StudioSettingsPage = () => {
         </HeaderTitle>
       </Header>
       <MainContentContent>
-        <div className="p-5">
-          <div className="max-w-2xl p-5 w-full bg-surface3 border border-border1 rounded-lg">
-            <StudioConfigForm initialConfig={{ baseUrl, headers }} />
-          </div>
+        <div className="max-w-2xl mx-auto w-full mt-[4vh]">
+          <StudioConfigForm initialConfig={{ baseUrl, headers }} />
         </div>
       </MainContentContent>
     </MainContentLayout>

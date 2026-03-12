@@ -133,6 +133,7 @@ function EditLayoutWrapper() {
   const isOnIdentityPage = location.pathname === basePath || location.pathname === `${basePath}/`;
   useEffect(() => {
     if (isCodeAgentOverride && isOnIdentityPage) {
+      // eslint-disable-next-line @typescript-eslint/no-floating-promises
       routerNavigate(`${basePath}/instruction-blocks${location.search}${location.hash}`, { replace: true });
     }
   }, [isCodeAgentOverride, isOnIdentityPage, routerNavigate, basePath, location.search, location.hash]);
@@ -197,7 +198,7 @@ function EditLayoutWrapper() {
         </HeaderTitle>
         {isReady && (
           <HeaderAction>
-            <Button variant="outline" onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
+            <Button onClick={handleSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting}>
               {isSavingDraft ? (
                 <>
                   <Spinner className="h-4 w-4" />
@@ -205,9 +206,7 @@ function EditLayoutWrapper() {
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Save />
-                  </Icon>
+                  <Save />
                   Save
                 </>
               )}
@@ -224,9 +223,7 @@ function EditLayoutWrapper() {
                 </>
               ) : (
                 <>
-                  <Icon>
-                    <Check />
-                  </Icon>
+                  <Check />
                   Publish
                 </>
               )}

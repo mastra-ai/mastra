@@ -1,13 +1,22 @@
-let prettierModules: Promise<
-  [typeof import('prettier/standalone'), typeof import('prettier/plugins/babel'), typeof import('prettier/plugins/estree')]
->;
+let prettierModules:
+  | Promise<
+      [
+        typeof import('prettier/standalone'),
+        typeof import('prettier/plugins/babel'),
+        typeof import('prettier/plugins/estree'),
+      ]
+    >
+  | undefined;
 
 const loadPrettier = () =>
   (prettierModules ??= Promise.all([
     import('prettier/standalone'),
     import('prettier/plugins/babel'),
     import('prettier/plugins/estree'),
-  ]));
+  ]).catch(error => {
+    prettierModules = undefined;
+    throw error;
+  }));
 
 export const formatJSON = async (code: string) => {
   const [prettier, prettierPluginBabel, prettierPluginEstree] = await loadPrettier();

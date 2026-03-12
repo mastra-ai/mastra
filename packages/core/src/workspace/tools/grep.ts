@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { isTextFile } from '../filesystem/fs-utils';
@@ -28,9 +28,9 @@ Usage:
     path: z
       .string()
       .optional()
-      .default('./')
+      .default('.')
       .describe(
-        'File, directory, or glob pattern to search within (default: "./"). ' +
+        'File, directory, or glob pattern to search within (default: "."). ' +
           'A plain path searches that file or directory. ' +
           'A glob pattern (e.g., "**/*.ts", "src/**/*.test.ts") filters which files to search.',
       ),
@@ -57,7 +57,7 @@ Usage:
       .describe('Include hidden files and directories (names starting with ".") in the search (default: false)'),
   }),
   execute: async (
-    { pattern, path: inputPath = './', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
+    { pattern, path: inputPath = '.', contextLines = 0, maxCount, caseSensitive = true, includeHidden = false },
     context,
   ) => {
     const { workspace, filesystem } = requireFilesystem(context);

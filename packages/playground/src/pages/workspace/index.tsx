@@ -75,11 +75,7 @@ export default function Workspace() {
   // Check if 403 forbidden (permission denied)
   const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
 
-  // For uncontained local filesystems, default to basePath instead of / (which would show the real root)
-  const fsMetadata = workspaceInfo?.filesystem?.metadata;
-  const defaultPath =
-    fsMetadata?.contained === false && typeof fsMetadata?.basePath === 'string' ? fsMetadata.basePath : '/';
-  const pathFromUrl = searchParams.get('path') || defaultPath;
+  const pathFromUrl = searchParams.get('path') || '.';
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
@@ -111,7 +107,7 @@ export default function Workspace() {
   };
 
   const setCurrentPath = (path: string) => {
-    updateSearchParams({ path, file: null });
+    updateSearchParams({ path: path === '.' || path === '' ? null : path, file: null });
   };
 
   const setSelectedFile = (file: string | null) => {
@@ -315,11 +311,15 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -344,11 +344,15 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -395,11 +399,17 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
               <Icon>
                 <DocsIcon />
               </Icon>
-              Documentation
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -425,11 +435,15 @@ export default function Workspace() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
-              Documentation
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/workspace/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
+              Workspaces documentation
             </Button>
           </HeaderAction>
         </Header>
@@ -467,11 +481,11 @@ export default function Workspace() {
               Search
             </Button>
           )}
-          <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank">
+          <Button as={Link} to="https://mastra.ai/en/docs/workspace/overview" target="_blank" variant="ghost" size="md">
             <Icon>
               <DocsIcon />
             </Icon>
-            Documentation
+            Workspaces documentation
           </Button>
         </HeaderAction>
       </Header>

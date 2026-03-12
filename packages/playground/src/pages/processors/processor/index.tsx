@@ -87,10 +87,15 @@ export function Processor() {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/docs/agents/processors" target="_blank" rel="noopener noreferrer">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/docs/agents/processors"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             Processors documentation
           </Button>
         </HeaderAction>

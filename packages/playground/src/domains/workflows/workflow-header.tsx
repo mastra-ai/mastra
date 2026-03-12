@@ -56,17 +56,13 @@ export function WorkflowHeader({
         </HeaderGroup>
 
         <HeaderAction>
-          <Button as="a" target="_blank" href="/swagger-ui">
-            <Icon>
-              <ApiIcon />
-            </Icon>
+          <Button as="a" target="_blank" href="/swagger-ui" variant="ghost" size="md">
+            <ApiIcon />
             API endpoints
           </Button>
 
-          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" variant="ghost" size="md">
+            <DocsIcon />
             Workflows documentation
           </Button>
         </HeaderAction>

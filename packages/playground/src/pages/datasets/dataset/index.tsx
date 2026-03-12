@@ -6,6 +6,8 @@ import {
   Breadcrumb,
   Crumb,
   Icon,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import {
   DatasetPageContent,
@@ -35,7 +37,7 @@ function DatasetPage() {
   const [activeVersion, setActiveVersion] = useState<number | null>(null);
 
   // Fetch dataset for edit dialog
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
 
   if (!datasetId) {
     return (
@@ -43,6 +45,16 @@ function DatasetPage() {
         <MainContentContent>
           <div className="text-neutral3 p-4">Dataset not found</div>
         </MainContentContent>
+      </MainContentLayout>
+    );
+  }
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
       </MainContentLayout>
     );
   }
@@ -76,6 +88,7 @@ function DatasetPage() {
           </Crumb>
         </Breadcrumb>
       </Header>
+
       <MainContentContent className="content-stretch">
         <DatasetPageContent
           datasetId={datasetId}
@@ -85,7 +98,7 @@ function DatasetPage() {
           activeDatasetVersion={activeVersion}
           onVersionSelect={handleVersionSelect}
           experimentTriggerSlot={
-            <Button variant="cta" size="default" onClick={() => setExperimentDialogOpen(true)}>
+            <Button variant="primary" onClick={() => setExperimentDialogOpen(true)}>
               <Play />
               {activeVersion != null ? `Run on v${activeVersion}` : 'Run Experiment'}
             </Button>

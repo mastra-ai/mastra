@@ -168,7 +168,7 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 ]}
 />
 
-## Exposing Agents as Tools
+## Exposing agents as tools
 
 A powerful feature of `MCPServer` is its ability to automatically expose your Mastra Agents as callable tools. When you provide agents in the `agents` property of the configuration:
 
@@ -180,9 +180,9 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
   - **Execution**: When this tool is called, it invokes the `generate()` method of the corresponding agent, passing the provided `query`.
   - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
-- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the _explicitly defined tool will take precedence_. The agent will not be converted into a tool in this conflicting case, and a warning will be logged.
+- **Name Collisions**: If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., you have a tool named `ask_myAgentKey` and also an agent with the key `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.
 
-This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, just like any other tool.
+This makes it straightforward to allow MCP clients to interact with your agents using natural language queries, like any other tool.
 
 ### Agent-to-Tool Conversion
 
@@ -248,7 +248,7 @@ const fetchUserData = createTool({
 
 These are the functions you can call on an `MCPServer` instance to control its behavior and get information.
 
-### startStdio()
+### `startStdio()`
 
 Use this method to start the server so it communicates using standard input and output (stdio). This is typical when running the server as a command-line program.
 
@@ -270,7 +270,7 @@ const server = new MCPServer({
 await server.startStdio()
 ```
 
-### startSSE()
+### `startSSE()`
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
@@ -342,7 +342,7 @@ Here are the details for the values needed by the `startSSE` method:
 ]}
 />
 
-### startHonoSSE()
+### `startHonoSSE()`
 
 This method helps you integrate the MCP server with an existing web server to use Server-Sent Events (SSE) for communication. You'll call this from your web server's code when it receives a request for the SSE or message paths.
 
@@ -414,7 +414,7 @@ Here are the details for the values needed by the `startHonoSSE` method:
 ]}
 />
 
-### startHTTP()
+### `startHTTP()`
 
 This method helps you integrate the MCP server with an existing web server to use streamable HTTP for communication. You'll call this from your web server's code when it receives HTTP requests.
 
@@ -517,7 +517,7 @@ Use the default session-based mode (without `serverless: true`) for:
 
 The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
 
-**Note:** The following MCP features require session state or persistent connections and will **not work** in serverless mode:
+**Note:** The following MCP features require session state or persistent connections and **won't work** in serverless mode:
 
 - **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
 - **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
@@ -602,7 +602,7 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 ]}
 />
 
-### close()
+### `close()`
 
 This method closes the server and releases all resources.
 
@@ -610,7 +610,7 @@ This method closes the server and releases all resources.
 async close(): Promise<void>
 ```
 
-### getServerInfo()
+### `getServerInfo()`
 
 This method gives you a look at the server's basic information.
 
@@ -618,7 +618,7 @@ This method gives you a look at the server's basic information.
 getServerInfo(): ServerInfo
 ```
 
-### getServerDetail()
+### `getServerDetail()`
 
 This method gives you a detailed look at the server's information.
 
@@ -626,7 +626,7 @@ This method gives you a detailed look at the server's information.
 getServerDetail(): ServerDetail
 ```
 
-### getToolListInfo()
+### `getToolListInfo()`
 
 This method gives you a look at the tools that were set up when you created the server. It's a read-only list, useful for debugging purposes.
 
@@ -634,7 +634,7 @@ This method gives you a look at the tools that were set up when you created the 
 getToolListInfo(): ToolListInfo
 ```
 
-### getToolInfo()
+### `getToolInfo()`
 
 This method gives you detailed information about a specific tool.
 
@@ -642,7 +642,7 @@ This method gives you detailed information about a specific tool.
 getToolInfo(toolName: string): ToolInfo
 ```
 
-### executeTool()
+### `executeTool()`
 
 This method executes a specific tool and returns the result.
 
@@ -650,7 +650,7 @@ This method executes a specific tool and returns the result.
 executeTool(toolName: string, input: any): Promise<any>
 ```
 
-### getStdioTransport()
+### `getStdioTransport()`
 
 If you started the server with `startStdio()`, you can use this to get the object that manages the stdio communication. This is mostly for checking things internally or for testing.
 
@@ -658,7 +658,7 @@ If you started the server with `startStdio()`, you can use this to get the objec
 getStdioTransport(): StdioServerTransport | undefined
 ```
 
-### getSseTransport()
+### `getSseTransport()`
 
 If you started the server with `startSSE()`, you can use this to get the object that manages the SSE communication. Like `getStdioTransport`, this is mainly for internal checks or testing.
 
@@ -666,7 +666,7 @@ If you started the server with `startSSE()`, you can use this to get the object 
 getSseTransport(): SSEServerTransport | undefined
 ```
 
-### getSseHonoTransport()
+### `getSseHonoTransport()`
 
 If you started the server with `startHonoSSE()`, you can use this to get the object that manages the SSE communication. Like `getSseTransport`, this is mainly for internal checks or testing.
 
@@ -674,7 +674,7 @@ If you started the server with `startHonoSSE()`, you can use this to get the obj
 getSseHonoTransport(): SSETransport | undefined
 ```
 
-### getStreamableHTTPTransport()
+### `getStreamableHTTPTransport()`
 
 If you started the server with `startHTTP()`, you can use this to get the object that manages the HTTP communication. Like `getSseTransport`, this is mainly for internal checks or testing.
 
@@ -682,7 +682,7 @@ If you started the server with `startHTTP()`, you can use this to get the object
 getStreamableHTTPTransport(): StreamableHTTPServerTransport | undefined
 ```
 
-### tools()
+### `tools()`
 
 Executes a specific tool provided by this MCP server.
 
@@ -715,7 +715,7 @@ async executeTool(
 ]}
 />
 
-## Resource Handling
+## Resource handling
 
 ### What are MCP Resources?
 
@@ -842,7 +842,7 @@ Example:
 await serverWithResources.resources.notifyListChanged()
 ```
 
-## Prompt Handling
+## Prompt handling
 
 ### What are MCP Prompts?
 
@@ -951,7 +951,7 @@ Call this method when the overall list of available prompts has changed (e.g., a
 await serverWithPrompts.prompts.notifyListChanged()
 ```
 
-### Best Practices for Prompt Handling
+### Best practices for Prompt Handling
 
 - Use clear, descriptive prompt names and descriptions.
 - Validate all required arguments in `getPromptMessages`.
@@ -971,7 +971,7 @@ The example at the beginning of this page also demonstrates how to instantiate `
 
 ## Elicitation
 
-### What is Elicitation?
+### What's Elicitation?
 
 Elicitation is a feature in the Model Context Protocol (MCP) that allows servers to request structured information from users. This enables interactive workflows where servers can collect additional data dynamically.
 
@@ -1175,7 +1175,7 @@ type ElicitResult = {
 }
 ```
 
-## OAuth Protection
+## OAuth protection
 
 To protect your MCP server with OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `createOAuthMiddleware` function:
 
@@ -1308,11 +1308,11 @@ const customMiddleware = createOAuthMiddleware({
 ]}
 />
 
-## Authentication Context
+## Authentication context
 
 Tools can access request metadata via `context.mcp.extra` when using HTTP-based transports. This allows you to pass authentication info, user context, or any custom data from your HTTP middleware to your MCP tools.
 
-### How It Works
+### How it works
 
 Whatever you set on `req.auth` in your HTTP middleware becomes available as `context.mcp.extra.authInfo` in your tools:
 
@@ -1488,7 +1488,7 @@ app.all('/mcp', async (req, res) => {
 app.listen(3000)
 ```
 
-## Related Information
+## Related information
 
 - For connecting to MCP servers in Mastra, see the [MCPClient documentation](./mcp-client).
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

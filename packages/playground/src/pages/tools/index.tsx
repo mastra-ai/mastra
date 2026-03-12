@@ -35,10 +35,14 @@ export default function Tools() {
         </HeaderTitle>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/agents/using-tools-and-mcp" target="_blank">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
+            target="_blank"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             Tools documentation
           </Button>
         </HeaderAction>

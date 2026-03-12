@@ -10,6 +10,8 @@ import {
   Button,
   Columns,
   Column,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import {
   useDataset,
@@ -31,7 +33,7 @@ function DatasetCompareVersionsPage() {
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
   const navigate = useNavigate();
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
 
   const versionA = useDatasetItems(datasetId ?? '', undefined, versionNumbers[0] ?? null);
   const versionB = useDatasetItems(datasetId ?? '', undefined, versionNumbers[1] ?? null);
@@ -53,6 +55,16 @@ function DatasetCompareVersionsPage() {
   // Lookup maps to resolve each item's version in A and B
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (!datasetId || versionNumbers.length < 2) {
     return (
@@ -128,7 +140,7 @@ function DatasetCompareVersionsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/datasets/${datasetId}`} variant="standard" size="default">
+              <Button as={Link} to={`/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

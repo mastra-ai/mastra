@@ -169,7 +169,6 @@ export const AgentMetadataModelSwitcher = ({
           <LLMProviders
             value={currentModelProvider}
             onValueChange={handleProviderSelect}
-            variant="default"
             open={providerOpen}
             onOpenChange={setProviderOpen}
           />
@@ -180,7 +179,6 @@ export const AgentMetadataModelSwitcher = ({
             llmId={currentModelProvider}
             value={selectedModel}
             onValueChange={handleModelSelect}
-            variant="default"
             open={modelOpen}
             onOpenChange={setModelOpen}
           />

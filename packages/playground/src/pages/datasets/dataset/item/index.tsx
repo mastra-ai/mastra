@@ -16,6 +16,8 @@ import {
   Columns,
   Column,
   Notice,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
 import {
   useDatasetItemVersions,
@@ -46,7 +48,7 @@ function DatasetItemPage() {
   const navigate = useNavigate();
 
   // Use versions as single source of truth - works for both active and deleted items
-  const { data: versions, isLoading: isVersionsLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
+  const { data: versions, isLoading: isVersionsLoading, error } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
   const { updateItem, deleteItem } = useDatasetMutations();
   const { data: dataset } = useDataset(datasetId ?? '');
 
@@ -205,6 +207,16 @@ function DatasetItemPage() {
       }
     : null;
 
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   // Wait for versions to load
   if (isVersionsLoading) {
     return null;
@@ -267,8 +279,6 @@ function DatasetItemPage() {
                 {!isEditing && !isDeleted && (
                   <ButtonsGroup>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleEditClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to edit' : undefined}
@@ -276,8 +286,6 @@ function DatasetItemPage() {
                       <Edit2Icon /> Edit
                     </Button>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleDeleteClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to delete' : undefined}

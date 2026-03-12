@@ -165,10 +165,14 @@ export default function Observability() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/observability/tracing/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
               Observability documentation
             </Button>
           </HeaderAction>
@@ -206,10 +210,14 @@ export default function Observability() {
           </HeaderTitle>
 
           <HeaderAction>
-            <Button as={Link} to="https://mastra.ai/en/docs/observability/tracing/overview" target="_blank">
-              <Icon>
-                <DocsIcon />
-              </Icon>
+            <Button
+              as={Link}
+              to="https://mastra.ai/en/docs/observability/tracing/overview"
+              target="_blank"
+              variant="ghost"
+              size="md"
+            >
+              <DocsIcon />
               Observability documentation
             </Button>
           </HeaderAction>
