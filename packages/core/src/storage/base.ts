@@ -17,10 +17,11 @@ import type {
   ExperimentsStorage,
 } from './domains';
 
+/** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
-  workflows: WorkflowsStorage;
-  scores: ScoresStorage;
-  memory: MemoryStorage;
+  workflows?: WorkflowsStorage;
+  scores?: ScoresStorage;
+  memory?: MemoryStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;

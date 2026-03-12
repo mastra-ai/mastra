@@ -65,6 +65,7 @@ export const noOpLoggerContext: LoggerContext = {
  * Used when observability is not configured.
  */
 export const noOpMetricsContext: MetricsContext = {
+  emit() {},
   counter() {
     return noOpCounter;
   },
@@ -80,6 +81,7 @@ export const noOpMetricsContext: MetricsContext = {
 // No-Op Observability
 // ============================================================================
 
+/** No-op observability entrypoint that silently discards all operations. */
 export class NoOpObservability implements ObservabilityEntrypoint {
   setMastraContext(_options: { mastra: Mastra }): void {
     return;
