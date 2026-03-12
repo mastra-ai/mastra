@@ -1,5 +1,9 @@
 let prettierModules: Promise<
-  [typeof import('prettier/standalone'), typeof import('prettier/plugins/babel'), typeof import('prettier/plugins/estree')]
+  [
+    typeof import('prettier/standalone'),
+    typeof import('prettier/plugins/babel'),
+    typeof import('prettier/plugins/estree'),
+  ]
 >;
 
 const loadPrettier = () =>
