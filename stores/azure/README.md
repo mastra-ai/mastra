@@ -453,15 +453,15 @@ const results = await azureVector.query({
 | Basic vector search | ✅ | ✅ | ✅ |
 | Metadata/payload filters | ✅ | ✅ | ✅ |
 | Hybrid lexical + vector search | ✅ | ✅ | ✅ |
-| Built-in semantic reranking | ❌ | ❌ | ✅ |
-| Built-in automatic vectorization | ✅ (integrated embedding indexes) | ❌ | ✅ (integrated vectorization) |
+| Semantic reranking (platform-provided) | ❌ | ❌ | ✅ |
+| Automatic vectorization (platform-provided) | ✅ (integrated embedding indexes) | ❌ | ✅ (integrated vectorization) |
 | Exact search mode | Not explicitly exposed as query option | ✅ (`exact: true`) | ✅ (`exhaustive: true`) |
 | Multiple vector fields per record | Limited (single dense + single sparse index design) | ✅ (named vectors) | ✅ (multi-vector fields) |
 | HNSW query tuning | Not exposed as HNSW params | ✅ (`hnsw_ef`, collection config) | ✅ (algorithm/profile configuration) |
 
 Comparison notes:
 - This table is based on vendor documentation and public APIs as of February 2026.
-- "Built-in" means available directly in the vendor platform, not via external rerankers or custom pipelines.
+- "Platform-provided" means available directly in the vendor platform, not via external rerankers or custom pipelines.
 
 ### Updating Vectors
 
