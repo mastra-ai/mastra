@@ -13,9 +13,8 @@ import {
   RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE,
   CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE,
 } from '../../handlers/agent-builder';
-import type { ServerRoute } from '.';
 
-export const AGENT_BUILDER_ROUTES: ServerRoute<any, any, any>[] = [
+export const AGENT_BUILDER_ROUTES = [
   LIST_AGENT_BUILDER_ACTIONS_ROUTE,
   GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE,
   LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE,
@@ -29,4 +28,4 @@ export const AGENT_BUILDER_ROUTES: ServerRoute<any, any, any>[] = [
   RESUME_AGENT_BUILDER_ACTION_ROUTE,
   RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE,
   CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE,
-];
+] as const;

@@ -27,11 +27,6 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
-/**
- * Config fields that live on version rows (from StorageMCPClientSnapshotType).
- */
-const SNAPSHOT_FIELDS = ['name', 'description', 'servers'] as const;
-
 export class MCPClientsLibSQL extends MCPClientsStorage {
   #db: LibSQLDB;
   #client: Client;
@@ -153,10 +148,7 @@ export class MCPClientsLibSQL extends MCPClientsStorage {
         throw new Error(`MCP client with id ${id} not found`);
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
-
-      const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
-      const hasConfigUpdate = configFieldNames.some(field => field in configFields);
+      const { authorId, activeVersionId, metadata, status } = updates;
 
       // Build update data for the MCP client record
       const updateData: Record<string, unknown> = {
@@ -164,12 +156,7 @@ export class MCPClientsLibSQL extends MCPClientsStorage {
       };
 
       if (authorId !== undefined) updateData.authorId = authorId;
-      if (activeVersionId !== undefined) {
-        updateData.activeVersionId = activeVersionId;
-        if (status === undefined) {
-          updateData.status = 'published';
-        }
-      }
+      if (activeVersionId !== undefined) updateData.activeVersionId = activeVersionId;
       if (status !== undefined) updateData.status = status;
       if (metadata !== undefined) {
         updateData.metadata = { ...existing.metadata, ...metadata };
@@ -180,44 +167,6 @@ export class MCPClientsLibSQL extends MCPClientsStorage {
         keys: { id },
         data: updateData,
       });
-
-      // If config fields changed, create a new version
-      if (hasConfigUpdate) {
-        const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion) {
-          throw new Error(`No versions found for MCP client ${id}`);
-        }
-
-        const {
-          id: _versionId,
-          mcpClientId: _mcpClientId,
-          versionNumber: _versionNumber,
-          changedFields: _changedFields,
-          changeMessage: _changeMessage,
-          createdAt: _createdAt,
-          ...latestConfig
-        } = latestVersion;
-
-        const newConfig = { ...latestConfig, ...configFields };
-        const changedFields = configFieldNames.filter(
-          field =>
-            field in configFields &&
-            JSON.stringify(configFields[field as keyof typeof configFields]) !==
-              JSON.stringify(latestConfig[field as keyof typeof latestConfig]),
-        );
-
-        if (changedFields.length > 0) {
-          const newVersionId = crypto.randomUUID();
-          await this.createVersion({
-            id: newVersionId,
-            mcpClientId: id,
-            versionNumber: latestVersion.versionNumber + 1,
-            ...newConfig,
-            changedFields,
-            changeMessage: `Updated ${changedFields.join(', ')}`,
-          });
-        }
-      }
 
       // Fetch and return updated MCP client
       const updated = await this.getById(id);
@@ -266,11 +215,14 @@ export class MCPClientsLibSQL extends MCPClientsStorage {
 
   async list(args?: StorageListMCPClientsInput): Promise<StorageListMCPClientsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status = 'published' } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       const conditions: string[] = [];
       const queryParams: InValue[] = [];
+
+      conditions.push('status = ?');
+      queryParams.push(status);
 
       if (authorId !== undefined) {
         conditions.push('authorId = ?');
@@ -294,7 +246,7 @@ export class MCPClientsLibSQL extends MCPClientsStorage {
         }
       }
 
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
       // Get total count
       const countResult = await this.#client.execute({

@@ -1,6 +1,3 @@
-import { useMemo } from 'react';
-import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
-import { Database, ScaleIcon, HistoryIcon } from 'lucide-react';
 import {
   Header,
   MainContentLayout,
@@ -10,13 +7,19 @@ import {
   Crumb,
   MainHeader,
   TextAndIcon,
+  Button,
   useDataset,
   useDatasetItems,
   Columns,
   Column,
   DatasetCompareVersionToolbar,
   DatasetCompareVersionsList,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ArrowLeft, Database, ScaleIcon, HistoryIcon } from 'lucide-react';
+import { useMemo } from 'react';
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router';
 
 function DatasetCompareVersionsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -28,7 +31,7 @@ function DatasetCompareVersionsPage() {
       .map(Number)
       .filter(n => !isNaN(n) && n > 0) ?? [];
   const navigate = useNavigate();
-  const { data: dataset } = useDataset(datasetId ?? '');
+  const { data: dataset, error } = useDataset(datasetId ?? '');
 
   const versionA = useDatasetItems(datasetId ?? '', undefined, versionNumbers[0] ?? null);
   const versionB = useDatasetItems(datasetId ?? '', undefined, versionNumbers[1] ?? null);
@@ -51,6 +54,16 @@ function DatasetCompareVersionsPage() {
   const itemsAMap = useMemo(() => new Map(itemsA.map(i => [i.id, i])), [itemsA]);
   const itemsBMap = useMemo(() => new Map(itemsB.map(i => [i.id, i])), [itemsB]);
 
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
+
   if (!datasetId || versionNumbers.length < 2) {
     return (
       <MainContentLayout>
@@ -62,10 +75,7 @@ function DatasetCompareVersionsPage() {
               </Icon>
               Datasets
             </Crumb>
-            <Crumb isCurrent>
-              <Icon>
-                <ScaleIcon />
-              </Icon>
+            <Crumb isCurrent as="span">
               Compare Versions
             </Crumb>
           </Breadcrumb>
@@ -80,13 +90,13 @@ function DatasetCompareVersionsPage() {
   }
 
   const handleItemClick = (itemId: string, itemA?: { datasetVersion: number }, itemB?: { datasetVersion: number }) => {
-    navigate(
+    void navigate(
       `/datasets/${datasetId}/items/${itemId}/versions?ids=${itemA?.datasetVersion ?? ''},${itemB?.datasetVersion ?? ''}`,
     );
   };
 
   const handleVersionChange = (newA: string, newB: string) => {
-    navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
+    void navigate(`/datasets/${datasetId}/versions?ids=${newA},${newB}`, {
       replace: true,
     });
   };
@@ -104,7 +114,7 @@ function DatasetCompareVersionsPage() {
           <Crumb as={Link} to={`/datasets/${datasetId}`}>
             {dataset?.name || datasetId?.slice(0, 8)}
           </Crumb>
-          <Crumb isCurrent>
+          <Crumb isCurrent as="span">
             <Icon>
               <ScaleIcon />
             </Icon>
@@ -127,6 +137,12 @@ function DatasetCompareVersionsPage() {
                 </TextAndIcon>
               </MainHeader.Description>
             </MainHeader.Column>
+            <MainHeader.Column>
+              <Button as={Link} to={`/datasets/${datasetId}`}>
+                <ArrowLeft />
+                Back to Dataset
+              </Button>
+            </MainHeader.Column>
           </MainHeader>
 
           <Columns>
@@ -138,6 +154,9 @@ function DatasetCompareVersionsPage() {
                 onVersionChange={handleVersionChange}
               />
               <DatasetCompareVersionsList
+                datasetId={datasetId}
+                versionA={versionNumbers[0]}
+                versionB={versionNumbers[1]}
                 allItems={allItems}
                 itemsAMap={itemsAMap}
                 itemsBMap={itemsBMap}

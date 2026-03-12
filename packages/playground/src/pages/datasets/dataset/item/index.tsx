@@ -1,16 +1,3 @@
-import { useParams, useNavigate, Link } from 'react-router';
-import { useState, useMemo } from 'react';
-import { format } from 'date-fns';
-import {
-  AlertTriangleIcon,
-  ArrowRightToLineIcon,
-  Calendar1Icon,
-  DatabaseIcon,
-  Edit2Icon,
-  FileCodeIcon,
-  HistoryIcon,
-  Trash2Icon,
-} from 'lucide-react';
 import {
   MainContentLayout,
   MainContentContent,
@@ -20,12 +7,9 @@ import {
   DatasetItemContent,
   DatasetItemVersionsPanel,
   EditModeContent,
-  Alert,
-  AlertTitle,
   AlertDialog,
   Button,
   Icon,
-  type DatasetItemVersion,
   Header,
   Breadcrumb,
   Crumb,
@@ -38,7 +22,23 @@ import {
   Columns,
   Column,
   Notice,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import type { DatasetItemVersion } from '@mastra/playground-ui';
+import { format } from 'date-fns';
+import {
+  AlertTriangleIcon,
+  ArrowRightToLineIcon,
+  Calendar1Icon,
+  DatabaseIcon,
+  Edit2Icon,
+  FileCodeIcon,
+  HistoryIcon,
+  Trash2Icon,
+} from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useParams, useNavigate, Link } from 'react-router';
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
@@ -46,7 +46,7 @@ function DatasetItemPage() {
   const navigate = useNavigate();
 
   // Use versions as single source of truth - works for both active and deleted items
-  const { data: versions, isLoading: isVersionsLoading } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
+  const { data: versions, isLoading: isVersionsLoading, error } = useDatasetItemVersions(datasetId ?? '', itemId ?? '');
   const { updateItem, deleteItem } = useDatasetMutations();
   const { data: dataset } = useDataset(datasetId ?? '');
 
@@ -182,7 +182,7 @@ function DatasetItemPage() {
       await deleteItem.mutateAsync({ datasetId, itemId });
       toast.success('Item deleted successfully');
       setDeleteDialogOpen(false);
-      navigate(`/datasets/${datasetId}`);
+      void navigate(`/datasets/${datasetId}`);
     } catch (error) {
       toast.error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -204,6 +204,16 @@ function DatasetItemPage() {
         updatedAt: versionToDisplay.updatedAt,
       }
     : null;
+
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="datasets" />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   // Wait for versions to load
   if (isVersionsLoading) {
@@ -233,12 +243,9 @@ function DatasetItemPage() {
               Datasets
             </Crumb>
             <Crumb as={Link} to={`/datasets/${datasetId}`}>
-              {dataset?.name || datasetId}
+              {dataset?.name}
             </Crumb>
-            <Crumb isCurrent>
-              <Icon>
-                <FileCodeIcon />
-              </Icon>
+            <Crumb isCurrent as="span">
               Item
             </Crumb>
           </Breadcrumb>
@@ -270,8 +277,6 @@ function DatasetItemPage() {
                 {!isEditing && !isDeleted && (
                   <ButtonsGroup>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleEditClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to edit' : undefined}
@@ -279,8 +284,6 @@ function DatasetItemPage() {
                       <Edit2Icon /> Edit
                     </Button>
                     <Button
-                      variant="cta"
-                      size="default"
                       onClick={handleDeleteClick}
                       disabled={isViewingOldVersion}
                       title={isViewingOldVersion ? 'Return to latest version to delete' : undefined}
@@ -292,12 +295,13 @@ function DatasetItemPage() {
               </MainHeader.Column>
             </MainHeader>
 
-            <Columns className="grid-cols-[1fr_auto]">
-              <Column withRightSeparator={true}>
+            <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
+              <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
-                  <Alert variant="destructive">
-                    <AlertTitle>This item was deleted at version v{latestVersion.datasetVersion}</AlertTitle>
-                  </Alert>
+                  <Notice variant="destructive">
+                    <AlertTriangleIcon />
+                    <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
+                  </Notice>
                 )}
 
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
@@ -325,26 +329,26 @@ function DatasetItemPage() {
                     onCancel={handleCancel}
                     isSaving={updateItem.isPending}
                   />
+                ) : displayItem ? (
+                  <DatasetItemContent item={displayItem} Link={FrameworkLink} />
                 ) : (
-                  displayItem && (
-                    <div className="grid content-start">
-                      <DatasetItemContent item={displayItem} Link={FrameworkLink} />
-                    </div>
-                  )
+                  <div className="text-neutral4 text-sm">Item data not available</div>
                 )}
               </Column>
-              <Column>
-                <DatasetItemVersionsPanel
-                  datasetId={datasetId}
-                  itemId={itemId}
-                  onClose={() => {}}
-                  onVersionSelect={handleVersionSelect}
-                  onCompareVersionsClick={(versionIds: string[]) => {
-                    navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
-                  }}
-                  activeVersion={selectedVersion?.datasetVersion ?? null}
-                />
-              </Column>
+              {!isEditing && (
+                <Column>
+                  <DatasetItemVersionsPanel
+                    datasetId={datasetId}
+                    itemId={itemId}
+                    onClose={() => {}}
+                    onVersionSelect={handleVersionSelect}
+                    onCompareVersionsClick={(versionIds: string[]) => {
+                      void navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
+                    }}
+                    activeVersion={selectedVersion?.datasetVersion ?? null}
+                  />
+                </Column>
+              )}
             </Columns>
           </div>
         </div>
@@ -373,60 +377,3 @@ function DatasetItemPage() {
 
 export { DatasetItemPage };
 export default DatasetItemPage;
-
-/*
-
-
-            <ListAndDetails isDetailsActive={true}>
-              <ListAndDetails.Column isTopFixed={isViewingOldVersion || isDeleted}>
-                {isDeleted && latestVersion && (
-                  <Alert variant="destructive">
-                    <AlertTitle>
-                      This item was deleted at version v{latestVersion.datasetVersion}
-                    </AlertTitle>
-                  </Alert>
-                )}
-                {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <Alert variant="warning">
-                    <AlertTitle>Viewing version v{selectedVersion.datasetVersion}</AlertTitle>
-                    <Button variant="standard" size="tiny" className="mt-2 mb-1" onClick={handleReturnToLatest}>
-                      <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
-                    </Button>
-                  </Alert>
-                )}
-
-                {isEditing ? (
-                  <EditModeContent
-                    inputValue={inputValue}
-                    setInputValue={setInputValue}
-                    groundTruthValue={groundTruthValue}
-                    setGroundTruthValue={setGroundTruthValue}
-                    metadataValue={metadataValue}
-                    setMetadataValue={setMetadataValue}
-                    validationErrors={null}
-                    onSave={handleSave}
-                    onCancel={handleCancel}
-                    isSaving={updateItem.isPending}
-                  />
-                ) : (
-                  displayItem && (
-                    <div className="grid content-start">
-                      <DatasetItemContent item={displayItem} Link={FrameworkLink} />
-                    </div>
-                  )
-                )}
-              </ListAndDetails.Column>
-
-              <ListAndDetails.Separator />
-
-              <ListAndDetails.Column>
-                <DatasetItemVersionsPanel
-                  datasetId={datasetId}
-                  itemId={itemId}
-                  onClose={() => {}}
-                  onVersionSelect={handleVersionSelect}
-                  activeVersion={selectedVersion?.datasetVersion ?? null}
-                />
-              </ListAndDetails.Column>
-            </ListAndDetails>
-            */

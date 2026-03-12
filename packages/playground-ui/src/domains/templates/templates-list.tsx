@@ -1,7 +1,36 @@
-import { AgentIcon, GithubIcon, McpServerIcon, ToolsIcon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
-import { NetworkIcon, WorkflowIcon } from 'lucide-react';
+import { AgentIcon, GithubIcon, GoogleIcon, McpServerIcon, ToolsIcon } from '@/ds/icons';
+import { OpenaiChatIcon } from '@/ds/icons/OpenaiChatIcon';
+import { AnthropicChatIcon } from '@/ds/icons/AnthropicChatIcon';
+import { GroqIcon } from '@/ds/icons/GroqIcon';
+import { MistralIcon } from '@/ds/icons/MistralIcon';
+import { CohereIcon } from '@/ds/icons/CohereIcon';
+import { AmazonIcon } from '@/ds/icons/AmazonIcon';
+import { AzureIcon } from '@/ds/icons/AzureIcon';
+import { NetworkIcon, WorkflowIcon, XIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Button } from '@/ds/components/Button';
+import { Column } from '@/ds/components/Columns';
+import { Chip, ChipsGroup } from '@/ds/components/Chip';
+import { EmptyState } from '@/ds/components/EmptyState';
+import { ItemList } from '@/ds/components/ItemList';
+import { ItemListSkeleton } from '@/ds/components/ItemList/item-list-skeleton';
+import { type ItemListColumn } from '@/ds/components/ItemList/types';
+import { ListSearch } from '@/ds/components/ListSearch';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { useLinkComponent } from '@/lib/framework';
 import { getRepoName } from './shared';
+
+const providerIcons: Record<string, React.ReactNode> = {
+  openai: <OpenaiChatIcon />,
+  anthropic: <AnthropicChatIcon />,
+  google: <GoogleIcon />,
+  groq: <GroqIcon />,
+  mistral: <MistralIcon />,
+  cohere: <CohereIcon />,
+  amazon: <AmazonIcon />,
+  azure: <AzureIcon />,
+};
 
 type Template = {
   slug: string;
@@ -18,119 +47,217 @@ type Template = {
   supportedProviders: string[];
 };
 
-type TemplatesListProps = {
+const columns: ItemListColumn[] = [
+  { name: 'name', label: 'Name & Description', size: '1fr' },
+  { name: 'entities', label: 'Entities', size: '10rem' },
+  { name: 'providers', label: 'Providers', size: '10rem' },
+  { name: 'repo', label: 'Repository', size: '12rem' },
+];
+
+export type TemplatesListProps = {
   templates: Template[];
-  linkComponent?: React.ElementType;
-  className?: string;
+  tags: string[];
+  providers: string[];
   isLoading?: boolean;
 };
 
-export function TemplatesList({ templates, linkComponent, className, isLoading }: TemplatesListProps) {
-  const LinkComponent = linkComponent || 'a';
+export function TemplatesList({ templates, tags, providers, isLoading }: TemplatesListProps) {
+  const [search, setSearch] = useState('');
+  const [selectedTag, setSelectedTag] = useState('all');
+  const [selectedProvider, setSelectedProvider] = useState('all');
+  const { navigate } = useLinkComponent();
 
-  if (isLoading) {
-    return (
-      <div className={cn('grid gap-y-4', className)}>
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-16 bg-surface3 animate-pulse rounded-lg" />
-        ))}
-      </div>
-    );
+  const tagOptions = useMemo(
+    () => [{ value: 'all', label: 'Any tag' }, ...tags.map(t => ({ value: t, label: t }))],
+    [tags],
+  );
+
+  const providerOptions = useMemo(
+    () => [{ value: 'all', label: 'Any provider' }, ...providers.map(p => ({ value: p, label: p }))],
+    [providers],
+  );
+
+  const hasActiveFilters = selectedTag !== 'all' || selectedProvider !== 'all';
+
+  const handleReset = () => {
+    setSelectedTag('all');
+    setSelectedProvider('all');
+  };
+
+  const filteredTemplates = useMemo(() => {
+    const term = search.toLowerCase();
+    return templates.filter(template => {
+      const matchesSearch =
+        !term || template.title.toLowerCase().includes(term) || template.description.toLowerCase().includes(term);
+      if (!matchesSearch) return false;
+
+      if (selectedTag !== 'all' && !template.tags.includes(selectedTag)) return false;
+      if (selectedProvider !== 'all' && !template.supportedProviders.includes(selectedProvider)) return false;
+      return true;
+    });
+  }, [templates, search, selectedTag, selectedProvider]);
+
+  if (templates.length === 0 && !isLoading) {
+    return <EmptyTemplatesList />;
   }
 
   return (
-    <div className={cn('grid gap-y-4', className)}>
-      {templates.map(template => {
-        const hasMetaInfo =
-          template?.agents || template?.tools || template?.networks || template?.workflows || template?.mcp;
+    <Column>
+      <Column.Toolbar>
+        <ListSearch onSearch={setSearch} label="Filter templates" placeholder="Filter by name or description" />
+        <SelectFieldBlock
+          name="filter-tag"
+          label="Filter by tag"
+          labelIsHidden
+          value={selectedTag}
+          options={tagOptions}
+          onValueChange={setSelectedTag}
+        />
+        <SelectFieldBlock
+          name="filter-provider"
+          label="Filter by provider"
+          labelIsHidden
+          value={selectedProvider}
+          options={providerOptions}
+          onValueChange={setSelectedProvider}
+        />
+        {hasActiveFilters && (
+          <Button onClick={handleReset}>
+            <XIcon />
+            Reset
+          </Button>
+        )}
+      </Column.Toolbar>
 
-        return (
-          <article
-            className={cn(
-              'border border-border1 rounded-lg overflow-hidden w-full grid grid-cols-[1fr_auto] bg-surface3 transition-colors hover:bg-surface4',
-            )}
-            key={template.slug}
-          >
-            <LinkComponent
-              to={`/templates/${template.slug}`}
-              className={cn('grid [&:hover_p]:text-neutral5', {
-                'grid-cols-[8rem_1fr] lg:grid-cols-[12rem_1fr]': template.imageURL,
-              })}
-            >
-              {template.imageURL && (
-                <div className={cn('overflow-hidden')}>
-                  <div
-                    className="w-full h-full bg-cover thumb transition-scale duration-150"
-                    style={{
-                      backgroundImage: `url(${template.imageURL})`,
-                    }}
-                  />
-                </div>
-              )}
-              <div
-                className={cn('grid py-3 px-6 w-full gap-0.5', '[&_svg]:w-[1em] [&_svg]:h-[1em] [&_svg]:text-neutral3')}
-              >
-                <h2 className="text-ui-lg text-neutral5">{template.title}</h2>
-                <p className="text-ui-md text-neutral4 transition-colors duration-500">{template.description}</p>
-                <div className="hidden 2xl:flex text-neutral3 text-ui-md flex-wrap items-center gap-4 mt-3">
-                  {hasMetaInfo && (
-                    <ul
-                      className={cn(
-                        'flex gap-4 text-ui-md text-neutral3 m-0 p-0 list-none',
-                        '[&>li]:flex [&>li]:items-center [&>li]:gap-0.5 text-neutral4',
-                      )}
+      <Column.Content>
+        {isLoading ? (
+          <ItemListSkeleton columns={columns} />
+        ) : (
+          <ItemList>
+            <ItemList.Items>
+              {filteredTemplates.map(template => {
+                const agentsCount = template.agents?.length ?? 0;
+                const toolsCount = template.tools?.length ?? 0;
+                const networksCount = template.networks?.length ?? 0;
+                const workflowsCount = template.workflows?.length ?? 0;
+                const mcpCount = template.mcp?.length ?? 0;
+                const hasEntities = agentsCount + toolsCount + networksCount + workflowsCount + mcpCount > 0;
+
+                return (
+                  <ItemList.Row key={template.slug}>
+                    <ItemList.RowButton
+                      columns={columns}
+                      item={{ id: template.slug }}
+                      onClick={() => navigate(`/templates/${template.slug}`)}
+                      className="min-h-16"
                     >
-                      {template?.agents && template.agents.length > 0 && (
-                        <li>
-                          <AgentIcon /> {template.agents.length}
-                        </li>
-                      )}
-                      {template?.tools && template.tools.length > 0 && (
-                        <li>
-                          <ToolsIcon /> {template.tools.length}
-                        </li>
-                      )}
-                      {template?.networks && template.networks.length > 0 && (
-                        <li>
-                          <NetworkIcon /> {template.networks.length}
-                        </li>
-                      )}
-                      {template?.workflows && template.workflows.length > 0 && (
-                        <li>
-                          <WorkflowIcon /> {template.workflows.length}
-                        </li>
-                      )}
-                      {template?.mcp && template.mcp.length > 0 && (
-                        <li>
-                          <McpServerIcon /> {template.mcp.length}
-                        </li>
-                      )}
-                    </ul>
-                  )}
-                  {hasMetaInfo && template.supportedProviders && <small>|</small>}
-                  <div className="flex items-center text-neutral3 gap-4">
-                    {template.supportedProviders.map(provider => (
-                      <span key={provider} className="">
-                        {provider}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </LinkComponent>
-            <a
-              href={template.githubUrl}
-              className={cn('group items-center gap-2 text-ui-md ml-auto pr-4 hidden', 'lg:flex')}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span className="flex items-center gap-2 px-2 py-1 rounded bg-surface1 group-hover:bg-surface2 text-neutral3 transition-colors group-hover:text-neutral5">
-                <GithubIcon /> {getRepoName(template.githubUrl)}
-              </span>
-            </a>
-          </article>
-        );
-      })}
-    </div>
+                      <ItemList.TextCell className="grid">
+                        <span className="text-neutral4 text-ui-md truncate">{template.title}</span>
+                        <span className="text-neutral2 text-ui-md truncate pr-6">{template.description}</span>
+                      </ItemList.TextCell>
+
+                      <ItemList.Cell>
+                        {hasEntities && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <ChipsGroup>
+                                {agentsCount > 0 && (
+                                  <Chip intensity="muted">
+                                    <AgentIcon /> {agentsCount}
+                                  </Chip>
+                                )}
+                                {toolsCount > 0 && (
+                                  <Chip intensity="muted">
+                                    <ToolsIcon /> {toolsCount}
+                                  </Chip>
+                                )}
+                                {workflowsCount > 0 && (
+                                  <Chip intensity="muted">
+                                    <WorkflowIcon /> {workflowsCount}
+                                  </Chip>
+                                )}
+                                {networksCount > 0 && (
+                                  <Chip intensity="muted">
+                                    <NetworkIcon /> {networksCount}
+                                  </Chip>
+                                )}
+                                {mcpCount > 0 && (
+                                  <Chip intensity="muted">
+                                    <McpServerIcon /> {mcpCount}
+                                  </Chip>
+                                )}
+                              </ChipsGroup>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="flex flex-col gap-1">
+                                <strong>Includes:</strong>
+                                {agentsCount > 0 && (
+                                  <span>
+                                    {agentsCount} agent{agentsCount !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {toolsCount > 0 && (
+                                  <span>
+                                    {toolsCount} tool{toolsCount !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {workflowsCount > 0 && (
+                                  <span>
+                                    {workflowsCount} workflow{workflowsCount !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {networksCount > 0 && (
+                                  <span>
+                                    {networksCount} network{networksCount !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {mcpCount > 0 && (
+                                  <span>
+                                    {mcpCount} MCP server{mcpCount !== 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </ItemList.Cell>
+
+                      <ItemList.Cell className="flex items-center">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1.5 [&_svg]:w-4 [&_svg]:h-4 opacity-70">
+                              {template.supportedProviders.map(p => {
+                                const icon = providerIcons[p.toLowerCase()];
+                                return icon ? <span key={p}>{icon}</span> : null;
+                              })}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>{template.supportedProviders.join(', ')}</TooltipContent>
+                        </Tooltip>
+                      </ItemList.Cell>
+
+                      <ItemList.Cell className="flex items-center gap-1.5">
+                        <GithubIcon className="w-4 h-4 text-neutral3 shrink-0" />
+                        <span className="truncate text-neutral3 text-ui-sm">{getRepoName(template.githubUrl)}</span>
+                      </ItemList.Cell>
+                    </ItemList.RowButton>
+                  </ItemList.Row>
+                );
+              })}
+            </ItemList.Items>
+          </ItemList>
+        )}
+      </Column.Content>
+    </Column>
   );
 }
+
+const EmptyTemplatesList = () => (
+  <div className="flex h-full items-center justify-center">
+    <EmptyState
+      iconSlot={<GithubIcon className="h-8 w-8" />}
+      titleSlot="No Templates"
+      descriptionSlot="No templates are available at the moment."
+    />
+  </div>
+);

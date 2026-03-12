@@ -1,22 +1,20 @@
-- table:
-    - rowgroup:
-        - row "Name Model Attached entities":
-            - columnheader "Name"
-            - columnheader "Model"
-            - columnheader "Attached entities"
-    - rowgroup:
-        - 'row "Weather Agent You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn''t in English, please translate it - If giving a location with multiple parts (e.g. \"New York, NY\"), use the most relevant part (e.g. \"New York\") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative mock-model-id 1 agent 2 tools 1 workflow"':
-            - 'cell "Weather Agent You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn''t in English, please translate it - If giving a location with multiple parts (e.g. \"New York, NY\"), use the most relevant part (e.g. \"New York\") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative"':
-                - link "Weather Agent":
-                    - /url: /agents/weather-agent
-                - text: 'You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn''t in English, please translate it - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative'
-            - cell "mock-model-id":
-                - img
-                - text: mock-model-id
-            - cell "1 agent 2 tools 1 workflow":
-                - img
-                - text: 1 agent
-                - img
-                - text: 2 tools
-                - img
-                - text: 1 workflow
+- list:
+    - listitem:
+        - button "OM Adaptive Agent You are a helpful assistant with adaptive observational memory. Your memory thresholds adjust dynamically based on current observation size. Always use the test tool first before responding to the user. Code gpt-4o-mini 1":
+            - text: ''
+            - img
+            - text: ''
+    - listitem:
+        - button "OM Agent You are a helpful assistant with observational memory enabled. Your memory system automatically observes and compresses conversation history. Always use the test tool first before responding to the user. Code gpt-4o-mini 1":
+            - text: ''
+            - img
+            - text: ''
+    - listitem:
+        - 'button "Weather Agent You are a helpful weather assistant that provides accurate weather information. Your primary function is to help users get weather details for specific locations. When responding: - Always ask for a location if none is provided - If the location name isn''t in English, please translate it - If giving a location with multiple parts (e.g. \"New York, NY\"), use the most relevant part (e.g. \"New York\") - Include relevant details like humidity, wind conditions, and precipitation - Keep responses concise but informative Code mock-model-id 1 1 2"':
+            - text: ''
+            - img
+            - text: ''
+            - img
+            - text: ''
+            - img
+            - text: ''

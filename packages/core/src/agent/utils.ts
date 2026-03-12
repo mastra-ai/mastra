@@ -1,6 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { MastraLegacyLanguageModel, MastraLanguageModel } from '../llm/model/shared.types';
 import type { StorageThreadType } from '../memory';
+import type { StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
 import type { FullOutput } from '../stream/base/output';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase } from './agent.types';
@@ -14,7 +15,16 @@ export const isSupportedLanguageModel = (
   return supportedLanguageModelSpecifications.includes(model.specificationVersion);
 };
 
+export async function tryGenerateWithJsonFallback<
+  SCHEMA extends StandardSchemaWithJSON,
+  OUTPUT extends InferStandardSchemaOutput<SCHEMA>,
+>(agent: Agent, prompt: MessageListInput, options: AgentExecutionOptions<OUTPUT>): Promise<FullOutput<OUTPUT>>;
 export async function tryGenerateWithJsonFallback<OUTPUT extends {}>(
+  agent: Agent,
+  prompt: MessageListInput,
+  options: AgentExecutionOptions<OUTPUT>,
+): Promise<FullOutput<OUTPUT>>;
+export async function tryGenerateWithJsonFallback<OUTPUT>(
   agent: Agent,
   prompt: MessageListInput,
   options: AgentExecutionOptions<OUTPUT>,

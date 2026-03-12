@@ -38,6 +38,8 @@ export class A2A extends BaseResource {
     const response = await this.request<SendMessageResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
         method: 'message/send',
         params,
       },
@@ -56,6 +58,8 @@ export class A2A extends BaseResource {
     const response = await this.request<AsyncIterable<SendStreamingMessageResponse>>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
         method: 'message/stream',
         params,
       },
@@ -74,6 +78,8 @@ export class A2A extends BaseResource {
     const response = await this.request<GetTaskResponse>(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
         method: 'tasks/get',
         params,
       },
@@ -91,6 +97,8 @@ export class A2A extends BaseResource {
     return this.request(`/a2a/${this.agentId}`, {
       method: 'POST',
       body: {
+        jsonrpc: '2.0',
+        id: crypto.randomUUID(),
         method: 'tasks/cancel',
         params,
       },

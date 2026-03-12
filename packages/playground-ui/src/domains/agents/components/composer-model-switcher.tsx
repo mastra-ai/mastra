@@ -74,13 +74,12 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-1.5">
-        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} variant="light" />
+        <LLMProviders value={currentModelProvider} onValueChange={handleProviderSelect} />
 
         <LLMModels
           llmId={currentModelProvider}
           value={selectedModel}
           onValueChange={handleModelSelect}
-          variant="light"
           open={modelOpen}
           onOpenChange={setModelOpen}
           className="min-w-48"

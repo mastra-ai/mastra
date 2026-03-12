@@ -1,6 +1,11 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { createGatewayMock } from '@internal/test-utils';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent/index.js';
+
+const mock = createGatewayMock();
+beforeAll(() => mock.start());
+afterAll(() => mock.saveAndStop());
 
 // Test configuration for different providers
 const testConfigs = [
@@ -11,7 +16,7 @@ const testConfigs = [
   },
   {
     provider: 'anthropic',
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5',
     envVar: 'ANTHROPIC_API_KEY',
   },
   {
@@ -72,7 +77,7 @@ describe('ModelRouter Integration Tests', () => {
         name: 'test-agent',
         instructions: 'You are a helpful assistant.',
         model: {
-          id: 'custom-anthropic/claude-3-5-haiku-20241022',
+          id: 'custom-anthropic/claude-haiku-4-5',
           url: 'https://api.anthropic.com/v1',
           apiKey: process.env.ANTHROPIC_API_KEY,
           headers: {

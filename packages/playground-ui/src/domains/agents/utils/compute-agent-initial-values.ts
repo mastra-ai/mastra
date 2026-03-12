@@ -1,12 +1,49 @@
+import type { GetAgentResponse, StoredAgentResponse } from '@mastra/client-js';
+
 import type { AgentFormValues, EntityConfig } from '../components/agent-edit-page/utils/form-validation';
 
 import {
   normalizeToolsToRecord,
   normalizeIntegrationToolsToRecord,
   normalizeScorersFromApi,
+  normalizeSkillsFromApi,
+  normalizeWorkspaceFromApi,
   mapInstructionBlocksFromApi,
   parseObservationalMemoryFromApi,
 } from './agent-form-mappers';
+
+/**
+ * Map a `GetAgentResponse` (from `GET /agents/:id`) into an `AgentDataSource`
+ * that the CMS edit form can consume. This allows code-defined agents to be
+ * loaded into the edit form for creating stored config overrides.
+ */
+export function mapAgentResponseToDataSource(agent: GetAgentResponse): AgentDataSource {
+  // Parse requestContextSchema from stringified JSON to an object
+  let requestContextSchema: unknown;
+  if (agent.requestContextSchema) {
+    try {
+      requestContextSchema =
+        typeof agent.requestContextSchema === 'string'
+          ? JSON.parse(agent.requestContextSchema)
+          : agent.requestContextSchema;
+    } catch {
+      // Invalid JSON — skip
+    }
+  }
+
+  return {
+    name: agent.name,
+    description: agent.description,
+    instructions: agent.instructions,
+    model: { provider: agent.provider, name: agent.modelId },
+    tools: agent.tools,
+    workflows: agent.workflows,
+    agents: agent.agents,
+    skills: agent.skills as AgentDataSource['skills'],
+    workspace: agent.workspaceId ? ({ workspaceId: agent.workspaceId } as AgentDataSource['workspace']) : undefined,
+    requestContextSchema,
+  };
+}
 
 export interface AgentDataSource {
   name?: string;
@@ -20,6 +57,8 @@ export interface AgentDataSource {
   scorers?: unknown;
   memory?: unknown;
   mcpClients?: unknown;
+  skills?: StoredAgentResponse['skills'];
+  workspace?: StoredAgentResponse['workspace'];
   requestContextSchema?: unknown;
 }
 
@@ -86,6 +125,8 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
         }
       : undefined,
     instructionBlocks,
+    skills: normalizeSkillsFromApi(dataSource.skills),
+    workspace: normalizeWorkspaceFromApi(dataSource.workspace),
     variables: dataSource.requestContextSchema as AgentFormValues['variables'],
   };
 }

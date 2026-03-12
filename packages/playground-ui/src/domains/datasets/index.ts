@@ -24,14 +24,16 @@ export * from './utils/csv-export';
 export * from './utils/json-export';
 
 // Components
-export { DatasetsTable } from './components/datasets-table/datasets-table';
+export { DatasetsList } from './components/datasets-list/datasets-list';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
 export { EditDatasetDialog } from './components/edit-dataset-dialog';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
-export { EmptyDatasetsTable } from './components/empty-datasets-table';
+export { NoDatasetInfo } from './components/datasets-list/no-datasets-info';
+export { DatasetCombobox } from './components/dataset-combobox';
+export type { DatasetComboboxProps } from './components/dataset-combobox';
 
 // Dataset detail components
 export { DatasetPageContent } from './components/dataset-detail/dataset-page-content';
@@ -39,7 +41,6 @@ export { DatasetItemsList } from './components/items/dataset-items-list';
 export { DatasetExperiments } from './components/experiments/dataset-experiments';
 export { ActionsMenu } from './components/dataset-detail/items-list-actions';
 export { AddItemDialog } from './components/add-item-dialog';
-export { EditItemDialog } from './components/edit-item-dialog';
 
 // Item detail components
 export { DatasetItemHeader } from './components/dataset-detail/dataset-item-header';
@@ -64,9 +65,9 @@ export { ScorerSelector } from './components/experiment-trigger/scorer-selector'
 
 // Experiment components
 export {
-  ExperimentResultsListAndDetails,
-  type ExperimentResultsListAndDetailsProps,
-} from '../experiments/components/experiment-results-list-and-details';
+  ExperimentPageContent,
+  type ExperimentPageContentProps,
+} from '../experiments/components/experiment-page-content';
 export { ExperimentPageHeader, type ExperimentPageHeaderProps } from '../experiments/components/experiment-page-header';
 export { ExperimentStats, type ExperimentStatsProps } from '../experiments/components/experiment-stats';
 export {
@@ -79,8 +80,8 @@ export {
 } from '../experiments/components/experiment-result-span-pane';
 
 // Comparison components
-export { ComparisonView } from './components/comparison/comparison-view';
-export { ScoreDelta } from './components/comparison/score-delta';
+export { DatasetExperimentsComparison } from './components/experiments/dataset-experiments-comparison';
+export { ScoreDelta } from './components/experiments/score-delta';
 
 // Versions components
 export { DatasetVersionsPanel } from './components/items/dataset-versions-panel';
