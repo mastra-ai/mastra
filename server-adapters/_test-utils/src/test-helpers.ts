@@ -831,7 +831,7 @@ Follow these instructions for the test skill.
   const workspace = new Workspace({
     id: 'test-workspace',
     filesystem,
-    skills: ['/skills'],
+    skills: ['skills'],
     bm25: true, // Enable BM25 search for index/unindex operations
   });
 
@@ -1119,22 +1119,22 @@ function getRouteSpecificPathDefaults(route: ServerRoute): {
     routePath.includes('/fs/delete') ||
     routePath.includes('/fs/stat')
   ) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   // Directory operations need directory paths
   if (routePath.includes('/fs/list')) {
-    return { query: { path: '/' } };
+    return { query: { path: '.' } };
   }
 
   // mkdir needs a new path to create
   if (routePath.includes('/fs/mkdir')) {
-    return { body: { path: '/new-test-dir' } };
+    return { body: { path: 'new-test-dir' } };
   }
 
   // Index/unindex operations
   if (routePath.includes('/workspace/index') || routePath.includes('/workspace/unindex')) {
-    return { query: { path: '/test-file.txt' }, body: { path: '/test-file.txt' } };
+    return { query: { path: 'test-file.txt' }, body: { path: 'test-file.txt' } };
   }
 
   return {};

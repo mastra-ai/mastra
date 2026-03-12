@@ -922,7 +922,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       instruction: config.reflection?.instruction,
     };
 
-    this.tokenCounter = new TokenCounter(undefined, {
+    this.tokenCounter = new TokenCounter({
       model: typeof observationModel === 'string' ? observationModel : undefined,
     });
     this.onDebugEvent = config.onDebugEvent;
