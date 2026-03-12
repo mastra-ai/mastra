@@ -1,3 +1,4 @@
+import { v4 as uuid } from '@lukeed/uuid';
 import {
   AgentChat,
   AgentLayout,
@@ -8,15 +9,15 @@ import {
   useMemory,
   useThreads,
   AgentInformation,
-  AgentPromptExperimentProvider,
   TracingSettingsProvider,
   ObservationalMemoryProvider,
   ActivatedSkillsProvider,
   SchemaRequestContextProvider,
-  type AgentSettingsType,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { useEffect, useMemo, useState } from 'react';
-import { v4 as uuid } from '@lukeed/uuid';
+import type { AgentSettingsType } from '@mastra/playground-ui';
+import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
@@ -24,11 +25,15 @@ import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 function Agent() {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId!);
+  const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isNewThread = threadId === 'new';
-  const [newThreadId, setNewThreadId] = useState<string>(() => uuid());
+
+  // Generate a stable thread ID for new threads. Regenerate when threadId
+  // changes (e.g., clicking "New Chat" navigates back to /chat/new).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- threadId is intentional: we need a new UUID per thread
+  const newThreadId = useMemo(() => uuid(), [threadId]);
 
   const hasMemory = Boolean(memory?.result);
 
@@ -36,14 +41,14 @@ function Agent() {
     data: threads,
     isLoading: isThreadsLoading,
     refetch: refreshThreads,
-  } = useThreads({ resourceId: agentId!, agentId: agentId!, isMemoryEnabled: hasMemory });
+  } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
   useEffect(() => {
     if (!hasMemory) return;
     if (threadId) return;
 
     // After redirects on /agents/:agentId
-    navigate(`/agents/${agentId}/chat/new`);
+    void navigate(`/agents/${agentId}/chat/new`);
   }, [hasMemory, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
@@ -80,7 +85,16 @@ function Agent() {
     };
   }, [agent]);
 
-  if (isAgentLoading || !agent) {
+  // 403 check - permission denied for agents
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <PermissionDenied resource="agents" />
+      </div>
+    );
+  }
+
+  if (isAgentLoading) {
     return null;
   }
 
@@ -94,53 +108,51 @@ function Agent() {
     await refreshThreads();
 
     if (isNewThread) {
-      setNewThreadId(() => uuid());
-      navigate(`/agents/${agentId}/chat/${newThreadId}`);
+      void navigate(`/agents/${agentId}/chat/${newThreadId}`);
     }
   };
 
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <AgentPromptExperimentProvider initialPrompt={agent!.instructions} agentId={agentId!}>
-        <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
-          <SchemaRequestContextProvider>
-            <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-              <ThreadInputProvider>
-                <ObservationalMemoryProvider>
-                  <ActivatedSkillsProvider>
-                    <AgentLayout
+      <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+        <SchemaRequestContextProvider>
+          <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
+            <ThreadInputProvider>
+              <ObservationalMemoryProvider>
+                <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                  <AgentLayout
+                    agentId={agentId!}
+                    leftSlot={
+                      hasMemory && (
+                        <AgentSidebar
+                          agentId={agentId!}
+                          threadId={actualThreadId!}
+                          threads={threads || []}
+                          isLoading={isThreadsLoading}
+                        />
+                      )
+                    }
+                    rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                  >
+                    <AgentChat
+                      key={actualThreadId!}
                       agentId={agentId!}
-                      leftSlot={
-                        hasMemory && (
-                          <AgentSidebar
-                            agentId={agentId!}
-                            threadId={actualThreadId!}
-                            threads={threads || []}
-                            isLoading={isThreadsLoading}
-                          />
-                        )
-                      }
-                      rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                    >
-                      <AgentChat
-                        agentId={agentId!}
-                        agentName={agent?.name}
-                        modelVersion={agent?.modelVersion}
-                        threadId={actualThreadId!}
-                        memory={hasMemory}
-                        refreshThreadList={handleRefreshThreadList}
-                        modelList={agent?.modelList}
-                        messageId={messageId}
-                        isNewThread={isNewThread}
-                      />
-                    </AgentLayout>
-                  </ActivatedSkillsProvider>
-                </ObservationalMemoryProvider>
-              </ThreadInputProvider>
-            </WorkingMemoryProvider>
-          </SchemaRequestContextProvider>
-        </AgentSettingsProvider>
-      </AgentPromptExperimentProvider>
+                      agentName={agent?.name}
+                      modelVersion={agent?.modelVersion}
+                      threadId={actualThreadId!}
+                      memory={hasMemory}
+                      refreshThreadList={handleRefreshThreadList}
+                      modelList={agent?.modelList}
+                      messageId={messageId}
+                      isNewThread={isNewThread}
+                    />
+                  </AgentLayout>
+                </ActivatedSkillsProvider>
+              </ObservationalMemoryProvider>
+            </ThreadInputProvider>
+          </WorkingMemoryProvider>
+        </SchemaRequestContextProvider>
+      </AgentSettingsProvider>
     </TracingSettingsProvider>
   );
 }

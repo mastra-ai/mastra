@@ -30,19 +30,26 @@
  * ```
  */
 
+import * as path from 'node:path';
 import type { IMastraLogger } from '../logger';
+import type { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
 import { WorkspaceError, SearchNotAvailableError } from './errors';
-import { CompositeFilesystem } from './filesystem';
-import type { WorkspaceFilesystem, FilesystemIcon } from './filesystem';
+import { CompositeFilesystem, LocalFilesystem } from './filesystem';
+import type { WorkspaceFilesystem, FilesystemInfo } from './filesystem';
 import { MastraFilesystem } from './filesystem/mastra-filesystem';
+import { resolvePathPattern } from './glob';
+import type { ReaddirEntry } from './glob';
 import { callLifecycle } from './lifecycle';
+import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
+import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
+import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
 import { SearchEngine } from './search';
 import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
-import type { WorkspaceSkills, SkillsResolver } from './skills';
+import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
@@ -54,8 +61,16 @@ import type { WorkspaceStatus } from './types';
 /**
  * Configuration for creating a Workspace.
  * Users pass provider instances directly.
+ *
+ * Generic type parameters allow the workspace to preserve the concrete types
+ * of filesystem and sandbox providers, so accessors return the exact type
+ * you passed in.
  */
-export interface WorkspaceConfig {
+export interface WorkspaceConfig<
+  TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
+  TSandbox extends WorkspaceSandbox | undefined = WorkspaceSandbox | undefined,
+  TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
+> {
   /** Unique identifier (auto-generated if not provided) */
   id?: string;
 
@@ -67,14 +82,14 @@ export interface WorkspaceConfig {
    * Use LocalFilesystem for a folder on disk, or AgentFS for Turso-backed storage.
    * Extend MastraFilesystem for automatic logger integration.
    */
-  filesystem?: WorkspaceFilesystem;
+  filesystem?: TFilesystem;
 
   /**
    * Sandbox provider instance.
    * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
    * Extend MastraSandbox for automatic logger integration.
    */
-  sandbox?: WorkspaceSandbox;
+  sandbox?: TSandbox;
 
   /**
    * Mount multiple filesystems at different paths.
@@ -84,6 +99,9 @@ export interface WorkspaceConfig {
    * into the sandbox at their respective paths during init().
    *
    * Use the `onMount` hook to skip or customize mounting for specific filesystems.
+   *
+   * The concrete mount types are preserved — use `workspace.filesystem.mounts.get()`
+   * for typed access to individual mounts.
    *
    * @example
    * ```typescript
@@ -96,10 +114,11 @@ export interface WorkspaceConfig {
    * });
    *
    * await workspace.init();
-   * // Both filesystems mounted in sandbox at /data and /skills
+   * workspace.filesystem                    // CompositeFilesystem<{ '/data': S3Filesystem, '/skills': S3Filesystem }>
+   * workspace.filesystem.mounts.get('/data') // S3Filesystem
    * ```
    */
-  mounts?: Record<string, WorkspaceFilesystem>;
+  mounts?: TMounts;
 
   /**
    * Hook called before mounting each filesystem into the sandbox.
@@ -182,7 +201,7 @@ export interface WorkspaceConfig {
   /**
    * Paths to auto-index on init().
    * Files in these directories will be indexed for search.
-   * @example ['/docs', '/support']
+   * @example ['docs', 'support']
    */
   autoIndexPaths?: string[];
 
@@ -195,7 +214,7 @@ export interface WorkspaceConfig {
    *
    * @example Static paths
    * ```typescript
-   * skills: ['/skills', '/node_modules/@myorg/skills']
+   * skills: ['skills', 'node_modules/@myorg/skills']
    * ```
    *
    * @example Dynamic paths
@@ -203,12 +222,54 @@ export interface WorkspaceConfig {
    * skills: (ctx) => {
    *   const tier = ctx.requestContext?.get('userTier');
    *   return tier === 'premium'
-   *     ? ['/skills/basic', '/skills/premium']
-   *     : ['/skills/basic'];
+   *     ? ['skills/basic', 'skills/premium']
+   *     : ['skills/basic'];
    * }
    * ```
    */
   skills?: SkillsResolver;
+
+  /**
+   * Custom SkillSource to use for skill discovery.
+   * When provided, this source is used instead of the workspace filesystem or LocalSkillSource.
+   *
+   * Use `VersionedSkillSource` to read skills from the content-addressable blob store,
+   * serving a specific published version without touching the live filesystem.
+   *
+   * @example
+   * ```typescript
+   * import { VersionedSkillSource } from '@mastra/core/workspace';
+   *
+   * const workspace = new Workspace({
+   *   skills: ['skills'],
+   *   skillSource: new VersionedSkillSource(tree, blobStore, versionCreatedAt),
+   * });
+   * ```
+   */
+  skillSource?: SkillSource;
+
+  // ---------------------------------------------------------------------------
+  // LSP Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Enable LSP diagnostics for edit tools.
+   *
+   * When enabled, edit tools (edit_file, write_file, ast_edit) will append
+   * type errors, warnings, and other diagnostics from language servers after edits.
+   *
+   * LSP requires a sandbox with a process manager (`sandbox.processes`) to spawn
+   * language server processes. It works with any sandbox backend (local, E2B, etc.).
+   *
+   * Requires optional peer dependencies: `vscode-jsonrpc`, `vscode-languageserver-protocol`,
+   * and the relevant language server (e.g. `typescript-language-server` for TypeScript).
+   *
+   * - `true` — Enable with defaults
+   * - `LSPConfig` object — Enable with custom timeouts/settings
+   *
+   * @default undefined (disabled)
+   */
+  lsp?: boolean | LSPConfig;
 
   // ---------------------------------------------------------------------------
   // Tool Configuration
@@ -256,6 +317,20 @@ export interface WorkspaceConfig {
 // Re-export WorkspaceStatus from types
 export type { WorkspaceStatus } from './types';
 
+/**
+ * A Workspace with any combination of filesystem, sandbox, and mounts.
+ * Use this when you need to accept any Workspace regardless of its generic parameters.
+ */
+export type AnyWorkspace = Workspace<WorkspaceFilesystem | undefined, WorkspaceSandbox | undefined, any>;
+
+/** A workspace entry in the Mastra registry, enriched with source metadata. */
+export interface RegisteredWorkspace {
+  workspace: Workspace;
+  source: 'mastra' | 'agent';
+  agentId?: string;
+  agentName?: string;
+}
+
 // =============================================================================
 // Path Context Types
 // =============================================================================
@@ -294,20 +369,7 @@ export interface WorkspaceInfo {
   lastAccessedAt: Date;
 
   /** Filesystem info (if available) */
-  filesystem?: {
-    provider: string;
-    /** Human-readable name */
-    name?: string;
-    /** Icon identifier for UI display */
-    icon?: FilesystemIcon;
-    basePath?: string;
-    readOnly?: boolean;
-    status?: string;
-    storage?: {
-      totalBytes?: number;
-      usedBytes?: number;
-      availableBytes?: number;
-    };
+  filesystem?: FilesystemInfo & {
     totalFiles?: number;
     totalSize?: number;
   };
@@ -337,7 +399,11 @@ export interface WorkspaceInfo {
  * At minimum, a workspace has either a filesystem or a sandbox (or both).
  * Users pass instantiated provider objects to the constructor.
  */
-export class Workspace {
+export class Workspace<
+  TFilesystem extends WorkspaceFilesystem | undefined = WorkspaceFilesystem | undefined,
+  TSandbox extends WorkspaceSandbox | undefined = WorkspaceSandbox | undefined,
+  TMounts extends Record<string, WorkspaceFilesystem> | undefined = undefined,
+> {
   readonly id: string;
   readonly name: string;
   readonly createdAt: Date;
@@ -346,11 +412,12 @@ export class Workspace {
   private _status: WorkspaceStatus = 'pending';
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _sandbox?: WorkspaceSandbox;
-  private readonly _config: WorkspaceConfig;
+  private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
   private _skills?: WorkspaceSkills;
+  private _lsp?: LSPManager;
 
-  constructor(config: WorkspaceConfig) {
+  constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
     this.name = config.name ?? `workspace-${this.id.slice(0, 8)}`;
     this.createdAt = new Date();
@@ -366,10 +433,22 @@ export class Workspace {
         throw new WorkspaceError('Cannot use both "filesystem" and "mounts"', 'INVALID_CONFIG');
       }
 
+      // Warn: contained: false is incompatible with mounts
+      for (const [mountPath, fs] of Object.entries(config.mounts)) {
+        if (fs instanceof LocalFilesystem && !fs.contained) {
+          console.warn(
+            `[Workspace] LocalFilesystem at mount "${mountPath}" has contained: false, which is incompatible with mounts. ` +
+              `CompositeFilesystem strips mount prefixes and produces absolute paths (e.g. "/file.txt"), ` +
+              `which a non-contained LocalFilesystem interprets as real host paths instead of paths ` +
+              `relative to basePath. Use contained: true (default) or allowedPaths for specific exceptions.`,
+          );
+        }
+      }
+
       this._fs = new CompositeFilesystem({ mounts: config.mounts });
       if (this._sandbox?.mounts) {
         // Inform sandbox about mounts so it can process them on start()
-        this._sandbox.mounts.setContext({ sandbox: this._sandbox, workspace: this });
+        this._sandbox.mounts.setContext({ sandbox: this._sandbox, workspace: this as unknown as Workspace });
         this._sandbox.mounts.add(config.mounts);
         if (config.onMount) {
           this._sandbox.mounts.setOnMount(config.onMount);
@@ -426,6 +505,28 @@ export class Workspace {
       });
     }
 
+    // Initialize LSP if configured and a process manager is available
+    if (config.lsp) {
+      const processes = this._sandbox?.processes;
+      if (!this._sandbox) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. No sandbox configured — LSP disabled.`,
+        );
+      } else if (!processes) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. Sandbox "${this._sandbox.name ?? 'unknown'}" does not provide one — LSP disabled.`,
+        );
+      } else if (!isLSPAvailable()) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true requires vscode-jsonrpc and vscode-languageserver-protocol packages. Install them to enable LSP diagnostics.`,
+        );
+      } else {
+        const lspConfig = config.lsp === true ? {} : config.lsp;
+        const defaultRoot = lspConfig.root ?? findProjectRoot(process.cwd()) ?? process.cwd();
+        this._lsp = new LSPManager(processes, defaultRoot, lspConfig, this._fs);
+      }
+    }
+
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
     if (!this._fs && !this._sandbox && !this.hasSkillsConfig()) {
@@ -449,16 +550,24 @@ export class Workspace {
 
   /**
    * The filesystem provider (if configured).
+   *
+   * Returns the concrete type you passed to the constructor.
+   * When `mounts` is used instead of `filesystem`, returns `CompositeFilesystem`
+   * parameterized with the concrete mount types.
    */
-  get filesystem(): WorkspaceFilesystem | undefined {
-    return this._fs;
+  get filesystem(): [TMounts] extends [Record<string, WorkspaceFilesystem>]
+    ? CompositeFilesystem<TMounts>
+    : TFilesystem {
+    return this._fs as any;
   }
 
   /**
    * The sandbox provider (if configured).
+   *
+   * Returns the concrete type you passed to the constructor.
    */
-  get sandbox(): WorkspaceSandbox | undefined {
-    return this._sandbox;
+  get sandbox(): TSandbox {
+    return this._sandbox as any;
   }
 
   /**
@@ -467,6 +576,34 @@ export class Workspace {
    */
   getToolsConfig(): WorkspaceToolsConfig | undefined {
     return this._config.tools;
+  }
+
+  /**
+   * The LSP manager (if configured, initialized, and a process manager is available).
+   * Returns undefined if LSP is not configured, deps are missing, or sandbox has no process manager.
+   */
+  get lsp(): LSPManager | undefined {
+    return this._lsp;
+  }
+
+  /**
+   * Update the per-tool configuration for this workspace.
+   * Takes effect on the next `createWorkspaceTools()` call.
+   *
+   * @example
+   * ```typescript
+   * // Disable write tools for read-only mode
+   * workspace.setToolsConfig({
+   *   mastra_workspace_write_file: { enabled: false },
+   *   mastra_workspace_edit_file: { enabled: false },
+   * });
+   *
+   * // Re-enable all tools
+   * workspace.setToolsConfig(undefined);
+   * ```
+   */
+  setToolsConfig(config: WorkspaceToolsConfig | undefined): void {
+    this._config.tools = config;
   }
 
   /**
@@ -490,8 +627,8 @@ export class Workspace {
 
     // Lazy initialization
     if (!this._skills) {
-      // Use filesystem if available, otherwise use LocalSkillSource (read-only from local disk)
-      const source = this._fs ?? new LocalSkillSource();
+      // Priority: explicit skillSource > workspace filesystem > LocalSkillSource (read-only from local disk)
+      const source = this._config.skillSource ?? this._fs ?? new LocalSkillSource();
 
       this._skills = new WorkspaceSkillsImpl({
         source,
@@ -590,6 +727,10 @@ export class Workspace {
   /**
    * Rebuild the search index from filesystem paths.
    * Used internally for auto-indexing on init.
+   *
+   * Paths can be plain directories, single files, or glob patterns.
+   * Uses resolvePathPattern for unified resolution: file matches are
+   * indexed directly, directory matches are recursed.
    */
   private async rebuildSearchIndex(paths: string[]): Promise<void> {
     if (!this._searchEngine || !this._fs || paths.length === 0) {
@@ -599,40 +740,81 @@ export class Workspace {
     // Clear existing BM25 index
     this._searchEngine.clear();
 
-    // Index all files from specified paths
-    for (const basePath of paths) {
+    // Adapt filesystem readdir to the ReaddirEntry interface
+    const readdir = async (dir: string): Promise<ReaddirEntry[]> => {
+      const entries = await this._fs!.readdir(dir);
+      return entries.map(e => ({ name: e.name, type: e.type, isSymlink: e.isSymlink }));
+    };
+
+    // Index all files from specified paths (track across patterns to avoid re-indexing overlaps)
+    const indexedPaths = new Set<string>();
+    for (const pathOrGlob of paths) {
       try {
-        const files = await this.getAllFiles(basePath);
-        for (const filePath of files) {
+        const resolved = await resolvePathPattern(pathOrGlob, readdir);
+        const filesToIndex = new Set<string>();
+        const directoryRoots: string[] = [];
+        for (const entry of resolved) {
+          if (entry.type === 'file') {
+            filesToIndex.add(entry.path);
+            continue;
+          }
+          // Skip directories already covered by a parent directory
+          const alreadyCovered = directoryRoots.some(root => entry.path === root || entry.path.startsWith(`${root}/`));
+          if (!alreadyCovered) directoryRoots.push(entry.path);
+        }
+        // Index direct file matches first so they aren't lost if a directory scan fails
+        for (const filePath of filesToIndex) {
+          if (indexedPaths.has(filePath)) continue;
+          await this.indexFileForSearch(filePath);
+          indexedPaths.add(filePath);
+        }
+        for (const dir of directoryRoots) {
           try {
-            const content = await this._fs.readFile(filePath, { encoding: 'utf-8' });
-            await this._searchEngine.index({
-              id: filePath,
-              content: content as string,
-            });
+            const files = await this.getAllFiles(dir);
+            for (const filePath of files) {
+              if (!indexedPaths.has(filePath)) {
+                await this.indexFileForSearch(filePath);
+                indexedPaths.add(filePath);
+              }
+            }
           } catch {
-            // Skip files that can't be read as text
+            // Skip directories that can't be read
           }
         }
       } catch {
-        // Skip paths that don't exist
+        // Skip paths that don't exist or can't be read
       }
     }
   }
 
-  private async getAllFiles(dir: string): Promise<string[]> {
-    if (!this._fs) return [];
+  /**
+   * Index a single file for search. Skips files that can't be read as text.
+   */
+  private async indexFileForSearch(filePath: string): Promise<void> {
+    try {
+      const content = await this._fs!.readFile(filePath, { encoding: 'utf-8' });
+      await this._searchEngine!.index({
+        id: filePath,
+        content: content as string,
+      });
+    } catch {
+      // Skip files that can't be read as text
+    }
+  }
+
+  private async getAllFiles(dir: string, depth: number = 0, maxDepth: number = 10): Promise<string[]> {
+    if (!this._fs || depth >= maxDepth) return [];
 
     const files: string[] = [];
     const entries = await this._fs.readdir(dir);
 
     for (const entry of entries) {
-      const fullPath = dir === '/' ? `/${entry.name}` : `${dir}/${entry.name}`;
+      const fullPath = dir === '.' || dir === '' ? entry.name : `${dir}/${entry.name}`;
       if (entry.type === 'file') {
         files.push(fullPath);
       } else if (entry.type === 'directory' && !entry.isSymlink) {
         // Skip symlink directories to prevent infinite recursion from cycles
-        files.push(...(await this.getAllFiles(fullPath)));
+        files.push(...(await this.getAllFiles(fullPath, depth + 1, maxDepth)));
       }
     }
 
@@ -678,6 +860,16 @@ export class Workspace {
     this._status = 'destroying';
 
     try {
+      // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit
+      if (this._lsp) {
+        try {
+          await this._lsp.shutdownAll();
+        } catch {
+          // LSP shutdown errors are non-blocking
+        }
+        this._lsp = undefined;
+      }
+
       if (this._sandbox) {
         await callLifecycle(this._sandbox, 'destroy');
       }
@@ -709,18 +901,19 @@ export class Workspace {
     if (this._fs) {
       const fsInfo = await this._fs.getInfo?.();
       info.filesystem = {
-        provider: this._fs.provider,
+        id: fsInfo?.id ?? this._fs.id,
         name: fsInfo?.name ?? this._fs.name,
-        icon: fsInfo?.icon,
-        basePath: fsInfo?.basePath ?? this._fs.basePath,
+        provider: fsInfo?.provider ?? this._fs.provider,
         readOnly: fsInfo?.readOnly ?? this._fs.readOnly,
         status: fsInfo?.status,
-        storage: fsInfo?.storage,
+        error: fsInfo?.error,
+        icon: fsInfo?.icon,
+        metadata: fsInfo?.metadata,
       };
 
       if (options?.includeFileCount) {
         try {
-          const files = await this.getAllFiles('/');
+          const files = await this.getAllFiles('.');
           info.filesystem.totalFiles = files.length;
         } catch {
           // Ignore errors - filesystem may not support listing
@@ -741,8 +934,72 @@ export class Workspace {
   }
 
   /**
+   * Get human-readable instructions describing the workspace environment.
+   *
+   * When both a sandbox with mounts and a filesystem exist, each mount path
+   * is classified as sandbox-accessible (state === 'mounted') or
+   * workspace-only (pending / mounting / error / unsupported). When there's
+   * no sandbox or no mounts, falls back to provider-level instructions.
+   *
+   * @param opts - Optional options including request context for per-request customisation
+   * @returns Combined instructions string (may be empty)
+   */
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    const parts: string[] = [];
+
+    // Sandbox-level instructions (working directory, provider type)
+    const sandboxInstructions = this._sandbox?.getInstructions?.(opts);
+    if (sandboxInstructions) parts.push(sandboxInstructions);
+
+    // Mount state overlay: check actual MountManager state
+    const mountEntries = this._sandbox?.mounts?.entries;
+    if (mountEntries && mountEntries.size > 0) {
+      const sandboxAccessible: string[] = [];
+      const workspaceOnly: string[] = [];
+      const workingDir = this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined;
+
+      for (const [mountPath, entry] of mountEntries) {
+        const fsName = entry.filesystem.displayName || entry.filesystem.provider;
+        const access = entry.filesystem.readOnly ? 'read-only' : 'read-write';
+
+        // Resolve mount path against workingDirectory when available
+        // so the LLM sees the actual usable path (e.g. /tmp/sandbox/s3 instead of /s3)
+        const displayPath = workingDir ? path.join(workingDir, mountPath.replace(/^\/+/, '')) : mountPath;
+
+        if (entry.state === 'mounted' || entry.state === 'pending' || entry.state === 'mounting') {
+          // mounted: ready now. pending/mounting: will be ready when sandbox starts
+          // (executeCommand triggers ensureRunning which processes pending mounts)
+          sandboxAccessible.push(`  - ${displayPath}: ${fsName} (${access})`);
+        } else {
+          // error, unsupported, unavailable — NOT accessible in sandbox
+          workspaceOnly.push(`  - ${mountPath}: ${fsName} (${access})`);
+        }
+      }
+
+      if (sandboxAccessible.length) {
+        parts.push(`Sandbox-mounted filesystems (accessible in shell commands):\n${sandboxAccessible.join('\n')}`);
+      }
+      if (workspaceOnly.length) {
+        parts.push(
+          `Workspace-only filesystems (use file tools, NOT available in shell commands):\n${workspaceOnly.join('\n')}`,
+        );
+      }
+    } else {
+      // No mounts or no sandbox — fall back to filesystem-level instructions
+      const fsInstructions = this._fs?.getInstructions?.(opts);
+      if (fsInstructions) parts.push(fsInstructions);
+    }
+
+    return parts.join('\n\n');
+  }
+
+  /**
    * Get information about how filesystem and sandbox paths relate.
    * Useful for understanding how to access workspace files from sandbox code.
+   *
+   * @deprecated Use {@link getInstructions} instead. `getInstructions()` is
+   * mount-state-aware and feeds into the system message via
+   * `WorkspaceInstructionsProcessor`.
    *
    * @returns PathContext with paths and instructions from providers
    */
@@ -764,7 +1021,7 @@ export class Workspace {
       sandbox: this._sandbox
         ? {
             provider: this._sandbox.provider,
-            workingDirectory: this._sandbox.workingDirectory,
+            workingDirectory: this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined,
           }
         : undefined,
       instructions,

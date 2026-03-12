@@ -2,7 +2,7 @@
  * Types for integration test configuration.
  */
 
-import type { WorkspaceFilesystem, WorkspaceSandbox } from '@mastra/core/workspace';
+import type { AnyWorkspace } from '@mastra/core/workspace';
 
 /**
  * Configuration for workspace integration tests.
@@ -11,11 +11,11 @@ export interface WorkspaceIntegrationTestConfig {
   /** Display name for test suite */
   suiteName: string;
 
-  /** Create a complete workspace setup for testing */
-  createWorkspace: () => Promise<WorkspaceSetup>;
+  /** Create a Workspace instance. The factory calls workspace.init() automatically. */
+  createWorkspace: () => Promise<AnyWorkspace> | AnyWorkspace;
 
-  /** Cleanup after tests */
-  cleanupWorkspace?: (setup: WorkspaceSetup) => Promise<void>;
+  /** Cleanup after tests (delete test files, etc.) */
+  cleanupWorkspace?: (workspace: AnyWorkspace) => Promise<void>;
 
   /** Test scenarios to run (default: all applicable) */
   testScenarios?: IntegrationTestScenarios;
@@ -25,20 +25,6 @@ export interface WorkspaceIntegrationTestConfig {
 
   /** Run only fast tests */
   fastOnly?: boolean;
-
-  /**
-   * Mount path prefix for sandbox commands.
-   *
-   * When a filesystem is FUSE-mounted inside a sandbox (e.g. s3fs at /data/s3),
-   * the filesystem API uses object-store keys (e.g. /test/file.txt) while the
-   * sandbox sees files at the mount point (e.g. /data/s3/test/file.txt).
-   *
-   * Set this to the mount path (e.g. '/data/s3') so that scenarios prepend it
-   * to paths used in sandbox commands.
-   *
-   * @default '' (filesystem paths are used directly for sandbox commands)
-   */
-  mountPath?: string;
 
   /**
    * Whether sandbox file paths align with filesystem API paths for multi-mount.
@@ -52,20 +38,6 @@ export interface WorkspaceIntegrationTestConfig {
    * @default true
    */
   sandboxPathsAligned?: boolean;
-}
-
-/**
- * Workspace setup returned by createWorkspace.
- */
-export interface WorkspaceSetup {
-  /** The filesystem (or CompositeFilesystem for multi-mount) */
-  filesystem: WorkspaceFilesystem;
-
-  /** The sandbox for command execution */
-  sandbox: WorkspaceSandbox;
-
-  /** Mount configuration (path -> filesystem) */
-  mounts?: Record<string, WorkspaceFilesystem>;
 }
 
 /**
@@ -92,4 +64,47 @@ export interface IntegrationTestScenarios {
 
   /** Write-read consistency (immediate read-after-write) */
   writeReadConsistency?: boolean;
+
+  // Composite-specific scenarios (API-only, no sandbox needed)
+
+  /** Route operations to correct mount based on path */
+  mountRouting?: boolean;
+
+  /** Cross-mount copy/move via filesystem API (not sandbox) */
+  crossMountApi?: boolean;
+
+  /** Virtual directory listing at root and mount points */
+  virtualDirectory?: boolean;
+
+  /** Mount isolation - operations on one mount don't affect another */
+  mountIsolation?: boolean;
+
+  // LSP scenarios (require sandbox with process manager + LSP deps)
+
+  /** LSP diagnostics - spawn language server, get real diagnostics */
+  lspDiagnostics?: boolean;
+
+  /** LSP per-file root resolution - two projects with different tsconfig settings */
+  lspPerFileRoot?: boolean;
+
+  /** LSP large file diagnostics - ~500-line TypeScript file with type error */
+  lspLargeFile?: boolean;
+
+  /** LSP Python diagnostics - Pyright type checking (graceful skip if not installed) */
+  lspPython?: boolean;
+
+  /** LSP cross-file import diagnostics - TS server reads imports from disk */
+  lspCrossFile?: boolean;
+
+  /** LSP external project diagnostics - getDiagnostics for files outside workspace basePath */
+  lspExternalProject?: boolean;
+
+  /** LSP Go diagnostics - gopls type checking (graceful skip if not installed) */
+  lspGo?: boolean;
+
+  /** LSP Rust diagnostics - rust-analyzer type checking (graceful skip if not installed) */
+  lspRust?: boolean;
+
+  /** LSP ESLint diagnostics + getDiagnosticsMulti (graceful skip if not installed) */
+  lspEslint?: boolean;
 }

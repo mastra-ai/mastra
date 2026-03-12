@@ -11,7 +11,12 @@
  * - GCS_SERVICE_ACCOUNT_KEY, TEST_GCS_BUCKET: For GCS mount tests
  */
 
-import { createSandboxTestSuite, createWorkspaceIntegrationTests } from '@internal/workspace-test-utils';
+import {
+  createSandboxTestSuite,
+  createWorkspaceIntegrationTests,
+  cleanupCompositeMounts,
+} from '@internal/workspace-test-utils';
+import { Workspace } from '@mastra/core/workspace';
 import { GCSFilesystem } from '@mastra/gcs';
 import { S3Filesystem } from '@mastra/s3';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -37,53 +42,6 @@ function getS3TestConfig() {
     endpoint: process.env.S3_ENDPOINT,
   };
 }
-
-/**
- * Basic E2B integration tests.
- */
-describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Integration', () => {
-  let sandbox: E2BSandbox;
-
-  beforeEach(() => {
-    sandbox = new E2BSandbox({
-      id: `test-${Date.now()}`,
-      timeout: 60000,
-    });
-  });
-
-  afterEach(async () => {
-    if (sandbox) {
-      try {
-        await sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  });
-
-  it('can start and execute commands', async () => {
-    await sandbox._start();
-
-    const result = await sandbox.executeCommand('echo', ['Hello E2B']);
-
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout.trim()).toBe('Hello E2B');
-  }, 120000);
-
-  it('can reconnect to existing sandbox', async () => {
-    await sandbox._start();
-    const originalId = sandbox.id;
-
-    // Create new sandbox instance with same ID
-    const sandbox2 = new E2BSandbox({ id: originalId });
-    await sandbox2._start();
-
-    // Should reconnect to existing
-    expect(sandbox2.status).toBe('running');
-
-    await sandbox2._destroy();
-  }, 120000);
-});
 
 /**
  * S3 Mount integration tests.
@@ -123,9 +81,14 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox S3 Mo
     const result = await sandbox.mount(mockFilesystem, '/data/s3-test');
     expect(result.success).toBe(true);
 
-    // Verify mount works by listing directory
-    const lsResult = await sandbox.executeCommand('ls', ['-la', '/data/s3-test']);
-    expect(lsResult.exitCode).toBe(0);
+    // Verify mount works by listing directory (FUSE mount may need a moment to become accessible)
+    let lsResult;
+    for (let i = 0; i < 5; i++) {
+      lsResult = await sandbox.executeCommand('ls', ['-la', '/data/s3-test']);
+      if (lsResult.exitCode === 0) break;
+      await new Promise(r => setTimeout(r, 500));
+    }
+    expect(lsResult!.exitCode).toBe(0);
   }, 180000);
 
   it('S3 public bucket mounts with public_bucket=1', async () => {
@@ -363,63 +326,6 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Mount Safety', () => {
       }
     }
   });
-
-  it('mount errors if directory exists and is non-empty', async () => {
-    await sandbox._start();
-
-    // Use home directory instead of /data to avoid sudo complexity
-    const testDir = '/home/user/test-non-empty';
-
-    // Create non-empty directory
-    await sandbox.executeCommand('mkdir', ['-p', testDir]);
-    await sandbox.executeCommand('sh', ['-c', `echo "existing" > ${testDir}/file.txt`]);
-
-    // Verify setup succeeded
-    const lsResult = await sandbox.executeCommand('ls', ['-la', testDir]);
-    expect(lsResult.exitCode).toBe(0);
-    expect(lsResult.stdout).toContain('file.txt');
-
-    const mockFilesystem = {
-      id: 'test-fs',
-      name: 'MockFS',
-      provider: 'mock',
-      status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test' }),
-    } as any;
-
-    const result = await sandbox.mount(mockFilesystem, testDir);
-    expect(result.success).toBe(false);
-    expect(result.error).toContain(`Cannot mount at ${testDir}: directory exists and is not empty`);
-    expect(result.error).toContain('Mounting would hide existing files');
-    expect(result.error).toContain('Use a different path or empty the directory first');
-  }, 120000);
-
-  it('mount succeeds if directory exists but is empty', async () => {
-    await sandbox._start();
-
-    // Use home directory to avoid sudo
-    const testDir = '/home/user/test-empty-dir';
-
-    // Create empty directory
-    await sandbox.executeCommand('mkdir', ['-p', testDir]);
-
-    const mockFilesystem = {
-      id: 'test-fs',
-      name: 'MockFS',
-      provider: 'mock',
-      status: 'ready',
-      getMountConfig: () => ({ type: 's3', bucket: 'test' }),
-    } as any;
-
-    const result = await sandbox.mount(mockFilesystem, testDir);
-    // Empty directory should not block mounting
-    if (!result.success) {
-      // If mount failed, it should NOT be because of non-empty directory
-      expect(result.error).not.toContain('not empty');
-    } else {
-      expect(result.success).toBe(true);
-    }
-  }, 120000);
 
   it.skipIf(!hasS3Credentials)(
     'mount creates directory with sudo for paths outside home',
@@ -981,61 +887,6 @@ describe.skipIf(!process.env.E2B_API_KEY || !hasS3Credentials)('E2BSandbox Stop/
 /**
  * Environment variable handling integration tests.
  */
-describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', () => {
-  let sandbox: E2BSandbox;
-
-  afterEach(async () => {
-    if (sandbox) {
-      try {
-        await sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
-    }
-  });
-
-  it('env changes reflected without sandbox restart', async () => {
-    // Create sandbox with initial env
-    sandbox = new E2BSandbox({
-      id: `test-env-${Date.now()}`,
-      timeout: 60000,
-      env: { MY_VAR: 'initial' },
-    });
-    await sandbox._start();
-
-    // Check initial value
-    const result1 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR']);
-    expect(result1.stdout.trim()).toBe('initial');
-
-    // Execute with different env value (should override)
-    const result2 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR'], {
-      env: { MY_VAR: 'changed' },
-    });
-    expect(result2.stdout.trim()).toBe('changed');
-
-    // Original sandbox env should still work for new commands
-    const result3 = await sandbox.executeCommand('sh', ['-c', 'echo $MY_VAR']);
-    expect(result3.stdout.trim()).toBe('initial');
-  }, 120000);
-
-  it('env vars merged and passed per-command', async () => {
-    sandbox = new E2BSandbox({
-      id: `test-env-merge-${Date.now()}`,
-      timeout: 60000,
-      env: { VAR_A: '1', VAR_B: '2' },
-    });
-    await sandbox._start();
-
-    // Command with additional env var - should merge
-    const result = await sandbox.executeCommand('sh', ['-c', 'echo $VAR_A $VAR_B $VAR_C'], {
-      env: { VAR_B: 'override', VAR_C: '3' },
-    });
-
-    // VAR_A from sandbox, VAR_B overridden, VAR_C from command
-    expect(result.stdout.trim()).toBe('1 override 3');
-  }, 120000);
-});
-
 /**
  * Shared Sandbox Conformance Tests
  *
@@ -1045,10 +896,17 @@ describe.skipIf(!process.env.E2B_API_KEY)('E2BSandbox Environment Variables', ()
 if (process.env.E2B_API_KEY) {
   createSandboxTestSuite({
     suiteName: 'E2BSandbox Conformance',
-    createSandbox: () => {
+    createSandbox: options => {
       return new E2BSandbox({
         id: `conformance-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         timeout: 120000,
+        ...(options?.env && { env: options.env }),
+      });
+    },
+    createInvalidSandbox: () => {
+      return new E2BSandbox({
+        id: `bad-config-${Date.now()}`,
+        template: 'nonexistent-template-id-12345',
       });
     },
     cleanupSandbox: async sandbox => {
@@ -1057,6 +915,9 @@ if (process.env.E2B_API_KEY) {
       } catch {
         // Ignore cleanup errors
       }
+    },
+    killSandboxExternally: async sb => {
+      await (sb as E2BSandbox).e2b.kill();
     },
     capabilities: {
       supportsMounting: true,
@@ -1068,15 +929,24 @@ if (process.env.E2B_API_KEY) {
       defaultCommandTimeout: 30000,
     },
     testTimeout: 60000, // E2B commands can take time
+    createMountableFilesystem: hasS3Credentials
+      ? () =>
+          ({
+            id: 'test-s3-conformance',
+            name: 'S3Filesystem',
+            provider: 's3',
+            status: 'ready',
+            getMountConfig: () => getS3TestConfig(),
+          }) as any
+      : undefined,
   });
 }
 
 /**
  * Shared Workspace Integration Tests (E2B + S3)
  *
- * These tests verify end-to-end filesystem↔sandbox sync using a real S3Filesystem
- * mounted via s3fs FUSE inside an E2B sandbox. The mountPath config aligns the
- * filesystem API paths (S3 keys) with sandbox paths (FUSE mount point).
+ * These tests verify end-to-end filesystem<->sandbox sync using a real S3Filesystem
+ * mounted via s3fs FUSE inside an E2B sandbox.
  */
 const canRunSharedIntegration = !!(process.env.E2B_API_KEY && hasS3Credentials);
 
@@ -1085,7 +955,6 @@ if (canRunSharedIntegration) {
 
   createWorkspaceIntegrationTests({
     suiteName: 'E2B + S3 Shared Integration',
-    mountPath: mountPoint,
     testTimeout: 120000,
     testScenarios: {
       fileSync: true,
@@ -1093,49 +962,26 @@ if (canRunSharedIntegration) {
       largeFileHandling: true,
       writeReadConsistency: true,
     },
-    createWorkspace: async () => {
+    createWorkspace: () => {
       const s3Config = getS3TestConfig();
 
-      const filesystem = new S3Filesystem({
-        bucket: s3Config.bucket,
-        region: s3Config.region,
-        accessKeyId: s3Config.accessKeyId,
-        secretAccessKey: s3Config.secretAccessKey,
-        endpoint: s3Config.endpoint,
+      return new Workspace({
+        mounts: {
+          [mountPoint]: new S3Filesystem({
+            bucket: s3Config.bucket,
+            region: s3Config.region,
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+            endpoint: s3Config.endpoint,
+          }),
+        },
+        sandbox: new E2BSandbox({
+          id: `shared-int-${Date.now()}`,
+          timeout: 180000,
+        }),
       });
-
-      const sandbox = new E2BSandbox({
-        id: `shared-int-${Date.now()}`,
-        timeout: 180000,
-      });
-
-      await sandbox._start();
-      await sandbox.mount(filesystem, mountPoint);
-
-      return { filesystem, sandbox };
     },
-    cleanupWorkspace: async setup => {
-      // Cleanup S3 test files
-      try {
-        const files = await setup.filesystem.readdir('/');
-        for (const file of files) {
-          if (file.type === 'file') {
-            await setup.filesystem.deleteFile(`/${file.name}`, { force: true });
-          } else if (file.type === 'directory') {
-            await setup.filesystem.rmdir(`/${file.name}`, { recursive: true });
-          }
-        }
-      } catch (e) {
-        console.warn('Cleanup: failed to remove test files', e);
-      }
-
-      // Destroy sandbox
-      try {
-        await setup.sandbox._destroy();
-      } catch (e) {
-        console.warn('Cleanup: failed to destroy sandbox', e);
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 
@@ -1158,53 +1004,30 @@ if (canRunSharedIntegration && hasGCSCredentials) {
       multiMount: true,
       crossMountCopy: true,
     },
-    createWorkspace: async () => {
+    createWorkspace: () => {
       const s3Config = getS3TestConfig();
-      const s3Fs = new S3Filesystem({
-        bucket: s3Config.bucket,
-        region: s3Config.region,
-        accessKeyId: s3Config.accessKeyId,
-        secretAccessKey: s3Config.secretAccessKey,
-        endpoint: s3Config.endpoint,
-      });
 
-      const gcsFs = new GCSFilesystem({
-        bucket: process.env.TEST_GCS_BUCKET!,
-        credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+      return new Workspace({
+        mounts: {
+          [s3Mount]: new S3Filesystem({
+            bucket: s3Config.bucket,
+            region: s3Config.region,
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+            endpoint: s3Config.endpoint,
+          }),
+          [gcsMount]: new GCSFilesystem({
+            bucket: process.env.TEST_GCS_BUCKET!,
+            credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+          }),
+        },
+        sandbox: new E2BSandbox({
+          id: `multi-s3gcs-${Date.now()}`,
+          timeout: 240000,
+        }),
       });
-
-      const sandbox = new E2BSandbox({
-        id: `multi-s3gcs-${Date.now()}`,
-        timeout: 240000,
-      });
-      await sandbox._start();
-      await sandbox.mount(s3Fs, s3Mount);
-      await sandbox.mount(gcsFs, gcsMount);
-
-      return {
-        filesystem: s3Fs,
-        sandbox,
-        mounts: { [s3Mount]: s3Fs, [gcsMount]: gcsFs },
-      };
     },
-    cleanupWorkspace: async setup => {
-      for (const fs of Object.values(setup.mounts || {})) {
-        try {
-          const files = await fs.readdir('/');
-          for (const f of files) {
-            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
-            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
-          }
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-      try {
-        await setup.sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 
@@ -1216,9 +1039,6 @@ if (canRunSharedIntegration && hasGCSCredentials) {
  * Only the API-level isolation test runs; sandbox-dependent tests are skipped.
  */
 if (canRunSharedIntegration) {
-  const s3Mount1 = '/data/multi-s3a';
-  const s3Mount2 = '/data/multi-s3b';
-
   createWorkspaceIntegrationTests({
     suiteName: 'E2B + S3+S3 Multi-Mount Integration',
     testTimeout: 120000,
@@ -1228,46 +1048,23 @@ if (canRunSharedIntegration) {
       multiMount: true,
       crossMountCopy: false,
     },
-    createWorkspace: async () => {
+    createWorkspace: () => {
       const s3Config = getS3TestConfig();
       const prefix1 = `multi-s3a-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const prefix2 = `multi-s3b-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      const s3Fs1 = new S3Filesystem({ ...s3Config, prefix: prefix1 });
-      const s3Fs2 = new S3Filesystem({ ...s3Config, prefix: prefix2 });
-
-      const sandbox = new E2BSandbox({
-        id: `multi-s3s3-${Date.now()}`,
-        timeout: 240000,
+      return new Workspace({
+        mounts: {
+          '/data/multi-s3a': new S3Filesystem({ ...s3Config, prefix: prefix1 }),
+          '/data/multi-s3b': new S3Filesystem({ ...s3Config, prefix: prefix2 }),
+        },
+        sandbox: new E2BSandbox({
+          id: `multi-s3s3-${Date.now()}`,
+          timeout: 240000,
+        }),
       });
-      await sandbox._start();
-      await sandbox.mount(s3Fs1, s3Mount1);
-      await sandbox.mount(s3Fs2, s3Mount2);
-
-      return {
-        filesystem: s3Fs1,
-        sandbox,
-        mounts: { [s3Mount1]: s3Fs1, [s3Mount2]: s3Fs2 },
-      };
     },
-    cleanupWorkspace: async setup => {
-      for (const fs of Object.values(setup.mounts || {})) {
-        try {
-          const files = await fs.readdir('/');
-          for (const f of files) {
-            if (f.type === 'file') await fs.deleteFile(`/${f.name}`, { force: true });
-            else if (f.type === 'directory') await fs.rmdir(`/${f.name}`, { recursive: true });
-          }
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-      try {
-        await setup.sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
-    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 
@@ -1287,41 +1084,69 @@ if (canRunSharedIntegration) {
       fileSync: false,
       readOnlyMount: true,
     },
-    createWorkspace: async () => {
+    createWorkspace: () => {
       const s3Config = getS3TestConfig();
 
-      const filesystem = new S3Filesystem({
-        bucket: s3Config.bucket,
-        region: s3Config.region,
-        accessKeyId: s3Config.accessKeyId,
-        secretAccessKey: s3Config.secretAccessKey,
-        endpoint: s3Config.endpoint,
-        readOnly: true,
-      });
-
-      const sandbox = new E2BSandbox({
-        id: `ro-int-${Date.now()}`,
-        timeout: 180000,
-      });
-
-      await sandbox._start();
-      await sandbox.mount(filesystem, roMountPath);
-
-      return {
-        filesystem,
-        sandbox,
+      return new Workspace({
         mounts: {
-          [roMountPath]: filesystem,
+          [roMountPath]: new S3Filesystem({
+            bucket: s3Config.bucket,
+            region: s3Config.region,
+            accessKeyId: s3Config.accessKeyId,
+            secretAccessKey: s3Config.secretAccessKey,
+            endpoint: s3Config.endpoint,
+            readOnly: true,
+          }),
         },
-      };
+        sandbox: new E2BSandbox({
+          id: `ro-int-${Date.now()}`,
+          timeout: 180000,
+        }),
+      });
     },
-    cleanupWorkspace: async setup => {
-      try {
-        await setup.sandbox._destroy();
-      } catch {
-        // Ignore cleanup errors
-      }
+  });
+}
+
+/**
+ * E2B + CompositeFilesystem(S3+GCS) Integration Tests
+ *
+ * Tests composite-specific scenarios (mount routing, cross-mount API, virtual
+ * directories, mount isolation) with an E2B sandbox containing S3 + GCS mounts.
+ */
+if (canRunSharedIntegration && hasGCSCredentials) {
+  createWorkspaceIntegrationTests({
+    suiteName: 'E2B + CompositeFilesystem(S3+GCS)',
+    testTimeout: 120000,
+    testScenarios: {
+      fileSync: false,
+      mountRouting: true,
+      crossMountApi: true,
+      virtualDirectory: true,
+      mountIsolation: true,
     },
+    createWorkspace: () => {
+      const s3Config = getS3TestConfig();
+      const prefix = `cfs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      return new Workspace({
+        mounts: {
+          '/s3': new S3Filesystem({
+            ...s3Config,
+            prefix: `${prefix}-s3`,
+          }),
+          '/gcs': new GCSFilesystem({
+            bucket: process.env.TEST_GCS_BUCKET!,
+            credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+            prefix: `${prefix}-gcs`,
+          }),
+        },
+        sandbox: new E2BSandbox({
+          id: `cfs-${Date.now()}`,
+          timeout: 240000,
+        }),
+      });
+    },
+    cleanupWorkspace: cleanupCompositeMounts,
   });
 }
 

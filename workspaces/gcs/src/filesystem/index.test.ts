@@ -16,21 +16,23 @@ import { GCSFilesystem } from './index';
 
 // Mock the Google Cloud Storage SDK
 vi.mock('@google-cloud/storage', () => ({
-  Storage: vi.fn().mockImplementation(() => ({
-    bucket: vi.fn().mockReturnValue({
-      file: vi.fn().mockReturnValue({
-        download: vi.fn(),
-        save: vi.fn(),
-        delete: vi.fn(),
-        copy: vi.fn(),
-        exists: vi.fn(),
-        getMetadata: vi.fn(),
+  Storage: vi.fn().mockImplementation(function () {
+    return {
+      bucket: vi.fn().mockReturnValue({
+        file: vi.fn().mockReturnValue({
+          download: vi.fn(),
+          save: vi.fn(),
+          delete: vi.fn(),
+          copy: vi.fn(),
+          exists: vi.fn(),
+          getMetadata: vi.fn(),
+        }),
+        exists: vi.fn().mockResolvedValue([true]),
+        getFiles: vi.fn().mockResolvedValue([[]]),
+        deleteFiles: vi.fn(),
       }),
-      exists: vi.fn().mockResolvedValue([true]),
-      getFiles: vi.fn().mockResolvedValue([[]]),
-      deleteFiles: vi.fn(),
-    }),
-  })),
+    };
+  }),
 }));
 
 describe('GCSFilesystem', () => {
@@ -303,6 +305,28 @@ describe('GCSFilesystem', () => {
 
       // Now the Storage client should have been created
       expect(MockStorage).toHaveBeenCalled();
+    });
+
+    it('exposes storage via public getter', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        projectId: 'my-project',
+      });
+
+      const storage1 = fs.storage;
+      const storage2 = fs.storage;
+      expect(storage1).toBe(storage2);
+    });
+
+    it('exposes bucket via public getter', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        projectId: 'my-project',
+      });
+
+      const bucket1 = fs.bucket;
+      const bucket2 = fs.bucket;
+      expect(bucket1).toBe(bucket2);
     });
   });
 

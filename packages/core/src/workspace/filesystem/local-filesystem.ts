@@ -8,6 +8,7 @@
 import { constants as fsConstants } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
+import type { RequestContext } from '../../request-context';
 import {
   FileNotFoundError,
   DirectoryNotFoundError,
@@ -19,6 +20,8 @@ import {
   WorkspaceReadOnlyError,
 } from '../errors';
 import type { ProviderStatus } from '../lifecycle';
+import type { InstructionsOption } from '../types';
+import { resolveInstructions } from '../utils';
 import type {
   FilesystemInfo,
   FileContent,
@@ -30,13 +33,15 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { fsExists, fsStat, isEnoentError, isEexistError } from './fs-utils';
+import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveToBasePath } from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
+import type { MastraFilesystemOptions } from './mastra-filesystem';
+import type { FilesystemMountConfig } from './mount';
 
 /**
  * Local filesystem provider configuration.
  */
-export interface LocalFilesystemOptions {
+export interface LocalFilesystemOptions extends MastraFilesystemOptions {
   /** Unique identifier for this filesystem instance */
   id?: string;
   /** Base directory path on disk */
@@ -44,6 +49,16 @@ export interface LocalFilesystemOptions {
   /**
    * When true, all file operations are restricted to stay within basePath.
    * Prevents path traversal attacks and symlink escapes.
+   *
+   * - `contained: true` (default) — File access is restricted to basePath
+   *   (and any allowedPaths). Paths that escape these boundaries throw a
+   *   PermissionError.
+   * - `contained: false` — No access restrictions. Any path on the host
+   *   filesystem is accessible.
+   *
+   * Set to `false` when the filesystem needs to access paths outside basePath,
+   * such as global skills directories or user home directories.
+   *
    * @default true
    */
   contained?: boolean;
@@ -53,6 +68,48 @@ export interface LocalFilesystemOptions {
    * @default false
    */
   readOnly?: boolean;
+  /**
+   * Additional directories the agent can access outside of `basePath`.
+   *
+   * Relative paths resolve against `basePath`.
+   * Absolute and tilde paths are used as-is.
+   *
+   * @example
+   * ```typescript
+   * new LocalFilesystem({
+   *   basePath: './workspace',
+   *   contained: true,
+   *   allowedPaths: ['../skills', '~/.claude/skills'],
+   * })
+   * ```
+   */
+  allowedPaths?: string[];
+  /**
+   * Custom instructions that override the default instructions
+   * returned by `getInstructions()`.
+   *
+   * - `string` — Fully replaces the default instructions.
+   *   Pass an empty string to suppress instructions entirely.
+   * - `(opts) => string` — Receives the default instructions and
+   *   optional request context so you can extend or customise per-request.
+   */
+  instructions?: InstructionsOption;
+}
+
+/**
+ * Mount configuration for local filesystems.
+ *
+ * When a `LocalFilesystem` is used as a mount in a Workspace with `LocalSandbox`,
+ * the sandbox creates a symlink from `<workingDir>/<mountPath>` → `basePath`.
+ * No FUSE tools are needed for local mounts.
+ *
+ * **Note:** When mounted with `contained: false`, the agent can access any
+ * path on the host filesystem through this mount. Workspace logs a warning
+ * at construction time if this combination is detected.
+ */
+export interface LocalMountConfig extends FilesystemMountConfig {
+  type: 'local';
+  basePath: string;
 }
 
 /**
@@ -70,7 +127,7 @@ export interface LocalFilesystemOptions {
  * });
  *
  * await workspace.init();
- * await workspace.writeFile('/hello.txt', 'Hello World!');
+ * await workspace.writeFile('hello.txt', 'Hello World!');
  * ```
  */
 export class LocalFilesystem extends MastraFilesystem {
@@ -83,6 +140,8 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private readonly _basePath: string;
   private readonly _contained: boolean;
+  private _allowedPaths: string[];
+  private readonly _instructionsOverride?: InstructionsOption;
 
   /**
    * The absolute base path on disk where files are stored.
@@ -92,16 +151,78 @@ export class LocalFilesystem extends MastraFilesystem {
     return this._basePath;
   }
 
+  /**
+   * Whether file operations are restricted to stay within basePath.
+   *
+   * When `true` (default), relative paths resolve against basePath and
+   * absolute paths are kept as-is. Any resolved path that falls outside
+   * basePath (and allowedPaths) throws a PermissionError. When `false`,
+   * no containment check is applied.
+   *
+   * **Note:** When used as a CompositeFilesystem mount with `contained: false`,
+   * the agent can access any path on the host filesystem through this mount.
+   */
+  get contained(): boolean {
+    return this._contained;
+  }
+
+  /**
+   * Current set of resolved allowed paths.
+   * These paths are permitted beyond basePath when containment is enabled.
+   */
+  get allowedPaths(): readonly string[] {
+    return this._allowedPaths;
+  }
+
+  /**
+   * Update allowed paths. Accepts a direct array or an updater callback
+   * receiving the current paths (React setState pattern).
+   *
+   * @example
+   * ```typescript
+   * // Set directly
+   * fs.setAllowedPaths(['../shared-data']);
+   *
+   * // Update with callback
+   * fs.setAllowedPaths(prev => [...prev, '~/.claude/skills']);
+   * ```
+   */
+  setAllowedPaths(pathsOrUpdater: string[] | ((current: readonly string[]) => string[])): void {
+    const newPaths = typeof pathsOrUpdater === 'function' ? pathsOrUpdater(this._allowedPaths) : pathsOrUpdater;
+    this._allowedPaths = newPaths.map(p => resolveToBasePath(this._basePath, p));
+  }
+
   constructor(options: LocalFilesystemOptions) {
-    super({ name: 'LocalFilesystem' });
+    super({ ...options, name: 'LocalFilesystem' });
     this.id = options.id ?? this.generateId();
-    this._basePath = nodePath.resolve(options.basePath);
+    this._basePath = nodePath.resolve(expandTilde(options.basePath));
     this._contained = options.contained ?? true;
     this.readOnly = options.readOnly;
+    this._allowedPaths = (options.allowedPaths ?? []).map(p => resolveToBasePath(this._basePath, p));
+    this._instructionsOverride = options.instructions;
+  }
+
+  /**
+   * Return mount config for sandbox integration.
+   * LocalSandbox uses this to create a symlink from the mount path to basePath.
+   */
+  getMountConfig(): LocalMountConfig {
+    return { type: 'local', basePath: this._basePath };
   }
 
   private generateId(): string {
     return `local-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Check if an absolute path falls within basePath or any allowed path.
+   */
+  private _isWithinAnyRoot(absolutePath: string): boolean {
+    const roots = [this._basePath, ...this._allowedPaths];
+    return roots.some(root => {
+      const relative = nodePath.relative(root, absolutePath);
+      return !relative.startsWith('..') && !nodePath.isAbsolute(relative);
+    });
   }
 
   private toBuffer(content: FileContent): Buffer {
@@ -111,13 +232,10 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   private resolvePath(inputPath: string): string {
-    const cleanedPath = inputPath.replace(/^\/+/, '');
-    const normalizedInput = nodePath.normalize(cleanedPath);
-    const absolutePath = nodePath.resolve(this._basePath, normalizedInput);
+    const absolutePath = resolveToBasePath(this._basePath, inputPath);
 
     if (this._contained) {
-      const relative = nodePath.relative(this._basePath, absolutePath);
-      if (relative.startsWith('..') || nodePath.isAbsolute(relative)) {
+      if (!this._isWithinAnyRoot(absolutePath)) {
         throw new PermissionError(inputPath, 'access');
       }
     }
@@ -125,8 +243,22 @@ export class LocalFilesystem extends MastraFilesystem {
     return absolutePath;
   }
 
+  /**
+   * Resolve a workspace-relative path to an absolute disk path.
+   * Uses the same resolution logic as internal file operations.
+   * Returns `undefined` if the path violates containment.
+   */
+  resolveAbsolutePath(inputPath: string): string | undefined {
+    try {
+      return this.resolvePath(inputPath);
+    } catch {
+      // PermissionError from containment check — path is not resolvable
+      return undefined;
+    }
+  }
+
   private toRelativePath(absolutePath: string): string {
-    return '/' + nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
+    return nodePath.relative(this._basePath, absolutePath).replace(/\\/g, '/');
   }
 
   private assertWritable(operation: string): void {
@@ -142,46 +274,33 @@ export class LocalFilesystem extends MastraFilesystem {
   private async assertPathContained(absolutePath: string): Promise<void> {
     if (!this._contained) return;
 
-    let baseReal: string;
-    try {
-      baseReal = await fs.realpath(this._basePath);
-    } catch (error: unknown) {
-      if (isEnoentError(error)) {
-        throw new DirectoryNotFoundError(this._basePath);
-      }
-      throw error;
-    }
-
+    // Resolve symlinks for the target path. If it doesn't exist,
+    // there are no symlinks to escape through — nothing to check.
     let targetReal: string;
     try {
       targetReal = await fs.realpath(absolutePath);
     } catch (error: unknown) {
-      // If path doesn't exist, walk up to find an existing parent
-      if (isEnoentError(error)) {
-        let parentPath = absolutePath;
-        while (true) {
-          const nextParent = nodePath.dirname(parentPath);
-          if (nextParent === parentPath) {
-            // Reached filesystem root without finding existing directory
-            throw new DirectoryNotFoundError(absolutePath);
-          }
-          parentPath = nextParent;
-          try {
-            targetReal = await fs.realpath(parentPath);
-            break;
-          } catch (parentError: unknown) {
-            if (!isEnoentError(parentError)) {
-              throw parentError;
-            }
-            // Continue walking up
-          }
-        }
-      } else {
+      if (isEnoentError(error)) return; // path doesn't exist yet — safe
+      throw error;
+    }
+
+    // Resolve real paths for roots, skipping any that don't exist
+    const roots = [this._basePath, ...this._allowedPaths];
+    const rootReals: string[] = [];
+    for (const root of roots) {
+      try {
+        rootReals.push(await fs.realpath(root));
+      } catch (error: unknown) {
+        if (isEnoentError(error)) continue;
         throw error;
       }
     }
 
-    if (targetReal !== baseReal && !targetReal.startsWith(baseReal + nodePath.sep)) {
+    const isWithinRoot = rootReals.some(
+      rootReal => targetReal === rootReal || targetReal.startsWith(rootReal + nodePath.sep),
+    );
+
+    if (!isWithinRoot) {
       throw new PermissionError(absolutePath, 'access');
     }
   }
@@ -587,21 +706,44 @@ export class LocalFilesystem extends MastraFilesystem {
    * Status management is handled by the base class.
    */
   async destroy(): Promise<void> {
-    // LocalFilesystem doesn't clean up files on destroy by default
+    // LocalFilesystem doesn't delete files on destroy
   }
 
-  getInfo(): FilesystemInfo {
+  getInfo(): FilesystemInfo<{ basePath: string; contained: boolean; allowedPaths?: string[] }> {
     return {
       id: this.id,
       name: this.name,
       provider: this.provider,
       readOnly: this.readOnly,
-      basePath: this.basePath,
       status: this.status,
+      error: this.error,
+      metadata: {
+        basePath: this.basePath,
+        contained: this._contained,
+        ...(this._allowedPaths.length > 0 && { allowedPaths: [...this._allowedPaths] }),
+      },
     };
   }
 
-  getInstructions(): string {
-    return `Local filesystem at "${this.basePath}". Files at workspace path "/foo" are stored at "${this.basePath}/foo" on disk.`;
+  getInstructions(opts?: { requestContext?: RequestContext<any> }): string {
+    return resolveInstructions(this._instructionsOverride, () => this._getDefaultInstructions(), opts?.requestContext);
+  }
+
+  private _getDefaultInstructions(): string {
+    const parts = [`Local filesystem at "${this.basePath}". Relative paths resolve from this directory.`];
+
+    if (this._contained) {
+      if (this._allowedPaths.length > 0) {
+        parts.push(
+          `File access is restricted to this directory and the following allowed paths: ${this._allowedPaths.join(', ')}.`,
+        );
+      } else {
+        parts.push('File access is restricted to this directory.');
+      }
+    } else {
+      parts.push('Containment is disabled, so any path on the host filesystem is accessible.');
+    }
+
+    return parts.join(' ');
   }
 }

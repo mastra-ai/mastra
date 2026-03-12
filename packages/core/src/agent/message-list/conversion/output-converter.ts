@@ -45,7 +45,8 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
 }
 
 /**
- * Sanitizes AIV5 UI messages by filtering out streaming states, data-* parts, and optionally incomplete tool calls.
+ * Sanitizes AIV5 UI messages by filtering out streaming states, data-* parts, empty text parts, and optionally incomplete tool calls.
+ * Handles legacy data by filtering empty text parts that may exist in pre-existing DB records.
  */
 export function sanitizeV5UIMessages(
   messages: AIV5Type.UIMessage[],
@@ -54,6 +55,22 @@ export function sanitizeV5UIMessages(
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
+
+      // When building a prompt TO the LLM (filterIncompleteToolCalls=true),
+      // check if this message contains OpenAI reasoning parts (rs_* itemIds).
+      // If so, we need to strip them AND clear providerMetadata.openai from remaining
+      // parts to prevent item_reference linking to the stripped reasoning items.
+      const hasOpenAIReasoning =
+        filterIncompleteToolCalls &&
+        m.parts.some(
+          p =>
+            p.type === 'reasoning' &&
+            'providerMetadata' in p &&
+            p.providerMetadata &&
+            typeof p.providerMetadata === 'object' &&
+            'openai' in (p.providerMetadata as Record<string, unknown>),
+        );
+
       // Filter out streaming states and optionally input-available (which aren't supported by convertToModelMessages)
       const safeParts = m.parts.filter(p => {
         // Filter out data-* parts (custom streaming data from writer.custom())
@@ -64,12 +81,43 @@ export function sanitizeV5UIMessages(
           return false;
         }
 
+        // Strip OpenAI reasoning parts when building a prompt TO the LLM.
+        // OpenAI's Responses API uses item_reference linking (rs_*/msg_* itemIds) that
+        // creates mandatory pairing between reasoning and message items. Replaying
+        // reasoning from history causes:
+        //   "Item 'rs_*' of type 'reasoning' was provided without its required following item"
+        //   "Item 'msg_*' of type 'message' was provided without its required 'reasoning' item"
+        // Reasoning data is preserved in the database — only stripped from LLM input.
+        // See: https://github.com/mastra-ai/mastra/issues/12980
+        if (p.type === 'reasoning' && hasOpenAIReasoning) {
+          return false;
+        }
+
+        // Filter out empty text parts to handle legacy data from before this filtering was implemented
+        // But preserve them if they are the only parts (legitimate placeholder messages)
+        if (p.type === 'text' && (!('text' in p) || p.text === '' || p.text?.trim() === '')) {
+          const hasNonEmptyParts = m.parts.some(
+            part => !(part.type === 'text' && (!('text' in part) || part.text === '' || part.text?.trim() === '')),
+          );
+          if (hasNonEmptyParts) return false;
+        }
+
         if (!AIV5.isToolUIPart(p)) return true;
 
         // When sending messages TO the LLM: only keep completed tool calls (output-available/output-error)
         // This filters out input-available (incomplete client-side tool calls) and input-streaming
         if (filterIncompleteToolCalls) {
-          return p.state === 'output-available' || p.state === 'output-error';
+          if (p.state === 'output-available' || p.state === 'output-error') {
+            // Strip completed provider-executed tools (e.g. Anthropic web_search). The provider
+            // already handled these internally — sending tool_result for server_tool_use is invalid.
+            if (p.providerExecuted) return false;
+            return true;
+          }
+          // Provider-executed tools (e.g. Anthropic web_search) remain in input-available state
+          // because no client-side result is added. Keep them so the provider API sees the
+          // server_tool_use block and can execute the deferred tool on the next request.
+          if (p.state === 'input-available' && p.providerExecuted) return true;
+          return false;
         }
 
         // When processing response messages FROM the LLM: keep input-available states
@@ -82,6 +130,39 @@ export function sanitizeV5UIMessages(
       const sanitized = {
         ...m,
         parts: safeParts.map(part => {
+          // When OpenAI reasoning was stripped, clear openai metadata from ALL remaining
+          // parts so the SDK sends inline content instead of item_reference. This covers:
+          //   - providerMetadata.openai on text/reasoning parts (msg_*/rs_* itemIds)
+          //   - callProviderMetadata.openai on tool parts (fc_* itemIds used by convertToModelMessages)
+          // Without paired reasoning items, OpenAI rejects orphaned item_references with:
+          //   "function_call was provided without its required reasoning item"
+          if (hasOpenAIReasoning) {
+            if ('providerMetadata' in part && part.providerMetadata) {
+              const meta = part.providerMetadata as Record<string, unknown>;
+              if ('openai' in meta) {
+                const { openai: _, ...restMeta } = meta;
+                part = {
+                  ...part,
+                  providerMetadata:
+                    Object.keys(restMeta).length > 0 ? (restMeta as typeof part.providerMetadata) : undefined,
+                };
+              }
+            }
+            if ('callProviderMetadata' in part && part.callProviderMetadata) {
+              const callMeta = part.callProviderMetadata as Record<string, unknown>;
+              if ('openai' in callMeta) {
+                const { openai: _, ...restCallMeta } = callMeta;
+                part = {
+                  ...part,
+                  callProviderMetadata:
+                    Object.keys(restCallMeta).length > 0
+                      ? (restCallMeta as typeof part.callProviderMetadata)
+                      : undefined,
+                } as typeof part;
+              }
+            }
+          }
+
           if (AIV5.isToolUIPart(part) && part.state === 'output-available') {
             return {
               ...part,
@@ -145,6 +226,46 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   const sanitized = sanitizeV5UIMessages(messages, filterIncompleteToolCalls);
   const preprocessed = addStartStepPartsForAIV5(sanitized);
   const result = AIV5.convertToModelMessages(preprocessed);
+
+  // Build a lookup of toolCallId → stored modelOutput from providerMetadata.mastra.modelOutput.
+  // This allows toModelOutput results computed at tool execution time to be preserved
+  // in the model prompt without re-running the transformation.
+  const storedModelOutputs = new Map<string, unknown>();
+  for (const dbMsg of dbMessages) {
+    if (dbMsg.content?.format === 2 && dbMsg.content.parts) {
+      for (const part of dbMsg.content.parts) {
+        if (
+          part.type === 'tool-invocation' &&
+          part.toolInvocation?.state === 'result' &&
+          part.providerMetadata?.mastra &&
+          typeof part.providerMetadata.mastra === 'object' &&
+          'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+        ) {
+          storedModelOutputs.set(
+            part.toolInvocation.toolCallId,
+            (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
+          );
+        }
+      }
+    }
+  }
+
+  // Apply stored modelOutput to tool-result parts in model messages
+  if (storedModelOutputs.size > 0) {
+    for (const modelMsg of result) {
+      if (modelMsg.role === 'tool' && Array.isArray(modelMsg.content)) {
+        for (let i = 0; i < modelMsg.content.length; i++) {
+          const part = modelMsg.content[i]!;
+          if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+            modelMsg.content[i] = {
+              ...part,
+              output: storedModelOutputs.get(part.toolCallId) as any,
+            };
+          }
+        }
+      }
+    }
+  }
 
   // Restore message-level providerOptions from metadata.providerMetadata
   // This preserves providerOptions through the DB → UI → Model conversion

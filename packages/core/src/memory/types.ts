@@ -1,6 +1,4 @@
 import type { AssistantContent, CoreMessage, ToolContent, UserContent } from '@internal/ai-sdk-v4';
-import type { JSONSchema7 } from 'json-schema';
-import type { ZodObject } from 'zod';
 
 import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { AgentConfig } from '../agent/types';
@@ -9,6 +7,7 @@ import type { EmbeddingModelId } from '../llm/model/index.js';
 import type { ModelRouterModelId } from '../llm/model/provider-registry.js';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
+import type { StandardSchemaWithJSON, PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage';
 import type { DynamicArgument } from '../types';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
@@ -57,6 +56,8 @@ export type ThreadOMMetadata = {
   suggestedResponse?: string;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
+  /** Cursor pointing at the last observed message (for replay pruning fallback) */
+  lastObservedMessageCursor?: { createdAt: string; id: string };
   // Note: Patterns are stored on the ObservationalMemoryRecord (resource-level), not thread metadata
 };
 
@@ -118,7 +119,7 @@ export function setThreadOMMetadata(
 export type MemoryRequestContext = {
   thread?: Partial<StorageThreadType> & { id: string };
   resourceId?: string;
-  memoryConfig?: MemoryConfig;
+  memoryConfig?: MemoryConfigInternal;
 };
 
 /**
@@ -189,7 +190,12 @@ type TemplateWorkingMemory = BaseWorkingMemory & {
 };
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
-  schema: ZodObject<any> | JSONSchema7;
+  schema: StandardSchemaWithJSON;
+  template?: never;
+};
+
+type PublicSchemaWorkingMemory = BaseWorkingMemory & {
+  schema: PublicSchema;
   template?: never;
 };
 
@@ -522,6 +528,19 @@ export interface ObservationalMemoryObservationConfig {
    * ```
    */
   blockAfter?: number;
+
+  /**
+   * Custom instructions appended to the Observer agent's system prompt.
+   * Use this to customize what the Observer focuses on or how it formats observations.
+   *
+   * @example
+   * ```ts
+   * observation: {
+   *   instruction: 'Focus on user dietary preferences and allergies.',
+   * }
+   * ```
+   */
+  instruction?: string;
 }
 
 /**
@@ -611,6 +630,19 @@ export interface ObservationalMemoryReflectionConfig {
    * ```
    */
   bufferActivation?: number;
+
+  /**
+   * Custom instructions appended to the Reflector agent's system prompt.
+   * Use this to customize how the Reflector consolidates observations.
+   *
+   * @example
+   * ```ts
+   * reflection: {
+   *   instruction: 'Consolidate observations and remove duplicates.',
+   * }
+   * ```
+   */
+  instruction?: string;
 }
 
 /**
@@ -717,7 +749,7 @@ export function isObservationalMemoryEnabled(
  *
  * @see https://mastra.ai/docs/memory/overview
  */
-export type MemoryConfig = {
+type BaseMemoryConfig = {
   /**
    * When true, prevents memory from saving new messages.
    * Useful for internal agents (like routing agents) that should read memory but not modify it.
@@ -863,6 +895,58 @@ export type MemoryConfig = {
   };
 };
 
+export type MemoryConfigInternal = BaseMemoryConfig & {
+  /**
+   * Working memory configuration for persistent user data and preferences.
+   * Maintains a structured record (Markdown or schema-based) that agents update over time.
+   * Can be thread-scoped (per conversation) or resource-scoped (across all user threads).
+   *
+   * @example
+   * ```typescript
+   * workingMemory: {
+   *   enabled: true,
+   *   scope: 'resource', // Persist across all resource (user) conversations
+   *   template: '# User Profile\n- **Name**:\n- **Preferences**:',
+   *   schema: z.object({
+   *     name: z.string(),
+   *     preferences: z.object({
+   *       communicationStyle: z.string(),
+   *       projectGoal: z.string(),
+   *       deadlines: z.array(z.string()),
+   *     }),
+   *   }),
+   * }
+   * ```
+   */
+  workingMemory?: WorkingMemory;
+};
+
+export type MemoryConfig = BaseMemoryConfig & {
+  /**
+   * Working memory configuration for persistent user data and preferences.
+   * Maintains a structured record (Markdown or schema-based) that agents update over time.
+   * Can be thread-scoped (per conversation) or resource-scoped (across all user threads).
+   *
+   * @example
+   * ```typescript
+   * workingMemory: {
+   *   enabled: true,
+   *   scope: 'resource', // Persist across all resource (user) conversations
+   *   template: '# User Profile\n- **Name**:\n- **Preferences**:',
+   *   schema: z.object({
+   *     name: z.string(),
+   *     preferences: z.object({
+   *       communicationStyle: z.string(),
+   *       projectGoal: z.string(),
+   *       deadlines: z.array(z.string()),
+   *     }),
+   *   }),
+   * }
+   * ```
+   */
+  workingMemory?: TemplateWorkingMemory | PublicSchemaWorkingMemory | WorkingMemoryNone;
+};
+
 /**
  * Configuration for Mastra's memory system.
  *
@@ -888,7 +972,7 @@ export type SharedMemoryConfig = {
    * working memory, and thread management. Controls how messages are retrieved and
    * what context is included in the LLM's prompt.
    */
-  options?: MemoryConfig;
+  options?: MemoryConfigInternal;
 
   /**
    * Vector database for semantic recall capabilities using RAG-based search.
@@ -1021,4 +1105,68 @@ export type SerializedMemoryConfig = {
    * Options to pass to the embedder, omitting telemetry
    */
   embedderOptions?: Omit<MastraEmbeddingOptions, 'telemetry'>;
+
+  /**
+   * Serialized observational memory configuration.
+   * `true` to enable with defaults, or a config object for customization.
+   * Only JSON-safe fields are included (model IDs as strings, numeric/boolean settings).
+   */
+  observationalMemory?: boolean | SerializedObservationalMemoryConfig;
+};
+
+/**
+ * JSON-serializable subset of ObservationalMemoryOptions for storage.
+ * Model references are stored as string IDs (e.g., "google/gemini-2.5-flash").
+ */
+export type SerializedObservationalMemoryConfig = {
+  /** Model ID for both Observer and Reflector (e.g., "google/gemini-2.5-flash") */
+  model?: string;
+
+  /** Memory scope: 'resource' or 'thread' */
+  scope?: 'resource' | 'thread';
+
+  /** Share the token budget between messages and observations */
+  shareTokenBudget?: boolean;
+
+  /** Observation step configuration */
+  observation?: SerializedObservationalMemoryObservationConfig;
+
+  /** Reflection step configuration */
+  reflection?: SerializedObservationalMemoryReflectionConfig;
+};
+
+/** Serializable subset of ObservationalMemoryObservationConfig */
+export type SerializedObservationalMemoryObservationConfig = {
+  /** Observer model ID */
+  model?: string;
+  /** Token count threshold that triggers observation */
+  messageTokens?: number;
+  /** Model settings (temperature, maxOutputTokens, etc.) */
+  modelSettings?: Record<string, unknown>;
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** Maximum tokens per batch */
+  maxTokensPerBatch?: number;
+  /** Token interval for async buffering, or false to disable */
+  bufferTokens?: number | false;
+  /** Ratio of buffered observations to activate */
+  bufferActivation?: number;
+  /** Token threshold for synchronous blocking */
+  blockAfter?: number;
+};
+
+/** Serializable subset of ObservationalMemoryReflectionConfig */
+export type SerializedObservationalMemoryReflectionConfig = {
+  /** Reflector model ID */
+  model?: string;
+  /** Token count threshold that triggers reflection */
+  observationTokens?: number;
+  /** Model settings (temperature, maxOutputTokens, etc.) */
+  modelSettings?: Record<string, unknown>;
+  /** Provider-specific options */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** Token threshold for synchronous blocking */
+  blockAfter?: number;
+  /** Ratio for async reflection buffering */
+  bufferActivation?: number;
 };

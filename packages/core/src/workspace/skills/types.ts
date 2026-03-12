@@ -308,4 +308,26 @@ export interface WorkspaceSkills {
    * Get all asset file paths for a skill
    */
   listAssets(skillName: string): Promise<string[]>;
+
+  // ===========================================================================
+  // Surgical Cache Updates
+  // ===========================================================================
+
+  /**
+   * Surgically add or update a single skill in the cache from its path.
+   * Parses the SKILL.md, updates the in-memory cache and search index,
+   * and bumps the discovery timestamp so maybeRefresh() won't trigger a full scan.
+   *
+   * @param skillPath - Path to the skill directory or SKILL.md file
+   */
+  addSkill?(skillPath: string): Promise<void>;
+
+  /**
+   * Surgically remove a single skill from the cache by name.
+   * Removes the skill from the in-memory cache and search index,
+   * and bumps the discovery timestamp so maybeRefresh() won't trigger a full scan.
+   *
+   * @param skillName - Name of the skill to remove
+   */
+  removeSkill?(skillName: string): Promise<void>;
 }

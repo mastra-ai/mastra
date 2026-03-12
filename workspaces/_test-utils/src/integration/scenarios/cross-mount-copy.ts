@@ -1,21 +1,13 @@
 /**
  * Cross-mount copy integration tests.
  *
- * Tests copying files between different mounts.
+ * Tests copying files between different mounts via sandbox commands.
  */
 
+import { type CompositeFilesystem } from '@mastra/core/workspace';
 import { describe, it, expect } from 'vitest';
 
-import type { WorkspaceSetup } from '../types';
-
-interface TestContext {
-  setup: WorkspaceSetup;
-  getTestPath: () => string;
-  mountPath: string;
-  testTimeout: number;
-  fastOnly: boolean;
-  sandboxPathsAligned: boolean;
-}
+import type { TestContext } from './test-context';
 
 export function createCrossMountCopyTests(getContext: () => TestContext): void {
   describe('Cross-Mount Copy', () => {
@@ -23,18 +15,19 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
       'copy file from one mount to another via sandbox',
       async () => {
         const ctx = getContext();
-        const { setup } = ctx;
+        const { workspace } = ctx;
         if (!ctx.sandboxPathsAligned) return;
-        if (!setup.mounts) return;
-        if (!setup.sandbox.executeCommand) return;
+        if (!workspace.filesystem) return;
+        if (!workspace.sandbox?.executeCommand) return;
 
-        const mountPaths = Object.keys(setup.mounts);
+        const composite = workspace.filesystem as CompositeFilesystem;
+        const mountPaths = composite.mountPaths;
         if (mountPaths.length < 2) return;
 
         const srcMount = mountPaths[0]!;
         const destMount = mountPaths[1]!;
-        const srcFs = setup.mounts[srcMount]!;
-        const destFs = setup.mounts[destMount]!;
+        const srcFs = composite.mounts.get(srcMount)!;
+        const destFs = composite.mounts.get(destMount)!;
 
         // Skip if either mount is read-only
         if (srcFs.readOnly || destFs.readOnly) return;
@@ -45,7 +38,7 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
         await srcFs.writeFile('/cross-copy-src.txt', content);
 
         // Copy via sandbox
-        const result = await setup.sandbox.executeCommand('cp', [
+        const result = await workspace.sandbox.executeCommand('cp', [
           `${srcMount}/cross-copy-src.txt`,
           `${destMount}/cross-copy-dest.txt`,
         ]);
@@ -67,18 +60,19 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
       'move file from one mount to another via sandbox',
       async () => {
         const ctx = getContext();
-        const { setup } = ctx;
+        const { workspace } = ctx;
         if (!ctx.sandboxPathsAligned) return;
-        if (!setup.mounts) return;
-        if (!setup.sandbox.executeCommand) return;
+        if (!workspace.filesystem) return;
+        if (!workspace.sandbox?.executeCommand) return;
 
-        const mountPaths = Object.keys(setup.mounts);
+        const composite = workspace.filesystem as CompositeFilesystem;
+        const mountPaths = composite.mountPaths;
         if (mountPaths.length < 2) return;
 
         const srcMount = mountPaths[0]!;
         const destMount = mountPaths[1]!;
-        const srcFs = setup.mounts[srcMount]!;
-        const destFs = setup.mounts[destMount]!;
+        const srcFs = composite.mounts.get(srcMount)!;
+        const destFs = composite.mounts.get(destMount)!;
 
         // Skip if either mount is read-only
         if (srcFs.readOnly || destFs.readOnly) return;
@@ -89,7 +83,7 @@ export function createCrossMountCopyTests(getContext: () => TestContext): void {
         await srcFs.writeFile('/cross-move-src.txt', content);
 
         // Move via sandbox
-        const result = await setup.sandbox.executeCommand('mv', [
+        const result = await workspace.sandbox.executeCommand('mv', [
           `${srcMount}/cross-move-src.txt`,
           `${destMount}/cross-move-dest.txt`,
         ]);

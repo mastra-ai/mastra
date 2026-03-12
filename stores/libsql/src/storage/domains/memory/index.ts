@@ -98,6 +98,7 @@ export class MemoryLibSQL extends MemoryStorage {
           'isBufferingReflection',
           'lastBufferedAtTokens',
           'lastBufferedAtTime',
+          'metadata',
         ],
       });
     }
@@ -144,43 +145,86 @@ export class MemoryLibSQL extends MemoryStorage {
     return result;
   }
 
+  private _sortMessages(messages: MastraDBMessage[], field: string, direction: string): MastraDBMessage[] {
+    return messages.sort((a, b) => {
+      const isDateField = field === 'createdAt' || field === 'updatedAt';
+      const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
+      const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
+
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'ASC' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'ASC'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+  }
+
   private async _getIncludedMessages({ include }: { include: StorageListMessagesInput['include'] }) {
     if (!include || include.length === 0) return null;
 
+    // Phase 1: Batch-fetch metadata for all target messages in a single query.
+    // This eliminates the correlated subselects that previously ran per-subquery.
+    const targetIds = include.map(inc => inc.id).filter(Boolean);
+    if (targetIds.length === 0) return null;
+
+    const idPlaceholders = targetIds.map(() => '?').join(', ');
+    const targetResult = await this.#client.execute({
+      sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders})`,
+      args: targetIds,
+    });
+
+    if (!targetResult.rows || targetResult.rows.length === 0) return null;
+
+    const targetMap = new Map(
+      targetResult.rows.map((r: any) => [r.id as string, { threadId: r.thread_id as string, createdAt: r.createdAt }]),
+    );
+
+    // Phase 2: Build cursor-based subqueries using materialized constants from Phase 1.
+    // Uses "createdAt" directly so the (thread_id, createdAt) index covers the query.
     const unionQueries: string[] = [];
     const params: any[] = [];
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
-      // Query by message ID directly - get the threadId from the message itself via subquery
-      unionQueries.push(
-        `
-                SELECT * FROM (
-                  WITH target_thread AS (
-                    SELECT thread_id FROM "${TABLE_MESSAGES}" WHERE id = ?
-                  ),
-                  numbered_messages AS (
-                    SELECT
-                      id, content, role, type, "createdAt", thread_id, "resourceId",
-                      ROW_NUMBER() OVER (ORDER BY "createdAt" ASC) as row_num
-                    FROM "${TABLE_MESSAGES}"
-                    WHERE thread_id = (SELECT thread_id FROM target_thread)
-                  ),
-                  target_positions AS (
-                    SELECT row_num as target_pos
-                    FROM numbered_messages
-                    WHERE id = ?
-                  )
-                  SELECT DISTINCT m.*
-                  FROM numbered_messages m
-                  CROSS JOIN target_positions t
-                  WHERE m.row_num BETWEEN (t.target_pos - ?) AND (t.target_pos + ?)
-                ) 
-                `, // Keep ASC for final sorting after fetching context
-      );
-      params.push(id, id, withPreviousMessages, withNextMessages);
+      const target = targetMap.get(id);
+      if (!target) continue;
+
+      // Fetch the target message itself plus previous messages.
+      // Wrap in SELECT * FROM (...) because SQLite does not allow ORDER BY
+      // inside compound-select members (UNION ALL) directly.
+      unionQueries.push(`SELECT * FROM (
+        SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
+        FROM "${TABLE_MESSAGES}"
+        WHERE thread_id = ?
+          AND "createdAt" <= ?
+        ORDER BY "createdAt" DESC, id DESC
+        LIMIT ?
+      )`);
+      params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+
+      // Fetch messages after the target (only if requested)
+      if (withNextMessages > 0) {
+        unionQueries.push(`SELECT * FROM (
+          SELECT id, content, role, type, "createdAt", thread_id, "resourceId"
+          FROM "${TABLE_MESSAGES}"
+          WHERE thread_id = ?
+            AND "createdAt" > ?
+          ORDER BY "createdAt" ASC, id ASC
+          LIMIT ?
+        )`);
+        params.push(target.threadId, target.createdAt, withNextMessages);
+      }
     }
-    const finalQuery = unionQueries.join(' UNION ALL ') + ' ORDER BY "createdAt" ASC';
+
+    if (unionQueries.length === 0) return null;
+
+    let finalQuery: string;
+    if (unionQueries.length === 1) {
+      finalQuery = unionQueries[0]!;
+    } else {
+      finalQuery = `${unionQueries.join(' UNION ALL ')} ORDER BY "createdAt" ASC, id ASC`;
+    }
     const includedResult = await this.#client.execute({ sql: finalQuery, args: params });
     const includedRows = includedResult.rows?.map(row => this.parseRow(row));
     const seen = new Set<string>();
@@ -293,6 +337,28 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // When perPage is 0 and we have include targets, skip COUNT(*) and data queries.
+      // This is the semantic recall path where we only need the included messages.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const list = new MessageList().add(includeMessages, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
@@ -336,21 +402,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       // If all thread messages have been returned (through pagination or include), hasMore = false
@@ -457,6 +509,27 @@ export class MemoryLibSQL extends MemoryStorage {
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
+      // When perPage is 0 with no includes, there's nothing to return.
+      if (perPage === 0 && (!include || include.length === 0)) {
+        return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+      }
+
+      // Fast path: when perPage is 0 and include is provided, skip COUNT and data queries.
+      if (perPage === 0 && include && include.length > 0) {
+        const includeMessages = await this._getIncludedMessages({ include });
+        if (!includeMessages || includeMessages.length === 0) {
+          return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
+        }
+        const list = new MessageList().add(includeMessages, 'memory');
+        return {
+          messages: this._sortMessages(list.get.all.db(), field, direction),
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
+
       // Get total count
       const countResult = await this.#client.execute({
         sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
@@ -500,21 +573,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
       // Use MessageList for proper deduplication and format conversion to V2
       const list = new MessageList().add(messages, 'memory');
-      let finalMessages = list.get.all.db();
-
-      // Sort all messages (paginated + included) for final output
-      finalMessages = finalMessages.sort((a, b) => {
-        const isDateField = field === 'createdAt' || field === 'updatedAt';
-        const aValue = isDateField ? new Date((a as any)[field]).getTime() : (a as any)[field];
-        const bValue = isDateField ? new Date((b as any)[field]).getTime() : (b as any)[field];
-
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return direction === 'ASC' ? aValue - bValue : bValue - aValue;
-        }
-        return direction === 'ASC'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
-      });
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       // Calculate hasMore based on pagination window
       const hasMore = perPageInput !== false && offset + perPage < total;
@@ -1283,7 +1342,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const newThread: StorageThreadType = {
         id: newThreadId,
         resourceId: resourceId || sourceThread.resourceId,
-        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+        title: title || (sourceThread.title ? `Clone of ${sourceThread.title}` : ''),
         metadata: {
           ...metadata,
           clone: cloneMetadata,
@@ -1303,7 +1362,7 @@ export class MemoryLibSQL extends MemoryStorage {
           args: [
             newThread.id,
             newThread.resourceId,
-            newThread.title || null,
+            newThread.title ?? '',
             JSON.stringify(newThread.metadata),
             nowStr,
             nowStr,
@@ -1312,10 +1371,12 @@ export class MemoryLibSQL extends MemoryStorage {
 
         // Clone messages with new IDs
         const clonedMessages: MastraDBMessage[] = [];
+        const messageIdMap: Record<string, string> = {};
         const targetResourceId = resourceId || sourceThread.resourceId;
 
         for (const sourceMsg of sourceMessages) {
           const newMessageId = crypto.randomUUID();
+          messageIdMap[sourceMsg.id as string] = newMessageId;
           const contentStr = sourceMsg.content as string;
           let parsedContent: MastraDBMessage['content'];
           try {
@@ -1355,6 +1416,7 @@ export class MemoryLibSQL extends MemoryStorage {
         return {
           thread: newThread,
           clonedMessages,
+          messageIdMap,
         };
       } catch (error) {
         await tx.rollback();
@@ -1568,6 +1630,69 @@ export class MemoryLibSQL extends MemoryStorage {
     }
   }
 
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    try {
+      const lookupKey = this.getOMKey(record.threadId, record.resourceId);
+      await this.#client.execute({
+        sql: `INSERT INTO "${OM_TABLE}" (
+          id, "lookupKey", scope, "resourceId", "threadId",
+          "activeObservations", "activeObservationsPendingUpdate",
+          "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
+          "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
+          "observedMessageIds", "bufferedObservationChunks",
+          "bufferedReflection", "bufferedReflectionTokens", "bufferedReflectionInputTokens",
+          "reflectedObservationLineCount",
+          "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection",
+          "lastBufferedAtTokens", "lastBufferedAtTime",
+          "observedTimezone", metadata, "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          record.id,
+          lookupKey,
+          record.scope,
+          record.resourceId,
+          record.threadId || null,
+          record.activeObservations || '',
+          null,
+          record.originType || 'initial',
+          record.config ? JSON.stringify(record.config) : null,
+          record.generationCount || 0,
+          record.lastObservedAt ? record.lastObservedAt.toISOString() : null,
+          null,
+          record.pendingMessageTokens || 0,
+          record.totalTokensObserved || 0,
+          record.observationTokenCount || 0,
+          record.observedMessageIds ? JSON.stringify(record.observedMessageIds) : null,
+          record.bufferedObservationChunks ? JSON.stringify(record.bufferedObservationChunks) : null,
+          record.bufferedReflection || null,
+          record.bufferedReflectionTokens ?? null,
+          record.bufferedReflectionInputTokens ?? null,
+          record.reflectedObservationLineCount ?? null,
+          record.isObserving || false,
+          record.isReflecting || false,
+          record.isBufferingObservation || false,
+          record.isBufferingReflection || false,
+          record.lastBufferedAtTokens || 0,
+          record.lastBufferedAtTime ? record.lastBufferedAtTime.toISOString() : null,
+          record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
+          record.createdAt.toISOString(),
+          record.updatedAt.toISOString(),
+        ],
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'INSERT_OBSERVATIONAL_MEMORY_RECORD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { id: record.id, threadId: record.threadId, resourceId: record.resourceId },
+        },
+        error,
+      );
+    }
+  }
+
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
     try {
       const now = new Date();
@@ -1657,8 +1782,8 @@ export class MemoryLibSQL extends MemoryStorage {
           "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
           "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
           "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
-          "observedTimezone", "createdAt", "updatedAt"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          "observedTimezone", metadata, "createdAt", "updatedAt"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id,
           lookupKey,
@@ -1682,6 +1807,7 @@ export class MemoryLibSQL extends MemoryStorage {
           0, // lastBufferedAtTokens
           null, // lastBufferedAtTime
           record.observedTimezone || null,
+          record.metadata ? JSON.stringify(record.metadata) : null,
           now.toISOString(),
           now.toISOString(),
         ],
@@ -2036,47 +2162,62 @@ export class MemoryLibSQL extends MemoryStorage {
       const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
       const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
 
-      // Find the closest chunk boundary to the target, biased under
+      // Find the closest chunk boundary to the target, biased over (prefer removing
+      // slightly more than the target so remaining context lands at or below retentionFloor).
+      // Track both best-over and best-under boundaries so we can fall back to under
+      // if the over boundary would overshoot by too much.
       let cumulativeMessageTokens = 0;
-      let bestBoundary = 0;
-      let bestBoundaryMessageTokens = 0;
+      let bestOverBoundary = 0;
+      let bestOverTokens = 0;
+      let bestUnderBoundary = 0;
+      let bestUnderTokens = 0;
 
       for (let i = 0; i < chunks.length; i++) {
         cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
         const boundary = i + 1;
 
-        // Prefer boundaries that are under the target (leaves more raw messages in context)
-        // Only go over if there's no under option
-        const isUnder = cumulativeMessageTokens <= targetMessageTokens;
-        const bestIsUnder = bestBoundaryMessageTokens <= targetMessageTokens;
-
-        if (bestBoundary === 0) {
-          // First boundary, take it
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
-        } else if (isUnder && !bestIsUnder) {
-          // Current is under, best is over - prefer under
-          bestBoundary = boundary;
-          bestBoundaryMessageTokens = cumulativeMessageTokens;
-        } else if (isUnder && bestIsUnder) {
-          // Both under - prefer the one closer to target (higher)
-          if (cumulativeMessageTokens > bestBoundaryMessageTokens) {
-            bestBoundary = boundary;
-            bestBoundaryMessageTokens = cumulativeMessageTokens;
+        if (cumulativeMessageTokens >= targetMessageTokens) {
+          // Over or equal — track the closest (lowest) over boundary
+          if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+            bestOverBoundary = boundary;
+            bestOverTokens = cumulativeMessageTokens;
           }
-        } else if (!isUnder && !bestIsUnder) {
-          // Both over - prefer the one closer to target (lower)
-          if (cumulativeMessageTokens < bestBoundaryMessageTokens) {
-            bestBoundary = boundary;
-            bestBoundaryMessageTokens = cumulativeMessageTokens;
+        } else {
+          // Under — track the closest (highest) under boundary
+          if (cumulativeMessageTokens > bestUnderTokens) {
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
-        // If current is over and best is under, keep best (do nothing)
       }
 
-      // If bestBoundary is 0 (no boundary under target), activate at least 1 chunk
-      // since we've reached threshold and need to clear some context
-      const chunksToActivate = bestBoundary === 0 ? 1 : bestBoundary;
+      // Safeguard: if the over boundary would eat into more than 95% of the
+      // retention floor, fall back to the best under boundary instead.
+      // This prevents edge cases where a large chunk overshoots dramatically.
+      // When forceMaxActivation is set (above blockAfter), still prefer the over
+      // boundary, but never if it would leave fewer than the smaller of 1000
+      // tokens or the retention floor remaining.
+      const maxOvershoot = retentionFloor * 0.95;
+      const overshoot = bestOverTokens - targetMessageTokens;
+      const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+      const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+      // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+      const minRemaining = Math.min(1000, retentionFloor);
+
+      let chunksToActivate: number;
+      if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+        chunksToActivate = bestOverBoundary;
+      } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+        chunksToActivate = bestUnderBoundary;
+      } else if (bestOverBoundary > 0) {
+        // All boundaries are over and exceed the safeguard — still activate
+        // the closest over boundary (better than nothing)
+        chunksToActivate = bestOverBoundary;
+      } else {
+        chunksToActivate = 1;
+      }
 
       // Split chunks
       const activatedChunks = chunks.slice(0, chunksToActivate);
@@ -2132,6 +2273,9 @@ export class MemoryLibSQL extends MemoryStorage {
         ],
       });
 
+      // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+      const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+
       return {
         chunksActivated: activatedChunks.length,
         messageTokensActivated: activatedMessageTokens,
@@ -2147,6 +2291,8 @@ export class MemoryLibSQL extends MemoryStorage {
           messageCount: c.messageIds.length,
           observations: c.observations,
         })),
+        suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+        currentTask: latestChunkHints?.currentTask ?? undefined,
       };
     } catch (error) {
       if (error instanceof MastraError) {

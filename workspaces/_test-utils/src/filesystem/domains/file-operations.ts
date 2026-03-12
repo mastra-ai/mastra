@@ -106,17 +106,6 @@ export function createFileOperationsTests(getContext: () => TestContext): void {
         expect(result).toBe(content);
       });
 
-      it('writes with encoding option', async () => {
-        const { fs, getTestPath } = getContext();
-        const path = `${getTestPath()}/encoded-write.txt`;
-        const content = 'Encoded content: äöü';
-
-        await fs.writeFile(path, content, { encoding: 'utf-8' });
-
-        const result = await fs.readFile(path, { encoding: 'utf-8' });
-        expect(result).toBe(content);
-      });
-
       it('writes Buffer content', async () => {
         const { fs, getTestPath, capabilities } = getContext();
         if (!capabilities.supportsBinaryFiles) return;
@@ -237,6 +226,23 @@ export function createFileOperationsTests(getContext: () => TestContext): void {
 
         const destContent = await fs.readFile(dest, { encoding: 'utf-8' });
         expect(destContent).toBe('source');
+      });
+
+      it('rejects copy with overwrite: false when dest exists', async () => {
+        const { fs, getTestPath, capabilities } = getContext();
+        if (!capabilities.supportsOverwrite) return;
+
+        const src = `${getTestPath()}/copy-no-overwrite-src.txt`;
+        const dest = `${getTestPath()}/copy-no-overwrite-dest.txt`;
+
+        await fs.writeFile(src, 'source');
+        await fs.writeFile(dest, 'original');
+
+        await expect(fs.copyFile(src, dest, { overwrite: false })).rejects.toThrow();
+
+        // Dest should be unchanged
+        const destContent = await fs.readFile(dest, { encoding: 'utf-8' });
+        expect(destContent).toBe('original');
       });
     });
 
