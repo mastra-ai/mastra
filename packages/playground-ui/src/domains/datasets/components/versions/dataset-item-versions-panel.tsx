@@ -78,12 +78,9 @@ export function DatasetItemVersionsPanel({
       {isSelectionActive ? (
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
-            <Button variant="standard" size="default" onClick={handleCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={handleCancelSelection}>Cancel</Button>
             <ButtonWithTooltip
-              variant="cta"
-              size="default"
+              variant="primary"
               disabled={selectedIds.size !== 2}
               onClick={handleExecuteCompare}
               tooltipContent={selectedIds.size !== 2 ? 'Check 2 versions to compare' : undefined}
@@ -97,7 +94,7 @@ export function DatasetItemVersionsPanel({
         <>
           {(versions || []).length > 1 && (
             <Column.Toolbar>
-              <Button variant="standard" size="default" onClick={handleCompareClick} className="w-full">
+              <Button onClick={handleCompareClick} className="w-full">
                 <GitCompareIcon /> Compare Ver.
               </Button>
             </Column.Toolbar>
@@ -175,7 +172,7 @@ function DatasetItemVersionsListSkeleton() {
         {Array.from({ length: 3 }).map((_, index) => (
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={[{ name: 'version', label: 'Item Version History', size: '1fr' }]}>
-              <ItemList.TextCell isLoading>Loading...</ItemList.TextCell>
+              <ItemList.TextCell>Loading...</ItemList.TextCell>
             </ItemList.RowButton>
           </ItemList.Row>
         ))}

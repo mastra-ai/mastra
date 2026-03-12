@@ -11,7 +11,7 @@ The `MastraScorer` class is the base class for all scorers in Mastra. It provide
 
 **Note:** Most users should use [`createScorer`](./create-scorer) to create scorer instances. Direct instantiation of `MastraScorer` isn't recommended.
 
-## How to Get a MastraScorer Instance
+## How to get a `MastraScorer` instance
 
 Use the `createScorer` factory function, which returns a `MastraScorer` instance:
 
@@ -29,7 +29,7 @@ const scorer = createScorer({
 // scorer is now a MastraScorer instance
 ```
 
-## .run() Method
+## `.run()` method
 
 The `.run()` method is the primary way to execute your scorer and evaluate input/output pairs. It processes the data through your defined steps (preprocess → analyze → generateScore → generateReason) and returns a comprehensive result object with the score, reasoning, and intermediate results.
 
@@ -44,7 +44,7 @@ const result = await scorer.run({
 })
 ```
 
-## .run() Input
+## `.run()` input
 
 <PropertiesTable
   content={[
@@ -82,7 +82,7 @@ const result = await scorer.run({
 ]}
 />
 
-## .run() Returns
+## `.run()` returns
 
 <PropertiesTable
   content={[
@@ -134,7 +134,7 @@ const result = await scorer.run({
 ]}
 />
 
-## Step Execution Flow
+## Step execution flow
 
 When you call `.run()`, the MastraScorer executes the defined steps in this order:
 
@@ -145,7 +145,7 @@ When you call `.run()`, the MastraScorer executes the defined steps in this orde
 
 Each step receives the results from previous steps, allowing you to build complex evaluation pipelines.
 
-## Usage Example
+## Usage example
 
 ```typescript
 const scorer = createScorer({

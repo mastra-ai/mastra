@@ -50,17 +50,17 @@ export const globalWorkspace = new Workspace({
   // Enable BM25 search for skills and files
   bm25: true,
   // Auto-index FAQ content for search
-  autoIndexPaths: ['/content'],
+  autoIndexPaths: ['content'],
   // Discover skills from these paths (global skills only)
-  skills: ['.agents/skills', '/skills'],
+  skills: ['.agents/skills', 'skills'],
 });
 
 /**
  * Docs agent workspace - inherits global skills AND has agent-specific skills.
  *
  * This demonstrates skill inheritance:
- * - Global skills (from /skills): code-review, api-design, customer-support
- * - Agent-specific skills (from /docs-skills): brand-guidelines
+ * - Global skills (from skills/): code-review, api-design, customer-support
+ * - Agent-specific skills (from docs-skills/): brand-guidelines
  *
  * The docs agent can use any of these skills, but brand-guidelines is
  * specifically designed for documentation writing.
@@ -84,7 +84,7 @@ export const docsAgentWorkspace = new Workspace({
   // Enable BM25 search
   bm25: true,
   // Inherit global skills + add agent-specific skills
-  skills: ['/skills', '/docs-skills'],
+  skills: ['skills', 'docs-skills'],
 });
 
 /**
@@ -102,7 +102,7 @@ export const readonlyWorkspace = new Workspace({
     readOnly: true,
   }),
   bm25: true,
-  skills: ['/skills'],
+  skills: ['skills'],
 });
 
 /**
@@ -133,7 +133,7 @@ export const safeWriteWorkspace = new Workspace({
     },
   },
   bm25: true,
-  skills: ['/skills'],
+  skills: ['skills'],
 });
 
 /**
@@ -158,7 +158,7 @@ export const supervisedSandboxWorkspace = new Workspace({
     requireApproval: true,
   },
   bm25: true,
-  skills: ['/skills'],
+  skills: ['skills'],
 });
 
 /**
@@ -172,7 +172,7 @@ export const testAgentWorkspace = new Workspace({
     basePath: join(PROJECT_ROOT, 'agent-files'),
   }),
   bm25: true,
-  autoIndexPaths: ['/'],
+  autoIndexPaths: ['.'],
 });
 
 /**
@@ -222,7 +222,7 @@ export const dynamicSkillsWorkspace = new Workspace({
   skills: context => {
     // Only include docs-skills (brand-guidelines) - excludes base skills
     // This demonstrates that the filter is working differently than static workspaces
-    return ['/docs-skills'];
+    return ['docs-skills'];
   },
 });
 

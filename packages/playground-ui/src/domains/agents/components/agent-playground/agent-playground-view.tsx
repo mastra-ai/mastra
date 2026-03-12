@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
-import { FlaskConical, MessageSquare, Settings, Braces } from 'lucide-react';
+import { FlaskConical, MessageSquare, Braces } from 'lucide-react';
 
 import { PanelSeparator } from '@/lib/resize/separator';
 import { Txt } from '@/ds/components/Txt';
@@ -13,8 +13,7 @@ import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
 import { AgentPlaygroundRequestContext } from './agent-playground-request-context';
 
-type LeftPanelTab = 'configuration' | 'request-context';
-type RightPanelTab = 'experiment' | 'test-chat';
+type RightPanelTab = 'experiment' | 'test-chat' | 'request-context';
 
 interface AgentPlaygroundViewProps {
   agentId: string;
@@ -33,6 +32,70 @@ interface AgentPlaygroundViewProps {
   readOnly: boolean;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+}
+
+function LeftPanel({
+  agentId,
+  activeVersionId,
+  selectedVersionId,
+  latestVersionId,
+  onVersionSelect,
+  isDirty,
+  isSavingDraft,
+  isPublishing,
+  hasDraft,
+  readOnly,
+  onSaveDraft,
+  onPublish,
+}: {
+  agentId: string;
+  activeVersionId?: string;
+  selectedVersionId?: string;
+  latestVersionId?: string;
+  onVersionSelect: (versionId: string) => void;
+  isDirty: boolean;
+  isSavingDraft: boolean;
+  isPublishing: boolean;
+  hasDraft: boolean;
+  readOnly: boolean;
+  onSaveDraft: (changeMessage?: string) => Promise<void>;
+  onPublish: () => Promise<void>;
+}) {
+  const { versionSelector, actionBar } = AgentPlaygroundVersionBar({
+    agentId,
+    activeVersionId,
+    selectedVersionId,
+    onVersionSelect,
+    isDirty,
+    isSavingDraft,
+    isPublishing,
+    hasDraft,
+    readOnly,
+    onSaveDraft,
+    onPublish,
+  });
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {versionSelector}
+
+      <div className="px-4 pt-3">
+        <Txt variant="ui-sm" className="text-neutral3">
+          Edit your agent's system prompt, tools, and variables below.
+        </Txt>
+      </div>
+
+      <div className="flex-1 min-h-0">
+        <AgentPlaygroundConfig
+          agentId={agentId}
+          selectedVersionId={selectedVersionId}
+          latestVersionId={latestVersionId}
+        />
+      </div>
+
+      {actionBar}
+    </div>
+  );
 }
 
 function TabButton({
@@ -81,7 +144,6 @@ export function AgentPlaygroundView({
   onSaveDraft,
   onPublish,
 }: AgentPlaygroundViewProps) {
-  const [leftTab, setLeftTab] = useState<LeftPanelTab>('configuration');
   const [rightTab, setRightTab] = useState<RightPanelTab>('experiment');
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-playground-${agentId}`,
@@ -89,59 +151,31 @@ export function AgentPlaygroundView({
   });
 
   return (
-    <div className="flex flex-col h-full bg-surface1">
-      <AgentPlaygroundVersionBar
-        agentId={agentId}
-        activeVersionId={activeVersionId}
-        selectedVersionId={selectedVersionId}
-        onVersionSelect={onVersionSelect}
-        isDirty={isDirty}
-        isSavingDraft={isSavingDraft}
-        isPublishing={isPublishing}
-        hasDraft={hasDraft}
-        readOnly={readOnly}
-        onSaveDraft={onSaveDraft}
-        onPublish={onPublish}
-      />
-
+    <div className="flex flex-col h-full bg-surface2">
       <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
-        {/* Left panel - Configuration / Request Context */}
+        {/* Left panel - Version Bar + Configuration + Action Bar */}
         <Panel id="playground-config" minSize={30} defaultSize={50} className="overflow-hidden">
-          <div className="flex flex-col h-full overflow-hidden">
-            <div className="flex items-center border-b border-border1 px-2">
-              <TabButton
-                active={leftTab === 'configuration'}
-                onClick={() => setLeftTab('configuration')}
-                icon={<Settings />}
-                label="Configuration"
-              />
-              <TabButton
-                active={leftTab === 'request-context'}
-                onClick={() => setLeftTab('request-context')}
-                icon={<Braces />}
-                label="Request Context"
-              />
-            </div>
-
-            <div className="flex-1 min-h-0">
-              {leftTab === 'configuration' ? (
-                <AgentPlaygroundConfig
-                  agentId={agentId}
-                  selectedVersionId={selectedVersionId}
-                  latestVersionId={latestVersionId}
-                />
-              ) : (
-                <AgentPlaygroundRequestContext requestContextSchema={requestContextSchema} />
-              )}
-            </div>
-          </div>
+          <LeftPanel
+            agentId={agentId}
+            activeVersionId={activeVersionId}
+            selectedVersionId={selectedVersionId}
+            latestVersionId={latestVersionId}
+            onVersionSelect={onVersionSelect}
+            isDirty={isDirty}
+            isSavingDraft={isSavingDraft}
+            isPublishing={isPublishing}
+            hasDraft={hasDraft}
+            readOnly={readOnly}
+            onSaveDraft={onSaveDraft}
+            onPublish={onPublish}
+          />
         </Panel>
 
         <PanelSeparator />
 
-        {/* Right panel - Experiment / Test Chat */}
+        {/* Right panel - Experiment / Test Chat / Request Context */}
         <Panel id="playground-eval" minSize={30} defaultSize={50} className="overflow-hidden">
-          <div className="flex flex-col h-full overflow-hidden">
+          <div className="flex flex-col h-full overflow-hidden bg-surface1">
             <div className="flex items-center border-b border-border1 px-2">
               <TabButton
                 active={rightTab === 'experiment'}
@@ -155,18 +189,28 @@ export function AgentPlaygroundView({
                 icon={<MessageSquare />}
                 label="Test Chat"
               />
+              <div className="ml-auto">
+                <TabButton
+                  active={rightTab === 'request-context'}
+                  onClick={() => setRightTab('request-context')}
+                  icon={<Braces />}
+                  label="Request Context"
+                />
+              </div>
             </div>
 
             <div className="flex-1 min-h-0">
               {rightTab === 'experiment' ? (
                 <AgentPlaygroundEval agentId={agentId} onSaveDraft={onSaveDraft} />
-              ) : (
+              ) : rightTab === 'test-chat' ? (
                 <AgentPlaygroundTestChat
                   agentId={agentId}
                   agentName={agentName}
                   modelVersion={modelVersion}
                   hasMemory={hasMemory}
                 />
+              ) : (
+                <AgentPlaygroundRequestContext requestContextSchema={requestContextSchema} />
               )}
             </div>
           </div>

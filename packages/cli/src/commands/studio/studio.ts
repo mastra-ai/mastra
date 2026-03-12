@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { config } from 'dotenv';
 import handler from 'serve-handler';
 import { logger } from '../../utils/logger';
@@ -112,6 +113,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson));
 
+  // Pre-compress the HTML shell since it's served for every non-asset request
+  const compressedHtml = gzipSync(Buffer.from(html));
+
   const server = http.createServer((req, res) => {
     const url = req.url || '/';
     const queryStart = url.indexOf('?');
@@ -131,9 +135,30 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     const isMastraSvg = pathWithoutBase === '/mastra.svg' || pathWithoutBase.endsWith('/mastra.svg');
     const isStaticAsset = isAssetsPath || isDistAssetsPath || isMastraSvg;
 
+    const rawEncoding = req.headers['accept-encoding'] ?? '';
+    const encodingValues = Array.isArray(rawEncoding) ? rawEncoding : [rawEncoding];
+    const supportsGzip = encodingValues
+      .flatMap((v: string) => v.split(','))
+      .map((v: string) => v.trim().toLowerCase())
+      .some((v: string) => {
+        const [coding, ...params] = v.split(';').map((p: string) => p.trim());
+        if (coding !== 'gzip') return false;
+        const q = params.find((p: string) => p.startsWith('q='));
+        return q ? Number(q.slice(2)) > 0 : true;
+      });
+
     // For everything that's not a static asset, serve the SPA shell (index.html)
     if (!isStaticAsset) {
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      if (supportsGzip) {
+        res.writeHead(200, {
+          'Content-Type': 'text/html',
+          'Content-Encoding': 'gzip',
+          'Content-Length': compressedHtml.length,
+          Vary: 'Accept-Encoding',
+        });
+        return res.end(compressedHtml);
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html', Vary: 'Accept-Encoding' });
       return res.end(html);
     }
 

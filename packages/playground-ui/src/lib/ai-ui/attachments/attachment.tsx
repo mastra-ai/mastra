@@ -103,7 +103,7 @@ const AttachmentRemove = () => {
         variant="light"
         size="md"
         tooltip="Remove file"
-        className="absolute -right-3 -top-3 text-neutral3 hover:text-neutral6 rounded-full bg-surface1 hover:bg-surface2 rounded-full p-1"
+        className="absolute -right-3 -top-3 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2 rounded-full p-1"
       >
         <Icon>
           <CircleXIcon />

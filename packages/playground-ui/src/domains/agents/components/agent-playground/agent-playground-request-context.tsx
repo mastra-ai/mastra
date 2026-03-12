@@ -114,6 +114,11 @@ export function AgentPlaygroundRequestContext({ requestContextSchema }: AgentPla
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
+        <Txt variant="ui-sm" className="text-neutral3">
+          Request context values are passed into both experiments and test chats. Use them to trigger conditional flows
+          in your agent's instructions and tools.
+        </Txt>
+
         {hasSchemaForm ? (
           <>
             <div className="flex items-center justify-end">

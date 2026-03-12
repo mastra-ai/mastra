@@ -2,30 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import imageSize from 'image-size';
-import { Tiktoken } from 'js-tiktoken/lite';
-import type { TiktokenBPE } from 'js-tiktoken/lite';
-import o200k_base from 'js-tiktoken/ranks/o200k_base';
-
-/**
- * Shared default encoder singleton.
- * Tiktoken(o200k_base) builds two internal Maps with ~200k entries each,
- * costing ~80-120 MB of heap per instance. Since ObservationalMemory creates
- * a TokenCounter for both input and output processors per request, sharing
- * the default encoder avoids duplicating this cost.
- *
- * Reuse the same global key as packages/core so both packages can share one
- * encoder instance without introducing a direct dependency between them.
- */
-const GLOBAL_TIKTOKEN_KEY = '__mastraTiktoken';
-
-function getDefaultEncoder(): Tiktoken {
-  const cached = (globalThis as Record<string, unknown>)[GLOBAL_TIKTOKEN_KEY] as Tiktoken | undefined;
-  if (cached) return cached;
-
-  const encoder = new Tiktoken(o200k_base);
-  (globalThis as Record<string, unknown>)[GLOBAL_TIKTOKEN_KEY] = encoder;
-  return encoder;
-}
+import { estimateTokenCount } from 'tokenx';
 
 type TokenEstimateCacheEntry = {
   v: number;
@@ -72,7 +49,7 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-const TOKEN_ESTIMATE_CACHE_VERSION = 5;
+const TOKEN_ESTIMATE_CACHE_VERSION = 6;
 
 const DEFAULT_IMAGE_ESTIMATOR: ImageTokenEstimatorConfig = {
   baseTokens: 85,
@@ -175,14 +152,8 @@ function buildEstimateKey(kind: string, text: string): string {
   return `${kind}:${payloadHash}`;
 }
 
-function resolveEncodingId(encoding?: TiktokenBPE): string {
-  if (!encoding) return 'o200k_base';
-
-  try {
-    return `custom:${createHash('sha1').update(JSON.stringify(encoding)).digest('hex')}`;
-  } catch {
-    return 'custom:unknown';
-  }
+function resolveEstimatorId(): string {
+  return 'tokenx';
 }
 
 function isTokenEstimateEntry(value: unknown): value is TokenEstimateCacheEntry {
@@ -1118,28 +1089,24 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
 }
 
 /**
- * Token counting utility using tiktoken.
- * Uses o200k_base (GPT-4o encoding) as a reasonable default for text and
+ * Token counting utility using tokenx for rough local estimation and
  * provider-aware heuristics for image parts so multimodal prompts are not
  * undercounted as generic JSON blobs.
  */
 export class TokenCounter {
-  private encoder: Tiktoken;
   private readonly cacheSource: string;
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly modelContextStorage = new AsyncLocalStorage<TokenCounterModelContext | undefined>();
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
 
   // Per-message overhead: accounts for role tokens, message framing, and separators.
-  // Empirically derived from OpenAI's token counting guide (3 tokens per message base +
-  // fractional overhead from name/role encoding). 3.8 is a practical average across models.
+  // 3.8 remains a practical average across providers for OM thresholding.
   private static readonly TOKENS_PER_MESSAGE = 3.8;
   // Conversation-level overhead: system prompt framing, reply priming tokens, etc.
   private static readonly TOKENS_PER_CONVERSATION = 24;
 
-  constructor(encoding?: TiktokenBPE, options?: TokenCounterOptions) {
-    this.encoder = encoding ? new Tiktoken(encoding) : getDefaultEncoder();
-    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEncodingId(encoding)}`;
+  constructor(options?: TokenCounterOptions) {
+    this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
     this.defaultModelContext = parseModelContext(options?.model);
   }
 
@@ -1156,8 +1123,7 @@ export class TokenCounter {
    */
   countString(text: string): number {
     if (!text) return 0;
-    // Allow all special tokens to avoid errors with content containing tokens like <|endoftext|>
-    return this.encoder.encode(text, 'all').length;
+    return estimateTokenCount(text);
   }
 
   private readOrPersistPartEstimate(part: CacheablePart, kind: string, payload: string): number {

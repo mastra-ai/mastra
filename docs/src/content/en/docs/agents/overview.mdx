@@ -1,5 +1,5 @@
 ---
-title: "Using Agents | Agents"
+title: "Using agents | Agents"
 description: Overview of agents in Mastra, detailing their capabilities and how they interact with tools, workflows, and external systems.
 packages:
   - "@mastra/core"
@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Using Agents
+# Using agents
 
 Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or agent networks.
 
@@ -262,7 +262,7 @@ console.log(response.text)
 
 ## Using `maxSteps`
 
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 1, but can be increased:
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 5, but can be increased:
 
 ```typescript
 const response = await testAgent.generate('Help me organize my day', {
