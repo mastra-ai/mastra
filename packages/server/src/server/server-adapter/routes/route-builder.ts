@@ -2,7 +2,7 @@ import type { ValidationErrorHook } from '@mastra/core/server';
 import { z } from 'zod';
 import type { ZodObject, ZodRawShape, ZodTypeAny } from 'zod';
 import { generateRouteOpenAPI } from '../openapi-utils';
-import type { InferParams, ResponseType, ServerRoute, ServerRouteHandler } from './index';
+import type { InferParams, ResponseType, RouteSchemas, ServerRoute, ServerRouteHandler } from './index';
 
 /**
  * Extracts parameters matching a Zod schema's shape from a params object.
@@ -173,9 +173,11 @@ interface RouteConfig<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 > {
-  method: ServerRoute['method'];
-  path: string;
+  method: TMethod;
+  path: TPath;
   responseType: TResponseType;
   streamFormat?: 'sse' | 'stream'; // Only used when responseType is 'stream'
   handler: ServerRouteHandler<
@@ -267,12 +269,17 @@ export function createRoute<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 >(
-  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>,
+  config: RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
-  TResponseType
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
 > {
   const { summary, description, tags, deprecated, requiresAuth, requiresPermission, onValidationError, ...baseRoute } =
     config;
@@ -297,7 +304,7 @@ export function createRoute<
 
   return {
     ...baseRoute,
-    openapi: openapi as any,
+    openapi,
     deprecated,
     requiresAuth,
     requiresPermission,
@@ -347,12 +354,20 @@ export function createPublicRoute<
   TBodySchema extends z.ZodTypeAny | undefined = undefined,
   TResponseSchema extends z.ZodTypeAny | undefined = undefined,
   TResponseType extends ResponseType = 'json',
+  TMethod extends string = string,
+  TPath extends string = string,
 >(
-  config: Omit<RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType>, 'requiresAuth'>,
+  config: Omit<
+    RouteConfig<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema, TResponseType, TMethod, TPath>,
+    'requiresAuth'
+  >,
 ): ServerRoute<
   InferParams<TPathSchema, TQuerySchema, TBodySchema>,
   TResponseSchema extends z.ZodTypeAny ? z.infer<TResponseSchema> : unknown,
-  TResponseType
+  TResponseType,
+  RouteSchemas<TPathSchema, TQuerySchema, TBodySchema, TResponseSchema>,
+  TMethod,
+  TPath
 > {
   return createRoute({
     ...config,
