@@ -2126,6 +2126,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (toolObj as any).requireApproval,
+          workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedWorkspaceTools[toolName] = convertedToCoreTool;
@@ -2192,6 +2193,7 @@ export class Agent<
           model: await this.getModel({ requestContext }),
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: false, // Skill tools never require approval
+          workspace,
         };
         const convertedToCoreTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools);
         convertedSkillTools[toolName] = convertedToCoreTool;
