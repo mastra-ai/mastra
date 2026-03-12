@@ -14,6 +14,7 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { parseToolCallInput } from '../aisdk/v5/transform';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -453,14 +454,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const toolCallId = chunk.payload.toolCallId;
               const meta = self.#toolCallStreamingMeta[toolCallId];
               const deltaParts = self.#toolCallArgsDeltas[toolCallId];
-              let args: Record<string, unknown> = {};
+              let args: Record<string, unknown> | undefined;
               if (deltaParts?.length) {
-                try {
-                  const merged = deltaParts.join('');
-                  args = typeof merged === 'string' && merged.length > 0 ? JSON.parse(merged) : {};
-                } catch {
-                  args = {};
-                }
+                const merged = deltaParts.join('');
+                args = parseToolCallInput(merged);
               }
               delete self.#toolCallStreamingMeta[toolCallId];
               delete self.#toolCallArgsDeltas[toolCallId];

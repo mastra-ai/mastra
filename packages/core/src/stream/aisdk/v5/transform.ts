@@ -89,6 +89,37 @@ export function tryRepairJson(input: string): Record<string, any> | null {
   }
 }
 
+/**
+ * Parses a raw tool-call input string into an object, applying sanitization
+ * and repair as needed.
+ *
+ * Pipeline: sanitize LLM tokens → JSON.parse → repair common malformations.
+ *
+ * @returns The parsed object, or undefined if the input is empty or unrecoverable.
+ *          When parsing fails on substantive input, logs an error for diagnostics.
+ */
+export function parseToolCallInput(raw: string): Record<string, any> | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  const sanitized = sanitizeToolCallInput(raw);
+  if (!sanitized) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(sanitized);
+  } catch {
+    const repaired = tryRepairJson(sanitized);
+    if (repaired) {
+      return repaired;
+    }
+    console.error('Error converting tool call input to JSON', { input: raw });
+    return undefined;
+  }
+}
+
 export type StreamPart =
   | Exclude<LanguageModelV2StreamPart, { type: 'finish' }>
   | {
@@ -209,27 +240,7 @@ export function convertFullStreamChunkToMastra(value: StreamPart, ctx: { runId: 
       };
 
     case 'tool-call': {
-      let toolCallInput: Record<string, any> | undefined = undefined;
-
-      if (value.input) {
-        const sanitized = sanitizeToolCallInput(value.input);
-        if (sanitized) {
-          try {
-            toolCallInput = JSON.parse(sanitized);
-          } catch {
-            // JSON.parse failed — attempt to repair common LLM JSON errors
-            const repaired = tryRepairJson(sanitized);
-            if (repaired) {
-              toolCallInput = repaired;
-            } else {
-              console.error('Error converting tool call input to JSON', {
-                input: value.input,
-              });
-              toolCallInput = undefined;
-            }
-          }
-        }
-      }
+      const toolCallInput = parseToolCallInput(value.input);
 
       return {
         type: 'tool-call',
