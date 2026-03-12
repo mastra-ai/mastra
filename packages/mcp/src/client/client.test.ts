@@ -1983,6 +1983,10 @@ describe('MastraMCPClient fetch with requestContext', () => {
 });
 
 describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
+  // Resolve the tsx CLI binary from the workspace instead of using npx -y,
+  // which can be flaky in CI when tsx needs to be downloaded on-the-fly.
+  const tsxCli = path.join(path.dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
+
   it('should pipe stderr instead of inheriting it when stderr is set to "pipe"', async () => {
     const STDERR_MARKER = 'noisy-server: startup log';
 
@@ -1992,8 +1996,8 @@ describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
     const client = new InternalMastraMCPClient({
       name: 'noisy',
       server: {
-        command: 'npx',
-        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/noisy-server.ts')],
+        command: process.execPath,
+        args: [tsxCli, path.join(__dirname, '..', '__fixtures__/noisy-server.ts')],
         stderr: 'pipe',
       },
     });
@@ -2016,8 +2020,8 @@ describe('MastraMCPClient - Stdio stderr and cwd forwarding', () => {
     const client = new InternalMastraMCPClient({
       name: 'cwd-test',
       server: {
-        command: 'npx',
-        args: ['-y', 'tsx', path.join(__dirname, '..', '__fixtures__/cwd-reporter.ts')],
+        command: process.execPath,
+        args: [tsxCli, path.join(__dirname, '..', '__fixtures__/cwd-reporter.ts')],
         cwd: targetDir,
       },
     });
