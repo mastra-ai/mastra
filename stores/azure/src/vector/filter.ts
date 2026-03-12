@@ -234,7 +234,15 @@ export class AzureAISearchFilterTranslator {
   }
 
   private translateMastraFieldCondition(field: string, value: any): string[] {
-    if (value === null || value === undefined || typeof value !== 'object' || Array.isArray(value)) {
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return [];
+      }
+      const list = value.map(v => this.formatValue(v)).join(', ');
+      return [`${this.escapeFieldName(field)} in (${list})`];
+    }
+
+    if (value === null || value === undefined || typeof value !== 'object') {
       return [`${this.escapeFieldName(field)} eq ${this.formatValue(value)}`];
     }
 
