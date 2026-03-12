@@ -224,11 +224,8 @@ interface ResolvedObservationConfig {
   bufferActivation?: number;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
-  /** Observer-specific context options */
-  observer: {
-    /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
-    previousObservationTokens?: number | false;
-  };
+  /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
+  previousObserverTokens?: number | false;
   /** Custom instructions to append to the Observer's system prompt */
   instruction?: string;
 }
@@ -895,9 +892,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
                 : undefined),
             config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
           ),
-      observer: {
-        previousObservationTokens: config.observation?.observer?.previousObservationTokens ?? 2000,
-      },
+      previousObserverTokens: config.observation?.previousObserverTokens ?? 2000,
       instruction: config.observation?.instruction,
     };
 
@@ -956,7 +951,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     scope: 'resource' | 'thread';
     observation: {
       messageTokens: number | ThresholdRange;
-      observer: { previousObservationTokens: number | false | undefined };
+      previousObserverTokens: number | false | undefined;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -966,7 +961,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       scope: this.scope,
       observation: {
         messageTokens: this.observationConfig.messageTokens,
-        observer: { previousObservationTokens: this.observationConfig.observer.previousObservationTokens },
+        previousObserverTokens: this.observationConfig.previousObserverTokens,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
@@ -1056,7 +1051,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     observation: {
       messageTokens: number | ThresholdRange;
       model: string;
-      observer: { previousObservationTokens: number | false | undefined };
+      previousObserverTokens: number | false | undefined;
     };
     reflection: {
       observationTokens: number | ThresholdRange;
@@ -1083,7 +1078,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       observation: {
         messageTokens: this.observationConfig.messageTokens,
         model: observationModelName,
-        observer: { previousObservationTokens: this.observationConfig.observer.previousObservationTokens },
+        previousObserverTokens: this.observationConfig.previousObserverTokens,
       },
       reflection: {
         observationTokens: this.reflectionConfig.observationTokens,
@@ -1167,15 +1162,15 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Validate observer context optimization options
     if (
-      this.observationConfig.observer.previousObservationTokens !== undefined &&
-      this.observationConfig.observer.previousObservationTokens !== false
+      this.observationConfig.previousObserverTokens !== undefined &&
+      this.observationConfig.previousObserverTokens !== false
     ) {
       if (
-        !Number.isFinite(this.observationConfig.observer.previousObservationTokens) ||
-        this.observationConfig.observer.previousObservationTokens < 0
+        !Number.isFinite(this.observationConfig.previousObserverTokens) ||
+        this.observationConfig.previousObserverTokens < 0
       ) {
         throw new Error(
-          `observation.observer.previousObservationTokens must be false or a finite number >= 0, got ${this.observationConfig.observer.previousObservationTokens}`,
+          `observation.previousObserverTokens must be false or a finite number >= 0, got ${this.observationConfig.previousObserverTokens}`,
         );
       }
     }
@@ -1696,18 +1691,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     existingObservations: string | undefined,
     record?: ObservationalMemoryRecord | null,
   ): { context: string | undefined; wasTruncated: boolean } {
-    const { previousObservationTokens } = this.observationConfig.observer;
+    const { previousObserverTokens } = this.observationConfig;
     const tokenBudget =
-      previousObservationTokens === undefined || previousObservationTokens === false
-        ? undefined
-        : previousObservationTokens;
+      previousObserverTokens === undefined || previousObserverTokens === false ? undefined : previousObserverTokens;
 
     // Fast path: no optimization configured — preserve legacy behavior
     if (tokenBudget === undefined) {
       return { context: existingObservations, wasTruncated: false };
     }
 
-    // When previousObservationTokens is enabled, also use buffered reflections
+    // When previousObserverTokens is enabled, also use buffered reflections
     const bufferedReflection =
       record?.bufferedReflection && record?.reflectedObservationLineCount ? record.bufferedReflection : undefined;
 

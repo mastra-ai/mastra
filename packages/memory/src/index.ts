@@ -2014,11 +2014,7 @@ Notes:
             bufferTokens: omConfig.observation.bufferTokens,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
-            observer: omConfig.observation.observer
-              ? {
-                  previousObservationTokens: omConfig.observation.observer.previousObservationTokens,
-                }
-              : undefined,
+            previousObserverTokens: omConfig.observation.previousObserverTokens,
             instruction: omConfig.observation.instruction,
           }
         : undefined,

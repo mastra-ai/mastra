@@ -8858,11 +8858,11 @@ describe('threadId validation in thread scope', () => {
 });
 
 // =============================================================================
-// Observer Context Optimization (observer.previousObservationTokens)
+// Observer Context Optimization (observation.previousObserverTokens)
 // =============================================================================
 
 describe('Observer Context Optimization', () => {
-  function createOM(observerOverrides: Record<string, unknown> = {}) {
+  function createOM(observationOverrides: Record<string, unknown> = {}) {
     return new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -8870,7 +8870,7 @@ describe('Observer Context Optimization', () => {
       observation: {
         messageTokens: 50000,
         bufferTokens: false,
-        observer: { ...observerOverrides },
+        ...observationOverrides,
       },
       reflection: { observationTokens: 40000 },
     });
@@ -8894,23 +8894,23 @@ describe('Observer Context Optimization', () => {
   }
 
   describe('config validation', () => {
-    it('should throw if observer.previousObservationTokens is invalid', () => {
-      expect(() => createOM({ previousObservationTokens: -100 })).toThrow(
-        'observation.observer.previousObservationTokens must be false or a finite number >= 0',
+    it('should throw if observation.previousObserverTokens is invalid', () => {
+      expect(() => createOM({ previousObserverTokens: -100 })).toThrow(
+        'observation.previousObserverTokens must be false or a finite number >= 0',
       );
-      expect(() => createOM({ previousObservationTokens: Infinity })).toThrow(
-        'observation.observer.previousObservationTokens must be false or a finite number >= 0',
+      expect(() => createOM({ previousObserverTokens: Infinity })).toThrow(
+        'observation.previousObserverTokens must be false or a finite number >= 0',
       );
-      expect(() => createOM({ previousObservationTokens: NaN })).toThrow(
-        'observation.observer.previousObservationTokens must be false or a finite number >= 0',
+      expect(() => createOM({ previousObserverTokens: NaN })).toThrow(
+        'observation.previousObserverTokens must be false or a finite number >= 0',
       );
     });
 
-    it('should accept valid observer.previousObservationTokens including 0 and false', () => {
-      expect(() => createOM({ previousObservationTokens: false })).not.toThrow();
-      expect(() => createOM({ previousObservationTokens: 0 })).not.toThrow();
-      expect(() => createOM({ previousObservationTokens: 1 })).not.toThrow();
-      expect(() => createOM({ previousObservationTokens: 5000 })).not.toThrow();
+    it('should accept valid observation.previousObserverTokens including 0 and false', () => {
+      expect(() => createOM({ previousObserverTokens: false })).not.toThrow();
+      expect(() => createOM({ previousObserverTokens: 0 })).not.toThrow();
+      expect(() => createOM({ previousObserverTokens: 1 })).not.toThrow();
+      expect(() => createOM({ previousObserverTokens: 5000 })).not.toThrow();
     });
   });
 
@@ -8922,12 +8922,12 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should return undefined when existingObservations is undefined', () => {
-      const om = createOM({ previousObservationTokens: 100 });
+      const om = createOM({ previousObserverTokens: 100 });
       expect(prepareObserverContext(om, undefined)).toBeUndefined();
     });
 
     it('should set wasTruncated to false when observations fit within budget', () => {
-      const om = createOM({ previousObservationTokens: 1000 });
+      const om = createOM({ previousObserverTokens: 1000 });
       const observations = '- User likes TypeScript';
       const result = prepareObserverContextFull(om, observations);
       expect(result.wasTruncated).toBe(false);
@@ -8935,23 +8935,23 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should set wasTruncated to true when observations exceed budget', () => {
-      const om = createOM({ previousObservationTokens: 5 });
+      const om = createOM({ previousObserverTokens: 5 });
       const observations = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`).join('\n');
       const result = prepareObserverContextFull(om, observations);
       expect(result.wasTruncated).toBe(true);
     });
 
     it('should set wasTruncated to false when truncation is disabled', () => {
-      const om = createOM({ previousObservationTokens: false });
+      const om = createOM({ previousObserverTokens: false });
       const observations = '- User likes TypeScript';
       const result = prepareObserverContextFull(om, observations);
       expect(result.wasTruncated).toBe(false);
     });
   });
 
-  describe('prepareObserverContext - observer.previousObservationTokens truncation', () => {
+  describe('prepareObserverContext - observation.previousObserverTokens truncation', () => {
     it('should truncate observations from the start to fit within token budget', () => {
-      const om = createOM({ previousObservationTokens: 20 });
+      const om = createOM({ previousObserverTokens: 20 });
       const tc = new TokenCounter();
 
       const lines = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`);
@@ -8987,7 +8987,7 @@ describe('Observer Context Optimization', () => {
         '- Observation line 19',
       ].join('\n');
       const budget = tc.countObservations(desired) + 2;
-      const om = createOM({ previousObservationTokens: budget });
+      const om = createOM({ previousObserverTokens: budget });
 
       const result = prepareObserverContext(om, observations)!;
       const lines = result.split('\n').filter(Boolean);
@@ -9011,7 +9011,7 @@ describe('Observer Context Optimization', () => {
         '- Observation line 20',
       ].join('\n');
       const budget = tc.countObservations(desired) + 2;
-      const om = createOM({ previousObservationTokens: budget });
+      const om = createOM({ previousObserverTokens: budget });
       const observations = [
         '- 🔴 Very old critical 1',
         '- 🔴 Very old critical 2',
@@ -9026,27 +9026,27 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should return observations unchanged when within budget', () => {
-      const om = createOM({ previousObservationTokens: 100_000 });
+      const om = createOM({ previousObserverTokens: 100_000 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
       expect(prepareObserverContext(om, observations)).toBe(observations);
     });
 
     it('should return truncation marker when budget is too small', () => {
-      const om = createOM({ previousObservationTokens: 1 });
+      const om = createOM({ previousObserverTokens: 1 });
       const observations = 'Line one\nLine two\nLine three';
       const result = prepareObserverContext(om, observations);
       expect(result).toBe('[3 hidden observations]');
     });
 
-    it('should fully truncate context when observer.previousObservationTokens is 0', () => {
-      const om = createOM({ previousObservationTokens: 0 });
+    it('should fully truncate context when observation.previousObserverTokens is 0', () => {
+      const om = createOM({ previousObserverTokens: 0 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
       const result = prepareObserverContext(om, observations);
       expect(result).toBe('');
     });
 
-    it('should fully truncate everything when observer.previousObservationTokens is 0 even with buffered reflection', () => {
-      const om = createOM({ previousObservationTokens: 0 });
+    it('should fully truncate everything when observation.previousObserverTokens is 0 even with buffered reflection', () => {
+      const om = createOM({ previousObserverTokens: 0 });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
       const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
       const result = prepareObserverContext(om, observations, record);
@@ -9054,8 +9054,8 @@ describe('Observer Context Optimization', () => {
       expect(result).toBe('');
     });
 
-    it('should disable truncation when observer.previousObservationTokens is false', () => {
-      const om = createOM({ previousObservationTokens: false });
+    it('should disable truncation when observation.previousObserverTokens is false', () => {
+      const om = createOM({ previousObserverTokens: false });
       const observations = '- User likes TypeScript\n- User prefers dark mode';
       const result = prepareObserverContext(om, observations);
       expect(result).toBe(observations);
@@ -9063,8 +9063,8 @@ describe('Observer Context Optimization', () => {
   });
 
   describe('prepareObserverContext - automatic buffered reflection', () => {
-    it('should NOT include buffered reflection when previousObservationTokens is false', () => {
-      const om = createOM({ previousObservationTokens: false });
+    it('should NOT include buffered reflection when previousObserverTokens is false', () => {
+      const om = createOM({ previousObserverTokens: false });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content', reflectedObservationLineCount: 1 };
       const result = prepareObserverContext(om, observations, record);
@@ -9072,8 +9072,8 @@ describe('Observer Context Optimization', () => {
       expect(result).toBe(observations);
     });
 
-    it('should replace reflected lines with buffered reflection when previousObservationTokens is set', () => {
-      const om = createOM({ previousObservationTokens: 5000 });
+    it('should replace reflected lines with buffered reflection when previousObserverTokens is set', () => {
+      const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- Old observation 1\n- Old observation 2\n- Recent observation 3';
       const record = {
         bufferedReflection: '- Summary of old observations',
@@ -9088,7 +9088,7 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should ignore buffered reflection when no reflectedObservationLineCount exists', () => {
-      const om = createOM({ previousObservationTokens: 5000 });
+      const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- User likes TypeScript';
       const record = { bufferedReflection: '- Condensed reflection content' };
       const result = prepareObserverContext(om, observations, record);
@@ -9096,7 +9096,7 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should not replace anything when no buffered reflection exists', () => {
-      const om = createOM({ previousObservationTokens: 5000 });
+      const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- User likes TypeScript';
       // No bufferedReflection in record
       const record = {};
@@ -9105,7 +9105,7 @@ describe('Observer Context Optimization', () => {
     });
 
     it('should not replace anything when record is null', () => {
-      const om = createOM({ previousObservationTokens: 5000 });
+      const om = createOM({ previousObserverTokens: 5000 });
       const observations = '- User likes TypeScript';
       const result = prepareObserverContext(om, observations, null);
       expect(result).toBe(observations);
@@ -9122,7 +9122,7 @@ describe('Observer Context Optimization', () => {
       const reflectionContent = '- Summary of first 10 observations';
 
       const budget = 50;
-      const om = createOM({ previousObservationTokens: budget });
+      const om = createOM({ previousObserverTokens: budget });
       const record = {
         bufferedReflection: reflectionContent,
         reflectedObservationLineCount: 10,
@@ -9150,7 +9150,7 @@ describe('Observer Context Optimization', () => {
       const assembled = `${reflectionContent}\n\n${newLines.join('\n')}`;
       const budget = tc.countObservations(assembled) + 5;
       const om = createOM({
-        previousObservationTokens: budget,
+        previousObserverTokens: budget,
       });
       const record = {
         bufferedReflection: reflectionContent,
@@ -9178,7 +9178,7 @@ describe('Observer Context Optimization', () => {
       // Budget only fits ~8 lines — reflection is at the start so it gets truncated
       const budget = 50;
       const om = createOM({
-        previousObservationTokens: budget,
+        previousObserverTokens: budget,
       });
       const record = {
         bufferedReflection: '- Summary of first 10 observations',

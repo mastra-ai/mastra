@@ -958,11 +958,7 @@ https://mastra.ai/en/docs/memory/overview`,
         bufferTokens: obs.bufferTokens,
         bufferActivation: obs.bufferActivation,
         blockAfter: obs.blockAfter,
-        observer: obs.observer
-          ? {
-              previousObservationTokens: obs.observer.previousObservationTokens,
-            }
-          : undefined,
+        previousObserverTokens: obs.previousObserverTokens,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {
