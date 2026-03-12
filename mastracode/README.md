@@ -143,7 +143,7 @@ You can optionally set `ANTHROPIC_BASE_URL` to point at an Anthropic-compatible 
 When both OAuth and a direct API key are available, Claude Max OAuth takes priority.
 
 For **OpenAI** models, you can authenticate with OpenAI OAuth or use a direct API key via mastracode or `OPENAI_API_KEY`.
-You can optionally set `OPENAI_BASE_URL` to point at an OpenAI-compatible endpoint or proxy. This applies to both direct API key access and OpenAI Codex OAuth requests.
+You can optionally set `OPENAI_BASE_URL` to point at an OpenAI-compatible endpoint or proxy. For OpenAI Codex OAuth, the configured value is used directly instead of assuming a fixed Codex path.
 
 For **other providers** (Google, etc.), set the corresponding environment variable (for example `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
 

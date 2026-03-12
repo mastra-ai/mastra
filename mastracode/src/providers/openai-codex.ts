@@ -54,12 +54,7 @@ function getOpenAIBaseUrl(): string | undefined {
 }
 
 function getCodexApiEndpoint(): string {
-  const baseURL = getOpenAIBaseUrl();
-  if (!baseURL) {
-    return CODEX_API_ENDPOINT;
-  }
-
-  return new URL('/backend-api/codex/responses', baseURL).toString();
+  return getOpenAIBaseUrl() ?? CODEX_API_ENDPOINT;
 }
 
 export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
