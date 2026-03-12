@@ -1,4 +1,5 @@
 import type { StandardSchemaV1, StandardJSONSchemaV1 } from '@standard-schema/spec';
+import { toJSONSchema } from 'zod/v4';
 import type { StandardSchemaWithJSON, StandardSchemaWithJSONProps } from '../standard-schema.types';
 
 /**
@@ -27,11 +28,6 @@ function convertToJsonSchema(
   options: StandardJSONSchemaV1.Options,
   adapterOptions: ZodV4AdapterOptions,
 ): Record<string, unknown> {
-  const toJSONSchema = getToJSONSchema();
-  if (!toJSONSchema) {
-    throw new Error('z.toJSONSchema is not available. Ensure zod >= 3.25.0 is installed.');
-  }
-
   const target = SUPPORTED_TARGETS.has(options.target) ? options.target : 'draft-07';
 
   const jsonSchemaOptions: Record<string, unknown> = {
@@ -47,27 +43,7 @@ function convertToJsonSchema(
     jsonSchemaOptions.override = adapterOptions.override;
   }
 
-  return toJSONSchema(zodSchema, jsonSchemaOptions) as Record<string, unknown>;
-}
-
-/**
- * Cached reference to z.toJSONSchema from zod/v4.
- */
-let _toJSONSchema: ((schema: unknown, options?: unknown) => unknown) | null = null;
-let _toJSONSchemaResolved = false;
-
-function getToJSONSchema(): ((schema: unknown, options?: unknown) => unknown) | null {
-  if (_toJSONSchemaResolved) {
-    return _toJSONSchema;
-  }
-  try {
-    const zv4 = require('zod/v4');
-    _toJSONSchema = typeof zv4.toJSONSchema === 'function' ? zv4.toJSONSchema : null;
-  } catch {
-    _toJSONSchema = null;
-  }
-  _toJSONSchemaResolved = true;
-  return _toJSONSchema;
+  return toJSONSchema(zodSchema as Parameters<typeof toJSONSchema>[0], jsonSchemaOptions) as Record<string, unknown>;
 }
 
 /**
