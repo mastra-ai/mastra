@@ -49,7 +49,7 @@ export function getDynamicMemory(storage: MastraCompositeStore) {
     const obsThreshold = state?.observationThreshold ?? DEFAULT_OBS_THRESHOLD;
     const refThreshold = state?.reflectionThreshold ?? DEFAULT_REF_THRESHOLD;
 
-    const observerPreviousObservationTokens = 3000;
+    const observerPreviousObservationTokens = 1000;
     const observerUseBufferedReflection = true;
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${observerUseBufferedReflection}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
