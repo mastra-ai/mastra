@@ -9,7 +9,6 @@ import { Checkbox } from '@/ds/components/Checkbox';
 import { useDatasetVersions, type DatasetVersion } from '../../hooks/use-dataset-versions';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Column } from '@/ds/components/Columns';
-import { cn } from '@/lib/utils';
 
 export interface DatasetVersionsPanelProps {
   datasetId: string;
@@ -175,7 +174,7 @@ function DatasetVersionsListSkeleton() {
         {Array.from({ length: 3 }).map((_, index) => (
           <ItemList.Row key={index}>
             <ItemList.RowButton columns={[{ name: 'version', label: 'Dataset Version History', size: '1fr' }]}>
-              <ItemList.TextCell isLoading>Loading...</ItemList.TextCell>
+              <ItemList.TextCell>Loading...</ItemList.TextCell>
             </ItemList.RowButton>
           </ItemList.Row>
         ))}

@@ -2999,6 +2999,12 @@ importers:
       '@babel/preset-typescript':
         specifier: ^7.28.5
         version: 7.28.5(@babel/core@7.29.0)
+      '@babel/traverse':
+        specifier: ^7.28.6
+        version: 7.29.0
+      '@mastra/server':
+        specifier: workspace:*
+        version: link:../server
       '@optimize-lodash/rollup-plugin':
         specifier: ^5.0.2
         version: 5.0.2(rollup@4.59.0)
@@ -3023,6 +3029,9 @@ importers:
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
+      '@types/babel__traverse':
+        specifier: ^7.28.0
+        version: 7.28.0
       empathic:
         specifier: ^2.0.0
         version: 2.0.0
@@ -3087,9 +3096,6 @@ importers:
       '@mastra/mcp':
         specifier: workspace:^
         version: link:../mcp
-      '@mastra/server':
-        specifier: workspace:*
-        version: link:../server
       '@types/babel__core':
         specifier: ^7.20.5
         version: 7.20.5

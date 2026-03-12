@@ -24,14 +24,14 @@ export * from './utils/csv-export';
 export * from './utils/json-export';
 
 // Components
-export { DatasetsTable } from './components/datasets-table/datasets-table';
+export { DatasetsList } from './components/datasets-list/datasets-list';
 export { CreateDatasetDialog } from './components/create-dataset-dialog';
 export { CreateDatasetFromItemsDialog } from './components/create-dataset-from-items-dialog';
 export { AddItemsToDatasetDialog } from './components/add-items-to-dataset-dialog';
 export { DuplicateDatasetDialog } from './components/duplicate-dataset-dialog';
 export { EditDatasetDialog } from './components/edit-dataset-dialog';
 export { DeleteDatasetDialog } from './components/delete-dataset-dialog';
-export { EmptyDatasetsTable } from './components/empty-datasets-table';
+export { NoDatasetInfo } from './components/datasets-list/no-datasets-info';
 export { DatasetCombobox } from './components/dataset-combobox';
 export type { DatasetComboboxProps } from './components/dataset-combobox';
 
