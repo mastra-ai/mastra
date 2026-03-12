@@ -731,20 +731,23 @@ export function buildMultiThreadObserverHistoryMessage(
     const messages = messagesByThread.get(threadId);
     if (!messages || messages.length === 0) return;
 
-    content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
-
+    const threadContent: any[] = [];
     let visibleCount = 0;
     messages.forEach(message => {
       const formatted = formatObserverMessage(message, counter);
       if (!formatted.text && formatted.attachments.length === 0) return;
       if (visibleCount > 0) {
-        content.push({ type: 'text', text: '\n\n---\n\n' });
+        threadContent.push({ type: 'text', text: '\n\n---\n\n' });
       }
-      content.push({ type: 'text', text: formatted.text });
-      content.push(...formatted.attachments);
+      threadContent.push({ type: 'text', text: formatted.text });
+      threadContent.push(...formatted.attachments);
       visibleCount++;
     });
 
+    if (visibleCount === 0) return;
+
+    content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
+    content.push(...threadContent);
     content.push({ type: 'text', text: '\n</thread>' });
     if (threadIndex < threadOrder.length - 1) {
       content.push({ type: 'text', text: '\n\n' });
