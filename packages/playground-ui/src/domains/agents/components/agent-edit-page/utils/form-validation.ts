@@ -1,5 +1,6 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
+import { workspaceSnapshotConfigSchema } from '@mastra/client-js';
 import { z } from 'zod';
 import type { JsonSchema } from '@/lib/json-schema';
 
@@ -234,7 +235,7 @@ export const agentFormSchema = z.object({
   workspace: z
     .discriminatedUnion('type', [
       z.object({ type: z.literal('id'), workspaceId: z.string() }),
-      z.object({ type: z.literal('inline'), config: z.record(z.string(), z.unknown()) }),
+      z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
     ])
     .optional(),
 });

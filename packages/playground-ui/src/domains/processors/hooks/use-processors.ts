@@ -1,58 +1,31 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useMastraClient } from '@mastra/react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { usePlaygroundStore } from '@/store/playground-store';
+import type {
+  ProcessorPhase,
+  ProcessorConfiguration,
+  GetProcessorResponse as ProcessorInfo,
+  GetProcessorDetailResponse as ProcessorDetail,
+  ExecuteProcessorResponse,
+  ProcessorTripwireResult,
+} from "@mastra/client-js";
+import { useMastraClient } from "@mastra/react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePlaygroundStore } from "@/store/playground-store";
 
-export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
-
-export interface ProcessorInfo {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  agentIds: string[];
-  isWorkflow: boolean;
-}
-
-export interface ProcessorConfiguration {
-  agentId: string;
-  agentName: string;
-  type: 'input' | 'output';
-}
-
-export interface ProcessorDetail {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  configurations: ProcessorConfiguration[];
-  isWorkflow: boolean;
-}
-
-export type { MastraDBMessage };
+export type {
+  ProcessorPhase,
+  ProcessorInfo,
+  ProcessorConfiguration,
+  ProcessorDetail,
+  MastraDBMessage,
+  ExecuteProcessorResponse,
+  ProcessorTripwireResult,
+};
 
 export interface ExecuteProcessorParams {
   processorId: string;
   phase: ProcessorPhase;
   messages: MastraDBMessage[];
   agentId?: string;
-}
-
-export interface ProcessorTripwireResult {
-  triggered: boolean;
-  reason?: string;
-  metadata?: unknown;
-}
-
-export interface ExecuteProcessorResponse {
-  success: boolean;
-  phase: string;
-  messages?: MastraDBMessage[];
-  messageList?: {
-    messages: MastraDBMessage[];
-  };
-  tripwire?: ProcessorTripwireResult;
-  error?: string;
 }
 
 export const useProcessors = () => {

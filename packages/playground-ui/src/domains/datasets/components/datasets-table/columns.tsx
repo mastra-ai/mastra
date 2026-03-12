@@ -39,13 +39,7 @@ export const columns: ColumnDef<DatasetTableColumn>[] = [
   {
     header: 'Created',
     accessorKey: 'createdAt',
-    cell: ({ row }) => (
-      <Cell>
-        {row.original.createdAt instanceof Date
-          ? row.original.createdAt.toLocaleDateString()
-          : new Date(row.original.createdAt).toLocaleDateString()}
-      </Cell>
-    ),
+    cell: ({ row }) => <Cell>{new Date(row.original.createdAt).toLocaleDateString()}</Cell>,
     size: 150,
   },
 ];
