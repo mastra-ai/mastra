@@ -314,7 +314,7 @@ const results = await azureVector.query({
 
 ## Advanced Features
 
-Azure AI Search for Mastra includes advanced capabilities that make it the most comprehensive vector store compared to other providers.
+Azure AI Search for Mastra includes the following advanced capabilities.
 
 ### Semantic Search
 
@@ -611,7 +611,7 @@ const azureVector = new AzureAISearchVector({
 
 ## TypeScript Support
 
-This package is fully typed and provides excellent TypeScript support:
+This package is written in TypeScript:
 
 ```typescript
 import type { 
@@ -631,7 +631,7 @@ const filter: AzureAISearchVectorFilter = {
 
 ## Testing
 
-This package includes comprehensive tests for Azure AI Search integration with Mastra Memory.
+This package includes tests for Azure AI Search integration with Mastra Memory.
 
 ### Test Types
 
