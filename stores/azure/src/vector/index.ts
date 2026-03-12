@@ -818,7 +818,15 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
           const queryResult: QueryResult = {
             id: result.document.id,
             score: result.score || 0,
-            metadata: result.document.metadata ? JSON.parse(result.document.metadata) : {},
+            metadata: result.document.metadata
+              ? (() => {
+                  try {
+                    return JSON.parse(result.document.metadata);
+                  } catch {
+                    return { _raw: result.document.metadata };
+                  }
+                })()
+              : {},
             document: result.document.content,
             // Note: Vector field is not retrievable in Azure AI Search, so it's not included
             // even when includeVector is true
