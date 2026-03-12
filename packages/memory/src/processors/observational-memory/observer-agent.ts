@@ -764,6 +764,7 @@ export function buildMultiThreadObserverTaskPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
   priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  wasTruncated?: boolean,
 ): string {
   let prompt = '';
 
@@ -773,7 +774,7 @@ export function buildMultiThreadObserverTaskPrompt(
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
-  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
+  const hasTruncatedObservations = wasTruncated ?? false;
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
@@ -831,9 +832,10 @@ export function buildMultiThreadObserverPrompt(
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
   priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
+  wasTruncated?: boolean,
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated)}`;
 }
 
 /**
@@ -918,6 +920,7 @@ export function buildObserverTaskPrompt(
     skipContinuationHints?: boolean;
     priorCurrentTask?: string;
     priorSuggestedResponse?: string;
+    wasTruncated?: boolean;
   },
 ): string {
   let prompt = '';
@@ -928,7 +931,7 @@ export function buildObserverTaskPrompt(
       'Do not repeat these existing observations. Your new observations will be appended to the existing observations.\n\n';
   }
 
-  const hasTruncatedObservations = /\[\d+ hidden observations\]/.test(existingObservations ?? '');
+  const hasTruncatedObservations = options?.wasTruncated ?? false;
   const priorMetadataLines: string[] = [];
   if (options?.priorCurrentTask) {
     priorMetadataLines.push(`- prior current-task: ${options.priorCurrentTask}`);
@@ -967,6 +970,7 @@ export function buildObserverPrompt(
     skipContinuationHints?: boolean;
     priorCurrentTask?: string;
     priorSuggestedResponse?: string;
+    wasTruncated?: boolean;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);

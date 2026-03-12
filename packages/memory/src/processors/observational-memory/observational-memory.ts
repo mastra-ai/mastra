@@ -1697,7 +1697,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
   private prepareObserverContext(
     existingObservations: string | undefined,
     record?: ObservationalMemoryRecord | null,
-  ): string | undefined {
+  ): { context: string | undefined; wasTruncated: boolean } {
     const { previousObservationTokens } = this.observationConfig.observer;
     const tokenBudget =
       previousObservationTokens === undefined || previousObservationTokens === false
@@ -1706,7 +1706,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
     // Fast path: no optimization configured — preserve legacy behavior
     if (tokenBudget === undefined) {
-      return existingObservations;
+      return { context: existingObservations, wasTruncated: false };
     }
 
     // When previousObservationTokens is enabled, also use buffered reflections
@@ -1714,7 +1714,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       record?.bufferedReflection && record?.reflectedObservationLineCount ? record.bufferedReflection : undefined;
 
     if (!existingObservations) {
-      return bufferedReflection;
+      return { context: bufferedReflection, wasTruncated: false };
     }
 
     // 1. Replace reflected observation lines with the buffered reflection summary.
@@ -1729,18 +1729,20 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     }
 
     // 2. Truncate the assembled result to fit within budget
+    let wasTruncated = false;
     if (tokenBudget !== undefined) {
       if (tokenBudget === 0) {
-        return '';
+        return { context: '', wasTruncated: true };
       }
 
       const currentTokens = this.tokenCounter.countObservations(observations);
       if (currentTokens > tokenBudget) {
         observations = this.truncateObservationsToTokenBudget(observations, tokenBudget);
+        wasTruncated = true;
       }
     }
 
-    return observations;
+    return { context: observations, wasTruncated };
   }
 
   /**
@@ -1940,6 +1942,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       requestContext?: RequestContext;
       priorCurrentTask?: string;
       priorSuggestedResponse?: string;
+      wasTruncated?: boolean;
     },
   ): Promise<{
     observations: string;
@@ -1953,6 +1956,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       skipContinuationHints: options?.skipContinuationHints,
       priorCurrentTask: options?.priorCurrentTask,
       priorSuggestedResponse: options?.priorSuggestedResponse,
+      wasTruncated: options?.wasTruncated,
     });
     const observerMessages = [
       {
@@ -1961,6 +1965,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
           skipContinuationHints: options?.skipContinuationHints,
           priorCurrentTask: options?.priorCurrentTask,
           priorSuggestedResponse: options?.priorSuggestedResponse,
+          wasTruncated: options?.wasTruncated,
         }),
       },
       buildObserverHistoryMessage(messagesToObserve),
@@ -2043,6 +2048,7 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string }>,
     abortSignal?: AbortSignal,
     requestContext?: RequestContext,
+    wasTruncated?: boolean,
   ): Promise<{
     results: Map<
       string,
@@ -2068,11 +2074,17 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       messagesByThread,
       threadOrder,
       priorMetadataByThread,
+      wasTruncated,
     );
     const observerMessages = [
       {
         role: 'user' as const,
-        content: buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread),
+        content: buildMultiThreadObserverTaskPrompt(
+          existingObservations,
+          threadOrder,
+          priorMetadataByThread,
+          wasTruncated,
+        ),
       },
       buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
     ];
@@ -4200,7 +4212,7 @@ ${formattedMessages}
         }
       }
 
-      const observerContext = this.prepareObserverContext(
+      const { context: observerContext, wasTruncated } = this.prepareObserverContext(
         freshRecord?.activeObservations ?? record.activeObservations,
         freshRecord ?? record,
       );
@@ -4210,6 +4222,7 @@ ${formattedMessages}
         requestContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        wasTruncated,
       });
 
       // Build new observations (use freshRecord if available)
@@ -4594,7 +4607,7 @@ ${formattedMessages}
     const combinedObservations = this.combineObservationsForBuffering(record.activeObservations, bufferedChunksText);
 
     // Apply observer context optimization (truncation, buffered-reflection inclusion)
-    const observerContext = this.prepareObserverContext(combinedObservations, record);
+    const { context: observerContext, wasTruncated } = this.prepareObserverContext(combinedObservations, record);
 
     // Call observer with optimized context
     // Skip continuation hints during async buffering — they reflect the observer's
@@ -4612,6 +4625,7 @@ ${formattedMessages}
         requestContext,
         priorCurrentTask: threadOMMetadata?.currentTask,
         priorSuggestedResponse: threadOMMetadata?.suggestedResponse,
+        wasTruncated,
       },
     );
 
@@ -5353,8 +5367,11 @@ ${formattedMessages}
       const rawExistingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
       // Apply observer context optimization (truncation, buffered-reflection inclusion, gating)
-      const existingObservations =
-        this.prepareObserverContext(rawExistingObservations, freshRecord ?? record) ?? rawExistingObservations;
+      const { context: optimizedObservations, wasTruncated } = this.prepareObserverContext(
+        rawExistingObservations,
+        freshRecord ?? record,
+      );
+      const existingObservations = optimizedObservations ?? rawExistingObservations;
 
       // ════════════════════════════════════════════════════════════
       // BATCHED MULTI-THREAD OBSERVATION: Single Observer call for all threads
@@ -5475,6 +5492,7 @@ ${formattedMessages}
           batchPriorMetadata,
           abortSignal,
           requestContext,
+          wasTruncated,
         );
         return batchResult;
       });

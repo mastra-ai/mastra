@@ -8880,12 +8880,20 @@ describe('Observer Context Optimization', () => {
   }
 
   // Helper to call the private method
+  function prepareObserverContextFull(
+    om: ObservationalMemory,
+    existingObservations: string | undefined,
+    record?: Record<string, unknown> | null,
+  ): { context: string | undefined; wasTruncated: boolean } {
+    return (om as any).prepareObserverContext(existingObservations, record);
+  }
+
   function prepareObserverContext(
     om: ObservationalMemory,
     existingObservations: string | undefined,
     record?: Record<string, unknown> | null,
   ): string | undefined {
-    return (om as any).prepareObserverContext(existingObservations, record);
+    return prepareObserverContextFull(om, existingObservations, record).context;
   }
 
   describe('config validation', () => {
@@ -8919,6 +8927,28 @@ describe('Observer Context Optimization', () => {
     it('should return undefined when existingObservations is undefined', () => {
       const om = createOM({ previousObservationTokens: 100 });
       expect(prepareObserverContext(om, undefined)).toBeUndefined();
+    });
+
+    it('should set wasTruncated to false when observations fit within budget', () => {
+      const om = createOM({ previousObservationTokens: 1000 });
+      const observations = '- User likes TypeScript';
+      const result = prepareObserverContextFull(om, observations);
+      expect(result.wasTruncated).toBe(false);
+      expect(result.context).toBe(observations);
+    });
+
+    it('should set wasTruncated to true when observations exceed budget', () => {
+      const om = createOM({ previousObservationTokens: 5 });
+      const observations = Array.from({ length: 20 }, (_, i) => `- Observation line ${i + 1}`).join('\n');
+      const result = prepareObserverContextFull(om, observations);
+      expect(result.wasTruncated).toBe(true);
+    });
+
+    it('should set wasTruncated to false when truncation is disabled', () => {
+      const om = createOM({ previousObservationTokens: false });
+      const observations = '- User likes TypeScript';
+      const result = prepareObserverContextFull(om, observations);
+      expect(result.wasTruncated).toBe(false);
     });
   });
 
