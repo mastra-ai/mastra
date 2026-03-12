@@ -490,10 +490,6 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
-  // ============================================================================
-  // OLAP Query Methods
-  // ============================================================================
-
   private filterMetrics(filters?: Record<string, unknown>): MetricRecord[] {
     if (!filters) return [...this.db.metricRecords];
     return this.db.metricRecords.filter(m => {

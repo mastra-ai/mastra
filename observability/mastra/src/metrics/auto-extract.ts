@@ -2,7 +2,7 @@
  * AutoExtractedMetrics - Converts TracingEvents into MetricEvents automatically.
  *
  * When a tracing span ends, this class emits metric events for duration
- * and (for model spans) token usage.
+ * and token usage (for model spans).
  */
 
 import { SpanType, TracingEventType } from '@mastra/core/observability';
@@ -20,7 +20,7 @@ export class AutoExtractedMetrics {
 
   /**
    * Route a tracing event to the appropriate handler.
-   * SPAN_ENDED emits duration and (for model spans) token metrics.
+   * SPAN_ENDED emits duration and token metrics (for model spans).
    */
   processTracingEvent(event: TracingEvent): void {
     if (event.type === TracingEventType.SPAN_ENDED) {

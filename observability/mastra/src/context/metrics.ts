@@ -1,7 +1,6 @@
 /**
  * MetricsContextImpl - User-facing metric emission API.
  *
- * Provides emit() plus deprecated counter/gauge/histogram instrument creation.
  * All metrics are routed through ObservabilityBus.emitMetric() which handles
  * validation, cardinality filtering, and event construction.
  * Context labels are snapshotted at construction time.

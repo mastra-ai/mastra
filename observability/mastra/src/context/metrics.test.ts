@@ -49,49 +49,6 @@ describe('MetricsContextImpl', () => {
     expect(m.labels).toEqual({ agent: 'test-agent' });
   });
 
-  it('should emit via deprecated counter()', () => {
-    setupBus();
-
-    const metrics = new MetricsContextImpl({
-      observabilityBus: bus,
-    });
-
-    metrics.counter('calls').add(1);
-
-    expect(emittedEvents).toHaveLength(1);
-    expect(emittedEvents[0]!.metric.name).toBe('calls');
-  });
-
-  it('should emit via deprecated gauge()', () => {
-    setupBus();
-
-    const metrics = new MetricsContextImpl({
-      observabilityBus: bus,
-    });
-
-    metrics.gauge('active_connections').set(42);
-
-    expect(emittedEvents).toHaveLength(1);
-    const m = emittedEvents[0]!.metric;
-    expect(m.name).toBe('active_connections');
-    expect(m.value).toBe(42);
-  });
-
-  it('should emit via deprecated histogram()', () => {
-    setupBus();
-
-    const metrics = new MetricsContextImpl({
-      observabilityBus: bus,
-    });
-
-    metrics.histogram('request_duration_ms').record(150);
-
-    expect(emittedEvents).toHaveLength(1);
-    const m = emittedEvents[0]!.metric;
-    expect(m.name).toBe('request_duration_ms');
-    expect(m.value).toBe(150);
-  });
-
   it('should merge base labels with additional labels', () => {
     setupBus();
 

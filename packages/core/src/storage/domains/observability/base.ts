@@ -244,10 +244,6 @@ export class ObservabilityStorage extends StorageDomain {
     });
   }
 
-  // ============================================================================
-  // OLAP Query Methods
-  // ============================================================================
-
   async getMetricAggregate(_args: GetMetricAggregateArgs): Promise<GetMetricAggregateResponse> {
     throw new MastraError({
       id: 'OBSERVABILITY_STORAGE_GET_METRIC_AGGREGATE_NOT_IMPLEMENTED',

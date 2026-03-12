@@ -444,7 +444,7 @@ interface BaseSpan<TType extends SpanType> {
   output?: any;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
-  /** Request context data */
+  /** Snapshot of the RequestContext */
   requestContext?: Record<string, any>;
   /** Is an event span? (event occurs at startTime, has no endTime) */
   isEvent: boolean;
