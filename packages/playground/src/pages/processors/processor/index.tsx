@@ -1,5 +1,3 @@
-import { Link, useParams, Navigate } from 'react-router';
-
 import {
   Header,
   Breadcrumb,
@@ -13,11 +11,38 @@ import {
   ProcessorIcon,
   useProcessor,
   Skeleton,
+  PermissionDenied,
+  is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Link, useParams, Navigate } from 'react-router';
 
 export function Processor() {
   const { processorId } = useParams();
-  const { data: processor, isLoading } = useProcessor(processorId!);
+  const { data: processor, isLoading, error } = useProcessor(processorId!);
+
+  // 403 check - permission denied for processors
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <div className="h-full w-full overflow-y-hidden">
+        <Header>
+          <Breadcrumb>
+            <Crumb as={Link} to={`/processors`}>
+              <Icon>
+                <ProcessorIcon />
+              </Icon>
+              Processors
+            </Crumb>
+            <Crumb as="span" to="" isCurrent>
+              {processorId}
+            </Crumb>
+          </Breadcrumb>
+        </Header>
+        <div className="flex h-full items-center justify-center">
+          <PermissionDenied resource="processors" />
+        </div>
+      </div>
+    );
+  }
 
   // If this is a workflow processor, redirect to the workflow graph UI
   if (!isLoading && processor?.isWorkflow) {
@@ -64,10 +89,15 @@ export function Processor() {
         </Breadcrumb>
 
         <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/docs/agents/processors" target="_blank" rel="noopener noreferrer">
-            <Icon>
-              <DocsIcon />
-            </Icon>
+          <Button
+            as={Link}
+            to="https://mastra.ai/docs/agents/processors"
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="ghost"
+            size="md"
+          >
+            <DocsIcon />
             Processors documentation
           </Button>
         </HeaderAction>

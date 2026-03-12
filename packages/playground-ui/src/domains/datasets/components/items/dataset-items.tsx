@@ -12,7 +12,7 @@ import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
 import { exportItemsToJSON } from '../../utils/json-export';
 import { toast } from '@/lib/toast';
-import { Alert, AlertTitle, Button, cn } from '@/index';
+import { cn } from '@/index';
 import { Columns, Column } from '@/ds/components/Columns';
 import { Notice } from '@/ds/components/Notice';
 
@@ -162,8 +162,8 @@ export function DatasetItems({
   const itemsListColumns = [
     { name: 'id', label: 'ID', size: '5rem' },
     { name: 'input', label: 'Input', size: '1fr' },
-    { name: 'groundTruth', label: 'Ground Truth', size: '1fr' },
-    { name: 'date', label: 'Created', size: '5rem' },
+    ...(!featuredItem ? [{ name: 'groundTruth', label: 'Ground Truth', size: '1fr' }] : []),
+    { name: 'date', label: 'Created', size: '10rem' },
   ];
 
   return (
@@ -203,7 +203,7 @@ export function DatasetItems({
             <AlertTriangleIcon />
             <Notice.Message>Viewing version v{activeDatasetVersion}</Notice.Message>
             <Notice.Button onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}>
-              <ArrowRightToLineIcon className="inline-block mr-2" /> Return to the latest version
+              <ArrowRightToLineIcon /> Return to the latest version
             </Notice.Button>
           </Notice>
         )}

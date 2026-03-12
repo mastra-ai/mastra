@@ -1,18 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { ChevronRight, GripVertical, Ruler, Trash2 } from 'lucide-react';
+import { GripVertical, X } from 'lucide-react';
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 
 import { ContentBlock } from '@/ds/components/ContentBlocks';
 import type { JsonSchema, RuleGroup } from '@/lib/rule-engine';
-import { RuleBuilder, countLeafRules } from '@/lib/rule-engine';
 import { IconButton } from '@/ds/components/IconButton';
 import { Icon } from '@/ds/icons';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { cn } from '@/lib/utils';
-import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
+import type { InstructionBlock, InlineInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
+import { DisplayConditionsDialog } from '@/domains/cms';
+import { AgentCMSRefBlock } from './agent-cms-ref-block';
 
 export interface AgentCMSBlockProps {
   index: number;
@@ -25,8 +26,9 @@ export interface AgentCMSBlockProps {
   autoFocus?: boolean;
 }
 
-interface AgentCMSBlockContentProps {
-  block: InstructionBlock;
+interface InlineBlockContentProps {
+  index: number;
+  block: InlineInstructionBlock;
   onBlockChange: (block: InstructionBlock) => void;
   placeholder?: string;
   dragHandleProps?: DraggableProvidedDragHandleProps | null;
@@ -35,7 +37,8 @@ interface AgentCMSBlockContentProps {
   autoFocus?: boolean;
 }
 
-const AgentCMSBlockContent = ({
+const InlineBlockContent = ({
+  index,
   block,
   onBlockChange,
   placeholder,
@@ -43,13 +46,8 @@ const AgentCMSBlockContent = ({
   onDelete,
   schema,
   autoFocus = false,
-}: AgentCMSBlockContentProps) => {
+}: InlineBlockContentProps) => {
   const editorRef = useRef<ReactCodeMirrorRef>(null);
-  const hasVariablesSet = Object.keys(schema?.properties ?? {}).length > 0;
-  const showRulesSection = schema && hasVariablesSet;
-  const ruleCount = countLeafRules(block.rules);
-
-  const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
   useEffect(() => {
     if (autoFocus) {
@@ -66,69 +64,55 @@ const AgentCMSBlockContent = ({
   };
 
   return (
-    <div className="h-full grid grid-rows-[auto_1fr_auto]">
+    <div className="h-full grid grid-rows-[auto_1fr]">
       {/* Top bar with drag handle and delete button */}
       <div className="bg-surface2 px-2 py-1 flex items-center justify-between gap-2">
-        <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Icon>
-                <GripVertical />
-              </Icon>
-            </TooltipTrigger>
-            <TooltipContent>Drag to reorder</TooltipContent>
-          </Tooltip>
+        <div className="flex items-center gap-2">
+          <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Icon>
+                  <GripVertical />
+                </Icon>
+              </TooltipTrigger>
+              <TooltipContent>Drag to reorder</TooltipContent>
+            </Tooltip>
+          </div>
+
+          <Txt variant="ui-sm" className="text-neutral3 font-mono">
+            {index + 1}
+          </Txt>
         </div>
 
-        {onDelete && (
-          <IconButton variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
-            <Trash2 />
-          </IconButton>
-        )}
+        <div className="flex items-center gap-1">
+          <DisplayConditionsDialog
+            entityName={`Block ${index + 1}`}
+            schema={schema}
+            rules={block.rules}
+            onRulesChange={handleRulesChange}
+          />
+
+          {onDelete && (
+            <IconButton variant="ghost" size="sm" onClick={onDelete} tooltip="Delete block">
+              <X />
+            </IconButton>
+          )}
+        </div>
       </div>
 
-      <div className="h-full grid grid-rows-[1fr_auto]">
-        {/* CodeEditor */}
-        <CodeEditor
-          ref={editorRef}
-          value={block.content}
-          onChange={handleContentChange}
-          placeholder={placeholder}
-          className="border-none rounded-none text-neutral6 h-full bg-surface2 min-h-[300px]"
-          language="markdown"
-          highlightVariables
-          showCopyButton={false}
-          schema={schema}
-          autoFocus={autoFocus}
-        />
-
-        {/* Rules disclosure section */}
-        {showRulesSection && (
-          <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border1 bg-surface2">
-            <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2">
-              <Icon>
-                <ChevronRight
-                  className={cn('text-icon3 transition-transform', {
-                    'rotate-90': isRulesOpen,
-                  })}
-                />
-              </Icon>
-              <Icon>
-                <Ruler className="text-accent6" />
-              </Icon>
-              <span className="text-neutral5 text-ui-sm">Display Conditions</span>
-              {ruleCount > 0 && (
-                <span className="text-neutral3 text-ui-sm">
-                  ({ruleCount} {ruleCount === 1 ? 'rule' : 'rules'})
-                </span>
-              )}
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <RuleBuilder schema={schema} ruleGroup={block.rules} onChange={handleRulesChange} />
-            </CollapsibleContent>
-          </Collapsible>
-        )}
-      </div>
+      {/* CodeEditor */}
+      <CodeEditor
+        ref={editorRef}
+        value={block.content}
+        onChange={handleContentChange}
+        placeholder={placeholder}
+        className="border-none rounded-none text-neutral6 h-full bg-surface2 min-h-[4.5rem]"
+        language="markdown"
+        highlightVariables
+        showCopyButton={false}
+        schema={schema}
+        autoFocus={autoFocus}
+      />
     </div>
   );
 };
@@ -143,6 +127,10 @@ export const AgentCMSBlock = ({
   schema,
   autoFocus,
 }: AgentCMSBlockProps) => {
+  if (block.type === 'prompt_block_ref') {
+    return <AgentCMSRefBlock index={index} block={block} onDelete={onDelete} className={className} />;
+  }
+
   return (
     <ContentBlock
       index={index}
@@ -150,7 +138,8 @@ export const AgentCMSBlock = ({
       className={cn('h-full rounded-md border border-border1 overflow-hidden', className)}
     >
       {(dragHandleProps: DraggableProvidedDragHandleProps | null) => (
-        <AgentCMSBlockContent
+        <InlineBlockContent
+          index={index}
           block={block}
           onBlockChange={onBlockChange}
           placeholder={placeholder}

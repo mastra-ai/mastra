@@ -118,75 +118,194 @@ export class InngestRun<
     throw new NonRetriableError(`Failed to get runs after ${maxRetries} attempts: ${lastError?.message}`);
   }
 
+  /**
+   * Get run output using hybrid approach: realtime subscription + polling fallback.
+   * Resolves as soon as either method detects completion.
+   */
   async getRunOutput(eventId: string, maxWaitMs = 300000) {
-    const startTime = Date.now();
     const storage = this.#mastra?.getStorage();
     const workflowsStore = await storage?.getStore('workflows');
 
-    while (Date.now() - startTime < maxWaitMs) {
-      let runs;
-      try {
-        runs = await this.getRuns(eventId);
-      } catch (error) {
-        // NonRetriableError from getRuns should propagate to prevent function-level retry
-        if (error instanceof NonRetriableError) {
-          throw error;
-        }
-        // Wrap other errors as non-retriable
-        throw new NonRetriableError(
-          `Failed to poll workflow status: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
+    return new Promise<any>((resolve, reject) => {
+      let resolved = false;
+      let unsubscribe: (() => void) | null = null;
+      let pollTimeoutId: NodeJS.Timeout | null = null;
 
-      // Check completion
-      if (runs?.[0]?.status === 'Completed' && runs?.[0]?.event_id === eventId) {
-        // Ensure output is fully populated before returning (Inngest eventual consistency)
-        // The workflow function returns { result, runId }, so check for runId presence
-        if (runs?.[0]?.output?.runId !== undefined) {
-          return runs[0];
+      const cleanup = () => {
+        if (unsubscribe) {
+          try {
+            unsubscribe();
+          } catch {
+            // Ignore unsubscribe errors
+          }
         }
-        // Output not ready yet, continue polling with backoff
-        await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-        continue;
-      }
+        if (pollTimeoutId) {
+          clearTimeout(pollTimeoutId);
+        }
+      };
 
-      // Check failure
-      if (runs?.[0]?.status === 'Failed') {
-        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-        // Hydrate serialized errors back to Error instances
-        if (snapshot?.context) {
-          snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+      const handleResult = (result: any, _source: string) => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          resolve(result);
         }
-        return {
-          output: {
-            result: {
-              steps: snapshot?.context,
-              status: 'failed',
-              // Get the original error from NonRetriableError's cause (which contains the workflow result)
-              error: getErrorFromUnknown(runs?.[0]?.output?.cause?.error, { serializeStack: false }),
+      };
+
+      const handleError = (error: any, _source: string) => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          reject(error);
+        }
+      };
+
+      // Start realtime subscription for workflow-finish event
+      let realtimeStreamPromise: ReturnType<typeof subscribe> | null = null;
+
+      const startRealtimeSubscription = async () => {
+        try {
+          realtimeStreamPromise = subscribe(
+            {
+              channel: `workflow:${this.workflowId}:${this.runId}`,
+              topics: ['watch'],
+              app: this.inngest,
             },
-          },
+            async (message: any) => {
+              if (resolved) return;
+
+              const event = message.data;
+
+              if (event?.type === 'workflow-finish') {
+                // Got the finish event - load snapshot and resolve
+                const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                  workflowName: this.workflowId,
+                  runId: this.runId,
+                });
+                if (snapshot?.context) {
+                  snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+                }
+
+                const result = {
+                  output: {
+                    result: {
+                      steps: snapshot?.context,
+                      status: event.payload.status,
+                      result: event.payload.result,
+                      error: event.payload.error
+                        ? getErrorFromUnknown(event.payload.error, { serializeStack: false })
+                        : undefined,
+                    },
+                  },
+                };
+
+                handleResult(result, 'realtime');
+              }
+            },
+          );
+
+          // Set unsubscribe immediately so cleanup can cancel even before await resolves
+          unsubscribe = () => {
+            realtimeStreamPromise?.then(stream => stream.cancel().catch(() => {})).catch(() => {});
+          };
+
+          await realtimeStreamPromise;
+        } catch {
+          // Realtime subscription failed - polling will still work as fallback
+        }
+      };
+
+      // Start polling as fallback
+      const startPolling = async () => {
+        const startTime = Date.now();
+
+        const poll = async () => {
+          if (resolved) {
+            return;
+          }
+          if (Date.now() - startTime >= maxWaitMs) {
+            handleError(new NonRetriableError(`Workflow did not complete within ${maxWaitMs}ms`), 'polling-timeout');
+            return;
+          }
+
+          try {
+            const runs = await this.getRuns(eventId);
+            const run = runs?.find((r: { event_id: string }) => r.event_id === eventId);
+
+            if (run?.status === 'Completed') {
+              const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: this.workflowId,
+                runId: this.runId,
+              });
+              if (snapshot?.context) {
+                snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+              }
+              handleResult({ output: { result: { steps: snapshot?.context, status: 'success' } } }, 'polling');
+              return;
+            }
+
+            if (run?.status === 'Failed') {
+              const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: this.workflowId,
+                runId: this.runId,
+              });
+              if (snapshot?.context) {
+                snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+              }
+              handleResult(
+                {
+                  output: {
+                    result: {
+                      steps: snapshot?.context,
+                      status: 'failed',
+                      error: getErrorFromUnknown(run?.output?.cause?.error, { serializeStack: false }),
+                    },
+                  },
+                },
+                'polling-failed',
+              );
+              return;
+            }
+
+            if (run?.status === 'Cancelled') {
+              const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+                workflowName: this.workflowId,
+                runId: this.runId,
+              });
+              if (snapshot?.context) {
+                snapshot.context = hydrateSerializedStepErrors(snapshot.context);
+              }
+              handleResult(
+                { output: { result: { steps: snapshot?.context, status: 'canceled' } } },
+                'polling-cancelled',
+              );
+              return;
+            }
+
+            // Schedule next poll with jitter
+            pollTimeoutId = setTimeout(poll, 200 + Math.random() * 200);
+          } catch (error) {
+            if (error instanceof NonRetriableError) {
+              handleError(error, 'polling-non-retriable');
+              return;
+            }
+            handleError(
+              new NonRetriableError(
+                `Failed to poll workflow status: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+              'polling-error',
+            );
+          }
         };
-      }
 
-      // Check cancellation
-      if (runs?.[0]?.status === 'Cancelled') {
-        const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-        return { output: { result: { steps: snapshot?.context, status: 'canceled' } } };
-      }
+        // Start first poll
+        void poll();
+      };
 
-      // Backoff between polls (1-2 seconds with jitter)
-      await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-    }
-
-    // Timeout - non-retriable to prevent duplicate executions
-    throw new NonRetriableError(`Workflow did not complete within ${maxWaitMs}ms`);
+      // Start both in parallel
+      void startRealtimeSubscription();
+      void startPolling();
+    });
   }
 
   async cancel() {
@@ -369,8 +488,10 @@ export class InngestRun<
     const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
+    const eventName = `workflow.${this.workflowId}`;
+
     const eventOutput = await this.inngest.send({
-      name: `workflow.${this.workflowId}`,
+      name: eventName,
       data: {
         inputData: inputDataToUse,
         initialState: initialStateToUse,
@@ -388,6 +509,7 @@ export class InngestRun<
     if (!eventId) {
       throw new Error('Event ID is not set');
     }
+
     const runOutput = await this.getRunOutput(eventId);
     const result = runOutput?.output?.result;
 
@@ -401,11 +523,12 @@ export class InngestRun<
 
   async resume<TResume>(params: {
     resumeData?: TResume;
-    step:
+    step?:
       | Step<string, any, any, TResume, any>
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
+    label?: string;
     requestContext?: RequestContext;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -423,29 +546,37 @@ export class InngestRun<
 
   async _resume<TResume>(params: {
     resumeData?: TResume;
-    step:
+    step?:
       | Step<string, any, any, TResume, any>
       | [...Step<string, any, any, any, any>[], Step<string, any, any, TResume, any>]
       | string
       | string[];
+    label?: string;
     requestContext?: RequestContext;
     perStep?: boolean;
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const storage = this.#mastra?.getStorage();
 
-    let steps: string[] = [];
-    if (typeof params.step === 'string') {
-      steps = params.step.split('.');
-    } else {
-      steps = (Array.isArray(params.step) ? params.step : [params.step]).map(step =>
-        typeof step === 'string' ? step : step?.id,
-      );
-    }
     const workflowsStore = await storage?.getStore('workflows');
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
     });
+
+    // Support label-based resume: look up step from resumeLabels
+    const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;
+    const stepParam = snapshotResumeLabel?.stepId ?? params.step;
+
+    let steps: string[] = [];
+    if (stepParam) {
+      if (typeof stepParam === 'string') {
+        steps = stepParam.split('.');
+      } else {
+        steps = (Array.isArray(stepParam) ? stepParam : [stepParam]).map(step =>
+          typeof step === 'string' ? step : step?.id,
+        );
+      }
+    }
 
     const suspendedStep = this.workflowSteps[steps?.[0] ?? ''];
 

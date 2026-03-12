@@ -1,7 +1,7 @@
 import { spanTypePrefixes, getExperimentSpanTypeUi } from './experiment-trace-shared';
 import { SpanRecord } from '@mastra/core/storage';
 import { ExperimentUISpanType } from '../types';
-import { SearchField } from '@/ds/components/FormFields';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { useThrottledCallback } from 'use-debounce';
 import { Fragment, useEffect, useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
@@ -56,13 +56,15 @@ export function ExperimentTraceTimelineTools({
   return (
     <div className="flex gap-3 items-center justify-between">
       <div className="flex">
-        <SearchField
+        <SearchFieldBlock
+          name="search-spans"
+          label="Find span by name"
+          labelIsHidden
+          placeholder="Look for span name"
           value={localSearchPhrase}
           onChange={e => {
             setLocalSearchPhrase(e.target.value);
           }}
-          label="Find span by name"
-          placeholder="Look for span name"
           onReset={() => setLocalSearchPhrase('')}
         />
       </div>

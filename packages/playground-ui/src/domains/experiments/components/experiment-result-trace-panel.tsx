@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { EyeIcon, ListTreeIcon } from 'lucide-react';
 import { getShortId } from '@/ds/components/Text';
 import { Section } from '@/ds/components/Section';
-import { ListAndDetails } from '@/ds/components/ListAndDetails/list-and-details';
+import { XIcon } from 'lucide-react';
+import { Button } from '@/ds/components/Button';
+import { Column } from '@/ds/components/Columns/column';
 import { MainHeader } from '@/ds/components/MainHeader';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { formatTraceSpans } from '../utils/format-trace-spans';
@@ -81,11 +83,13 @@ export function ExperimentResultTracePanel({
 
   return (
     <>
-      <ListAndDetails.ColumnToolbar>
-        <ListAndDetails.CloseButton onClick={onClose} aria-label="Close trace panel" />
-      </ListAndDetails.ColumnToolbar>
+      <Column.Toolbar>
+        <Button onClick={onClose} aria-label="Close trace panel">
+          <XIcon />
+        </Button>
+      </Column.Toolbar>
 
-      <ListAndDetails.ColumnContent>
+      <Column.Content>
         <MainHeader withMargins={false}>
           <MainHeader.Column>
             <MainHeader.Title size="smaller">
@@ -114,7 +118,7 @@ export function ExperimentResultTracePanel({
           setExpandedSpanIds={setExpandedSpanIds}
           featuredSpanIds={featuredSpanIds}
         />
-      </ListAndDetails.ColumnContent>
+      </Column.Content>
     </>
   );
 }

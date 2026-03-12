@@ -76,6 +76,8 @@ function getHttpStatusForMastraError(errorId: string): number {
     case 'DATASET_NOT_FOUND':
     case 'EXPERIMENT_NOT_FOUND':
       return 404;
+    case 'EXPERIMENT_NO_ITEMS':
+      return 400;
     default:
       return 500;
   }
@@ -126,19 +128,21 @@ export const CREATE_DATASET_ROUTE = createRoute({
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
+      const { name, description, metadata, inputSchema, groundTruthSchema, requestContextSchema } = params as {
         name: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
+        requestContextSchema?: Record<string, unknown> | null;
       };
       const ds = await mastra.datasets.create({
         name,
         description,
         metadata,
-        inputSchema: inputSchema ?? undefined,
-        groundTruthSchema: groundTruthSchema ?? undefined,
+        inputSchema,
+        groundTruthSchema,
+        requestContextSchema,
       });
       const details = await ds.getDetails();
       return details as any;
@@ -189,20 +193,22 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { name, description, metadata, inputSchema, groundTruthSchema } = params as {
+      const { name, description, metadata, inputSchema, groundTruthSchema, requestContextSchema } = params as {
         name?: string;
         description?: string;
         metadata?: Record<string, unknown>;
         inputSchema?: Record<string, unknown> | null;
         groundTruthSchema?: Record<string, unknown> | null;
+        requestContextSchema?: Record<string, unknown> | null;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.update({
         name,
         description,
         metadata,
-        inputSchema: inputSchema ?? undefined,
-        groundTruthSchema: groundTruthSchema ?? undefined,
+        inputSchema,
+        groundTruthSchema,
+        requestContextSchema,
       });
       return result as any;
     } catch (error) {
@@ -305,13 +311,14 @@ export const ADD_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, metadata } = params as {
+      const { input, groundTruth, requestContext, metadata } = params as {
         input: unknown;
         groundTruth?: unknown;
+        requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.addItem({ input, groundTruth, metadata });
+      return await ds.addItem({ input, groundTruth, requestContext, metadata });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -369,9 +376,10 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, metadata } = params as {
+      const { input, groundTruth, requestContext, metadata } = params as {
         input?: unknown;
         groundTruth?: unknown;
+        requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -380,7 +388,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, metadata });
+      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -471,12 +479,13 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { targetType, targetId, scorerIds, version, maxConcurrency } = params as {
+      const { targetType, targetId, scorerIds, version, maxConcurrency, requestContext } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
         scorerIds?: string[];
         version?: number;
         maxConcurrency?: number;
+        requestContext?: Record<string, unknown>;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       const result = await ds.startExperimentAsync({
@@ -485,12 +494,13 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         maxConcurrency,
+        requestContext,
       });
       // Return shape matching experimentSummaryResponseSchema
       return {
         experimentId: result.experimentId,
         status: result.status,
-        totalItems: 0,
+        totalItems: result.totalItems ?? 0,
         succeededCount: 0,
         failedCount: 0,
         startedAt: new Date(),

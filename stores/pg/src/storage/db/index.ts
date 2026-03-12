@@ -246,6 +246,17 @@ export function generateTableSQL({
                 ADD CONSTRAINT ${workflowSnapshotConstraint}
                 UNIQUE (workflow_name, run_id);
               END IF;
+              IF EXISTS (
+                SELECT 1 FROM pg_index i
+                JOIN pg_class c ON i.indexrelid = c.oid
+                JOIN pg_namespace n ON c.relnamespace = n.oid
+                WHERE c.relname = lower('${workflowSnapshotConstraint}')
+                AND n.nspname = '${schemaFilter}'
+                AND i.indisreplident = false
+              ) THEN
+                ALTER TABLE ${getTableName({ indexName: tableName, schemaName: quotedSchemaName })}
+                REPLICA IDENTITY USING INDEX ${workflowSnapshotConstraint};
+              END IF;
             END $$;
             `
                 : ''
@@ -360,6 +371,9 @@ export class PgDB extends MastraBase {
   public schemaName?: string;
   public skipDefaultIndexes?: boolean;
 
+  /** Cache of actual table columns: tableName -> Set<columnName> */
+  private tableColumnsCache = new Map<string, Set<string>>();
+
   constructor(config: PgDBInternalConfig) {
     super({
       component: 'STORAGE',
@@ -369,6 +383,48 @@ export class PgDB extends MastraBase {
     this.client = config.client;
     this.schemaName = config.schemaName;
     this.skipDefaultIndexes = config.skipDefaultIndexes;
+  }
+
+  /**
+   * Gets the set of column names that actually exist in the database table.
+   * Results are cached; the cache is invalidated when alterTable() adds new columns.
+   */
+  private async getTableColumns(tableName: TABLE_NAMES): Promise<Set<string>> {
+    const cached = this.tableColumnsCache.get(tableName);
+    if (cached) return cached;
+
+    const schema = this.schemaName || 'public';
+    const rows = await this.client.manyOrNone<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+      [schema, tableName],
+    );
+
+    const columns = new Set(rows.map(r => r.column_name));
+    if (columns.size > 0) {
+      this.tableColumnsCache.set(tableName, columns);
+    }
+    return columns;
+  }
+
+  /**
+   * Filters a record to only include columns that exist in the actual database table.
+   * Unknown columns are silently dropped to ensure forward compatibility when newer
+   * domain packages add fields that haven't been migrated yet.
+   */
+  private async filterRecordToKnownColumns(
+    tableName: TABLE_NAMES,
+    record: Record<string, any>,
+  ): Promise<Record<string, any>> {
+    const knownColumns = await this.getTableColumns(tableName);
+    if (knownColumns.size === 0) return record; // Table may not exist yet
+
+    const filtered: Record<string, any> = {};
+    for (const [key, value] of Object.entries(record)) {
+      if (knownColumns.has(key)) {
+        filtered[key] = value;
+      }
+    }
+    return filtered;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
@@ -514,9 +570,13 @@ export class PgDB extends MastraBase {
     try {
       this.addTimestampZColumns(record);
 
+      // Filter out columns that don't exist in the actual database table
+      const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+
       const schemaName = getSchemaName(this.schemaName);
-      const columns = Object.keys(record).map(col => parseSqlIdentifier(col, 'column name'));
-      const values = this.prepareValuesForInsert(record, tableName);
+      const columns = Object.keys(filteredRecord).map(col => parseSqlIdentifier(col, 'column name'));
+      if (columns.length === 0) return; // No known columns after filtering - skip insert
+      const values = this.prepareValuesForInsert(filteredRecord, tableName);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
       const fullTableName = getTableName({ indexName: tableName, schemaName });
       const columnList = columns.map(c => `"${c}"`).join(', ');
@@ -682,6 +742,9 @@ export class PgDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Clear cached columns so subsequent inserts see the fresh schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -1088,6 +1151,9 @@ export class PgDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Invalidate cached columns after DDL completes so concurrent writers see the new schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -1171,6 +1237,9 @@ export class PgDB extends MastraBase {
         },
         error,
       );
+    } finally {
+      // Clear cached columns so subsequent createTable+insert sees the fresh schema
+      this.tableColumnsCache.delete(tableName);
     }
   }
 
@@ -1452,11 +1521,15 @@ export class PgDB extends MastraBase {
     data: Record<string, any>;
   }): Promise<void> {
     try {
+      // Filter out columns that don't exist in the actual database table
+      const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+      if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
+
       const setColumns: string[] = [];
       const setValues: any[] = [];
       let paramIndex = 1;
 
-      Object.entries(data).forEach(([key, value]) => {
+      Object.entries(filteredData).forEach(([key, value]) => {
         const parsedKey = parseSqlIdentifier(key, 'column name');
         setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
         setValues.push(this.prepareValue(value, key, tableName));

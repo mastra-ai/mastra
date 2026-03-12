@@ -1,6 +1,6 @@
 {
   "name": "@mastra/posthog",
-  "version": "1.0.2",
+  "version": "1.0.7",
   "description": "PostHog observability provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -31,18 +31,18 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "posthog-node": "^4.0.1",
+    "posthog-node": "^4.18.0",
     "@mastra/observability": "workspace:*"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@mastra/core": "workspace:*",
     "@observability/test-utils": "workspace:*",
-    "@types/node": "^20.19.30",
-    "eslint": "^9.37.0",
+    "@types/node": "^20.19.35",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^3.2.4",
+    "vitest": "catalog:",
     "@internal/types-builder": "workspace:*"
   },
   "peerDependencies": {

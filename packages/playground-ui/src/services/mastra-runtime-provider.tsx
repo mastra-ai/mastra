@@ -654,7 +654,7 @@ export function MastraRuntimeProvider({
     topK,
     topP,
     seed,
-    maxOutputTokens: maxTokens, // AI SDK v5 uses maxOutputTokens
+    maxTokens,
     providerOptions,
     maxSteps,
     requireToolApproval,
@@ -1271,23 +1271,23 @@ export function MastraRuntimeProvider({
     },
   });
 
-  if (!isReady) return null;
-
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ToolCallProvider
-        approveToolcall={approveToolCall}
-        declineToolcall={declineToolCall}
-        approveToolcallGenerate={approveToolCallGenerate}
-        declineToolcallGenerate={declineToolCallGenerate}
-        isRunning={isRunningStream}
-        toolCallApprovals={toolCallApprovals}
-        approveNetworkToolcall={approveNetworkToolCall}
-        declineNetworkToolcall={declineNetworkToolCall}
-        networkToolCallApprovals={networkToolCallApprovals}
-      >
-        {children}
-      </ToolCallProvider>
+      {isReady ? (
+        <ToolCallProvider
+          approveToolcall={approveToolCall}
+          declineToolcall={declineToolCall}
+          approveToolcallGenerate={approveToolCallGenerate}
+          declineToolcallGenerate={declineToolCallGenerate}
+          isRunning={isRunningStream}
+          toolCallApprovals={toolCallApprovals}
+          approveNetworkToolcall={approveNetworkToolCall}
+          declineNetworkToolcall={declineNetworkToolCall}
+          networkToolCallApprovals={networkToolCallApprovals}
+        >
+          {children}
+        </ToolCallProvider>
+      ) : null}
     </AssistantRuntimeProvider>
   );
 }

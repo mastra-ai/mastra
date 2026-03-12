@@ -41,19 +41,19 @@ export const WithCopyMessage: Story = {
   },
 };
 
-export const SmallIcon: Story = {
-  args: {
-    content: 'some-text',
-    iconSize: 'sm',
-  },
-};
+// export const SmallIcon: Story = {
+//   args: {
+//     content: 'some-text',
+//     iconSize: 'sm',
+//   },
+// };
 
-export const LargeIcon: Story = {
-  args: {
-    content: 'some-text',
-    iconSize: 'lg',
-  },
-};
+// export const LargeIcon: Story = {
+//   args: {
+//     content: 'some-text',
+//     iconSize: 'lg',
+//   },
+// };
 
 export const InContext: Story = {
   render: () => (
@@ -69,6 +69,16 @@ export const CodeBlock: Story = {
     <div className="relative p-4 bg-surface4 rounded-md w-[300px]">
       <CopyButton content="const agent = new Agent()" className="absolute top-2 right-2" />
       <pre className="text-sm font-mono text-neutral5">const agent = new Agent()</pre>
+    </div>
+  ),
+};
+
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex items-center gap-3">
+      {(['sm', 'md', 'default'] as const).map(size => (
+        <CopyButton key={size} content="copy me" size={size} />
+      ))}
     </div>
   ),
 };

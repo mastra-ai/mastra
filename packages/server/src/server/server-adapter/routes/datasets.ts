@@ -20,9 +20,8 @@ import {
   BATCH_INSERT_ITEMS_ROUTE,
   BATCH_DELETE_ITEMS_ROUTE,
 } from '../../handlers/datasets';
-import type { ServerRoute } from '.';
 
-export const DATASETS_ROUTES: ServerRoute<any, any, any>[] = [
+export const DATASETS_ROUTES = [
   // Dataset CRUD
   LIST_DATASETS_ROUTE,
   CREATE_DATASET_ROUTE,
@@ -50,4 +49,4 @@ export const DATASETS_ROUTES: ServerRoute<any, any, any>[] = [
   LIST_EXPERIMENT_RESULTS_ROUTE,
   // Analytics
   COMPARE_EXPERIMENTS_ROUTE,
-];
+] as const;

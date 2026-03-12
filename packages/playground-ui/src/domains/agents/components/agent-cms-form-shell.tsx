@@ -10,12 +10,17 @@ export interface AgentCmsFormShellProps {
   mode: 'create' | 'edit';
   agentId?: string;
   isSubmitting: boolean;
+  isSavingDraft?: boolean;
   handlePublish: () => Promise<void>;
+  handleSaveDraft?: (changeMessage?: string) => Promise<void>;
   readOnly?: boolean;
+  isCodeAgentOverride?: boolean;
   basePath: string;
   currentPath: string;
   banner?: ReactNode;
   children: ReactNode;
+  versionId?: string;
+  rightPanel?: ReactNode;
 }
 
 export function AgentCmsFormShell({
@@ -23,12 +28,17 @@ export function AgentCmsFormShell({
   mode,
   agentId,
   isSubmitting,
+  isSavingDraft,
   handlePublish,
+  handleSaveDraft,
   readOnly,
+  isCodeAgentOverride,
   basePath,
   currentPath,
   banner,
   children,
+  versionId,
+  rightPanel,
 }: AgentCmsFormShellProps) {
   return (
     <AgentEditFormProvider
@@ -36,10 +46,13 @@ export function AgentCmsFormShell({
       mode={mode}
       agentId={agentId}
       isSubmitting={isSubmitting}
+      isSavingDraft={isSavingDraft}
       handlePublish={handlePublish}
+      handleSaveDraft={handleSaveDraft}
       readOnly={readOnly}
+      isCodeAgentOverride={isCodeAgentOverride}
     >
-      <AgentsCmsLayout basePath={basePath} currentPath={currentPath}>
+      <AgentsCmsLayout basePath={basePath} currentPath={currentPath} versionId={versionId} rightPanel={rightPanel}>
         {banner}
         {children}
       </AgentsCmsLayout>

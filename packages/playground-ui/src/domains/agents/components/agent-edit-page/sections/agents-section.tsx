@@ -1,15 +1,12 @@
 import { useMemo, useState } from 'react';
 import { Controller, Control, useWatch } from 'react-hook-form';
-import { ChevronRight, Plus } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 import { EntityAccordionItem } from '@/domains/cms';
 import { AgentIcon, Icon } from '@/ds/icons';
 import { MultiCombobox } from '@/ds/components/Combobox';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
-import { Button } from '@/ds/components/Button';
-import { SideDialog } from '@/ds/components/SideDialog';
 import { useAgents } from '../../../hooks/use-agents';
-import { AgentCreateContent } from '../../agent-create-content';
 import type { AgentFormValues, EntityConfig } from '../utils/form-validation';
 import { SectionTitle } from '@/domains/cms/components/section/section-title';
 
@@ -18,18 +15,10 @@ interface AgentsSectionProps {
   error?: string;
   currentAgentId?: string;
   readOnly?: boolean;
-  hideCreateButton?: boolean;
 }
 
-export function AgentsSection({
-  control,
-  error,
-  currentAgentId,
-  readOnly = false,
-  hideCreateButton = false,
-}: AgentsSectionProps) {
+export function AgentsSection({ control, error, currentAgentId, readOnly = false }: AgentsSectionProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { data: agents, isLoading } = useAgents();
   const selectedAgents = useWatch({ control, name: 'agents' });
   const count = Object.keys(selectedAgents || {}).length;
@@ -95,22 +84,11 @@ export function AgentsSection({
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="flex items-center justify-between p-3 bg-surface3">
                   <CollapsibleTrigger className="flex items-center gap-1 w-full">
-                    <ChevronRight className="h-4 w-4 text-icon3" />
+                    <ChevronRight className="h-4 w-4 text-neutral3" />
                     <SectionTitle icon={<AgentIcon className="text-accent1" />}>
                       Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>
                   </CollapsibleTrigger>
-
-                  {!readOnly && !hideCreateButton && (
-                    <div className="flex justify-end items-center">
-                      <Button variant="outline" size="sm" onClick={() => setIsCreateDialogOpen(true)}>
-                        <Icon size="sm">
-                          <Plus />
-                        </Icon>
-                        Create
-                      </Button>
-                    </div>
-                  )}
                 </div>
 
                 <CollapsibleContent>
@@ -148,45 +126,10 @@ export function AgentsSection({
                   </div>
                 </CollapsibleContent>
               </Collapsible>
-              <AgentsSideDialog
-                isOpen={isCreateDialogOpen}
-                onClose={() => setIsCreateDialogOpen(false)}
-                onAgentCreated={agent => {
-                  field.onChange({
-                    ...field.value,
-                    [agent.id]: { description: agent.description || '' },
-                  });
-                  setIsCreateDialogOpen(false);
-                }}
-              />
             </>
           );
         }}
       />
     </div>
-  );
-}
-
-interface AgentsSideDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onAgentCreated?: (agent: { id: string; description?: string }) => void;
-}
-
-function AgentsSideDialog({ isOpen, onClose, onAgentCreated }: AgentsSideDialogProps) {
-  return (
-    <SideDialog
-      isOpen={isOpen}
-      onClose={onClose}
-      dialogTitle="Create a new sub-agent"
-      dialogDescription="Create a new agent to use as a sub-agent."
-    >
-      <SideDialog.Top>
-        <SideDialog.Header>
-          <SideDialog.Heading>Create a new sub-agent</SideDialog.Heading>
-        </SideDialog.Header>
-      </SideDialog.Top>
-      <AgentCreateContent onSuccess={onAgentCreated} hideSubAgentCreate />
-    </SideDialog>
   );
 }

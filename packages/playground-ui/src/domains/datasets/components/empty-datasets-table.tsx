@@ -11,7 +11,7 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
   return (
     <div className="flex h-full items-center justify-center">
       <EmptyState
-        iconSlot={<Database className="size-10 text-icon3" />}
+        iconSlot={<Database className="size-10 text-neutral3" />}
         titleSlot="No Datasets Yet"
         descriptionSlot="Create your first dataset to start evaluating your agents and workflows."
         actionSlot={
@@ -28,7 +28,7 @@ export function EmptyDatasetsTable({ onCreateClick }: EmptyDatasetsTableProps) {
               size="lg"
               variant="outline"
               as="a"
-              href="https://mastra.ai/docs/evals"
+              href="https://mastra.ai/docs/observability/datasets/overview"
               target="_blank"
               rel="noopener noreferrer"
             >
