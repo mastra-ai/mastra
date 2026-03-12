@@ -2,7 +2,7 @@
 '@mastra/elasticsearch': minor
 ---
 
-Added discriminated union type for ElasticSearchVector constructor config. You can now pass either `{ id, client }` with a pre-configured `@elastic/elasticsearch` Client, or `{ id, url, auth? }` with connection parameters. The type system enforces that exactly one variant is used, preventing invalid combinations at compile time.
+Added support for constructing `ElasticSearchVector` with a pre-configured Elasticsearch client. You can now pass either a `client` instance or connection parameters (`url` and optional `auth`), giving you full control over client configuration when needed.
 
 **Using connection parameters:**
 
