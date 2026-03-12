@@ -123,6 +123,11 @@ export type HarnessStateSchema<T> = PublicSchema<T>;
 /**
  * Configuration for creating a Harness instance.
  */
+/**
+ * Identifiers for the built-in harness tools that can be selectively disabled.
+ */
+export type BuiltinToolId = 'ask_user' | 'submit_plan' | 'task_write' | 'task_check' | 'subagent';
+
 export interface HarnessConfig<TState = {}> {
   /** Unique identifier for this harness instance */
   id: string;
@@ -218,6 +223,13 @@ export interface HarnessConfig<TState = {}> {
    * and provides accessors that Memory's dynamic model functions can close over.
    */
   omConfig?: HarnessOMConfig;
+
+  /**
+   * Built-in tool IDs to disable.
+   * Any tool listed here will be excluded from the `harnessBuiltIn` toolset.
+   * Valid values: 'ask_user', 'submit_plan', 'task_write', 'task_check', 'subagent'.
+   */
+  disabledBuiltinTools?: BuiltinToolId[];
 
   /**
    * Maps tool names to permission categories.

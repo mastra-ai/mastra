@@ -2677,6 +2677,13 @@ export class Harness<TState extends HarnessStateSchema<any> = HarnessStateSchema
       });
     }
 
+    // Remove any explicitly disabled built-in tools
+    if (this.config.disabledBuiltinTools?.length) {
+      for (const toolId of this.config.disabledBuiltinTools) {
+        delete builtInTools[toolId];
+      }
+    }
+
     if (resolvedHarnessTools) {
       return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
     }
