@@ -631,19 +631,40 @@ export class MemoryStorageD1 extends MemoryStorage {
       targetResult.map((r: any) => [r.id as string, { threadId: r.thread_id as string, createdAt: r.createdAt }]),
     );
 
-    // Phase 2: Build cursor-based subqueries using materialized constants from Phase 1.
-    // Uses createdAt directly so the (thread_id, createdAt) index covers the query.
+    // Phase 2: Build cursor-based subqueries and execute in batches to stay under
+    // D1's compound SELECT limit. D1 sets SQLITE_LIMIT_COMPOUND_SELECT well below
+    // SQLite's default of 500 — empirically it fails at 10 terms, so we use a
+    // conservative batch size of 5 terms.
+    const MAX_UNION_TERMS = 5;
     const unionQueries: string[] = [];
-    const params: any[] = [];
+    const unionParams: any[] = [];
+    const allMessages: Record<string, any>[] = [];
+
+    const flushBatch = async () => {
+      if (unionQueries.length === 0) return;
+      const sql =
+        unionQueries.length === 1
+          ? unionQueries[0]!
+          : `${unionQueries.join(' UNION ALL ')} ORDER BY createdAt ASC, id ASC`;
+      const result = await this.#db.executeQuery({ sql, params: unionParams });
+      if (Array.isArray(result)) {
+        allMessages.push(...result);
+      }
+      unionQueries.length = 0;
+      unionParams.length = 0;
+    };
 
     for (const inc of include) {
       const { id, withPreviousMessages = 0, withNextMessages = 0 } = inc;
       const target = targetMap.get(id);
       if (!target) continue;
 
-      // Fetch the target message itself plus previous messages.
-      // Wrap in SELECT * FROM (...) because SQLite does not allow ORDER BY
-      // inside compound-select members (UNION ALL) directly.
+      // Check if adding this target's subqueries would exceed the batch limit
+      const termsNeeded = withNextMessages > 0 ? 2 : 1;
+      if (unionQueries.length + termsNeeded > MAX_UNION_TERMS) {
+        await flushBatch();
+      }
+
       unionQueries.push(`SELECT * FROM (
         SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
         FROM ${tableName}
@@ -652,9 +673,8 @@ export class MemoryStorageD1 extends MemoryStorage {
         ORDER BY createdAt DESC, id DESC
         LIMIT ?
       )`);
-      params.push(target.threadId, target.createdAt, withPreviousMessages + 1);
+      unionParams.push(target.threadId, target.createdAt, withPreviousMessages + 1);
 
-      // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
         unionQueries.push(`SELECT * FROM (
           SELECT id, content, role, type, createdAt, thread_id AS threadId, resourceId
@@ -664,27 +684,15 @@ export class MemoryStorageD1 extends MemoryStorage {
           ORDER BY createdAt ASC, id ASC
           LIMIT ?
         )`);
-        params.push(target.threadId, target.createdAt, withNextMessages);
+        unionParams.push(target.threadId, target.createdAt, withNextMessages);
       }
     }
 
-    if (unionQueries.length === 0) return null;
-
-    let finalQuery: string;
-    if (unionQueries.length === 1) {
-      finalQuery = unionQueries[0]!;
-    } else {
-      finalQuery = `${unionQueries.join(' UNION ALL ')} ORDER BY createdAt ASC, id ASC`;
-    }
-    const messages = await this.#db.executeQuery({ sql: finalQuery, params });
-
-    if (!Array.isArray(messages)) {
-      return [];
-    }
+    await flushBatch();
 
     // Parse message content and deduplicate
     const seen = new Set<string>();
-    const processedMessages = messages
+    const processedMessages = allMessages
       .filter((message: Record<string, any>) => {
         const id = message.id as string;
         if (seen.has(id)) return false;

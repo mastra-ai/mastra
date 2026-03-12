@@ -99,13 +99,32 @@ function isFilesystemNotFoundError(error: unknown): boolean {
 }
 
 /**
+ * Check if an error is a workspace filesystem permission error.
+ * Handles Node.js EACCES and workspace PermissionError.
+ */
+function isFilesystemPermissionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  if ('code' in error && error.code === 'EACCES') return true;
+
+  if ('name' in error && error.name === 'PermissionError') return true;
+
+  return false;
+}
+
+/**
  * Workspace-specific error handler.
- * Converts filesystem not-found errors to 404, then falls back to generic handler.
+ * Converts filesystem errors to appropriate HTTP status codes,
+ * then falls back to generic handler.
  */
 function handleWorkspaceError(error: unknown, defaultMessage: string): never {
   if (isFilesystemNotFoundError(error)) {
     const message = error instanceof Error ? error.message : 'Not found';
     throw new HTTPException(404, { message });
+  }
+  if (isFilesystemPermissionError(error)) {
+    const message = error instanceof Error ? error.message : 'Permission denied';
+    throw new HTTPException(403, { message });
   }
   return handleError(error, defaultMessage);
 }

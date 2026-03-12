@@ -48,19 +48,25 @@ function LandingContent() {
               name: 'Mastra',
               url: 'https://mastra.ai',
             },
-            instructor: {
-              '@type': 'Person',
-              name: 'Guil Hernandez',
-              url: 'https://www.linkedin.com/in/guiljh/',
-              image: 'https://mastra.ai/img/guil-hernandez.jpg',
-              jobTitle: 'Developer Educator',
-              description: 'Over a decade building and teaching software, with courses used by 500,000+ learners.',
-            },
             isAccessibleForFree: true,
+            offers: {
+              '@type': 'Offer',
+              price: 0,
+              priceCurrency: 'USD',
+              category: 'Free',
+            },
             hasCourseInstance: {
               '@type': 'CourseInstance',
               courseMode: 'online',
               courseWorkload: 'PT90M',
+              instructor: {
+                '@type': 'Person',
+                name: 'Guil Hernandez',
+                url: 'https://www.linkedin.com/in/guiljh/',
+                image: 'https://mastra.ai/img/guil-hernandez.jpg',
+                jobTitle: 'Developer Educator',
+                description: 'Over a decade building and teaching software, with courses used by 500,000+ learners.',
+              },
             },
           })}
         </script>

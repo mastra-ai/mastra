@@ -26,7 +26,7 @@ describe('workspace_list_files', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/dir' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: 'dir' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('file1.txt');
@@ -45,7 +45,7 @@ describe('workspace_list_files', () => {
     const tools = createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/dir', maxDepth: 5 },
+      { path: 'dir', maxDepth: 5 },
       { workspace },
     );
 
@@ -68,10 +68,7 @@ describe('workspace_list_files', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/', maxDepth: 2 },
-      { workspace },
-    );
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '', maxDepth: 2 }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('level1');
@@ -90,7 +87,7 @@ describe('workspace_list_files', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' }, { workspace });
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '' }, { workspace });
 
     expect(typeof result).toBe('string');
     expect(result).toContain('level1');
@@ -109,7 +106,7 @@ describe('workspace_list_files', () => {
     const tools = createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/', extension: '.ts' },
+      { path: '', extension: '.ts' },
       { workspace },
     );
 
@@ -127,14 +124,14 @@ describe('workspace_list_files', () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
     const tools = createWorkspaceTools(workspace);
 
-    const resultHidden = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '/' }, { workspace });
+    const resultHidden = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute({ path: '' }, { workspace });
     expect(resultHidden).not.toContain('.gitignore');
     expect(resultHidden).not.toContain('.hidden-dir');
     expect(resultHidden).toContain('visible.txt');
 
     const resultVisible = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         showHidden: true,
       },
       { workspace },
@@ -154,7 +151,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 3,
         dirsOnly: true,
       },
@@ -179,7 +176,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 3,
         exclude: 'node_modules',
       },
@@ -203,7 +200,7 @@ describe('workspace_list_files', () => {
     const tools = createWorkspaceTools(workspace);
 
     const defaultResult = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/' },
+      { path: '' },
       { workspace },
     )) as string;
     expect(defaultResult).toContain('src.ts');
@@ -211,7 +208,7 @@ describe('workspace_list_files', () => {
     expect(defaultResult).not.toContain('app.log');
 
     const ignoreDisabledResult = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/', showHidden: true, respectGitignore: false },
+      { path: '', showHidden: true, respectGitignore: false },
       { workspace },
     )) as string;
     expect(ignoreDisabledResult).toContain('.gitignore');
@@ -229,7 +226,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 5,
         pattern: '**/*.ts',
       },
@@ -251,7 +248,7 @@ describe('workspace_list_files', () => {
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         pattern: ['**/*.ts', '**/*.tsx'],
       },
       { workspace },
@@ -278,7 +275,7 @@ describe('workspace_list_files', () => {
 
     const result = (await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
       {
-        path: '/',
+        path: '',
         maxDepth: 5,
       },
       { workspace },
@@ -297,7 +294,7 @@ describe('workspace_list_files', () => {
     const tools = createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/', maxDepth: 3, showHidden: true },
+      { path: '', maxDepth: 3, showHidden: true },
       { workspace },
     );
 
@@ -315,7 +312,7 @@ describe('workspace_list_files', () => {
     const tools = createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES].execute(
-      { path: '/dist', maxDepth: 3 },
+      { path: 'dist', maxDepth: 3 },
       { workspace },
     );
 

@@ -288,6 +288,7 @@ export abstract class Bundler extends MastraBundler {
       enableSourcemap: !!bundlerOptions.sourcemap,
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
+      dynamicPackages: bundlerOptions.dynamicPackages,
     };
 
     let analyzedBundleInfo;
@@ -368,11 +369,6 @@ export abstract class Bundler extends MastraBundler {
       } else {
         dependenciesToInstall.set(dep, version);
       }
-    }
-
-    if (dependenciesToInstall.has('@mastra/core') && !dependenciesToInstall.has('@mastra/schema-compat')) {
-      const coreVersion = dependenciesToInstall.get('@mastra/core') || 'latest';
-      dependenciesToInstall.set('@mastra/schema-compat', coreVersion);
     }
 
     try {
