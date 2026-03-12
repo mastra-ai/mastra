@@ -280,7 +280,7 @@ describe('makeCoreTool', () => {
     expect(tool.onInputAvailable).toBe(onInputAvailable);
     expect(tool.onOutput).toBe(onOutput);
 
-    // Break 2 fix: CoreToolBuilder.build() transfers hooks to CoreTool
+    // Break 2 fix: AISDKToolConverter.build() transfers hooks to CoreTool
     const coreTool = makeCoreTool(tool, mockOptions);
     expect((coreTool as any).onInputStart).toBe(onInputStart);
     expect((coreTool as any).onInputDelta).toBe(onInputDelta);

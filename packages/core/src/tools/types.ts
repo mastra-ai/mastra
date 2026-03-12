@@ -75,7 +75,7 @@ export interface MCPToolExecutionContext {
  * This is used by CoreTool/InternalCoreTool for AI SDK compatibility (AI SDK expects this signature).
  * Mastra v1.0 tools (ToolAction) use ToolExecutionContext instead.
  *
- * CoreToolBuilder acts as the adapter layer:
+ * AISDKToolConverter acts as the adapter layer:
  * - Receives: AI SDK calls with MastraToolInvocationOptions
  * - Converts to: ToolExecutionContext for Mastra tool execution
  * - Returns: Results back to AI SDK
@@ -114,7 +114,7 @@ export type MCPToolType = 'agent' | 'workflow';
 /**
  * Metadata identifying a tool as originating from an MCP server.
  * Set automatically by the MCP client when creating tools.
- * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+ * Used by AISDKToolConverter to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
  */
 export interface McpMetadata {
   serverName: string;
@@ -189,7 +189,7 @@ export interface MCPToolProperties {
  * CoreTool is the AI SDK-compatible tool format used when passing tools to the AI SDK.
  * This matches the AI SDK's Tool interface.
  *
- * CoreToolBuilder converts Mastra tools (ToolAction) to this format and handles the
+ * AISDKToolConverter converts Mastra tools (ToolAction) to this format and handles the
  * signature transformation from Mastra's (inputData, context) to AI SDK format (params, options).
  *
  * Key differences from ToolAction:
@@ -387,7 +387,7 @@ export interface ToolAction<
   /**
    * Metadata identifying this tool as originating from an MCP server.
    * Set automatically by the MCP client when creating tools.
-   * Used by CoreToolBuilder to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
+   * Used by AISDKToolConverter to create MCP_TOOL_CALL spans instead of TOOL_CALL spans.
    */
   mcpMetadata?: McpMetadata;
   /**
