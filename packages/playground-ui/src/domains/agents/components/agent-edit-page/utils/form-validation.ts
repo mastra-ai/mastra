@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { JsonSchema } from '@/lib/json-schema';
 import type { RuleGroup, RuleGroupDepth1, RuleGroupDepth2 } from '@mastra/core/storage';
+import { workspaceSnapshotConfigSchema } from '@mastra/client-js';
 
 export type InMemoryFileNode = {
   id: string;
@@ -242,7 +243,7 @@ export const agentFormSchema = z.object({
   workspace: z
     .discriminatedUnion('type', [
       z.object({ type: z.literal('id'), workspaceId: z.string() }),
-      z.object({ type: z.literal('inline'), config: z.record(z.string(), z.unknown()) }),
+      z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
     ])
     .optional(),
 });

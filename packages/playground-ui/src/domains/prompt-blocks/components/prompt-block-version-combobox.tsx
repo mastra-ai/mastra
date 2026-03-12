@@ -34,7 +34,7 @@ export function PromptBlockVersionCombobox({
 }: PromptBlockVersionComboboxProps) {
   const { data, isLoading } = usePromptBlockVersions({
     blockId,
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const versions = data?.versions ?? [];

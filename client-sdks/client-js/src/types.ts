@@ -24,16 +24,13 @@ import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type {
-  AgentInstructionBlock,
   PaginationInfo,
   WorkflowRuns,
   StorageListMessagesInput,
-  ObservationalMemoryRecord,
   Rule,
   RuleGroup,
   StorageConditionalVariant,
   StorageConditionalField,
-  StoredProcessorGraph,
 } from '@mastra/core/storage';
 
 import type { QueryResult } from '@mastra/core/vector';
@@ -46,8 +43,142 @@ import type {
 } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat';
 
+import type {
+  // Stored Agents
+  storedAgentSchema,
+  listStoredAgentsResponseSchema,
+  createStoredAgentBodySchema,
+  updateStoredAgentBodySchema,
+  deleteStoredAgentResponseSchema,
+  listStoredAgentsQuerySchema,
+  // Stored Scorers
+  storedScorerSchema,
+  listStoredScorersResponseSchema,
+  createStoredScorerBodySchema,
+  updateStoredScorerBodySchema,
+  deleteStoredScorerResponseSchema,
+  listStoredScorersQuerySchema,
+  // Stored MCP Clients
+  storedMCPClientSchema,
+  listStoredMCPClientsResponseSchema,
+  createStoredMCPClientBodySchema,
+  updateStoredMCPClientBodySchema,
+  deleteStoredMCPClientResponseSchema,
+  listStoredMCPClientsQuerySchema,
+  // Stored Skills
+  storedSkillSchema,
+  listStoredSkillsResponseSchema,
+  createStoredSkillBodySchema,
+  updateStoredSkillBodySchema,
+  deleteStoredSkillResponseSchema,
+  listStoredSkillsQuerySchema,
+  // Stored Prompt Blocks
+  storedPromptBlockSchema,
+  listStoredPromptBlocksResponseSchema,
+  createStoredPromptBlockBodySchema,
+  updateStoredPromptBlockBodySchema,
+  deleteStoredPromptBlockResponseSchema,
+  listStoredPromptBlocksQuerySchema,
+  // Agent Versions
+  agentVersionSchema,
+  listVersionsQuerySchema,
+  listVersionsResponseSchema,
+  createVersionBodySchema,
+  activateVersionResponseSchema,
+  deleteVersionResponseSchema,
+  versionDiffEntrySchema,
+  compareVersionsResponseSchema,
+  // Scorer Versions
+  scorerVersionSchema,
+  listScorerVersionsQuerySchema,
+  listScorerVersionsResponseSchema,
+  createScorerVersionBodySchema,
+  activateScorerVersionResponseSchema,
+  deleteScorerVersionResponseSchema,
+  compareScorerVersionsResponseSchema,
+  // Prompt Block Versions
+  promptBlockVersionSchema,
+  listPromptBlockVersionsQuerySchema,
+  listPromptBlockVersionsResponseSchema,
+  createPromptBlockVersionBodySchema,
+  activatePromptBlockVersionResponseSchema,
+  deletePromptBlockVersionResponseSchema,
+  // System
+  systemPackagesResponseSchema,
+  // Processors
+  processorSerializedSchema,
+  processorConfigurationSchema,
+  serializedProcessorDetailSchema,
+  executeProcessorBodySchema,
+  executeProcessorResponseSchema,
+  // Processor Providers
+  getProcessorProvidersResponseSchema,
+  getProcessorProviderResponseSchema,
+  // Tool Providers
+  listToolProvidersResponseSchema,
+  listToolProviderToolkitsResponseSchema,
+  listToolProviderToolsQuerySchema,
+  listToolProviderToolsResponseSchema,
+  getToolProviderToolSchemaResponseSchema,
+  // Vectors & Embedders
+  listVectorsResponseSchema,
+  listEmbeddersResponseSchema,
+  // Workspace
+  workspaceSnapshotConfigSchema,
+  workspaceInfoResponseSchema,
+  listWorkspacesResponseSchema,
+  fsReadResponseSchema,
+  fsWriteResponseSchema,
+  fsListResponseSchema,
+  fsDeleteResponseSchema,
+  fsMkdirResponseSchema,
+  fsStatResponseSchema,
+  searchResponseSchema,
+  searchQuerySchema,
+  indexResponseSchema,
+  searchResultSchema,
+  indexBodySchema,
+  fileEntrySchema,
+  // Skills (workspace)
+  skillSourceSchema,
+  skillMetadataSchema,
+  skillSchema,
+  listSkillsResponseSchema,
+  skillSearchResultSchema,
+  searchSkillsQuerySchema,
+  searchSkillsResponseSchema,
+  skillReferenceResponseSchema,
+  listReferencesResponseSchema,
+  // Memory
+  memoryStatusResponseSchema,
+  memoryConfigResponseSchema,
+  getObservationalMemoryResponseSchema,
+  awaitBufferStatusResponseSchema,
+  // Datasets
+  datasetResponseSchema,
+  datasetItemResponseSchema,
+  experimentResponseSchema,
+  experimentResultResponseSchema,
+  createDatasetBodySchema,
+  updateDatasetBodySchema,
+  addItemBodySchema,
+  updateItemBodySchema,
+  triggerExperimentBodySchema,
+  compareExperimentsBodySchema,
+  comparisonResponseSchema,
+  itemVersionResponseSchema,
+  batchInsertItemsBodySchema,
+  batchDeleteItemsBodySchema,
+  datasetVersionResponseSchema,
+} from '@mastra/server/schemas';
 import type { JSONSchema7 } from 'json-schema';
+import type { z } from 'zod';
 import type { ZodSchema } from 'zod/v3';
+import type { JsonSerialized } from './serialization';
+
+// ============================================================================
+// Server Schema Imports (for type derivation)
+// ============================================================================
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -784,10 +915,11 @@ export interface StoredAgentSkillConfig {
 /**
  * Workspace reference stored in agent snapshots.
  * Can reference a stored workspace by ID or provide inline workspace config.
+ * Inline config type derived from server's workspaceSnapshotConfigSchema.
  */
 export type StoredWorkspaceRef =
   | { type: 'id'; workspaceId: string }
-  | { type: 'inline'; config: Record<string, unknown> };
+  | { type: 'inline'; config: z.input<typeof workspaceSnapshotConfigSchema> };
 
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
@@ -800,65 +932,22 @@ export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
- * Stored agent data returned from API
+ * Stored agent data returned from API.
+ * Derived from server's storedAgentSchema with Date→string serialization for JSON transport.
  */
-export interface StoredAgentResponse {
-  // Thin agent record fields
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  // Version snapshot config fields (resolved from active version)
-  name: string;
-  description?: string;
-  instructions: string | AgentInstructionBlock[];
-  model: ConditionalField<{
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<StoredProcessorGraph>;
-  outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
-  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
-  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
-  workspace?: ConditionalField<StoredWorkspaceRef>;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type StoredAgentResponse = JsonSerialized<z.infer<typeof storedAgentSchema>>;
 
 /**
- * Parameters for listing stored agents
+ * Parameters for listing stored agents.
+ * Derived from server's listStoredAgentsQuerySchema.
  */
-export interface ListStoredAgentsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredAgentsParams = z.input<typeof listStoredAgentsQuerySchema>;
 
 /**
- * Response for listing stored agents
+ * Response for listing stored agents.
+ * Derived from server's listStoredAgentsResponseSchema with Date→string serialization.
  */
-export interface ListStoredAgentsResponse {
-  agents: StoredAgentResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredAgentsResponse = JsonSerialized<z.infer<typeof listStoredAgentsResponseSchema>>;
 
 /**
  * Parameters for cloning an agent to a stored agent
@@ -878,452 +967,237 @@ export interface CloneAgentParams {
 
 /**
  * Parameters for creating a stored agent.
- * Flat union of agent-record fields and config fields.
+ * Derived from server's createStoredAgentBodySchema.
  */
-export interface CreateStoredAgentParams {
-  /** Unique identifier for the agent. If not provided, derived from name via slugify. */
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  instructions: string | AgentInstructionBlock[];
-  model: ConditionalField<{
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<StoredProcessorGraph>;
-  outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
-  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
-  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
-  workspace?: ConditionalField<StoredWorkspaceRef>;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type CreateStoredAgentParams = z.input<typeof createStoredAgentBodySchema>;
 
 /**
- * Parameters for updating a stored agent
+ * Parameters for updating a stored agent.
+ * Derived from server's updateStoredAgentBodySchema.
  */
-export interface UpdateStoredAgentParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  instructions?: string | AgentInstructionBlock[];
-  model?: ConditionalField<{
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<StoredProcessorGraph>;
-  outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
-  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
-  skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
-  workspace?: ConditionalField<StoredWorkspaceRef>;
-  requestContextSchema?: Record<string, unknown>;
-  /** Optional message describing the changes for the auto-created version */
-  changeMessage?: string;
-}
+export type UpdateStoredAgentParams = z.input<typeof updateStoredAgentBodySchema>;
 
 /**
- * Response for deleting a stored agent
+ * Response for deleting a stored agent.
+ * Derived from server's deleteStoredAgentResponseSchema.
  */
-export interface DeleteStoredAgentResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredAgentResponse = z.infer<typeof deleteStoredAgentResponseSchema>;
 
 // ============================================================================
-// Stored Scorer Definition Types
+// Stored Scorer Definition Types (derived from @mastra/server/schemas)
 // ============================================================================
 
 /**
- * Sampling configuration for scorers
+ * Stored scorer definition data returned from API.
+ * Derived from server's storedScorerSchema with Date→string serialization.
  */
-export type ScorerSamplingConfig = { type: 'none' } | { type: 'ratio'; rate: number };
+export type StoredScorerResponse = JsonSerialized<z.infer<typeof storedScorerSchema>>;
 
 /**
- * Scorer type discriminator
+ * Parameters for listing stored scorer definitions.
+ * Derived from server's listStoredScorersQuerySchema.
  */
-export type StoredScorerType =
-  | 'llm-judge'
-  | 'answer-relevancy'
-  | 'answer-similarity'
-  | 'bias'
-  | 'context-precision'
-  | 'context-relevance'
-  | 'faithfulness'
-  | 'hallucination'
-  | 'noise-sensitivity'
-  | 'prompt-alignment'
-  | 'tool-call-accuracy'
-  | 'toxicity';
+export type ListStoredScorersParams = z.input<typeof listStoredScorersQuerySchema>;
 
 /**
- * Stored scorer definition data returned from API
+ * Response for listing stored scorer definitions.
+ * Derived from server's listStoredScorersResponseSchema with Date→string serialization.
  */
-export interface StoredScorerResponse {
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  name: string;
-  description?: string;
-  type: StoredScorerType;
-  model?: {
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  };
-  instructions?: string;
-  scoreRange?: {
-    min?: number;
-    max?: number;
-  };
-  presetConfig?: Record<string, unknown>;
-  defaultSampling?: ScorerSamplingConfig;
-}
+export type ListStoredScorersResponse = JsonSerialized<z.infer<typeof listStoredScorersResponseSchema>>;
 
 /**
- * Parameters for listing stored scorer definitions
+ * Parameters for creating a stored scorer definition.
+ * Derived from server's createStoredScorerBodySchema.
  */
-export interface ListStoredScorersParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type CreateStoredScorerParams = z.input<typeof createStoredScorerBodySchema>;
 
 /**
- * Response for listing stored scorer definitions
+ * Parameters for updating a stored scorer definition.
+ * Derived from server's updateStoredScorerBodySchema.
  */
-export interface ListStoredScorersResponse {
-  scorerDefinitions: StoredScorerResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type UpdateStoredScorerParams = z.input<typeof updateStoredScorerBodySchema>;
 
 /**
- * Parameters for creating a stored scorer definition
+ * Response for deleting a stored scorer definition.
+ * Derived from server's deleteStoredScorerResponseSchema.
  */
-export interface CreateStoredScorerParams {
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  type: StoredScorerType;
-  model?: {
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  };
-  instructions?: string;
-  scoreRange?: {
-    min?: number;
-    max?: number;
-  };
-  presetConfig?: Record<string, unknown>;
-  defaultSampling?: ScorerSamplingConfig;
-}
-
-/**
- * Parameters for updating a stored scorer definition
- */
-export interface UpdateStoredScorerParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  type?: StoredScorerType;
-  model?: {
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  };
-  instructions?: string;
-  scoreRange?: {
-    min?: number;
-    max?: number;
-  };
-  presetConfig?: Record<string, unknown>;
-  defaultSampling?: ScorerSamplingConfig;
-}
-
-/**
- * Response for deleting a stored scorer definition
- */
-export interface DeleteStoredScorerResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredScorerResponse = z.infer<typeof deleteStoredScorerResponseSchema>;
 
 // ============================================================================
-// Stored MCP Client Types
+// Stored MCP Client Types (derived from @mastra/server/schemas)
 // ============================================================================
 
 /**
- * MCP server transport configuration
+ * Stored MCP client data returned from API.
+ * Derived from server's storedMCPClientSchema with Date→string serialization.
  */
-export interface StoredMCPServerConfig {
-  type: 'stdio' | 'http';
-  command?: string;
-  args?: string[];
-  env?: Record<string, string>;
-  url?: string;
-  timeout?: number;
-}
+export type StoredMCPClientResponse = JsonSerialized<z.infer<typeof storedMCPClientSchema>>;
 
 /**
- * Stored MCP client data returned from API
+ * MCP server configuration (stdio or http transport).
+ * Extracted from StoredMCPClientResponse's servers field.
  */
-export interface StoredMCPClientResponse {
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  name: string;
-  description?: string;
-  servers: Record<string, StoredMCPServerConfig>;
-}
+export type StoredMCPServerConfig = StoredMCPClientResponse['servers'][string];
 
 /**
- * Parameters for listing stored MCP clients
+ * Parameters for listing stored MCP clients.
+ * Derived from server's listStoredMCPClientsQuerySchema.
  */
-export interface ListStoredMCPClientsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredMCPClientsParams = z.input<typeof listStoredMCPClientsQuerySchema>;
 
 /**
- * Response for listing stored MCP clients
+ * Response for listing stored MCP clients.
+ * Derived from server's listStoredMCPClientsResponseSchema with Date→string serialization.
  */
-export interface ListStoredMCPClientsResponse {
-  mcpClients: StoredMCPClientResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredMCPClientsResponse = JsonSerialized<z.infer<typeof listStoredMCPClientsResponseSchema>>;
 
 /**
- * Parameters for creating a stored MCP client
+ * Parameters for creating a stored MCP client.
+ * Derived from server's createStoredMCPClientBodySchema.
  */
-export interface CreateStoredMCPClientParams {
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  servers: Record<string, StoredMCPServerConfig>;
-}
+export type CreateStoredMCPClientParams = z.input<typeof createStoredMCPClientBodySchema>;
 
 /**
- * Parameters for updating a stored MCP client
+ * Parameters for updating a stored MCP client.
+ * Derived from server's updateStoredMCPClientBodySchema.
  */
-export interface UpdateStoredMCPClientParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  servers?: Record<string, StoredMCPServerConfig>;
-}
+export type UpdateStoredMCPClientParams = z.input<typeof updateStoredMCPClientBodySchema>;
 
 /**
- * Response for deleting a stored MCP client
+ * Response for deleting a stored MCP client.
+ * Derived from server's deleteStoredMCPClientResponseSchema.
  */
-export interface DeleteStoredMCPClientResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredMCPClientResponse = z.infer<typeof deleteStoredMCPClientResponseSchema>;
 
 // ============================================================================
-// Agent Version Types
+// Agent Version Types (derived from @mastra/server/schemas)
 // ============================================================================
 
-export interface AgentVersionResponse {
-  id: string;
-  agentId: string;
-  versionNumber: number;
-  name: string;
-  description?: string;
-  instructions: string | AgentInstructionBlock[];
-  model: ConditionalField<{
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  }>;
-  tools?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  defaultOptions?: ConditionalField<DefaultOptions>;
-  workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
-  integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
-  inputProcessors?: ConditionalField<StoredProcessorGraph>;
-  outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
-  scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
-  requestContextSchema?: Record<string, unknown>;
-  changedFields?: string[];
-  changeMessage?: string;
-  createdAt: string;
-}
+/**
+ * Agent version data returned from API.
+ * Derived from server's agentVersionSchema with Date→string serialization.
+ */
+export type AgentVersionResponse = JsonSerialized<z.infer<typeof agentVersionSchema>>;
 
-export interface ListAgentVersionsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
-}
+/**
+ * Parameters for listing agent versions.
+ * Derived from server's listVersionsQuerySchema.
+ */
+export type ListAgentVersionsParams = z.input<typeof listVersionsQuerySchema>;
 
-export interface ListAgentVersionsResponse {
-  versions: AgentVersionResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+/**
+ * Response for listing agent versions.
+ * Derived from server's listVersionsResponseSchema with Date→string serialization.
+ */
+export type ListAgentVersionsResponse = JsonSerialized<z.infer<typeof listVersionsResponseSchema>>;
 
-export interface CreateAgentVersionParams {
-  changeMessage?: string;
-}
+/**
+ * Parameters for creating an agent version.
+ * Derived from server's createVersionBodySchema.
+ */
+export type CreateAgentVersionParams = z.input<typeof createVersionBodySchema>;
 
+/**
+ * Response for creating an agent version.
+ */
 export interface CreateAgentVersionResponse {
   version: AgentVersionResponse;
 }
 
-export interface ActivateAgentVersionResponse {
-  success: boolean;
-  message: string;
-  activeVersionId: string;
-}
+/**
+ * Response for activating an agent version.
+ * Derived from server's activateVersionResponseSchema.
+ */
+export type ActivateAgentVersionResponse = z.infer<typeof activateVersionResponseSchema>;
 
+/**
+ * Response for restoring an agent version.
+ */
 export interface RestoreAgentVersionResponse {
   success: boolean;
   message: string;
   version: AgentVersionResponse;
 }
 
-export interface DeleteAgentVersionResponse {
-  success: boolean;
-  message: string;
-}
+/**
+ * Response for deleting an agent version.
+ * Derived from server's deleteVersionResponseSchema.
+ */
+export type DeleteAgentVersionResponse = z.infer<typeof deleteVersionResponseSchema>;
 
-export interface VersionDiff {
-  field: string;
-  previousValue: any;
-  currentValue: any;
-  changeType?: 'added' | 'removed' | 'modified';
-}
+/**
+ * Version diff entry.
+ * Derived from server's versionDiffEntrySchema.
+ */
+export type VersionDiff = z.infer<typeof versionDiffEntrySchema>;
 
 export type AgentVersionDiff = VersionDiff;
 
-export interface CompareVersionsResponse {
-  fromVersion: AgentVersionResponse;
-  toVersion: AgentVersionResponse;
-  diffs: VersionDiff[];
-}
+/**
+ * Response for comparing agent versions.
+ * Derived from server's compareVersionsResponseSchema with Date→string serialization.
+ */
+export type CompareVersionsResponse = JsonSerialized<z.infer<typeof compareVersionsResponseSchema>>;
 
 // ============================================================================
-// Scorer Version Types
+// Scorer Version Types (derived from @mastra/server/schemas)
 // ============================================================================
 
-export interface ScorerVersionResponse {
-  id: string;
-  scorerDefinitionId: string;
-  versionNumber: number;
-  name: string;
-  description?: string;
-  type: StoredScorerType;
-  model?: {
-    provider: string;
-    name: string;
-    [key: string]: unknown;
-  };
-  instructions?: string;
-  scoreRange?: {
-    min?: number;
-    max?: number;
-  };
-  presetConfig?: Record<string, unknown>;
-  defaultSampling?: ScorerSamplingConfig;
-  changedFields?: string[];
-  changeMessage?: string;
-  createdAt: string;
-}
+/**
+ * Scorer version data returned from API.
+ * Derived from server's scorerVersionSchema with Date→string serialization.
+ */
+export type ScorerVersionResponse = JsonSerialized<z.infer<typeof scorerVersionSchema>>;
 
-export interface ListScorerVersionsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
-}
+/**
+ * Parameters for listing scorer versions.
+ * Derived from server's listScorerVersionsQuerySchema.
+ */
+export type ListScorerVersionsParams = z.input<typeof listScorerVersionsQuerySchema>;
 
-export interface ListScorerVersionsResponse {
-  versions: ScorerVersionResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+/**
+ * Response for listing scorer versions.
+ * Derived from server's listScorerVersionsResponseSchema with Date→string serialization.
+ */
+export type ListScorerVersionsResponse = JsonSerialized<z.infer<typeof listScorerVersionsResponseSchema>>;
 
-export interface CreateScorerVersionParams {
-  changeMessage?: string;
-}
+/**
+ * Parameters for creating a scorer version.
+ * Derived from server's createScorerVersionBodySchema.
+ */
+export type CreateScorerVersionParams = z.input<typeof createScorerVersionBodySchema>;
 
-export interface ActivateScorerVersionResponse {
-  success: boolean;
-  message: string;
-  activeVersionId: string;
-}
+/**
+ * Response for activating a scorer version.
+ * Derived from server's activateScorerVersionResponseSchema.
+ */
+export type ActivateScorerVersionResponse = z.infer<typeof activateScorerVersionResponseSchema>;
 
-export interface DeleteScorerVersionResponse {
-  success: boolean;
-  message: string;
-}
+/**
+ * Response for deleting a scorer version.
+ * Derived from server's deleteScorerVersionResponseSchema.
+ */
+export type DeleteScorerVersionResponse = z.infer<typeof deleteScorerVersionResponseSchema>;
 
-export interface CompareScorerVersionsResponse {
-  fromVersion: ScorerVersionResponse;
-  toVersion: ScorerVersionResponse;
-  diffs: VersionDiff[];
-}
+/**
+ * Response for comparing scorer versions.
+ * Derived from server's compareScorerVersionsResponseSchema with Date→string serialization.
+ */
+export type CompareScorerVersionsResponse = JsonSerialized<z.infer<typeof compareScorerVersionsResponseSchema>>;
 
+/**
+ * Response for listing agent model providers.
+ * NOTE: The server's providerSchema is incomplete — it omits envVar, connected, docUrl, models
+ * fields that the handler actually returns. We keep the full type here until the server schema is fixed.
+ */
 export interface ListAgentsModelProvidersResponse {
   providers: Provider[];
 }
 
+/**
+ * Individual model provider.
+ * NOTE: Server's providerSchema is incomplete — keeping manual definition with all fields.
+ */
 export interface Provider {
   id: string;
   name: string;
@@ -1334,19 +1208,12 @@ export interface Provider {
 }
 
 // ============================================================================
-// System Types
+// System Types (derived from @mastra/server/schemas)
 // ============================================================================
 
-export interface MastraPackage {
-  name: string;
-  version: string;
-}
+// MastraPackage is exported from @mastra/server/schemas via re-export in index.ts
 
-export interface GetSystemPackagesResponse {
-  packages: MastraPackage[];
-  isDev: boolean;
-  cmsEnabled: boolean;
-}
+export type GetSystemPackagesResponse = z.infer<typeof systemPackagesResponseSchema>;
 
 // ============================================================================
 // Workspace Types
@@ -1372,252 +1239,146 @@ export interface WorkspaceSafety {
 }
 
 /**
- * Response for getting workspace info
+ * Response for getting workspace info.
+ * Derived from server's workspaceInfoResponseSchema.
  */
-export interface WorkspaceInfoResponse {
-  isWorkspaceConfigured: boolean;
-  id?: string;
-  name?: string;
-  status?: string;
-  capabilities?: WorkspaceCapabilities;
-  safety?: WorkspaceSafety;
-}
+export type WorkspaceInfoResponse = z.infer<typeof workspaceInfoResponseSchema>;
 
 /**
- * Workspace item in list response
+ * Response for listing all workspaces.
+ * Derived from server's listWorkspacesResponseSchema.
  */
-export interface WorkspaceItem {
-  id: string;
-  name: string;
-  status: string;
-  source: 'mastra' | 'agent';
-  agentId?: string;
-  agentName?: string;
-  capabilities: WorkspaceCapabilities;
-  safety: WorkspaceSafety;
-}
+export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>;
 
 /**
- * Response for listing all workspaces
+ * File entry in directory listing.
+ * Derived from server's fileEntrySchema.
  */
-export interface ListWorkspacesResponse {
-  workspaces: WorkspaceItem[];
-}
+export type WorkspaceFileEntry = z.infer<typeof fileEntrySchema>;
 
 /**
- * File entry in directory listing
+ * Response for reading a file.
+ * Derived from server's fsReadResponseSchema.
  */
-export interface WorkspaceFileEntry {
-  name: string;
-  type: 'file' | 'directory';
-  size?: number;
-}
+export type WorkspaceFsReadResponse = z.infer<typeof fsReadResponseSchema>;
 
 /**
- * Response for reading a file
+ * Response for writing a file.
+ * Derived from server's fsWriteResponseSchema.
  */
-export interface WorkspaceFsReadResponse {
-  path: string;
-  content: string;
-  type: 'file' | 'directory';
-  size?: number;
-  mimeType?: string;
-}
+export type WorkspaceFsWriteResponse = z.infer<typeof fsWriteResponseSchema>;
 
 /**
- * Response for writing a file
+ * Response for listing files.
+ * Derived from server's fsListResponseSchema.
  */
-export interface WorkspaceFsWriteResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsListResponse = z.infer<typeof fsListResponseSchema>;
 
 /**
- * Response for listing files
+ * Response for deleting a file.
+ * Derived from server's fsDeleteResponseSchema.
  */
-export interface WorkspaceFsListResponse {
-  path: string;
-  entries: WorkspaceFileEntry[];
-}
+export type WorkspaceFsDeleteResponse = z.infer<typeof fsDeleteResponseSchema>;
 
 /**
- * Response for deleting a file
+ * Response for creating a directory.
+ * Derived from server's fsMkdirResponseSchema.
  */
-export interface WorkspaceFsDeleteResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsMkdirResponse = z.infer<typeof fsMkdirResponseSchema>;
 
 /**
- * Response for creating a directory
+ * Response for getting file stats.
+ * Derived from server's fsStatResponseSchema.
  */
-export interface WorkspaceFsMkdirResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsStatResponse = z.infer<typeof fsStatResponseSchema>;
 
 /**
- * Response for getting file stats
+ * Workspace search result.
+ * Derived from server's searchResultSchema.
  */
-export interface WorkspaceFsStatResponse {
-  path: string;
-  type: 'file' | 'directory';
-  size?: number;
-  createdAt?: string;
-  modifiedAt?: string;
-  mimeType?: string;
-}
+export type WorkspaceSearchResult = z.infer<typeof searchResultSchema>;
 
 /**
- * Workspace search result
+ * Parameters for searching workspace content.
+ * Derived from server's searchQuerySchema.
  */
-export interface WorkspaceSearchResult {
-  /** Document identifier (typically the indexed file path) */
-  id: string;
-  content: string;
-  score: number;
-  lineRange?: {
-    start: number;
-    end: number;
-  };
-  scoreDetails?: {
-    vector?: number;
-    bm25?: number;
-  };
-}
+export type WorkspaceSearchParams = z.input<typeof searchQuerySchema>;
 
 /**
- * Parameters for searching workspace content
+ * Response for searching workspace.
+ * Derived from server's searchResponseSchema.
  */
-export interface WorkspaceSearchParams {
-  query: string;
-  topK?: number;
-  mode?: 'bm25' | 'vector' | 'hybrid';
-  minScore?: number;
-}
+export type WorkspaceSearchResponse = z.infer<typeof searchResponseSchema>;
 
 /**
- * Response for searching workspace
+ * Parameters for indexing content.
+ * Derived from server's indexBodySchema.
  */
-export interface WorkspaceSearchResponse {
-  results: WorkspaceSearchResult[];
-  query: string;
-  mode: 'bm25' | 'vector' | 'hybrid';
-}
+export type WorkspaceIndexParams = z.input<typeof indexBodySchema>;
 
 /**
- * Parameters for indexing content
+ * Response for indexing content.
+ * Derived from server's indexResponseSchema.
  */
-export interface WorkspaceIndexParams {
-  path: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Response for indexing content
- */
-export interface WorkspaceIndexResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceIndexResponse = z.infer<typeof indexResponseSchema>;
 
 // ============================================================================
 // Skills Types
 // ============================================================================
 
 /**
- * Skill source type indicating where the skill comes from
+ * Skill source type indicating where the skill comes from.
+ * Derived from server's skillSourceSchema.
  */
-export type SkillSource =
-  | { type: 'external'; packagePath: string }
-  | { type: 'local'; projectPath: string }
-  | { type: 'managed'; mastraPath: string };
+export type SkillSource = z.infer<typeof skillSourceSchema>;
 
 /**
- * Skill metadata (without instructions content)
+ * Skill metadata (without instructions content).
+ * Derived from server's skillMetadataSchema.
  */
-export interface SkillMetadata {
-  name: string;
-  description: string;
-  license?: string;
-  compatibility?: string;
-  metadata?: Record<string, string>;
-}
+export type SkillMetadata = z.infer<typeof skillMetadataSchema>;
 
 /**
- * Full skill data including instructions and file paths
+ * Full skill data including instructions and file paths.
+ * Derived from server's skillSchema.
  */
-export interface Skill extends SkillMetadata {
-  path: string;
-  instructions: string;
-  source: SkillSource;
-  references: string[];
-  scripts: string[];
-  assets: string[];
-}
+export type Skill = z.infer<typeof skillSchema>;
 
 /**
- * Response for listing skills
+ * Response for listing skills.
+ * Derived from server's listSkillsResponseSchema.
  */
-export interface ListSkillsResponse {
-  skills: SkillMetadata[];
-  isSkillsConfigured: boolean;
-}
+export type ListSkillsResponse = z.infer<typeof listSkillsResponseSchema>;
 
 /**
- * Skill search result
+ * Skill search result.
+ * Derived from server's skillSearchResultSchema.
  */
-export interface SkillSearchResult {
-  skillName: string;
-  source: string;
-  content: string;
-  score: number;
-  lineRange?: {
-    start: number;
-    end: number;
-  };
-  scoreDetails?: {
-    vector?: number;
-    bm25?: number;
-  };
-}
+export type SkillSearchResult = z.infer<typeof skillSearchResultSchema>;
 
 /**
- * Parameters for searching skills
+ * Parameters for searching skills.
+ * Derived from server's searchSkillsQuerySchema.
  */
-export interface SearchSkillsParams {
-  query: string;
-  topK?: number;
-  minScore?: number;
-  skillNames?: string[];
-  includeReferences?: boolean;
-}
+export type SearchSkillsParams = z.input<typeof searchSkillsQuerySchema>;
 
 /**
- * Response for searching skills
+ * Response for searching skills.
+ * Derived from server's searchSkillsResponseSchema.
  */
-export interface SearchSkillsResponse {
-  results: SkillSearchResult[];
-  query: string;
-}
+export type SearchSkillsResponse = z.infer<typeof searchSkillsResponseSchema>;
 
 /**
- * Response for listing skill references
+ * Response for listing skill references.
+ * Derived from server's listReferencesResponseSchema.
  */
-export interface ListSkillReferencesResponse {
-  skillName: string;
-  references: string[];
-}
+export type ListSkillReferencesResponse = z.infer<typeof listReferencesResponseSchema>;
 
 /**
- * Response for getting skill reference content
+ * Response for getting skill reference content.
+ * Derived from server's skillReferenceResponseSchema.
  */
-export interface GetSkillReferenceResponse {
-  skillName: string;
-  referencePath: string;
-  content: string;
-}
+export type GetSkillReferenceResponse = z.infer<typeof skillReferenceResponseSchema>;
 
 // ============================================================================
 // Stored Skill Types
@@ -1635,156 +1396,85 @@ export interface StoredSkillFileNode {
 }
 
 /**
- * Stored skill data returned from API
+ * Stored skill data returned from API.
+ * Derived from server's storedSkillSchema with Date→string serialization.
  */
-export interface StoredSkillResponse {
-  id: string;
-  status: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  name: string;
-  description?: string;
-  instructions: string;
-  license?: string;
-  files?: StoredSkillFileNode[];
-}
+export type StoredSkillResponse = JsonSerialized<z.infer<typeof storedSkillSchema>>;
 
 /**
- * Parameters for listing stored skills
+ * Parameters for listing stored skills.
+ * Derived from server's listStoredSkillsQuerySchema.
  */
-export interface ListStoredSkillsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredSkillsParams = z.input<typeof listStoredSkillsQuerySchema>;
 
 /**
- * Response for listing stored skills
+ * Response for listing stored skills.
+ * Derived from server's listStoredSkillsResponseSchema with Date→string serialization.
  */
-export interface ListStoredSkillsResponse {
-  skills: StoredSkillResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredSkillsResponse = JsonSerialized<z.infer<typeof listStoredSkillsResponseSchema>>;
 
 /**
- * Parameters for creating a stored skill
+ * Parameters for creating a stored skill.
+ * Derived from server's createStoredSkillBodySchema.
  */
-export interface CreateStoredSkillParams {
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  instructions: string;
-  license?: string;
-  files?: StoredSkillFileNode[];
-}
+export type CreateStoredSkillParams = z.input<typeof createStoredSkillBodySchema>;
 
 /**
- * Parameters for updating a stored skill
+ * Parameters for updating a stored skill.
+ * Derived from server's updateStoredSkillBodySchema.
  */
-export interface UpdateStoredSkillParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  instructions?: string;
-  license?: string;
-  files?: StoredSkillFileNode[];
-}
+export type UpdateStoredSkillParams = z.input<typeof updateStoredSkillBodySchema>;
 
 /**
- * Response for deleting a stored skill
+ * Response for deleting a stored skill.
+ * Derived from server's deleteStoredSkillResponseSchema.
  */
-export interface DeleteStoredSkillResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredSkillResponse = z.infer<typeof deleteStoredSkillResponseSchema>;
 
 // ============================================================================
 // Processor Types
 // ============================================================================
 
 /**
- * Processor phase types
+ * Phases that a processor can handle.
  */
 export type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
 
 /**
- * Processor configuration showing how it's attached to an agent
+ * Configuration of how a processor is attached to an agent.
+ * Derived from server's processorConfigurationSchema.
  */
-export interface ProcessorConfiguration {
-  agentId: string;
-  agentName: string;
-  type: 'input' | 'output';
-}
+export type ProcessorConfiguration = z.infer<typeof processorConfigurationSchema>;
 
 /**
- * Processor in list response
+ * Processor in list response.
+ * Derived from server's processorSerializedSchema (renamed from serializedProcessorSchema).
  */
-export interface GetProcessorResponse {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  agentIds: string[];
-  isWorkflow: boolean;
-}
+export type GetProcessorResponse = z.infer<typeof processorSerializedSchema>;
 
 /**
- * Detailed processor response
+ * Detailed processor response.
+ * Derived from server's serializedProcessorDetailSchema.
  */
-export interface GetProcessorDetailResponse {
-  id: string;
-  name?: string;
-  description?: string;
-  phases: ProcessorPhase[];
-  configurations: ProcessorConfiguration[];
-  isWorkflow: boolean;
-}
+export type GetProcessorDetailResponse = z.infer<typeof serializedProcessorDetailSchema>;
 
 /**
- * Parameters for executing a processor
+ * Parameters for executing a processor.
+ * Derived from server's executeProcessorBodySchema.
  */
-export interface ExecuteProcessorParams {
-  phase: ProcessorPhase;
-  messages: MastraDBMessage[];
-  agentId?: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type ExecuteProcessorParams = z.input<typeof executeProcessorBodySchema>;
 
 /**
- * Tripwire result from processor execution
+ * Response from processor execution.
+ * Derived from server's executeProcessorResponseSchema with Date→string serialization.
  */
-export interface ProcessorTripwireResult {
-  triggered: boolean;
-  reason?: string;
-  metadata?: unknown;
-}
+export type ExecuteProcessorResponse = JsonSerialized<z.infer<typeof executeProcessorResponseSchema>>;
 
 /**
- * Response from processor execution
+ * Processor tripwire result.
+ * Extracted from ExecuteProcessorResponse's tripwire field.
  */
-export interface ExecuteProcessorResponse {
-  success: boolean;
-  phase: string;
-  messages?: MastraDBMessage[];
-  messageList?: {
-    messages: MastraDBMessage[];
-  };
-  tripwire?: ProcessorTripwireResult;
-  error?: string;
-}
+export type ProcessorTripwireResult = NonNullable<ExecuteProcessorResponse['tripwire']>;
 
 // ============================================================================
 // Observational Memory Types
@@ -1801,12 +1491,10 @@ export interface GetObservationalMemoryParams {
 }
 
 /**
- * Response for observational memory endpoint
+ * Response for observational memory endpoint.
+ * Derived from server's getObservationalMemoryResponseSchema.
  */
-export interface GetObservationalMemoryResponse {
-  record: ObservationalMemoryRecord | null;
-  history?: ObservationalMemoryRecord[];
-}
+export type GetObservationalMemoryResponse = z.infer<typeof getObservationalMemoryResponseSchema>;
 
 /**
  * Parameters for awaiting buffer status
@@ -1819,161 +1507,88 @@ export interface AwaitBufferStatusParams {
 }
 
 /**
- * Response for buffer status endpoint
+ * Response for buffer status endpoint.
+ * Derived from server's awaitBufferStatusResponseSchema.
  */
-export interface AwaitBufferStatusResponse {
-  record: ObservationalMemoryRecord | null;
-}
+export type AwaitBufferStatusResponse = z.infer<typeof awaitBufferStatusResponseSchema>;
 
 /**
- * Extended memory status response with OM info
+ * Extended memory status response with OM info.
+ * Derived from server's memoryStatusResponseSchema with Date→string serialization.
  */
-export interface GetMemoryStatusResponse {
-  result: boolean;
-  observationalMemory?: {
-    enabled: boolean;
-    hasRecord?: boolean;
-    originType?: string;
-    lastObservedAt?: Date | null;
-    tokenCount?: number;
-    observationTokenCount?: number;
-    isObserving?: boolean;
-    isReflecting?: boolean;
-  };
-}
+export type GetMemoryStatusResponse = JsonSerialized<z.infer<typeof memoryStatusResponseSchema>>;
 
 /**
- * Extended memory config response with OM config
+ * Extended memory config response with OM config.
+ * Derived from server's memoryConfigResponseSchema.
  */
-export interface GetMemoryConfigResponseExtended {
-  config: MemoryConfig & {
-    observationalMemory?: {
-      enabled: boolean;
-      scope?: 'thread' | 'resource';
-      messageTokens?: number | { min: number; max: number };
-      observationTokens?: number | { min: number; max: number };
-      observationModel?: string;
-      reflectionModel?: string;
-    };
-  };
-}
+export type GetMemoryConfigResponseExtended = z.infer<typeof memoryConfigResponseSchema>;
 
 // ============================================================================
 // Vector & Embedder Types
 // ============================================================================
 
 /**
- * Response for listing available vector stores
+ * Response for listing available vector stores.
+ * Derived from server's listVectorsResponseSchema.
  */
-export interface ListVectorsResponse {
-  vectors: Array<{
-    name: string;
-    id: string;
-    type: string;
-  }>;
-}
+export type ListVectorsResponse = z.infer<typeof listVectorsResponseSchema>;
 
 /**
- * Response for listing available embedding models
+ * Response for listing available embedding models.
+ * Derived from server's listEmbeddersResponseSchema.
  */
-export interface ListEmbeddersResponse {
-  embedders: Array<{
-    id: string;
-    provider: string;
-    name: string;
-    description: string;
-    dimensions: number;
-    maxInputTokens: number;
-  }>;
-}
+export type ListEmbeddersResponse = z.infer<typeof listEmbeddersResponseSchema>;
 
 // ============================================================================
 // Tool Provider Types
 // ============================================================================
 
-export interface ToolProviderInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
+/**
+ * Response for listing tool providers.
+ * Derived from server's listToolProvidersResponseSchema.
+ */
+export type ListToolProvidersResponse = z.infer<typeof listToolProvidersResponseSchema>;
 
-export interface ToolProviderToolkit {
-  slug: string;
-  name: string;
-  description?: string;
-  icon?: string;
-}
+/**
+ * Response for listing tool provider toolkits.
+ * Derived from server's listToolProviderToolkitsResponseSchema.
+ */
+export type ListToolProviderToolkitsResponse = z.infer<typeof listToolProviderToolkitsResponseSchema>;
 
-export interface ToolProviderToolInfo {
-  slug: string;
-  name: string;
-  description?: string;
-  toolkit?: string;
-}
+/**
+ * Parameters for listing tool provider tools.
+ * Derived from server's listToolProviderToolsQuerySchema.
+ */
+export type ListToolProviderToolsParams = z.input<typeof listToolProviderToolsQuerySchema>;
 
-export interface ToolProviderPagination {
-  total?: number;
-  page?: number;
-  perPage?: number;
-  hasMore: boolean;
-}
+/**
+ * Response for listing tool provider tools.
+ * Derived from server's listToolProviderToolsResponseSchema.
+ */
+export type ListToolProviderToolsResponse = z.infer<typeof listToolProviderToolsResponseSchema>;
 
-export interface ListToolProvidersResponse {
-  providers: ToolProviderInfo[];
-}
-
-export interface ListToolProviderToolkitsResponse {
-  data: ToolProviderToolkit[];
-  pagination?: ToolProviderPagination;
-}
-
-export interface ListToolProviderToolsParams {
-  toolkit?: string;
-  search?: string;
-  page?: number;
-  perPage?: number;
-}
-
-export interface ListToolProviderToolsResponse {
-  data: ToolProviderToolInfo[];
-  pagination?: ToolProviderPagination;
-}
-
-export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
+/**
+ * Response for getting tool provider tool schema.
+ * Derived from server's getToolProviderToolSchemaResponseSchema.
+ */
+export type GetToolProviderToolSchemaResponse = z.infer<typeof getToolProviderToolSchemaResponseSchema>;
 
 // ============================================================================
 // Processor Provider Types
 // ============================================================================
 
 /**
- * Provider phase names as returned by the server (prefixed form).
- * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
+ * Response for listing processor providers.
+ * Derived from server's getProcessorProvidersResponseSchema.
  */
-export type ProcessorProviderPhase =
-  | 'processInput'
-  | 'processInputStep'
-  | 'processOutputStream'
-  | 'processOutputResult'
-  | 'processOutputStep';
+export type GetProcessorProvidersResponse = z.infer<typeof getProcessorProvidersResponseSchema>;
 
-export interface ProcessorProviderInfo {
-  id: string;
-  name: string;
-  description?: string;
-  availablePhases: ProcessorProviderPhase[];
-}
-
-export interface GetProcessorProvidersResponse {
-  providers: ProcessorProviderInfo[];
-}
-
-export interface GetProcessorProviderResponse {
-  id: string;
-  name: string;
-  description?: string;
-  availablePhases: ProcessorProviderPhase[];
-  configSchema: Record<string, unknown>;
-}
+/**
+ * Response for getting a single processor provider.
+ * Derived from server's getProcessorProviderResponseSchema.
+ */
+export type GetProcessorProviderResponse = z.infer<typeof getProcessorProviderResponseSchema>;
 
 // ============================================================================
 // Error Types
@@ -2020,309 +1635,172 @@ export class MastraClientError extends Error {
 // Dataset Types
 // ============================================
 
-export interface DatasetItem {
-  id: string;
-  datasetId: string;
-  datasetVersion: number;
-  input: unknown;
-  groundTruth?: unknown;
-  requestContext?: Record<string, unknown>;
-  metadata?: unknown;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+/**
+ * Dataset item response.
+ * Derived from server's datasetItemResponseSchema with Date→string serialization.
+ */
+export type DatasetItem = JsonSerialized<z.infer<typeof datasetItemResponseSchema>>;
 
-export interface DatasetRecord {
-  id: string;
-  name: string;
-  description?: string | null;
-  metadata?: Record<string, unknown> | null;
-  inputSchema?: Record<string, unknown>;
-  groundTruthSchema?: Record<string, unknown>;
-  requestContextSchema?: Record<string, unknown>;
-  version: number;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+/**
+ * Dataset record response.
+ * Derived from server's datasetResponseSchema with Date→string serialization.
+ */
+export type DatasetRecord = JsonSerialized<z.infer<typeof datasetResponseSchema>>;
 
-export interface DatasetExperiment {
-  id: string;
-  datasetId: string | null;
-  datasetVersion: number | null;
-  targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
-  targetId: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  totalItems: number;
-  succeededCount: number;
-  failedCount: number;
-  startedAt: string | Date | null;
-  completedAt: string | Date | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+/**
+ * Dataset experiment response.
+ * Derived from server's experimentResponseSchema with Date→string serialization.
+ */
+export type DatasetExperiment = JsonSerialized<z.infer<typeof experimentResponseSchema>>;
 
-export interface DatasetExperimentResult {
-  id: string;
-  experimentId: string;
-  itemId: string;
-  itemDatasetVersion: number | null;
-  input: unknown;
-  output: unknown | null;
-  groundTruth: unknown | null;
-  error: string | null;
-  startedAt: string | Date;
-  completedAt: string | Date;
-  retryCount: number;
-  traceId: string | null;
-  scores: Array<{
-    scorerId: string;
-    scorerName: string;
-    score: number | null;
-    reason: string | null;
-    error: string | null;
-  }>;
-  createdAt: string | Date;
-}
+/**
+ * Dataset experiment result response.
+ * Derived from server's experimentResultResponseSchema with Date→string serialization.
+ */
+export type DatasetExperimentResult = JsonSerialized<z.infer<typeof experimentResultResponseSchema>>;
 
-export interface CreateDatasetParams {
-  name: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
-  requestContextSchema?: Record<string, unknown> | null;
-}
+/**
+ * Parameters for creating a dataset.
+ * Derived from server's createDatasetBodySchema.
+ */
+export type CreateDatasetParams = z.input<typeof createDatasetBodySchema>;
 
-export interface UpdateDatasetParams {
-  datasetId: string;
-  name?: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-  inputSchema?: Record<string, unknown> | null;
-  groundTruthSchema?: Record<string, unknown> | null;
-  requestContextSchema?: Record<string, unknown> | null;
-}
+/**
+ * Parameters for updating a dataset.
+ * Includes datasetId for routing + body fields from server's updateDatasetBodySchema.
+ */
+export type UpdateDatasetParams = { datasetId: string } & z.input<typeof updateDatasetBodySchema>;
 
-export interface AddDatasetItemParams {
-  datasetId: string;
-  input: unknown;
-  groundTruth?: unknown;
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-}
+/**
+ * Parameters for adding a dataset item.
+ * Includes datasetId for routing + body fields from server's addItemBodySchema.
+ */
+export type AddDatasetItemParams = { datasetId: string } & z.input<typeof addItemBodySchema>;
 
-export interface UpdateDatasetItemParams {
-  datasetId: string;
-  itemId: string;
-  input?: unknown;
-  groundTruth?: unknown;
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-}
+/**
+ * Parameters for updating a dataset item.
+ * Includes datasetId and itemId for routing + body fields from server's updateItemBodySchema.
+ */
+export type UpdateDatasetItemParams = { datasetId: string; itemId: string } & z.input<typeof updateItemBodySchema>;
 
-export interface BatchInsertDatasetItemsParams {
-  datasetId: string;
-  items: Array<{
-    input: unknown;
-    groundTruth?: unknown;
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-  }>;
-}
+/**
+ * Parameters for batch inserting dataset items.
+ * Includes datasetId for routing + body fields from server's batchInsertItemsBodySchema.
+ */
+export type BatchInsertDatasetItemsParams = { datasetId: string } & z.input<typeof batchInsertItemsBodySchema>;
 
-export interface BatchDeleteDatasetItemsParams {
-  datasetId: string;
-  itemIds: string[];
-}
+/**
+ * Parameters for batch deleting dataset items.
+ * Includes datasetId for routing + body fields from server's batchDeleteItemsBodySchema.
+ */
+export type BatchDeleteDatasetItemsParams = { datasetId: string } & z.input<typeof batchDeleteItemsBodySchema>;
 
-export interface TriggerDatasetExperimentParams {
-  datasetId: string;
-  targetType: 'agent' | 'workflow' | 'scorer';
-  targetId: string;
-  scorerIds?: string[];
-  version?: number;
-  maxConcurrency?: number;
-  requestContext?: Record<string, unknown>;
-}
+/**
+ * Parameters for triggering a dataset experiment.
+ * Includes datasetId for routing + body fields from server's triggerExperimentBodySchema.
+ */
+export type TriggerDatasetExperimentParams = { datasetId: string } & z.input<typeof triggerExperimentBodySchema>;
 
-export interface CompareExperimentsParams {
-  datasetId: string;
-  experimentIdA: string;
-  experimentIdB: string;
-  thresholds?: Record<
-    string,
-    {
-      value: number;
-      direction?: 'higher-is-better' | 'lower-is-better';
-    }
-  >;
-}
+/**
+ * Parameters for comparing experiments.
+ * Includes datasetId for routing + body fields from server's compareExperimentsBodySchema.
+ */
+export type CompareExperimentsParams = { datasetId: string } & z.input<typeof compareExperimentsBodySchema>;
 
-export interface DatasetItemVersionResponse {
-  id: string;
-  datasetId: string;
-  datasetVersion: number;
-  input: unknown;
-  groundTruth?: unknown;
-  metadata?: Record<string, unknown>;
-  validTo: number | null;
-  isDeleted: boolean;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-}
+/**
+ * Dataset item version response.
+ * Derived from server's itemVersionResponseSchema with Date→string serialization.
+ */
+export type DatasetItemVersionResponse = JsonSerialized<z.infer<typeof itemVersionResponseSchema>>;
 
-export interface DatasetVersionResponse {
-  id: string;
-  datasetId: string;
-  version: number;
-  createdAt: string | Date;
-}
+/**
+ * Dataset version response.
+ * Derived from server's datasetVersionResponseSchema with Date→string serialization.
+ */
+export type DatasetVersionResponse = JsonSerialized<z.infer<typeof datasetVersionResponseSchema>>;
 
-export interface CompareExperimentsResponse {
-  baselineId: string;
-  items: Array<{
-    itemId: string;
-    input: unknown;
-    groundTruth: unknown;
-    results: Record<
-      string,
-      {
-        output: unknown;
-        scores: Record<string, number | null>;
-      } | null
-    >;
-  }>;
-}
+/**
+ * Response for comparing experiments.
+ * Derived from server's comparisonResponseSchema.
+ */
+export type CompareExperimentsResponse = z.infer<typeof comparisonResponseSchema>;
 
 // ============================================================================
-// Stored Prompt Block Types
+// Stored Prompt Block Types (derived from @mastra/server/schemas)
 // ============================================================================
 
 /**
- * Stored prompt block data returned from API
+ * Stored prompt block data returned from API.
+ * Derived from server's storedPromptBlockSchema with Date→string serialization.
  */
-export interface StoredPromptBlockResponse {
-  id: string;
-  status: string;
-  activeVersionId?: string;
-  hasDraft?: boolean;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-  // Version snapshot config fields (resolved from active version)
-  name: string;
-  description?: string;
-  content: string;
-  rules?: RuleGroup;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type StoredPromptBlockResponse = JsonSerialized<z.infer<typeof storedPromptBlockSchema>>;
 
 /**
- * Parameters for listing stored prompt blocks
+ * Parameters for listing stored prompt blocks.
+ * Derived from server's listStoredPromptBlocksQuerySchema.
  */
-export interface ListStoredPromptBlocksParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: {
-    field?: 'createdAt' | 'updatedAt';
-    direction?: 'ASC' | 'DESC';
-  };
-  status?: 'draft' | 'published' | 'archived';
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-}
+export type ListStoredPromptBlocksParams = z.input<typeof listStoredPromptBlocksQuerySchema>;
 
 /**
- * Response for listing stored prompt blocks
+ * Response for listing stored prompt blocks.
+ * Derived from server's listStoredPromptBlocksResponseSchema with Date→string serialization.
  */
-export interface ListStoredPromptBlocksResponse {
-  promptBlocks: StoredPromptBlockResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+export type ListStoredPromptBlocksResponse = JsonSerialized<z.infer<typeof listStoredPromptBlocksResponseSchema>>;
 
 /**
- * Parameters for creating a stored prompt block
+ * Parameters for creating a stored prompt block.
+ * Derived from server's createStoredPromptBlockBodySchema.
  */
-export interface CreateStoredPromptBlockParams {
-  id?: string;
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name: string;
-  description?: string;
-  content: string;
-  rules?: RuleGroup;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type CreateStoredPromptBlockParams = z.input<typeof createStoredPromptBlockBodySchema>;
 
 /**
- * Parameters for updating a stored prompt block
+ * Parameters for updating a stored prompt block.
+ * Derived from server's updateStoredPromptBlockBodySchema.
  */
-export interface UpdateStoredPromptBlockParams {
-  authorId?: string;
-  metadata?: Record<string, unknown>;
-  name?: string;
-  description?: string;
-  content?: string;
-  rules?: RuleGroup;
-  requestContextSchema?: Record<string, unknown>;
-}
+export type UpdateStoredPromptBlockParams = z.input<typeof updateStoredPromptBlockBodySchema>;
 
 /**
- * Response for deleting a stored prompt block
+ * Response for deleting a stored prompt block.
+ * Derived from server's deleteStoredPromptBlockResponseSchema.
  */
-export interface DeleteStoredPromptBlockResponse {
-  success: boolean;
-  message: string;
-}
+export type DeleteStoredPromptBlockResponse = z.infer<typeof deleteStoredPromptBlockResponseSchema>;
 
 // ============================================================================
-// Prompt Block Version Types
+// Prompt Block Version Types (derived from @mastra/server/schemas)
 // ============================================================================
 
-export interface PromptBlockVersionResponse {
-  id: string;
-  blockId: string;
-  versionNumber: number;
-  name: string;
-  description?: string;
-  content: string;
-  rules?: RuleGroup;
-  requestContextSchema?: Record<string, unknown>;
-  changedFields?: string[];
-  changeMessage?: string;
-  createdAt: string;
-}
+/**
+ * Prompt block version data returned from API.
+ * Derived from server's promptBlockVersionSchema with Date→string serialization.
+ */
+export type PromptBlockVersionResponse = JsonSerialized<z.infer<typeof promptBlockVersionSchema>>;
 
-export interface ListPromptBlockVersionsParams {
-  page?: number;
-  perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
-}
+/**
+ * Parameters for listing prompt block versions.
+ * Derived from server's listPromptBlockVersionsQuerySchema.
+ */
+export type ListPromptBlockVersionsParams = z.input<typeof listPromptBlockVersionsQuerySchema>;
 
-export interface ListPromptBlockVersionsResponse {
-  versions: PromptBlockVersionResponse[];
-  total: number;
-  page: number;
-  perPage: number | false;
-  hasMore: boolean;
-}
+/**
+ * Response for listing prompt block versions.
+ * Uses listPromptBlockVersionsResponseSchema with Date→string serialization.
+ */
+export type ListPromptBlockVersionsResponse = JsonSerialized<z.infer<typeof listPromptBlockVersionsResponseSchema>>;
 
-export interface CreatePromptBlockVersionParams {
-  changeMessage?: string;
-}
+/**
+ * Parameters for creating a prompt block version.
+ * Derived from server's createPromptBlockVersionBodySchema.
+ */
+export type CreatePromptBlockVersionParams = z.input<typeof createPromptBlockVersionBodySchema>;
 
-export interface ActivatePromptBlockVersionResponse {
-  success: boolean;
-  message: string;
-  activeVersionId: string;
-}
+/**
+ * Response for activating a prompt block version.
+ * Derived from server's activatePromptBlockVersionResponseSchema.
+ */
+export type ActivatePromptBlockVersionResponse = z.infer<typeof activatePromptBlockVersionResponseSchema>;
 
-export interface DeletePromptBlockVersionResponse {
-  success: boolean;
-  message: string;
-}
+/**
+ * Response for deleting a prompt block version.
+ * Derived from server's deletePromptBlockVersionResponseSchema.
+ */
+export type DeletePromptBlockVersionResponse = z.infer<typeof deletePromptBlockVersionResponseSchema>;

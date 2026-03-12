@@ -306,7 +306,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           // Now activate the first version
           const versionsResponse = await client
             .getStoredAgent(options.agentId)
-            .listVersions({ sortDirection: 'DESC', perPage: 1 });
+            .listVersions({ orderBy: { direction: 'DESC' }, perPage: 1 });
           const latestVersion = versionsResponse.versions[0];
           if (latestVersion) {
             await client.getStoredAgent(options.agentId).activateVersion(latestVersion.id);
@@ -315,7 +315,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           // Check if there's an unpublished draft version to activate
           const [agentDetails, versionsResponse] = await Promise.all([
             client.getStoredAgent(options.agentId).details(),
-            client.getStoredAgent(options.agentId).listVersions({ sortDirection: 'DESC', perPage: 1 }),
+            client.getStoredAgent(options.agentId).listVersions({ orderBy: { direction: 'DESC' }, perPage: 1 }),
           ]);
 
           const latestVersion = versionsResponse.versions[0];
