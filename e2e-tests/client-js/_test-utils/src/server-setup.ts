@@ -77,6 +77,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     const [
       { Mastra },
       { Agent },
+      { MastraCompositeStore, InMemoryStore },
       { LibSQLStore },
       { MastraServer },
       { registerApiRoute },
@@ -84,6 +85,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     ] = await Promise.all([
       import('@mastra/core/mastra'),
       import('@mastra/core/agent'),
+      import('@mastra/core/storage'),
       import('@mastra/libsql'),
       import('@mastra/hono'),
       import('@mastra/core/server'),
@@ -94,9 +96,21 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     const baseUrl = `http://localhost:${port}`;
 
     // Create storage
-    const storage = new LibSQLStore({
+    const libSqlStore = new LibSQLStore({
       id: storageId,
       url: ':memory:',
+    });
+
+    const inMemoryStore = new InMemoryStore({
+      id: storageId,
+    });
+
+    const storage = new MastraCompositeStore({
+      id: storageId,
+      domains: {
+        ...libSqlStore,
+        observability: inMemoryStore.stores.observability,
+      },
     });
 
     // Create a simple test agent
