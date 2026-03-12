@@ -1,4 +1,4 @@
-import { MASTRA_CLOUD_API_URL, authHeaders } from '../auth/client.js';
+import { authHeaders, createApiClient, MASTRA_CLOUD_API_URL } from '../auth/client.js';
 
 export interface Project {
   id: string;
@@ -19,35 +19,49 @@ export interface DeployStatus {
 }
 
 export async function fetchProjects(token: string, orgId: string): Promise<Project[]> {
-  const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/studio/projects`, {
-    headers: authHeaders(token, orgId),
-  });
+  const client = createApiClient(token, orgId);
+  const { data, error, response } = await client.GET('/v1/studio/projects');
 
-  if (!resp.ok) {
-    throw new Error(`Failed to fetch projects: ${resp.status}`);
+  if (error) {
+    throw new Error(`Failed to fetch projects: ${response.status}`);
   }
 
-  const data = (await resp.json()) as { projects: Project[] };
   return data.projects;
 }
 
 export async function createProject(token: string, orgId: string, name: string): Promise<Project> {
-  const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/studio/projects`, {
-    method: 'POST',
-    headers: {
-      ...authHeaders(token, orgId),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ name }),
+  const client = createApiClient(token, orgId);
+  const { data, error, response } = await client.POST('/v1/studio/projects', {
+    body: { name },
   });
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Failed to create project: ${resp.status} — ${text}`);
+  if (error) {
+    throw new Error(`Failed to create project: ${response.status} — ${error.error}`);
   }
 
-  const data = (await resp.json()) as { project: Project };
   return data.project;
+}
+
+export interface DeployInfo {
+  id: string;
+  status: string;
+  instanceUrl: string | null;
+  error: string | null;
+  projectName?: string | null;
+  createdAt?: string | null;
+}
+
+export async function fetchDeployStatus(deployId: string, token: string, orgId?: string): Promise<DeployInfo> {
+  const client = createApiClient(token, orgId);
+  const { data, error, response } = await client.GET('/v1/studio/deploys/{id}', {
+    params: { path: { id: deployId } },
+  });
+
+  if (error) {
+    throw new Error(`Failed to fetch deploy status: ${response.status}`);
+  }
+
+  return data.deploy;
 }
 
 export async function uploadDeploy(
@@ -159,17 +173,19 @@ export async function pollDeploy(
   const logAbort = new AbortController();
   streamDeployLogs(deployId, token, orgId, logAbort.signal).catch(() => {});
 
+  const client = createApiClient(token, orgId);
+
   try {
     while (Date.now() - start < maxWaitMs) {
-      const resp = await fetch(`${MASTRA_CLOUD_API_URL}/v1/studio/deploys/${deployId}`, {
-        headers: authHeaders(token, orgId),
+      const { data, error } = await client.GET('/v1/studio/deploys/{id}', {
+        params: { path: { id: deployId } },
       });
 
-      if (!resp.ok) {
-        throw new Error(`Poll failed: ${resp.status}`);
+      if (error) {
+        throw new Error(`Poll failed: ${JSON.stringify(error)}`);
       }
 
-      const { deploy } = (await resp.json()) as { deploy: DeployStatus };
+      const { deploy } = data;
 
       if (deploy.status !== lastStatus) {
         lastStatus = deploy.status;
