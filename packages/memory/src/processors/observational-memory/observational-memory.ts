@@ -1797,7 +1797,10 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
 
       for (const keptIndex of keptIndexes) {
         const hiddenCount = keptIndex - previousKeptIndex - 1;
-        if (hiddenCount > 0) {
+        if (hiddenCount === 1) {
+          // Keep the original line — the marker would cost more tokens than the line itself
+          outputLines.push(lines[previousKeptIndex + 1]!);
+        } else if (hiddenCount > 1) {
           outputLines.push(`[${hiddenCount} hidden observations]`);
         }
         outputLines.push(lines[keptIndex]!);
@@ -1805,7 +1808,9 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
       }
 
       const trailingHiddenCount = totalCount - previousKeptIndex - 1;
-      if (trailingHiddenCount > 0) {
+      if (trailingHiddenCount === 1) {
+        outputLines.push(lines[totalCount - 1]!);
+      } else if (trailingHiddenCount > 1) {
         outputLines.push(`[${trailingHiddenCount} hidden observations]`);
       }
 
