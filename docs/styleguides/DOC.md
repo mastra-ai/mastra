@@ -138,7 +138,7 @@ One to two sentence introduction explaining what this feature is and why you wou
 
 Short paragraph or bulleted list of use cases. Help the reader decide whether this page is relevant to them.
 
-## Quick start
+## Quickstart
 
 Minimal working code example showing the feature in action. Include only the essentials — imports, setup, and basic usage.
 

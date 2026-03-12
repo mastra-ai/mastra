@@ -1,11 +1,11 @@
 ---
-title: "Using tools | Agents"
+title: "Tools | Agents"
 description: Learn how to create tools and add them to agents to extend capabilities beyond text generation.
 packages:
   - "@mastra/core"
 ---
 
-# Using tools
+# Tools
 
 Agents use tools to call APIs, query databases, or run custom functions from your codebase. Tools give agents capabilities beyond language generation by providing structured access to data and performing clearly defined operations. You can also load tools from remote [MCP servers](/docs/mcp/overview) to expand an agent's capabilities.
 
@@ -13,9 +13,9 @@ Agents use tools to call APIs, query databases, or run custom functions from you
 
 Use tools when an agent needs additional context or information from remote resources, or when it needs to run code that performs a specific operation. This includes tasks a model can't reliably handle on its own, such as fetching live data or returning consistent, well defined outputs.
 
-## Creating a tool
+## Quickstart
 
-When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
+Import [`createTool`](/reference/tools/create-tool) from `@mastra/core/tools` and define a tool with an `id`, `description`, `inputSchema`, `outputSchema`, and `execute` function.
 
 This example shows how to create a tool that fetches weather data from an API. When the agent calls the tool, it provides the required input as defined by the tool's `inputSchema`. The tool accesses this data through its `inputData` parameter, which in this example includes the `location` used in the weather API query.
 
@@ -40,6 +40,52 @@ export const weatherTool = createTool({
 
     return { weather }
   },
+})
+```
+
+When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
+
+:::note
+
+Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
+
+:::
+
+To make a tool available to an agent, add it to the `tools` property on the `Agent` class. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
+
+```typescript {11} title="src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
+
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: `
+    You are a helpful weather assistant.
+    Use the weatherTool to fetch current weather data.`,
+  model: 'openai/gpt-5.4',
+  tools: { weatherTool },
+})
+```
+
+## Multiple tools
+
+An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
+
+```typescript {13} title="src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { weatherTool } from '../tools/weather-tool'
+import { hazardsTool } from '../tools/hazards-tool'
+
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions: `
+    You are a helpful weather assistant.
+    Use the weatherTool to fetch current weather data.
+    Use the hazardsTool to provide information about potential weather hazards.`,
+  model: 'openai/gpt-5.4',
+  tools: { weatherTool, hazardsTool },
 })
 ```
 
@@ -74,42 +120,6 @@ export const weatherTool = createTool({
       ],
     }
   },
-})
-```
-
-## Adding tools to an agent
-
-To make a tool available to an agent, add it to `tools`. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
-
-An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
-
-```typescript {11} title="src/mastra/agents/weather-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { weatherTool } from '../tools/weather-tool'
-
-export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
-  instructions: `
-      You are a helpful weather assistant.
-      Use the weatherTool to fetch current weather data.`,
-  model: 'openai/gpt-5.1',
-  tools: { weatherTool },
-})
-```
-
-## Using multiple tools
-
-When multiple tools are available, the agent may choose to use one, several, or none, depending on what's needed to answer the query.
-
-```typescript {7} title="src/mastra/agents/weather-agent.ts"
-import { weatherTool } from '../tools/weather-tool'
-import { activitiesTool } from '../tools/activities-tool'
-
-export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
-  tools: { weatherTool, activitiesTool },
 })
 ```
 

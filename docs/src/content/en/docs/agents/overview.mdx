@@ -7,8 +7,6 @@ packages:
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 
 # Agents overview
 
@@ -16,7 +14,7 @@ Agents use LLMs and tools to solve open-ended tasks. They reason about goals, de
 
 ## When to use agents
 
-TODO
+Use agents when the task is open-ended and the steps aren't known in advance. An agent decides which tools to call, how many times to loop, and when to stop. You provide the goal and constraints instead of defining each step. For predetermined, multi-step processes with explicit control flow, use [workflows](/docs/workflows/overview) instead.
 
 :::tip
 
@@ -24,7 +22,7 @@ Watch an introduction to agents, and how they compare to workflows on [YouTube (
 
 :::
 
-## Get started
+## Quickstart
 
 Create an agent by instantiating the `Agent` class from `@mastra/core` and provide the required properties: `id`, `name`, `instructions`, and `model`.
 
