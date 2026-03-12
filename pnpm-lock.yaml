@@ -4161,9 +4161,6 @@ importers:
 
   packages/server:
     dependencies:
-      '@mastra/schema-compat':
-        specifier: workspace:*
-        version: link:../schema-compat
       hono:
         specifier: ^4.11.9
         version: 4.11.9
@@ -4192,6 +4189,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/schema-compat':
+        specifier: workspace:*
+        version: link:../schema-compat
       '@types/node':
         specifier: 22.19.13
         version: 22.19.13
