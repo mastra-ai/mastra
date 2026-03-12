@@ -195,6 +195,16 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
     includeVector = false,
     documentFilter,
   }: ChromaQueryVectorParams): Promise<QueryResult[]> {
+    if (!queryVector) {
+      throw new MastraError({
+        id: createVectorErrorId('CHROMA', 'QUERY', 'MISSING_VECTOR'),
+        text: 'queryVector is required for Chroma queries. Metadata-only queries are not supported by this vector store.',
+        domain: ErrorDomain.MASTRA_VECTOR,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
     // Validate topK parameter
     validateTopK('CHROMA', topK);
 

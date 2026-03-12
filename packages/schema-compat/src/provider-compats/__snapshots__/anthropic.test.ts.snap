@@ -161,10 +161,16 @@ exports[`AnthropicSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output >
   "properties": {
     "metadata": {
       "additionalProperties": {
-        "type": [
-          "string",
-          "number",
-          "boolean",
+        "anyOf": [
+          {
+            "type": "string",
+          },
+          {
+            "type": "number",
+          },
+          {
+            "type": "boolean",
+          },
         ],
       },
       "type": "object",
@@ -639,9 +645,13 @@ exports[`AnthropicSchemaCompatLayer > processZodType - Complex Schemas > should 
       "type": "string",
     },
     "unionField": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1098,9 +1108,13 @@ exports[`AnthropicSchemaCompatLayer > processZodType - Unions > should handle op
       "type": "string",
     },
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },
@@ -1117,9 +1131,13 @@ exports[`AnthropicSchemaCompatLayer > processZodType - Unions > should handle si
   "additionalProperties": false,
   "properties": {
     "value": {
-      "type": [
-        "string",
-        "number",
+      "anyOf": [
+        {
+          "type": "string",
+        },
+        {
+          "type": "number",
+        },
       ],
     },
   },

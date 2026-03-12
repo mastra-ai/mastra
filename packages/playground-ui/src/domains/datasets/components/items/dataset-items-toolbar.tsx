@@ -1,8 +1,7 @@
 'use client';
 
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
+import { Button } from '@/ds/components/Button';
 import {
   Plus,
   Upload,
@@ -13,15 +12,16 @@ import {
   Trash2,
   ChevronDownIcon,
   MoveRightIcon,
-  Search,
   History,
-  ArrowRightIcon,
-  ScaleIcon,
+  GitCompareIcon,
+  AmpersandIcon,
 } from 'lucide-react';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Badge } from '@/ds/components/Badge';
-import { Input } from '@/ds/components/Input';
+
 import { Column } from '@/ds/components/Columns/column';
+import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
+import { Chip } from '@/ds/components/Chip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 interface ActionsMenuProps {
   onExportClick: () => void;
@@ -43,23 +43,25 @@ function ActionsMenu({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button variant="standard" size="default" aria-label="Actions menu">
-          <ArrowRightIcon /> Select and ...
+        <Button aria-label="Actions menu">
+          Select <AmpersandIcon />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-72">
         <DropdownMenu.Item onSelect={onCompareClick}>
-          <ScaleIcon />
+          <GitCompareIcon />
           <span>Compare Items</span>
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
         <DropdownMenu.Item onSelect={onExportClick}>
           <Download />
           <span>Export Items as CSV</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item onSelect={onExportJsonClick}>
-          <FileJson />
+          <Download />
           <span>Export Items as JSON</span>
         </DropdownMenu.Item>
+        <DropdownMenu.Separator />
         <DropdownMenu.Item onSelect={onCreateDatasetClick}>
           <FolderPlus />
           <span>Create Dataset from Items</span>
@@ -134,41 +136,51 @@ export function DatasetItemsToolbar({
 }: DatasetItemsToolbarProps) {
   if (isSelectionActive) {
     return (
-      <Column.Toolbar>
-        {/* Search input - always visible */}
-        <div className="relative flex-1 max-w-xs">
-          <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
-            <Search className="w-4 h-4" />
-          </Icon>
-          <Input
-            placeholder="Search items..."
-            value={searchQuery ?? ''}
-            onChange={e => onSearchChange?.(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      <Column.Toolbar className="">
+        <SearchFieldBlock
+          name="search-items"
+          label="Search"
+          labelIsHidden
+          placeholder="Search items..."
+          value={searchQuery ?? ''}
+          onChange={e => onSearchChange?.(e.target.value)}
+          onReset={() => onSearchChange?.('')}
+          disabled={!hasItems && !searchQuery}
+        />
 
         <div className="flex gap-5">
-          <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
-            <Badge className="text-ui-md">{selectedCount}</Badge>
-            <span>selected items</span>
-            <MoveRightIcon />
-          </div>
-          <ButtonsGroup>
-            <ButtonWithTooltip
-              variant="cta"
-              size="default"
-              disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
-              onClick={onExecuteAction}
-              tooltipContent={
-                selectionMode === 'compare-items'
-                  ? selectedCount !== 2
-                    ? 'Select exactly 2 items to compare'
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="text-sm text-neutral3 flex items-center gap-2">
+                <Chip
+                  size="large"
+                  color={
+                    (selectionMode === 'compare-items' && selectedCount < 2) || selectedCount === 0 ? 'red' : 'green'
+                  }
+                >
+                  {selectedCount}
+                </Chip>
+                <span>{selectionMode === 'compare-items' ? 'of 2 items selected' : 'items selected'}</span>
+                <MoveRightIcon />
+              </div>
+            </TooltipTrigger>
+            {((selectionMode === 'compare-items' && selectedCount < 2) || selectedCount === 0) && (
+              <TooltipContent>
+                {selectionMode === 'compare-items'
+                  ? selectedCount <= 2
+                    ? 'Select 2 items to compare'
                     : undefined
                   : selectedCount === 0
                     ? 'Select at least one item'
-                    : undefined
-              }
+                    : undefined}
+              </TooltipContent>
+            )}
+          </Tooltip>
+          <ButtonsGroup>
+            <Button
+              variant="primary"
+              disabled={selectionMode === 'compare-items' ? selectedCount !== 2 : selectedCount === 0}
+              onClick={onExecuteAction}
             >
               {selectionMode === 'compare-items' && 'Compare Items'}
               {selectionMode === 'export' && 'Export Items as CSV'}
@@ -176,10 +188,8 @@ export function DatasetItemsToolbar({
               {selectionMode === 'create-dataset' && 'Create a new Dataset with Items'}
               {selectionMode === 'add-to-dataset' && 'Add Items to a Dataset'}
               {selectionMode === 'delete' && 'Delete Items'}
-            </ButtonWithTooltip>
-            <Button variant="standard" size="default" onClick={onCancelSelection}>
-              Cancel
             </Button>
+            <Button onClick={onCancelSelection}>Cancel</Button>
           </ButtonsGroup>
         </div>
       </Column.Toolbar>
@@ -188,28 +198,26 @@ export function DatasetItemsToolbar({
 
   return (
     <div className="flex items-center justify-between gap-4 w-full">
-      {/* Search input */}
-      <div className="relative flex-1 max-w-xs">
-        <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral4 pointer-events-none">
-          <Search className="w-4 h-4" />
-        </Icon>
-        <Input
-          placeholder="Search items..."
-          value={searchQuery ?? ''}
-          onChange={e => onSearchChange?.(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+      <SearchFieldBlock
+        name="search-items"
+        label="Search"
+        labelIsHidden
+        placeholder="Search items..."
+        value={searchQuery ?? ''}
+        onChange={e => onSearchChange?.(e.target.value)}
+        onReset={() => onSearchChange?.('')}
+        disabled={!hasItems && !searchQuery}
+      />
 
       <ButtonsGroup>
         {!isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup spacing="close">
-            <Button variant="standard" size="default" onClick={onAddClick}>
-              <Plus /> New Item
+            <Button onClick={onAddClick}>
+              <Plus /> Add Item
             </Button>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button variant="standard" size="default" aria-label="Dataset actions menu">
+                <Button aria-label="Dataset actions menu">
                   <ChevronDownIcon />
                 </Button>
               </DropdownMenu.Trigger>
@@ -237,7 +245,7 @@ export function DatasetItemsToolbar({
         )}
 
         {!isItemPanelOpen && !isVersionsPanelOpen && (
-          <Button variant="standard" size="default" onClick={onVersionsClick} aria-label="View versions">
+          <Button onClick={onVersionsClick} aria-label="View versions">
             <History className="w-4 h-4" />
             Versions
           </Button>

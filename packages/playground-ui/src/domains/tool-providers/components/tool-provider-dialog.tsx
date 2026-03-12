@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SideDialog } from '@/ds/components/SideDialog';
 import { Button } from '@/ds/components/Button';
 
 import { ToolkitList } from './toolkit-list';
-import { ToolList } from './tool-list';
+import { ProviderToolList } from './provider-tool-list';
 
 interface ToolProviderDialogProps {
   provider: { id: string; name: string; description?: string } | null;
@@ -31,6 +31,7 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
     } else {
       setLocalSelection(new Map());
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally resets only when the dialog opens for a different provider
   }, [provider?.id]);
 
   const handleToggle = useCallback((toolId: string, description: string) => {
@@ -51,6 +52,11 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
       onClose();
     }
   };
+
+  const selectedIdSet = useMemo(
+    () => (onSubmit ? new Set(localSelection.keys()) : undefined),
+    [onSubmit, localSelection],
+  );
 
   const selectionCount = localSelection.size;
 
@@ -84,10 +90,10 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
 
         <div className="overflow-hidden">
           {provider && (
-            <ToolList
+            <ProviderToolList
               providerId={provider.id}
               toolkit={selectedToolkit}
-              selectedIds={onSubmit ? new Set(localSelection.keys()) : undefined}
+              selectedIds={selectedIdSet}
               onToggle={onSubmit ? handleToggle : undefined}
             />
           )}

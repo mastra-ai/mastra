@@ -6,5 +6,5 @@ export type ColumnToolbarProps = {
 };
 
 export function ColumnToolbar({ children, className }: ColumnToolbarProps) {
-  return <div className={cn(`flex items-center justify-between w-full`, className)}>{children}</div>;
+  return <div className={cn(`flex items-center w-full flex-wrap gap-4 gap-x-6`, className)}>{children}</div>;
 }

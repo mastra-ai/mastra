@@ -183,6 +183,81 @@ describe('Composite auth', () => {
         const compositeAuth = new CompositeAuth([provider1, provider2]);
         expect(compositeAuth).toBeInstanceOf(CompositeAuth);
       });
+
+      it('should combine public paths from multiple providers', () => {
+        const provider1 = new MockAuthProvider();
+        provider1.public = ['/api/public1', '/api/public2'];
+
+        const provider2 = new MockAuthProvider();
+        provider2.public = ['/api/public3', ['/api/public4', 'GET']];
+
+        const compositeAuth = new CompositeAuth([provider1, provider2]);
+
+        expect(compositeAuth.public).toEqual(['/api/public1', '/api/public2', '/api/public3', ['/api/public4', 'GET']]);
+      });
+
+      it('should combine protected paths from multiple providers', () => {
+        const provider1 = new MockAuthProvider();
+        provider1.protected = ['/api/protected1', ['/api/protected2', 'POST']];
+
+        const provider2 = new MockAuthProvider();
+        provider2.protected = ['/api/protected3', /\/api\/admin\/.*/];
+
+        const compositeAuth = new CompositeAuth([provider1, provider2]);
+
+        expect(compositeAuth.protected).toEqual([
+          '/api/protected1',
+          ['/api/protected2', 'POST'],
+          '/api/protected3',
+          /\/api\/admin\/.*/,
+        ]);
+      });
+
+      it('should handle providers with undefined public/protected fields', () => {
+        const provider1 = new MockAuthProvider();
+        provider1.public = ['/api/public1'];
+        // provider1.protected is undefined
+
+        const provider2 = new MockAuthProvider();
+        // provider2.public is undefined
+        provider2.protected = ['/api/protected1'];
+
+        const compositeAuth = new CompositeAuth([provider1, provider2]);
+
+        expect(compositeAuth.public).toEqual(['/api/public1']);
+        expect(compositeAuth.protected).toEqual(['/api/protected1']);
+      });
+
+      it('should handle all providers with undefined public/protected fields', () => {
+        const provider1 = new MockAuthProvider();
+        const provider2 = new MockAuthProvider();
+        // Both providers have no public/protected fields
+
+        const compositeAuth = new CompositeAuth([provider1, provider2]);
+
+        expect(compositeAuth.public).toEqual([]);
+        expect(compositeAuth.protected).toEqual([]);
+      });
+
+      it('should combine paths with different types (string, regex, tuple)', () => {
+        const provider1 = new MockAuthProvider();
+        provider1.public = ['/api/public', /\/public\/.*/];
+
+        const provider2 = new MockAuthProvider();
+        provider2.public = [
+          ['/api/resource', 'GET'],
+          ['/api/resource', ['POST', 'PUT']],
+        ];
+
+        const compositeAuth = new CompositeAuth([provider1, provider2]);
+
+        expect(compositeAuth.public).toEqual([
+          '/api/public',
+          /\/public\/.*/,
+          ['/api/resource', 'GET'],
+          ['/api/resource', ['POST', 'PUT']],
+        ]);
+      });
     });
 
     describe('integration scenarios', () => {

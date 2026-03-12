@@ -72,7 +72,7 @@ export abstract class CrudEditorNamespace<
   TResolved,
   THydrated = TResolved,
 > extends EditorNamespace {
-  private _cache = new Map<string, THydrated>();
+  protected _cache = new Map<string, THydrated>();
 
   /**
    * Each subclass must provide a storage adapter that maps
@@ -115,8 +115,8 @@ export abstract class CrudEditorNamespace<
   async getById(id: string, options?: GetByIdOptions): Promise<THydrated | null> {
     this.ensureRegistered();
 
-    // Only use the cache for default (latest) version requests
-    const isVersionRequest = options?.versionId || options?.versionNumber;
+    // Only use the cache for default version requests (no specific version or status override)
+    const isVersionRequest = options?.versionId || options?.versionNumber || options?.status;
     if (!isVersionRequest) {
       const cached = this._cache.get(id);
       if (cached) {
@@ -180,8 +180,11 @@ export abstract class CrudEditorNamespace<
    */
   clearCache(id?: string): void {
     if (id) {
+      const wasCached = this._cache.has(id);
       this._cache.delete(id);
-      this.onCacheEvict(id);
+      if (wasCached) {
+        this.onCacheEvict(id);
+      }
       this.logger?.debug(`[clearCache] Cleared cache for "${id}"`);
     } else {
       for (const cachedId of Array.from(this._cache.keys())) {

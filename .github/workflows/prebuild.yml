@@ -10,15 +10,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      has_code: ${{ steps.filter.outputs.has_code }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check for code changes
+        id: filter
+        run: |
+          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} \
+            | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "has_code=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_code=false" >> $GITHUB_OUTPUT
+          fi
+
   prebuild:
     name: Build
+    needs: changes
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'mastra-ai/mastra' && !contains(github.event.pull_request.files.*.path, 'examples/') && !contains(github.event.pull_request.files.*.path, 'docs/') && !contains(github.event.pull_request.files.*.path, '.changeset/') && !contains(github.event.pull_request.files.*.path, 'generated-changesets/') }}
+    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:rw
-      NODE_OPTIONS: --max-old-space-size=4096
+      NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       pull-requests: read
       statuses: write
@@ -26,8 +51,12 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
 
       - name: Setup custom action
+        continue-on-error: true
         uses: ./.github/workflows/shared-actions/set-pr-status
         with:
           status: 'pending'

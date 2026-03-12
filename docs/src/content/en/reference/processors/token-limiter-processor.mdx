@@ -1,5 +1,5 @@
 ---
-title: "Reference: Token Limiter Processor | Processors"
+title: "Reference: TokenLimiterProcessor | Processors"
 description: "Documentation for the TokenLimiterProcessor in Mastra, which limits the number of tokens in messages."
 packages:
   - "@mastra/core"
@@ -8,128 +8,139 @@ packages:
 
 # TokenLimiterProcessor
 
-The `TokenLimiterProcessor` limits the number of tokens in messages. It can be used as both an input and output processor:
+The `TokenLimiterProcessor` limits the number of tokens in messages. It can be used as an input, per-step input, and output processor:
 
-- **Input processor**: Filters historical messages to fit within the context window, prioritizing recent messages
+- **Input processor** (`processInput`): Filters historical messages to fit within the context window before the agentic loop starts, prioritizing recent messages
+- **Per-step input processor** (`processInputStep`): Prunes messages at each step of a multi-step agent workflow, preventing unbounded token growth when tools trigger additional LLM calls
 - **Output processor**: Limits generated response tokens via streaming or non-streaming with configurable strategies for handling exceeded limits
 
 ## Usage example
 
 ```typescript
-import { TokenLimiterProcessor } from "@mastra/core/processors";
+import { TokenLimiterProcessor } from '@mastra/core/processors'
 
 const processor = new TokenLimiterProcessor({
   limit: 1000,
-  strategy: "truncate",
-  countMode: "cumulative"
-});
+  strategy: 'truncate',
+  countMode: 'cumulative',
+})
 ```
 
 ## Constructor parameters
 
 <PropertiesTable
   content={[
-    {
-      name: "options",
-      type: "number | Options",
-      description: "Either a simple number for token limit, or configuration options object",
-      isOptional: false,
-    },
-  ]}
-/>
-
-### Options
-
-<PropertiesTable
-  content={[
-    {
-      name: "limit",
-      type: "number",
-      description: "Maximum number of tokens to allow in the response",
-      isOptional: false,
-    },
-    {
-      name: "encoding",
-      type: "TiktokenBPE",
-      description: "Optional encoding to use. Defaults to o200k_base which is used by gpt-5.1",
-      isOptional: true,
-      default: "o200k_base",
-    },
-    {
-      name: "strategy",
-      type: "'truncate' | 'abort'",
-      description: "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
-      isOptional: true,
-      default: "'truncate'",
-    },
-    {
-      name: "countMode",
-      type: "'cumulative' | 'part'",
-      description: "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
-      isOptional: true,
-      default: "'cumulative'",
-    },
-  ]}
+  {
+    name: 'options',
+    type: 'number | Options',
+    description: 'Either a simple number for token limit, or configuration options object',
+    isOptional: false,
+    properties: [
+      {
+        type: 'number | Options',
+        parameters: [
+          {
+            name: 'limit',
+            type: 'number',
+            description: 'Maximum number of tokens to allow in the response',
+            isOptional: false,
+          },
+          {
+            name: 'encoding',
+            type: 'TiktokenBPE',
+            description: 'Optional encoding to use. Defaults to o200k_base which is used by gpt-5.1',
+            isOptional: true,
+            default: 'o200k_base',
+          },
+          {
+            name: 'strategy',
+            type: "'truncate' | 'abort'",
+            description:
+              "Strategy when token limit is reached: 'truncate' stops emitting chunks, 'abort' calls abort() to stop the stream",
+            isOptional: true,
+            default: "'truncate'",
+          },
+          {
+            name: 'countMode',
+            type: "'cumulative' | 'part'",
+            description:
+              "Whether to count tokens from the beginning of the stream or just the current part: 'cumulative' counts all tokens from start, 'part' only counts tokens in current part",
+            isOptional: true,
+            default: "'cumulative'",
+          },
+        ],
+      },
+    ],
+  },
+]}
 />
 
 ## Returns
 
 <PropertiesTable
   content={[
-    {
-      name: "id",
-      type: "string",
-      description: "Processor identifier set to 'token-limiter'",
-      isOptional: false,
-    },
-    {
-      name: "name",
-      type: "string",
-      description: "Optional processor display name",
-      isOptional: true,
-    },
-    {
-      name: "processInput",
-      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
-      description: "Filters input messages to fit within token limit, prioritizing recent messages while preserving system messages",
-      isOptional: false,
-    },
-    {
-      name: "processOutputStream",
-      type: "(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>",
-      description: "Processes streaming output parts to limit token count during streaming",
-      isOptional: false,
-    },
-    {
-      name: "processOutputResult",
-      type: "(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>",
-      description: "Processes final output results to limit token count in non-streaming scenarios",
-      isOptional: false,
-    },
-    {
-      name: "getMaxTokens",
-      type: "() => number",
-      description: "Get the maximum token limit",
-      isOptional: false,
-    },
-  ]}
+  {
+    name: 'id',
+    type: 'string',
+    description: "Processor identifier set to 'token-limiter'",
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Optional processor display name',
+    isOptional: true,
+  },
+  {
+    name: 'processInput',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
+    description:
+      'Filters input messages to fit within token limit before the agentic loop starts, prioritizing recent messages while preserving system messages',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<void>',
+    description:
+      'Prunes messages at each step of the agentic loop (including tool call continuations) to keep the conversation within the token limit. Mutates the messageList directly by removing oldest messages first while preserving system messages.',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputStream',
+    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never }) => Promise<ChunkType | null>',
+    description: 'Processes streaming output parts to limit token count during streaming',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputResult',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
+    description: 'Processes final output results to limit token count in non-streaming scenarios',
+    isOptional: false,
+  },
+  {
+    name: 'getMaxTokens',
+    type: '() => number',
+    description: 'Get the maximum token limit',
+    isOptional: false,
+  },
+]}
 />
 
 ## Error behavior
 
-When used as an input processor, `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
+When used as an input processor (both `processInput` and `processInputStep`), `TokenLimiterProcessor` throws a `TripWire` error in the following cases:
 
-- **Empty messages**: If there are no messages to process, a TripWire is thrown because you cannot send an LLM request with no messages.
-- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you cannot send an LLM request with only system messages and no user/assistant messages.
+- **Empty messages**: If there are no messages to process, a TripWire is thrown because you can't send an LLM request with no messages.
+- **System messages exceed limit**: If system messages alone exceed the token limit, a TripWire is thrown because you can't send an LLM request with only system messages and no user/assistant messages.
 
 ```typescript
-import { TripWire } from "@mastra/core/agent";
+import { TripWire } from '@mastra/core/agent'
 
 try {
-  await agent.generate("Hello");
+  await agent.generate('Hello')
 } catch (error) {
   if (error instanceof TripWire) {
-    console.log("Token limit error:", error.message);
+    console.log('Token limit error:', error.message)
   }
 }
 ```
@@ -141,19 +152,44 @@ try {
 Use `inputProcessors` to limit historical messages sent to the model, which helps stay within context window limits:
 
 ```typescript title="src/mastra/agents/context-limited-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { Memory } from "@mastra/memory";
-import { TokenLimiterProcessor } from "@mastra/core/processors";
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { TokenLimiterProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: "context-limited-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o",
-  memory: new Memory({ /* ... */ }),
+  name: 'context-limited-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-4o',
+  memory: new Memory({
+    /* ... */
+  }),
   inputProcessors: [
-    new TokenLimiterProcessor({ limit: 4000 }) // Limits historical messages to ~4000 tokens
-  ]
-});
+    new TokenLimiterProcessor({ limit: 4000 }), // Limits historical messages to ~4000 tokens
+  ],
+})
+```
+
+### As a per-step input processor (limit multi-step token growth)
+
+When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. Use `inputProcessors` to also limit tokens at each step of the agentic loop — the `TokenLimiterProcessor` automatically applies to both the initial input and every subsequent step:
+
+```typescript title="src/mastra/agents/multi-step-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { TokenLimiterProcessor } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  name: 'multi-step-agent',
+  instructions: 'You are a helpful research assistant with access to tools',
+  model: 'openai/gpt-4o',
+  inputProcessors: [
+    new TokenLimiterProcessor({ limit: 8000 }), // Applied at every step
+  ],
+})
+
+// Each tool call step will be limited to ~8000 input tokens
+const result = await agent.generate('Research this topic using your tools', {
+  maxSteps: 10,
+})
 ```
 
 ### As an output processor (limit response length)
@@ -161,21 +197,21 @@ export const agent = new Agent({
 Use `outputProcessors` to limit the length of generated responses:
 
 ```typescript title="src/mastra/agents/response-limited-agent.ts"
-import { Agent } from "@mastra/core/agent";
-import { TokenLimiterProcessor } from "@mastra/core/processors";
+import { Agent } from '@mastra/core/agent'
+import { TokenLimiterProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: "response-limited-agent",
-  instructions: "You are a helpful assistant",
-  model: "openai/gpt-4o",
+  name: 'response-limited-agent',
+  instructions: 'You are a helpful assistant',
+  model: 'openai/gpt-4o',
   outputProcessors: [
     new TokenLimiterProcessor({
       limit: 1000,
-      strategy: "truncate",
-      countMode: "cumulative"
-    })
-  ]
-});
+      strategy: 'truncate',
+      countMode: 'cumulative',
+    }),
+  ],
+})
 ```
 
 ## Related

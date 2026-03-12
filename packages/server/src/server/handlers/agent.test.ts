@@ -110,9 +110,12 @@ describe('Agent Handlers', () => {
           workflows: {},
           skills: [],
           workspaceTools: [],
+          workspaceId: undefined,
           inputProcessors: [],
           outputProcessors: [],
           provider: 'openai.chat',
+          requestContextSchema: undefined,
+          hasDraft: false,
           modelId: 'gpt-4o',
           modelVersion: 'v1',
           defaultOptions: {},
@@ -129,6 +132,8 @@ describe('Agent Handlers', () => {
           tools: {},
           agents: {},
           workflows: {},
+          hasDraft: false,
+          requestContextSchema: undefined,
           skills: [],
           workspaceTools: [],
           inputProcessors: [],
@@ -139,6 +144,7 @@ describe('Agent Handlers', () => {
           defaultOptions: {},
           defaultGenerateOptionsLegacy: {},
           defaultStreamOptionsLegacy: {},
+          workspaceId: undefined,
           modelList: [
             {
               id: expect.any(String),
@@ -334,6 +340,37 @@ describe('Agent Handlers', () => {
       expect(typeof agent.tools.testTool.inputSchema).toBe('string');
       expect(typeof agent.tools.testTool.outputSchema).toBe('string');
     });
+
+    it('should not expose a model list for agents with dynamic single-model selection', async () => {
+      const dynamicSingleModelAgent = makeMockAgent({
+        name: 'dynamic-single-model-agent',
+        description: 'A test agent with dynamic single-model selection',
+        model: ({ requestContext }) => {
+          return requestContext.get('foo') ? openaiV5('gpt-4o-mini') : openaiV5('gpt-4.1');
+        },
+      });
+
+      const mastraWithDynamicSingleModel = makeMastraMock({
+        agents: { 'dynamic-single-model-agent': dynamicSingleModelAgent },
+      });
+
+      const dynamicRequestContext = new RequestContext();
+      dynamicRequestContext.set('foo', true);
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithDynamicSingleModel }),
+        requestContext: dynamicRequestContext,
+      });
+
+      expect(result['dynamic-single-model-agent']).toMatchObject({
+        name: 'dynamic-single-model-agent',
+        description: 'A test agent with dynamic single-model selection',
+        provider: 'openai.responses',
+        modelId: 'gpt-4o-mini',
+        modelVersion: 'v2',
+        modelList: undefined,
+      });
+    });
   });
 
   describe('getAgentByIdHandler', () => {
@@ -442,6 +479,38 @@ describe('Agent Handlers', () => {
           model: { modelId: 'gpt-4.1', provider: 'openai.responses', modelVersion: 'v2' },
         },
       ]);
+    });
+
+    it('should return serialized agent without a model list for dynamic single-model selection', async () => {
+      const dynamicSingleModelAgent = makeMockAgent({
+        name: 'dynamic-single-model-agent',
+        description: 'A test agent with dynamic single-model selection',
+        model: ({ requestContext }) => {
+          return requestContext.get('foo') ? openaiV5('gpt-4o-mini') : openaiV5('gpt-4.1');
+        },
+      });
+
+      const mastraWithDynamicSingleModel = makeMastraMock({
+        agents: { 'dynamic-single-model-agent': dynamicSingleModelAgent },
+      });
+
+      const dynamicRequestContext = new RequestContext();
+      dynamicRequestContext.set('foo', true);
+
+      const result = await GET_AGENT_BY_ID_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithDynamicSingleModel }),
+        agentId: 'dynamic-single-model-agent',
+        requestContext: dynamicRequestContext,
+      });
+
+      expect(result).toMatchObject({
+        name: 'dynamic-single-model-agent',
+        description: 'A test agent with dynamic single-model selection',
+        provider: 'openai.responses',
+        modelId: 'gpt-4o-mini',
+        modelVersion: 'v2',
+        modelList: undefined,
+      });
     });
 
     it('should throw 404 when agent not found', async () => {

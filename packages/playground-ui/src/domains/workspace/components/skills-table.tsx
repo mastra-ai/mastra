@@ -25,6 +25,8 @@ export interface SkillsTableProps {
   updatingSkillName?: string;
   /** Name of the skill currently being removed (if any) */
   removingSkillName?: string;
+  /** Mount paths for labeling skills by mount (only used when multiple mounts exist) */
+  mountPaths?: string[];
 }
 
 /** Path segment that identifies skills installed via the skills CLI */
@@ -37,6 +39,20 @@ const columns = [
 
 const columnsWithActions = [...columns, { name: 'actions', label: '', size: '48px' }];
 
+/**
+ * Derive a mount label for a skill by matching its path against known mount paths.
+ * Returns the mount path or display name if multiple mounts exist.
+ */
+function getMountLabel(skillPath: string | undefined, mountPaths: string[] | undefined): string | null {
+  if (!skillPath || !mountPaths || mountPaths.length === 0) return null;
+  for (const mp of mountPaths) {
+    if (skillPath.startsWith(mp + '/') || skillPath === mp) {
+      return mp;
+    }
+  }
+  return null;
+}
+
 export function SkillsTable({
   skills,
   isLoading,
@@ -48,8 +64,10 @@ export function SkillsTable({
   onRemoveSkill,
   updatingSkillName,
   removingSkillName,
+  mountPaths,
 }: SkillsTableProps) {
   const { navigate } = useLinkComponent();
+  const showMountBadges = mountPaths && mountPaths.length > 0;
 
   // Helper to check if a skill is downloaded (installed via skills CLI)
   const isDownloaded = (skill: SkillMetadata) => skill.path?.includes(DOWNLOADED_SKILLS_PATH) ?? false;
@@ -59,6 +77,7 @@ export function SkillsTable({
   // For skeleton, assume actions column is needed if callbacks are provided
   const hasActionCallbacks = !!onRemoveSkill || !!onUpdateSkill;
   const hasRowActions = hasActionCallbacks && hasDownloadedSkills;
+
   const effectiveColumns = hasRowActions ? columnsWithActions : columns;
 
   if (!isSkillsConfigured && !isLoading) {
@@ -89,7 +108,7 @@ export function SkillsTable({
           <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-medium text-amber-500">Skills installed but not discovered</p>
-            <p className="text-icon4 mt-1">
+            <p className="text-neutral4 mt-1">
               You have skills in <code className="px-1 py-0.5 rounded bg-surface4 text-xs">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
             </p>
@@ -108,6 +127,7 @@ export function SkillsTable({
                   name: skill.name,
                   description: skill.description || '—',
                 };
+                const mountLabel = showMountBadges ? getMountLabel(skill.path, mountPaths) : null;
 
                 return (
                   <EntryList.Entry
@@ -121,9 +141,23 @@ export function SkillsTable({
                   >
                     <div className="flex items-center gap-3">
                       <div className="p-1.5 rounded bg-surface5">
-                        <SkillIcon className="h-3.5 w-3.5 text-icon4" />
+                        <SkillIcon className="h-3.5 w-3.5 text-neutral4" />
                       </div>
-                      <span className="font-medium text-icon6">{skill.name}</span>
+                      <div className="min-w-0">
+                        <span className="font-medium text-neutral6">{skill.name}</span>
+                        {skill.path && (
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {mountLabel && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral3 shrink-0">
+                                {mountLabel}
+                              </span>
+                            )}
+                            <span className="text-[11px] text-neutral3 truncate" title={skill.path}>
+                              {skill.path}
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <EntryList.EntryText>{skill.description || '—'}</EntryList.EntryText>
                     {hasRowActions && (
@@ -179,7 +213,10 @@ function SkillsTableSkeleton({ hasRowActions }: { hasRowActions?: boolean }) {
             <EntryList.Entry key={i} columns={effectiveColumns} isLoading>
               <div className="flex items-center gap-3">
                 <div className="h-7 w-7 rounded bg-surface4 animate-pulse" />
-                <div className="h-4 w-32 rounded bg-surface4 animate-pulse" />
+                <div>
+                  <div className="h-4 w-32 rounded bg-surface4 animate-pulse" />
+                  <div className="h-3 w-40 rounded bg-surface4 animate-pulse mt-1" />
+                </div>
               </div>
               <div className="h-4 w-48 rounded bg-surface4 animate-pulse" />
               {hasRowActions && <div className="h-4 w-6 rounded bg-surface4 animate-pulse" />}
@@ -200,10 +237,10 @@ function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
     <div className="grid place-items-center py-16">
       <div className="flex flex-col items-center text-center max-w-md">
         <div className="p-4 rounded-full bg-surface4 mb-4">
-          <SkillIcon className="h-8 w-8 text-icon3" />
+          <SkillIcon className="h-8 w-8 text-neutral3" />
         </div>
-        <h2 className="text-lg font-medium text-icon6 mb-2">Skills Not Configured</h2>
-        <p className="text-sm text-icon4 mb-6">
+        <h2 className="text-lg font-medium text-neutral6 mb-2">Skills Not Configured</h2>
+        <p className="text-sm text-neutral4 mb-6">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>

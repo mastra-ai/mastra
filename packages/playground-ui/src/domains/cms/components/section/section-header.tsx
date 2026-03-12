@@ -1,3 +1,5 @@
+import { Txt } from '@/ds/components/Txt';
+import { Icon } from '@/ds/icons/Icon';
 import { cn } from '@/lib/utils';
 
 export type SectionHeaderProps = {
@@ -10,11 +12,28 @@ export type SectionHeaderProps = {
 export function SectionHeader({ title, subtitle, icon, className }: SectionHeaderProps) {
   return (
     <header className={cn('flex flex-col w-fit', className)}>
-      <h2 className="flex items-center gap-2 text-ui-md font-medium text-neutral5">
-        {icon}
+      <Txt as="h2" variant="header-md" className="flex items-center gap-2">
+        {icon && (
+          <Icon size="lg" className="text-accent1">
+            {icon}
+          </Icon>
+        )}
         {title}
-      </h2>
-      {subtitle && <p className="text-ui-sm text-neutral3">{subtitle}</p>}
+      </Txt>
+      {subtitle && <Txt className="text-ui-md text-neutral3 !font-light">{subtitle}</Txt>}
     </header>
+  );
+}
+
+export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
+  return (
+    <Txt as="h4" variant="ui-sm" className="flex items-center gap-1 text-neutral2 uppercase">
+      {icon && (
+        <Icon size="sm" className="text-neutral1">
+          {icon}
+        </Icon>
+      )}
+      {title}
+    </Txt>
   );
 }

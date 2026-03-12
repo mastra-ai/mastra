@@ -1,10 +1,9 @@
 'use client';
 
 import { Button } from '@/ds/components/Button';
-import { Badge } from '@/ds/components/Badge';
+import { Chip } from '@/ds/components/Chip';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { SelectField } from '@/ds/components/FormFields';
-import { Icon } from '@/ds/icons/Icon';
+import { SelectFieldBlock } from '@/ds/components/FormFieldBlocks/fields/select-field-block';
 import { GitCompare, MoveRightIcon, XIcon } from 'lucide-react';
 import type { DatasetExperimentsFilters } from '../../hooks/use-dataset-experiments';
 
@@ -54,18 +53,18 @@ export function DatasetExperimentsToolbar({
       <div className="flex items-center justify-end gap-4 w-full">
         <div className="flex gap-5">
           <div className="text-sm text-neutral3 flex items-center gap-2 pl-6">
-            <Badge className="text-ui-md">{selectedCount}</Badge>
+            <Chip size="large" color={selectedCount < 2 ? 'red' : 'green'}>
+              {selectedCount}
+            </Chip>
             <span>of 2 experiments selected</span>
             <MoveRightIcon />
           </div>
           <ButtonsGroup>
-            <Button variant="cta" size="default" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
+            <Button variant="primary" disabled={selectedCount !== 2} onClick={onExecuteCompare}>
               <GitCompare className="w-4 h-4" />
               Compare Experiments
             </Button>
-            <Button variant="standard" size="default" onClick={onCancelSelection}>
-              Cancel
-            </Button>
+            <Button onClick={onCancelSelection}>Cancel</Button>
           </ButtonsGroup>
         </div>
       </div>
@@ -74,17 +73,19 @@ export function DatasetExperimentsToolbar({
 
   return (
     <div className="flex items-center justify-between gap-4 w-full">
-      <div className="flex items-center gap-2">
-        <SelectField
+      <ButtonsGroup>
+        <SelectFieldBlock
           label="Status"
+          labelIsHidden={true}
           name="filter-status"
           options={STATUS_OPTIONS}
           value={filters.status ?? 'all'}
           onValueChange={v => onFiltersChange({ ...filters, status: v === 'all' ? undefined : v })}
         />
 
-        <SelectField
+        <SelectFieldBlock
           label="Type"
+          labelIsHidden={true}
           name="filter-target-type"
           options={TARGET_TYPE_OPTIONS}
           value={filters.targetType ?? 'all'}
@@ -92,8 +93,9 @@ export function DatasetExperimentsToolbar({
         />
 
         {targetIds.length > 0 && (
-          <SelectField
+          <SelectFieldBlock
             label="Target"
+            labelIsHidden={true}
             name="filter-target-id"
             options={targetIdOptions}
             value={filters.targetId ?? 'all'}
@@ -102,18 +104,16 @@ export function DatasetExperimentsToolbar({
         )}
 
         {(filters.status || filters.targetType || filters.targetId) && (
-          <Button variant="standard" size="default" onClick={() => onFiltersChange({})}>
-            <Icon>
-              <XIcon />
-            </Icon>
+          <Button onClick={() => onFiltersChange({})}>
+            <XIcon />
             Reset
           </Button>
         )}
-      </div>
+      </ButtonsGroup>
 
       {hasExperiments && (
-        <Button variant="standard" size="default" onClick={onCompareClick}>
-          <GitCompare className="w-4 h-4" />
+        <Button onClick={onCompareClick}>
+          <GitCompare />
           Compare
         </Button>
       )}

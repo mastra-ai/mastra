@@ -44,11 +44,11 @@ npm install @mastra/auth-better-auth
 First, create your Better Auth instance:
 
 ```ts title="lib/auth.ts"
-import { betterAuth } from "better-auth";
+import { betterAuth } from 'better-auth'
 
 export const auth = betterAuth({
   database: {
-    provider: "postgresql",
+    provider: 'postgresql',
     url: process.env.DATABASE_URL!,
   },
   emailAndPassword: {
@@ -56,25 +56,25 @@ export const auth = betterAuth({
   },
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
-});
+})
 ```
 
 Then, use it with Mastra:
 
 ```ts title="src/mastra/index.ts"
-import { Mastra } from "@mastra/core";
-import { MastraAuthBetterAuth } from "@mastra/auth-better-auth";
-import { auth } from "@/lib/auth";
+import { Mastra } from '@mastra/core'
+import { MastraAuthBetterAuth } from '@mastra/auth-better-auth'
+import { auth } from '@/lib/auth'
 
 const mastraAuth = new MastraAuthBetterAuth({
   auth,
-});
+})
 
 export const mastra = new Mastra({
   server: {
     auth: mastraAuth,
   },
-});
+})
 ```
 
 :::info
@@ -90,9 +90,9 @@ const mastraAuth = new MastraAuthBetterAuth({
   auth,
   async authorizeUser(user) {
     // Example: only allow verified emails
-    return user?.user?.emailVerified === true;
+    return user?.user?.emailVerified === true
   },
-});
+})
 ```
 
 ## Route configuration
@@ -100,9 +100,9 @@ const mastraAuth = new MastraAuthBetterAuth({
 ```ts
 const mastraAuth = new MastraAuthBetterAuth({
   auth,
-  public: ["/health", "/api/status"],
-  protected: ["/api/*", "/admin/*"],
-});
+  public: ['/health', '/api/status'],
+  protected: ['/api/*', '/admin/*'],
+})
 ```
 
 ### Matching rules
@@ -118,43 +118,60 @@ When auth is enabled, requests to Mastra's built-in routes require authenticatio
 
 ### Cookie session (recommended)
 
-If your Better Auth setup uses cookies, configure the client to send credentials and ensure your Mastra server CORS allows credentials for cross-origin requests.
+If your Better Auth setup uses cookies, configure the client to send credentials. For cross-origin requests (e.g. Next.js on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
+
+```ts title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  server: {
+    auth: mastraAuth,
+    cors: {
+      origin: 'http://localhost:3000', // your frontend origin
+      credentials: true,
+    },
+  },
+})
+```
+
+Then configure the client to include credentials:
 
 ```ts
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: "http://localhost:4111",
-  credentials: "include",
-});
+  baseUrl: 'http://localhost:4111',
+  credentials: 'include',
+})
 ```
 
 If you are calling the API directly, include credentials in `fetch` as well:
 
 ```ts
-await fetch("http://localhost:4111/api/agents/weatherAgent/generate", {
-  method: "POST",
+await fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
+  method: 'POST',
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
-  credentials: "include",
-  body: JSON.stringify({ messages: "Weather in London" }),
-});
+  credentials: 'include',
+  body: JSON.stringify({ messages: 'Weather in London' }),
+})
 ```
 
 ### Bearer token
 
-If your Better Auth setup issues bearer tokens, include them in the `Authorization` header:
+You can pass the signed session token as a Bearer token. Retrieve it from your Better Auth client session and include it in the `Authorization` header:
 
 ```ts
-import { MastraClient } from "@mastra/client-js";
+import { MastraClient } from '@mastra/client-js'
+import { authClient } from './auth-client' // your Better Auth client
+
+const session = await authClient.getSession()
 
 export const mastraClient = new MastraClient({
-  baseUrl: "http://localhost:4111",
+  baseUrl: 'http://localhost:4111',
   headers: {
-    Authorization: `Bearer ${accessToken}`,
+    Authorization: `Bearer ${session.data?.session.token}`,
   },
-});
+})
 ```
 
 :::info
@@ -167,26 +184,24 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 
 <Tabs>
   <TabItem value="react" label="React">
-
     ```tsx title="src/components/test-agent.tsx"
-    import { mastraClient } from "../lib/mastra-client";
+    import { mastraClient } from '../lib/mastra-client'
 
     export const TestAgent = () => {
       async function handleClick() {
-        const agent = mastraClient.getAgent("weatherAgent");
+        const agent = mastraClient.getAgent('weatherAgent')
 
-        const response = await agent.generate("Weather in London");
+        const response = await agent.generate('Weather in London')
 
-        console.log(response);
+        console.log(response)
       }
 
-      return <button onClick={handleClick}>Test Agent</button>;
-    };
+      return <button onClick={handleClick}>Test Agent</button>
+    }
     ```
-
   </TabItem>
-  <TabItem value="curl" label="cURL">
 
+  <TabItem value="curl" label="cURL">
     ```bash
     curl -X POST http://localhost:4111/api/agents/weatherAgent/generate \
       -H "Content-Type: application/json" \
@@ -195,14 +210,13 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
         "messages": "Weather in London"
       }'
     ```
-
   </TabItem>
 </Tabs>
 
 ## Troubleshooting
 
-* **401/403 on every request**: confirm your Better Auth handler is mounted and your app can create a valid session/token.
-* **Cookies not sent**: set `credentials: "include"` in `MastraClient` and enable CORS credentials on the Mastra server.
-* **Authorization header missing**: ensure the client attaches `Authorization: Bearer <token>` when using bearer tokens.
-* **Base URL issues**: set `baseURL` in `betterAuth({ ... })` or set `BETTER_AUTH_URL`.
-* **DB connection errors**: verify `DATABASE_URL` and database provider configuration.
+- **401 on every request**: confirm your Better Auth handler is mounted and your app can create a valid session. Check that your client sends either a session cookie or an `Authorization: Bearer <signed-token>` header.
+- **Cookies not sent cross-origin**: set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
+- **Bearer token rejected**: ensure you pass the full signed session token (from `authClient.getSession()`), not a raw or unsigned token.
+- **Base URL issues**: set `baseURL` in `betterAuth({ ... })` or set `BETTER_AUTH_URL`.
+- **DB connection errors**: verify `DATABASE_URL` and database provider configuration.
