@@ -47,7 +47,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip?: React.Re
     <Tooltip>
       <TooltipTrigger asChild>
         <BanIcon
-          className={cn('text-neutral3/40 w-5 h-5', {
+          className={cn('text-neutral3/40 w-5 h-5 ', {
             'text-red-900': red,
           })}
         />
@@ -120,7 +120,7 @@ export function DatasetCompareVersionsList({
                         )}
                       </ItemList.LinkCell>
                     ) : (
-                      <ItemList.Cell>
+                      <ItemList.Cell className={'justify-center flex  items-center'}>
                         <EmptyCell
                           red={isANewer}
                           tooltip={isANewer ? 'Deleted in this version' : 'Not present in this version'}
@@ -138,7 +138,7 @@ export function DatasetCompareVersionsList({
                         )}
                       </ItemList.LinkCell>
                     ) : (
-                      <ItemList.Cell>
+                      <ItemList.Cell className={'justify-center flex items-center'}>
                         <EmptyCell
                           red={!isANewer}
                           tooltip={!isANewer ? 'Deleted in this version' : 'Not present in this version'}

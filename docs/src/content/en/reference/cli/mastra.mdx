@@ -1,11 +1,11 @@
 ---
-title: "Reference: CLI Commands | CLI"
+title: "Reference: CLI commands | CLI"
 description: Documentation for the Mastra CLI to develop, build, and start your project.
 packages:
   - "mastra"
 ---
 
-# CLI Commands
+# CLI commands
 
 You can use the Command-Line Interface (CLI) provided by Mastra to develop, build, and start your Mastra project.
 
@@ -37,7 +37,7 @@ Comma-separated list of custom arguments to pass to the Node.js process, e.g. `-
 
 #### `--request-context-presets`
 
-Path to a JSON file containing named [request context](/docs/server/request-context) presets. When provided, a dropdown appears in Studio's request context editor, letting you quickly switch between preset configurations.
+Path to a JSON file containing named [request context](/docs/server/request-context) presets. When provided, a dropdown displays in Studio's request context editor, letting you quickly switch between preset configurations.
 
 ```bash
 mastra dev --request-context-presets ./presets.json
@@ -64,7 +64,7 @@ Set `MASTRA_SKIP_PEERDEP_CHECK=1` to skip the peer dependency version mismatch c
 MASTRA_SKIP_PEERDEP_CHECK=1 mastra dev
 ```
 
-This is useful during monorepo development when peer dependencies may be bumped but packages are not yet published.
+This is useful during monorepo development when peer dependencies may be bumped but packages aren't yet published.
 
 #### Disable build caching
 
@@ -109,7 +109,7 @@ or `"anthropic/..."` model selections.
 
 ## `mastra build`
 
-The `mastra build` command bundles your Mastra project into a production-ready Hono server. [Hono](https://hono.dev/) is a lightweight, type-safe web framework that makes it easy to deploy Mastra agents as HTTP endpoints with middleware support.
+The `mastra build` command bundles your Mastra project into a production-ready Hono server. [Hono](https://hono.dev/) is a lightweight, type-safe web framework that makes it straightforward to deploy Mastra agents as HTTP endpoints with middleware support.
 
 Under the hood Mastra's Rollup server locates your Mastra entry file and bundles it to a production-ready Hono server. During that bundling it tree-shakes your code and generates source maps for debugging.
 
@@ -265,7 +265,7 @@ If enabled, example code is written to the list of components (e.g. example agen
 
 #### `--no-example`
 
-Do not include example code. Useful when using the `--default` flag.
+Don't include example code. Useful when using the `--default` flag.
 
 #### `--mcp`
 

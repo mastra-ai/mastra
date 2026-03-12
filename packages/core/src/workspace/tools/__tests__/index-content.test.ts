@@ -28,14 +28,14 @@ describe('workspace_index', () => {
 
     const result = await tools[WORKSPACE_TOOLS.SEARCH.INDEX].execute(
       {
-        path: '/doc.txt',
+        path: 'doc.txt',
         content: 'Document content',
       },
       { workspace },
     );
 
     expect(typeof result).toBe('string');
-    expect(result).toBe('Indexed /doc.txt');
+    expect(result).toBe('Indexed doc.txt');
 
     // Verify it's searchable
     const searchResult = await tools[WORKSPACE_TOOLS.SEARCH.SEARCH].execute({ query: 'Document' }, { workspace });

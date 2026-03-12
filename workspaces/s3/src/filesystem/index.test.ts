@@ -431,18 +431,10 @@ describe('S3Filesystem', () => {
         secretAccessKey: 'test',
       });
 
-      const fsAny = fs as any;
+      // Subsequent .client accesses should return the cached instance
+      const client1 = fs.client;
+      const client2 = fs.client;
 
-      // Simulate first operation creating the client
-      const fakeClient = { send: vi.fn() };
-      fsAny._client = fakeClient;
-
-      // Subsequent getClient() calls should return the cached instance
-      const client1 = fsAny.getClient();
-      const client2 = fsAny.getClient();
-
-      expect(client1).toBe(fakeClient);
-      expect(client2).toBe(fakeClient);
       expect(client1).toBe(client2);
     });
 

@@ -444,6 +444,7 @@ export class DefaultExporter extends BaseExporter {
       input: span.input ?? null,
       output: span.output ?? null,
       error: span.errorInfo ?? null,
+      requestContext: span.requestContext ?? null,
       isEvent: span.isEvent,
 
       // Timestamps
@@ -463,6 +464,7 @@ export class DefaultExporter extends BaseExporter {
       input: span.input,
       output: span.output,
       error: span.errorInfo ?? null,
+      requestContext: span.requestContext ?? null,
     };
   }
 

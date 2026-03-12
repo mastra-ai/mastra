@@ -22,7 +22,7 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
-    "pretest": "docker compose up -d",
+    "pretest": "docker compose up -d --wait",
     "posttest": "docker compose down -v",
     "test": "vitest run",
     "lint": "eslint ."
@@ -39,7 +39,7 @@
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
