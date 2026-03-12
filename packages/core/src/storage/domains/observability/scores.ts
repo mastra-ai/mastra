@@ -81,10 +81,10 @@ export type ScoreInput = z.infer<typeof scoreInputSchema>;
 // Create Score Schemas
 // ============================================================================
 
-/** Schema for creating a score record (without db timestamps) */
+/** Schema for creating a score record */
 export const createScoreRecordSchema = scoreRecordSchema;
 
-/** Score record for creation (excludes db timestamps) */
+/** Score record for creation */
 export type CreateScoreRecord = z.infer<typeof createScoreRecordSchema>;
 
 /** Schema for createScore operation arguments */
@@ -96,6 +96,16 @@ export const createScoreArgsSchema = z
 
 /** Arguments for creating a score */
 export type CreateScoreArgs = z.infer<typeof createScoreArgsSchema>;
+
+/** Schema for createScore operation body in client/server */
+export const createScoreBodySchema = z
+  .object({
+    score: createScoreRecordSchema.omit({ timestamp: true }),
+  })
+  .describe('Arguments for creating a score');
+
+/** Body for creating a score in client/server */
+export type CreateScoreBody = z.infer<typeof createScoreBodySchema>;
 
 /** Schema for createScore operation response */
 export const createScoreResponseSchema = z.object({ success: z.boolean() }).describe('Response from creating a score');

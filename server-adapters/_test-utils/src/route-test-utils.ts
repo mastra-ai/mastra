@@ -120,7 +120,32 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   }
 
   if (typeName === 'ZodString') return generateContextualValue(fieldName);
-  if (typeName === 'ZodNumber') return 10;
+  if (typeName === 'ZodNumber') {
+    // Respect min/max constraints from Zod checks
+    let min = -Infinity;
+    let max = Infinity;
+    const checks = def.checks ?? [];
+    for (const check of checks) {
+      // Zod 3: check.kind === 'min'/'max', check.value
+      if (check.kind === 'min') min = check.value;
+      if (check.kind === 'max') max = check.value;
+      // Zod 4: checks have _zod.def with check type and value
+      const zod4Def = check._zod?.def;
+      if (zod4Def) {
+        if (zod4Def.check === 'greater_than') min = zod4Def.value;
+        if (zod4Def.check === 'less_than') max = zod4Def.value;
+      }
+    }
+
+    if (min !== -Infinity && max !== Infinity) {
+      return (min + max) / 2; // midpoint
+    } else if (max !== Infinity) {
+      return max - 1 < 0 ? max : max - 1;
+    } else if (min !== -Infinity) {
+      return min + 1;
+    }
+    return 10;
+  }
   if (typeName === 'ZodBoolean') return true;
   if (typeName === 'ZodNull') return null;
   if (typeName === 'ZodUndefined') return undefined;
