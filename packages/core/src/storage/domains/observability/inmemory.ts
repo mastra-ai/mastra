@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
+import { EntityType } from '../../../observability';
 import { jsonValueEquals } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { ObservabilityStorage } from './base';
@@ -162,7 +163,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     traceEntry.spans[spanId] = span;
 
     // Update root span if this is a root span
-    if (span.parentSpanId === null) {
+    if (span.parentSpanId == null) {
       traceEntry.rootSpan = span;
     }
 
@@ -184,7 +185,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (rootSpan) {
       if (rootSpan.error != null) {
         traceEntry.status = TraceStatus.ERROR;
-      } else if (rootSpan.endedAt === null) {
+      } else if (rootSpan.endedAt == null) {
         traceEntry.status = TraceStatus.RUNNING;
       } else {
         traceEntry.status = TraceStatus.SUCCESS;
@@ -461,7 +462,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     traceEntry.spans[spanId] = updatedSpan;
 
     // Update root span reference if this is the root span
-    if (updatedSpan.parentSpanId === null) {
+    if (updatedSpan.parentSpanId == null) {
       traceEntry.rootSpan = updatedSpan;
     }
 
@@ -758,10 +759,13 @@ export class ObservabilityInMemory extends ObservabilityStorage {
   }
 
   async getEntityTypes(_args: GetEntityTypesArgs): Promise<GetEntityTypesResponse> {
-    const typeSet = new Set<string>();
+    const validTypes = new Set(Object.values(EntityType));
+    const typeSet = new Set<EntityType>();
     for (const [, traceEntry] of this.db.traces) {
       for (const span of Object.values(traceEntry.spans)) {
-        if (span.entityType) typeSet.add(span.entityType);
+        if (span.entityType && validTypes.has(span.entityType as EntityType)) {
+          typeSet.add(span.entityType as EntityType);
+        }
       }
     }
     return { entityTypes: Array.from(typeSet).sort() };

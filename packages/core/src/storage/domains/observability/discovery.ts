@@ -68,7 +68,7 @@ export const getEntityTypesArgsSchema = z.object({}).describe('Arguments for get
 export type GetEntityTypesArgs = z.infer<typeof getEntityTypesArgsSchema>;
 
 export const getEntityTypesResponseSchema = z.object({
-  entityTypes: z.array(z.string()).describe('Distinct entity types'),
+  entityTypes: z.array(entityTypeField).describe('Distinct entity types'),
 });
 
 export type GetEntityTypesResponse = z.infer<typeof getEntityTypesResponseSchema>;

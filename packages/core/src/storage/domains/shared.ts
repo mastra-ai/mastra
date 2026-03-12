@@ -60,7 +60,7 @@ export const dateRangeSchema = z
   .describe('Date range filter for timestamps');
 
 /** Date range with optional inclusive/exclusive boundaries. */
-export type DateRange = z.infer<typeof dateRangeSchema>;
+export type DateRange = z.input<typeof dateRangeSchema>;
 
 export const sortDirectionSchema = z.enum(['ASC', 'DESC']).describe("Sort direction: 'ASC' | 'DESC'");
 

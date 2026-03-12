@@ -260,7 +260,7 @@ async function attachScoreToSpan({
         timestamp: scoreRecord.createdAt ? new Date(scoreRecord.createdAt) : new Date(),
         traceId: span.traceId,
         spanId: span.spanId,
-        scorerId: scoreRecord.scorerId,
+        scorerId: scoreRecord.scorerId ?? (scoreRecord.scorer?.id as string),
         score: scoreRecord.score,
         reason: scoreRecord.reason ?? null,
         experimentId: null,

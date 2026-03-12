@@ -107,9 +107,9 @@ export const batchCreateFeedbackArgsSchema = z
   .object({
     feedbacks: z.array(createFeedbackRecordSchema),
   })
-  .describe('Arguments for batch recording metrics');
+  .describe('Arguments for batch recording feedback');
 
-/** Arguments for batch creating metrics */
+/** Arguments for batch creating feedback */
 export type BatchCreateFeedbackArgs = z.infer<typeof batchCreateFeedbackArgsSchema>;
 
 // ============================================================================

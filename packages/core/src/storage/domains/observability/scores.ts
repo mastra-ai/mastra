@@ -108,9 +108,9 @@ export const batchCreateScoresArgsSchema = z
   .object({
     scores: z.array(createScoreRecordSchema),
   })
-  .describe('Arguments for batch recording metrics');
+  .describe('Arguments for batch recording scores');
 
-/** Arguments for batch creating metrics */
+/** Arguments for batch creating scores */
 export type BatchCreateScoresArgs = z.infer<typeof batchCreateScoresArgsSchema>;
 
 // ============================================================================
