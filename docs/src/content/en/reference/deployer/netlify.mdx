@@ -35,7 +35,7 @@ export const mastra = new Mastra({
 ## Constructor options
 
 - `target?: 'serverless' | 'edge'` — Deploy target for Netlify. Defaults to `'serverless'`.
-  - `'serverless'` — Standard [Netlify Functions](https://docs.netlify.com/functions/overview/) (Node.js runtime, 10s default timeout).
+  - `'serverless'` — Standard [Netlify Functions](https://docs.netlify.com/functions/overview/) (Node.js runtime, 60s default timeout).
   - `'edge'` — [Netlify Edge Functions](https://docs.netlify.com/build/edge-functions/overview/) (Deno-based runtime, runs at the edge closest to users, no hard timeout).
 
 ### Edge functions example

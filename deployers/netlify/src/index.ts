@@ -7,12 +7,14 @@ import type { BundlerOptions } from '@mastra/deployer/bundler';
 import { DepsService } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';
 
+/** Bare Node.js built-in module names (excludes internal `_`-prefixed ones). */
+const builtins = new Set(builtinModules.filter(m => !m.startsWith('_')));
+
 /**
  * Rollup plugin that adds the `node:` prefix to bare Node.js built-in imports.
  * Deno requires `node:events` instead of `events`, `node:fs` instead of `fs`, etc.
  */
 function nodeBuiltinPrefix() {
-  const builtins = new Set(builtinModules.filter(m => !m.startsWith('_')));
   return {
     name: 'node-builtin-prefix',
     resolveId(source: string) {
@@ -29,7 +31,7 @@ export interface NetlifyDeployerOptions {
   /**
    * Deploy target for Netlify.
    *
-   * - `'serverless'` — Standard Netlify Functions (Node.js runtime, 10s default timeout).
+   * - `'serverless'` — Standard Netlify Functions (Node.js runtime, 60s default timeout).
    * - `'edge'` — Netlify Edge Functions (Deno-based runtime, no hard timeout, runs at the edge).
    *
    * @default 'serverless'
