@@ -84,7 +84,7 @@ async function zipOutput(projectDir: string): Promise<string> {
   });
 }
 
-function parseEnvFile(content: string): Record<string, string> {
+export function parseEnvFile(content: string): Record<string, string> {
   const vars: Record<string, string> = {};
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
