@@ -128,10 +128,7 @@ export const metricsFilterSchema = z
     ...commonFilterFields,
 
     // Metric identification
-    name: z
-      .union([z.string(), z.array(z.string())])
-      .optional()
-      .describe('Filter by metric name(s)'),
+    name: z.array(z.string()).nonempty().optional().describe('Filter by metric name(s)'),
 
     // Parent/root entity filters
     parentEntityType: parentEntityTypeField.optional(),
@@ -164,7 +161,7 @@ export const comparePeriodSchema = z
 
 export const getMetricAggregateArgsSchema = z
   .object({
-    name: z.union([z.string(), z.array(z.string())]).describe('Metric name(s) to aggregate'),
+    name: z.array(z.string()).nonempty().describe('Metric name(s) to aggregate'),
     aggregation: aggregationTypeSchema.describe('Aggregation function'),
     filters: metricsFilterSchema.optional().describe('Optional filters'),
     comparePeriod: comparePeriodSchema.optional().describe('Optional comparison period'),
@@ -185,7 +182,7 @@ export type GetMetricAggregateResponse = z.infer<typeof getMetricAggregateRespon
 
 export const getMetricBreakdownArgsSchema = z
   .object({
-    name: z.union([z.string(), z.array(z.string())]).describe('Metric name(s) to break down'),
+    name: z.array(z.string()).nonempty().describe('Metric name(s) to break down'),
     groupBy: z.array(z.string()).min(1).describe('Fields to group by'),
     aggregation: aggregationTypeSchema.describe('Aggregation function'),
     filters: metricsFilterSchema.optional().describe('Optional filters'),
@@ -197,7 +194,7 @@ export type GetMetricBreakdownArgs = z.infer<typeof getMetricBreakdownArgsSchema
 export const getMetricBreakdownResponseSchema = z.object({
   groups: z.array(
     z.object({
-      dimensions: z.record(z.string(), z.string()).describe('Dimension values for this group'),
+      dimensions: z.record(z.string(), z.string().nullable()).describe('Dimension values for this group'),
       value: z.number().describe('Aggregated value for this group'),
     }),
   ),
@@ -209,7 +206,7 @@ export type GetMetricBreakdownResponse = z.infer<typeof getMetricBreakdownRespon
 
 export const getMetricTimeSeriesArgsSchema = z
   .object({
-    name: z.union([z.string(), z.array(z.string())]).describe('Metric name(s)'),
+    name: z.array(z.string()).nonempty().describe('Metric name(s)'),
     interval: aggregationIntervalSchema.describe('Time bucket interval'),
     aggregation: aggregationTypeSchema.describe('Aggregation function'),
     filters: metricsFilterSchema.optional().describe('Optional filters'),

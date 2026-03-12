@@ -499,9 +499,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         if (ts.start && m.timestamp < ts.start) return false;
         if (ts.end && m.timestamp > ts.end) return false;
       }
-      if (filters.name !== undefined) {
-        const names = Array.isArray(filters.name) ? filters.name : [filters.name];
-        if (!names.includes(m.name)) return false;
+      if (filters.name != null) {
+        if (!(filters.name as string[]).includes(m.name)) return false;
       }
       if (filters.traceId !== undefined && m.traceId !== filters.traceId) return false;
       if (filters.spanId !== undefined && m.spanId !== filters.spanId) return false;
@@ -984,10 +983,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
     if (filters.source !== undefined && fb.source !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
-    if (filters.userId !== undefined) {
-      const meta = fb.metadata as Record<string, unknown> | null | undefined;
-      if (meta?.userId !== filters.userId) return false;
-    }
+    if (filters.userId !== undefined && fb.userId !== filters.userId) return false;
 
     return true;
   }

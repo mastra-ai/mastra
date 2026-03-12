@@ -209,6 +209,8 @@ export class EventBuffer {
       // no need to track spans if strategy is 'insert-only' or 'event-sourced'
       return;
     }
-    args.records.forEach(r => this.#allCreatedSpans.delete(this.buildSpanKey(r)));
+    args.records.forEach(r => {
+      this.#allCreatedSpans.delete(this.buildSpanKey(r));
+    });
   }
 }

@@ -159,6 +159,7 @@ export const observabilityInstanceConfigSchema = z
     includeInternalSpans: z.boolean().optional(),
     requestContextKeys: z.array(z.string()).optional(),
     serializationOptions: serializationOptionsSchema,
+    cardinality: z.any().optional(),
   })
   .refine(
     data => {

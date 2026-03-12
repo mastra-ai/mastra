@@ -33,9 +33,6 @@ interface DefaultExporterConfig extends BaseExporterConfig {
 
   // Strategy selection (optional)
   strategy?: TracingStorageStrategy | 'auto';
-
-  // Whether to emit metric events for scores and feedback
-  emitScoreFeedbackMetrics?: boolean;
 }
 
 /**
@@ -365,24 +362,26 @@ export class DefaultExporter extends BaseExporter {
       }
     }
 
-    // Flush creates per signal type
-    await this.flushCreates('feedback', createFeedbackEvents, events =>
-      this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
-    );
-    await this.flushCreates('logs', createLogEvents, events =>
-      this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
-    );
-    await this.flushCreates('metrics', createMetricEvents, events =>
-      this.#observabilityStorage!.batchCreateMetrics({ metrics: events.map(m => buildMetricRecord(m)) }),
-    );
-    await this.flushCreates('scores', createScoreEvents, events =>
-      this.#observabilityStorage!.batchCreateScores({ scores: events.map(s => buildScoreRecord(s)) }),
-    );
-    await this.flushCreates('tracing', createSpanEvents, async events => {
-      const records = events.map(t => buildCreateSpanRecord(t.exportedSpan));
-      await this.#observabilityStorage!.batchCreateSpans({ records });
-      this.#eventBuffer.addCreatedSpans({ records });
-    });
+    // Flush all creates in parallel — signals are independent
+    await Promise.all([
+      this.flushCreates('feedback', createFeedbackEvents, events =>
+        this.#observabilityStorage!.batchCreateFeedback({ feedbacks: events.map(f => buildFeedbackRecord(f)) }),
+      ),
+      this.flushCreates('logs', createLogEvents, events =>
+        this.#observabilityStorage!.batchCreateLogs({ logs: events.map(l => buildLogRecord(l)) }),
+      ),
+      this.flushCreates('metrics', createMetricEvents, events =>
+        this.#observabilityStorage!.batchCreateMetrics({ metrics: events.map(m => buildMetricRecord(m)) }),
+      ),
+      this.flushCreates('scores', createScoreEvents, events =>
+        this.#observabilityStorage!.batchCreateScores({ scores: events.map(s => buildScoreRecord(s)) }),
+      ),
+      this.flushCreates('tracing', createSpanEvents, async events => {
+        const records = events.map(t => buildCreateSpanRecord(t.exportedSpan));
+        await this.#observabilityStorage!.batchCreateSpans({ records });
+        this.#eventBuffer.addCreatedSpans({ records });
+      }),
+    ]);
 
     // Flush span updates and ends — check span existence, defer if not yet created
     const deferredUpdates: BufferedEvent[] = [];

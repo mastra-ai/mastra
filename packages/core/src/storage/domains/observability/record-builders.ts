@@ -226,6 +226,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
 /** Convert a FeedbackEvent to a CreateFeedbackRecord */
 export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord {
   const fb = event.feedback;
+  const userId = typeof fb.metadata?.userId === 'string' ? fb.metadata.userId : null;
   return {
     timestamp: fb.timestamp,
     traceId: fb.traceId,
@@ -235,6 +236,7 @@ export function buildFeedbackRecord(event: FeedbackEvent): CreateFeedbackRecord 
     value: fb.value,
     comment: fb.comment ?? null,
     experimentId: fb.experimentId ?? null,
+    userId,
     metadata: fb.metadata ?? null,
   };
 }

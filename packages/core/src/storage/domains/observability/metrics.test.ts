@@ -173,9 +173,9 @@ describe('Metric Schemas', () => {
       expect(filter.experimentId).toBe('exp-1');
     });
 
-    it('accepts single name as string', () => {
-      const filter = metricsFilterSchema.parse({ name: 'mastra_agent_duration_ms' });
-      expect(filter.name).toBe('mastra_agent_duration_ms');
+    it('accepts single-element name array', () => {
+      const filter = metricsFilterSchema.parse({ name: ['mastra_agent_duration_ms'] });
+      expect(filter.name).toEqual(['mastra_agent_duration_ms']);
     });
 
     it('accepts empty filter', () => {
@@ -187,7 +187,7 @@ describe('Metric Schemas', () => {
   describe('OLAP query schemas', () => {
     it('getMetricAggregateArgsSchema validates', () => {
       const args = getMetricAggregateArgsSchema.parse({
-        name: 'test',
+        name: ['test'],
         aggregation: 'sum',
         comparePeriod: 'previous_period',
       });
@@ -206,7 +206,7 @@ describe('Metric Schemas', () => {
 
     it('getMetricBreakdownArgsSchema validates', () => {
       const args = getMetricBreakdownArgsSchema.parse({
-        name: 'test',
+        name: ['test'],
         groupBy: ['entityType'],
         aggregation: 'avg',
       });

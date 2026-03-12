@@ -15,7 +15,6 @@ describe('Feedback Schemas', () => {
   describe('feedbackRecordSchema', () => {
     it('accepts a complete feedback record', () => {
       const record = feedbackRecordSchema.parse({
-        id: 'fb-1',
         timestamp: now,
         traceId: 'trace-1',
         spanId: 'span-1',
@@ -24,13 +23,13 @@ describe('Feedback Schemas', () => {
         value: 1,
         comment: 'Great response!',
         experimentId: 'exp-1',
-        metadata: { userId: 'user-123' },
-        createdAt: now,
-        updatedAt: now,
+        userId: 'user-123',
+        metadata: { page: '/chat' },
       });
       expect(record.source).toBe('user');
       expect(record.feedbackType).toBe('thumbs');
       expect(record.value).toBe(1);
+      expect(record.userId).toBe('user-123');
     });
 
     it('accepts string value', () => {

@@ -43,6 +43,9 @@ export const feedbackRecordSchema = z
     comment: feedbackCommentField.nullish(),
     experimentId: experimentIdField.nullish(),
 
+    // Identity
+    userId: userIdField.nullish(),
+
     // User-defined metadata (context fields stored here)
     metadata: z.record(z.string(), z.unknown()).nullish().describe('User-defined metadata'),
   })
