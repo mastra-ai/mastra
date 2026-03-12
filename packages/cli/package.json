@@ -52,6 +52,7 @@
   ],
   "dependencies": {
     "@clack/prompts": "^1.1.0",
+    "archiver": "^7.0.0",
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
