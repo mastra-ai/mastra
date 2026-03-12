@@ -5758,6 +5758,79 @@ describe('Async Buffering Processor Logic', () => {
       }
     });
 
+    it('should skip messages with pending tool calls (no result yet)', () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        scope: 'thread',
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+        observation: { messageTokens: 50000 },
+        reflection: { observationTokens: 20000 },
+      });
+
+      // Message with a tool call that has no result — should NOT be sealed
+      const msgWithPendingCall: MastraDBMessage = {
+        id: 'msg-pending',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'srvtoolu_test1',
+                toolName: 'web_search_20250305',
+                args: { query: 'test' },
+              },
+              providerExecuted: true,
+            } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      // Message with a completed tool call — should be sealed
+      const msgWithResult: MastraDBMessage = {
+        id: 'msg-complete',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-1',
+                toolName: 'execute_command',
+                args: { command: 'ls' },
+                result: 'file1.txt',
+              },
+            } as any,
+          ],
+        },
+        type: 'text',
+        createdAt: new Date(),
+      };
+
+      // Regular text message — should be sealed
+      const msgText = createTestMessage('Some text', 'user', 'msg-text');
+
+      (om as any).sealMessagesForBuffering([msgWithPendingCall, msgWithResult, msgText]);
+
+      // Pending tool call message should NOT be sealed
+      const pendingMetadata = msgWithPendingCall.content.metadata as { mastra?: { sealed?: boolean } } | undefined;
+      expect(pendingMetadata?.mastra?.sealed).toBeUndefined();
+
+      // Completed tool result message should be sealed
+      const resultMetadata = msgWithResult.content.metadata as { mastra?: { sealed?: boolean } };
+      expect(resultMetadata.mastra?.sealed).toBe(true);
+
+      // Text message should be sealed
+      const textMetadata = msgText.content.metadata as { mastra?: { sealed?: boolean } };
+      expect(textMetadata.mastra?.sealed).toBe(true);
+    });
+
     it('should skip messages without parts', () => {
       const om = new ObservationalMemory({
         storage: createInMemoryStorage(),

@@ -1466,6 +1466,16 @@ export class ObservationalMemory implements Processor<'observational-memory'> {
     for (const msg of messages) {
       if (!msg.content?.parts?.length) continue;
 
+      // Don't seal messages that have pending tool calls (state: 'call' with no result yet).
+      // If we seal such a message, arriving tool results will be split into a new message.
+      // For provider-executed tools (e.g. web_search), the output-converter strips completed
+      // results while keeping the call, producing an orphaned server_tool_use block that
+      // causes an API 400. The message will be sealed on a later cycle once results arrive.
+      const hasPendingToolCall = msg.content.parts.some(
+        (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'call',
+      );
+      if (hasPendingToolCall) continue;
+
       // Set message-level sealed flag
       if (!msg.content.metadata) {
         msg.content.metadata = {};
